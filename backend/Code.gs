@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '1.0';
+var VERSIE = '1.1';
 var P = PropertiesService.getScriptProperties();
 
 var TABELLEN = {
@@ -187,9 +187,10 @@ function metCache(sleutel, seconden, fn) {
   try { cache.put('athena-' + sleutel, JSON.stringify(waarde), seconden); } catch (e3) {}
   return waarde;
 }
+// v1.1: zonder lock nooit schrijven — twee gelijktijdige schrijfVeel-runs schrijven anders allebei op getLastRow()+1 en overschrijven elkaar.
 function metLock(fn) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(15000);
+  if (!lock.tryLock(15000)) throw new Error('Athena is al bezig met een andere bewerking. Probeer het over een halve minuut opnieuw.');
   try { return fn(); } finally { lock.releaseLock(); }
 }
 
@@ -276,7 +277,7 @@ function apiKennisbank() {
   };
 }
 function apiIndexeer() { return metLock(indexeerDocumenten); }
-function indexeerTrigger() { try { indexeerDocumenten(); } catch (e) { Logger.log('Indexeren mislukt: ' + e); } }
+function indexeerTrigger() { try { metLock(indexeerDocumenten); } catch (e) { Logger.log('Indexeren mislukt: ' + e); } }  // v1.1: ook de trigger onder de lock
 
 function indexeerDocumenten() {
   var mapId = P.getProperty('DRIVE_MAP_ID'); if (!mapId) throw new Error('Geen documentenmap — draai setup().');
@@ -404,7 +405,7 @@ function apiReview() {
 }
 function apiReviewNu() { return metLock(function () { return reviewUit(nachtelijkeReview()); }); }
 function nachtelijkeReviewTrigger() {
-  try { var r = nachtelijkeReview(); if (P.getProperty('RAPPORT_EMAIL')) mailRapport(reviewUit(r)); }
+  try { var r = metLock(nachtelijkeReview); if (P.getProperty('RAPPORT_EMAIL')) mailRapport(reviewUit(r)); }  // v1.1: ook de trigger onder de lock
   catch (e) { Logger.log('Review mislukt: ' + e); }
 }
 function reviewUit(r) {
@@ -520,7 +521,7 @@ function apiZetHuisstijl(sleutel, waarde) {
   if (/^kleur_/.test(sleutel) && !/^#[0-9a-fA-F]{6}$/.test(waarde)) throw new Error('Kleur als #RRGGBB.');
   metLock(function () {
     var b = blad('Huisstijl'), hit = lees('Huisstijl').filter(function (r) { return r.sleutel === sleutel; })[0];
-    if (hit) b.getRange(hit._rij, 2).setValue(waarde); else b.appendRow([sleutel, waarde]);
+    if (hit) b.getRange(hit._rij, 2).setValue(celUit(waarde)); else b.appendRow([sleutel, celUit(waarde)]);  // v1.1: een regel die met = of + begint mag geen formule worden
   });
   return null;
 }
@@ -597,9 +598,10 @@ function apiImporteer(tabel, rijen) {
         else if (naam === 'Kansen') o.id = slug([o.school, o.traject].join('-'));
         else o.id = slug(o.tekst);
       }
-      if (naam === 'Acties' && !o.status) o.status = 'open';
-      if (naam === 'Acties' && !o.aangemaakt) o.aangemaakt = nu();
       var hit = bestaand[String(o.id)];
+      // v1.1: standaardwaarden alleen voor nieuwe acties; een herhaalde import mag een afgevinkte actie niet heropenen
+      if (naam === 'Acties' && !hit && !o.status) o.status = 'open';
+      if (naam === 'Acties' && !hit && !o.aangemaakt) o.aangemaakt = nu();
       // ongewijzigde rijen niet opnieuw schrijven: anders telt de nachtelijke review elke import als "bijgewerkt"
       if (hit && Object.keys(o).every(function (k) { return k === 'id' || String(hit[k]) === String(o[k]); })) { ongewijzigd++; return; }
       teSchrijven.push(o);
