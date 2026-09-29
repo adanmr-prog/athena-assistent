@@ -1,5 +1,5 @@
 /* Athena Assistent — service worker: HTML network-first (cache als fallback), statische shell cache-first, API altijd via netwerk */
-var CACHE = 'athena-assistent-v1.0';  // bump bij elke release (zie /release)
+var CACHE = 'athena-assistent-v1.1';  // bump bij elke release (zie /release)
 var SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 var NET_TIMEOUT_MS = 3000;  // v1.0: bij trage verbinding na 3 s de gecachte shell tonen; het netwerk werkt op de achtergrond door
 
@@ -54,8 +54,9 @@ self.addEventListener('fetch', function (e) {
   e.respondWith(  // statische assets: cache-first
     caches.match(e.request).then(function (hit) {
       return hit || fetch(e.request).then(function (resp) {
+        if (!(resp && resp.ok)) return resp;  // v1.1: een 404 of serverfout nooit in de cache zetten, anders blijft die tot de volgende CACHE-bump
         var kopie = resp.clone();
-        caches.open(CACHE).then(function (c) { c.put(e.request, kopie); });
+        e.waitUntil(caches.open(CACHE).then(function (c) { return c.put(e.request, kopie); }));
         return resp;
       });
     })
