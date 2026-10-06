@@ -8,6 +8,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno. Vijf modul
 - `manifest.webmanifest` en de icon-PNG's (AthenaSchool-logo op paars): PWA-metadata.
 - `backend/Code.gs`: de Google Apps Script-backend (Sheet als database, Drive-index, Gmail/Agenda, triggers, Claude API). Wordt in een eigen Apps Script-project geplakt; installatie in `backend/README.md`. Het contract staat in de skill `athena-backend-api`.
 - `test/`: mock-backend en Playwright-script voor browsertests (zie Testen).
+- `.claude/skills/werving-recruiter/`: werkwijze van de recruiter-agent (monday-bord Werving talent, PoliteReach, Lusha); zie de skill `werving-recruiter`.
 - Hosting: GitHub Pages van deze repo (`https://adanmr-prog.github.io/athena-assistent/`).
 
 ## Conventies
