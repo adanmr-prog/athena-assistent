@@ -107,10 +107,26 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiHomeMails` | — | `[{onderwerp,van,dagen,link}]` (v3.2: los van `apiHome`, omdat Gmail traag is; `apiHome` geeft `mails: []`) |
 | `apiAgenda` | van, tot (`yyyy-MM-dd`, max. 62 dagen) | `{ van, tot, events:[google-afspraak (+schoolId/school als hij aan het CRM hangt)], afspraken:[activiteit], taken:[taak] }` (v3.0) |
 | `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
-| `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak`, id | null (school alleen zonder personen en kansen) |
+| `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak\|traject\|notitie\|content\|doel`, id, opties? `{agenda: true}` | null (school alleen zonder personen en kansen; eigenaar of beheerder; `agenda` haalt een afspraak ook uit Google Agenda) |
+| `apiActiviteitOpslaan` (v3.7) | `{id, type?, datum?, onderwerp?, tekst?, duurMin?, schoolId?, persoonId?, kansId?, trajectId?, _oud}` | activiteit + `agendaBijgewerkt` (afspraak ook in Google Agenda verzet/hernoemd) |
+| `apiTaakHeropen` | id | taak |
+| `apiTrackStoppen` / `apiTrackVerwijderen` | trackRunId / trackId | `{aantal}` / tracks |
+| `apiInstellingen` / `apiKeuzelijstOpslaan` | — / sleutel (`schoolStatussen\|taakCategorieen\|trajectStatussen`), `[{waarde, oud}]` | `{schoolStatussen, taakCategorieen, trajectStatussen}`; hernoemde waarden gaan mee in bestaande rijen |
+| `apiVelden` / `apiTagHernoem` / `apiVeldHernoem` | — / oud, nieuw (leeg = weg) | `{tags, velden}` / `{aantal}` |
+| `apiHuisstijlOpslaan` | `{veld: waarde, …}` | zoals `apiHuisstijl` (+ `magBewerken`) |
+| `apiContentOpslaan` | `{id, onderwerp?, tekst?}` | content |
+| `apiDocumentOpslaan` | id, `{type?, school?}` | document; de correctie blijft bij het volgende inlezen (Instellingen `documentCorrecties`) |
 
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
+
+## Alles aanpasbaar (v3.7)
+
+- Alles wat je maakt kun je wijzigen en verwijderen: taken (ook heropenen en de rest van een track stoppen), tijdlijn (ook afspraken verzetten of annuleren in Google Agenda), projecten, notities, doelen, tracks, teksten, documenten (soort/school), gebruikers (naam/e-mail/rol, doorgevoerd overal), mijlpalen en pipelines (kansen verhuizen mee), keuzelijsten (statussen, categorieën; bestaande rijen gaan mee), tags en eigen velden (overal hernoemen of weghalen), alle huisstijlvelden.
+- Nieuw tabblad `Instellingen` (sleutel, waarde-JSON) voor keuzelijsten en documentcorrecties; `Content` kreeg de kolom `door`.
+- Grote hernoemingen schrijven één kolom in één keer (`wijzigKolom`), ook bij duizenden rijen.
+- De app werkt na een wijziging het scherm meteen lokaal bij en slaat op de achtergrond op; bij een fout haalt hij het scherm opnieuw op.
+- Plan voor de overstap naar Supabase + Vercel: `docs/supabase-migratie.md`.
 
 ## Rollen, privacy en tegelijk werken (v3.3)
 

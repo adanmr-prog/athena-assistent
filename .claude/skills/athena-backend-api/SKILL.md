@@ -20,6 +20,7 @@ De volledige tabel met argumenten en resultaatvorm staat in `backend/README.md` 
 CRM (v2.0, module Relaties): `apiCrm`, `apiSchool`, `apiSchoolOpslaan`, `apiPersoon`, `apiPersoonOpslaan`, `apiKans`, `apiKansOpslaan`, `apiPipeline`,
 `apiMijlpalenOpslaan`, `apiActiviteitToevoegen`, `apiAfspraakPlannen`, `apiTaken`, `apiTaakOpslaan`, `apiTrackOpslaan`, `apiTrackStart`, `apiRapport`,
 `apiDoelen`, `apiDoelOpslaan`, `apiHome`, `apiAgenda` (v3.0), `apiHomeMails` (v3.2), `apiActiviteiten`, `apiArchiefTijdlijn`, `apiArchiveer` (v3.3), `apiGebruikers`, `apiGebruikerOpslaan`, `apiCrmSync`, `apiCrmInrichten`, `apiCapsuleMigratie`, `apiExport`, `apiVerwijder`.
+v3.7 (alles aanpasbaar): `apiActiviteitOpslaan`, `apiTaakHeropen`, `apiTrackStoppen`, `apiTrackVerwijderen`, `apiInstellingen`, `apiKeuzelijstOpslaan`, `apiVelden`, `apiTagHernoem`, `apiVeldHernoem`, `apiHuisstijlOpslaan`, `apiContentOpslaan`, `apiDocumentOpslaan`. Nieuwe functies volgen de afspraken in `docs/supabase-migratie.md` (stabiele ids, alleen gewijzigde velden + `_oud`, volledig object terug).
 
 ## Gebruikers (v2.0)
 - `doPost` zet `GEBRUIKER` via `wieIs(secret)`: `SECRET` = beheerder, een code uit scripteigenschap `CODES` = accountmanager. Geen geldige code → `fout: 'secret'`.

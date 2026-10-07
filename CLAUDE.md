@@ -11,6 +11,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder)
 - `test/`: mock-backend en Playwright-script voor browsertests (zie Testen).
 - `.claude/skills/werving-recruiter/`: werkwijze van de recruiter-agent (monday-bord Werving talent, PoliteReach, Lusha); zie de skill `werving-recruiter`.
 - Hosting: GitHub Pages van deze repo (`https://adanmr-prog.github.io/athena-assistent/`).
+- Toekomst: overstap naar Supabase + Vercel met eigen domein; bouw nu al volgens `docs/supabase-migratie.md` (stabiele ids, alleen gewijzigde velden + `_oud`, keuzelijsten in `Instellingen`, alle bewerkingen via het bewerkvenster `openVenster`).
 
 ## Conventies
 - Vanilla JS in ES5-stijl: `var`, `function`, geen arrow functions, `let/const`, template strings, classes of modules. Doel: iOS Safari als standalone PWA.
