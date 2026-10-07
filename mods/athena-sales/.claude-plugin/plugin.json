@@ -1,0 +1,9 @@
+{
+  "name": "athena-sales",
+  "version": "0.1.0",
+  "description": "Salespaneel: open kansen en taken per school uit het Capsule-snapshot (data/salespaneel.json), via /sales.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "AthenaSchool"
+  }
+}
