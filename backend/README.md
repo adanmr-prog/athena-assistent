@@ -15,7 +15,8 @@ Draai hem onder het werkaccount (`menno.adan@athenastudies.nl`), dan ziet hij de
    | `ANTHROPIC_API_KEY` | API-sleutel van console.anthropic.com | voor vragen, teksten en de geschreven ochtendsamenvatting |
    | `RAPPORT_EMAIL` | adres waar de nachtelijke review naartoe moet | nee (zonder: alleen in de app) |
    | `NAAM` | voornaam in de begroeting (standaard `Menno`) | nee |
-   | `CLAUDE_MODEL` | standaard `claude-opus-5` | nee |
+   | `CLAUDE_MODEL` | standaard `claude-opus-5-5` | nee |
+   | `OFFERTE_SJABLOON_ID` | id van het Google Doc dat als offertesjabloon dient (zie Brein-assistent) | nee (zonder: een nieuw Doc in de huisstijl) |
    | `CLAUDE_EFFORT` | `low`, `medium` (standaard), `high` | nee — `low` als antwoorden te lang duren |
    | `CAPSULE_TOKEN` | API-token uit Capsule (My Preferences → API Authentication Tokens) | alleen voor de eenmalige Capsule-migratie; daarna verwijderen |
 
@@ -57,7 +58,9 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiActieToevoegen` | tekst, prio, deadline | actie |
 | `apiKennisbank` | — | `{ tellingen, documenten:[{id,titel,type,school,url,gewijzigd,woorden}], laatsteIndex, mapUrl }` |
 | `apiIndexeer` | — | `{ aantal, nieuw, bijgewerkt, verwijderd }` |
-| `apiVraag` | vraag | `{ antwoord, bronnen:[{titel,url,type}] }` |
+| `apiVraag` | vraag | `{ antwoord, bronnen:[{titel,url,type}] }` (oud; de app gebruikt sinds v3.5 `apiBrein`) |
+| `apiBrein` | bericht, gesprek:[{rol:'ik'\|'bot', tekst}] | `{ antwoord, bronnen, acties:[{id, soort, titel, invoer}] }` |
+| `apiBreinUitvoeren` | {soort, invoer} | `{ melding, url? }` |
 | `apiReview` | — | `{ laatste: review, eerdere:[{id,datum,gemaaktOp,samenvatting,tellingen}] }` |
 | `apiReviewNu` | — | review (`{id,datum,gemaaktOp,samenvatting,gedaan,blijvenLiggen,vandaag,tellingen}`) |
 | `apiHuisstijl` | — | `{ velden, kleuren, toon, zinnen, types, recent }` |
@@ -114,6 +117,16 @@ Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewo
 - **Tegelijk opslaan:** bij bewerken stuurt de app alleen de gewijzigde velden plus `_oud` (de waarden zoals geladen). `controleerConflict()` vergelijkt die binnen het lock met de Sheet; heeft iemand anders hetzelfde veld intussen gewijzigd, dan volgt de fout "Intussen gewijzigd: …" en ververst de app het scherm. Andere velden worden gewoon samengevoegd. Kolom `bijgewerktDoor` houdt bij wie het laatst wijzigde.
 - **Archief:** elke 1e van de maand (trigger `archiveerTrigger`) gaat activiteit ouder dan 12 maanden naar `Activiteiten_archief`. In een detailscherm haalt de knop "Oudere activiteit (archief)" die terug.
 
+## Brein als persoonlijke assistent (v3.5)
+
+- `apiBrein` laat Claude met tools werken (lus van maximaal 8 rondes, stopt na ±4 minuten). De systeemprompt kent de gebruiker (naam, rol), de huisstijl, de prijslijst-documenten en `feitenSamenvatting()`.
+- **Leestools** draaien direct: `zoek_crm`, `lees_school`, `zoek_documenten`, `mijn_taken`, en (alleen met eigen mailbox, `mijnMailbox()`) `zoek_mail`, `lees_mail`, `mijn_agenda`.
+- **Actietools** worden nooit door het model zelf uitgevoerd: `breinActieCheck()` controleert de invoer en de backend geeft ze terug in `acties`. De app toont per actie een kaart met Uitvoeren / Aanpassen / Annuleren; pas Uitvoeren roept `apiBreinUitvoeren` aan, dat opnieuw controleert en de bestaande functies gebruikt:
+  - `maak_offerte`: Google Doc in de map `Offertes` (in de documentenmap, dus ook in de kennisbank). Met `OFFERTE_SJABLOON_ID` een kopie van dat sjabloon met de velden `{{titel}} {{school}} {{contactpersoon}} {{datum}} {{adviseur}} {{inleiding}} {{hulpvraag}} {{aanpak}} {{rooster}} {{kosten}} {{voorwaarden}} {{afsluiting}}` (ontbreken de inhoudsvelden, dan komen ze als hoofdstukken onderaan); zonder sjabloon een nieuw Doc in Nunito en paars. Gedeeld met de vrager, tijdlijnregel "Offerte gemaakt".
+  - `maak_conceptmail`: concept in Gmail (antwoord op `threadId` of nieuw), nooit versturen. Alleen voor wie zijn eigen mailbox heeft (tot Fase B: de eigenaar van het script).
+  - `maak_taak`, `log_activiteit`, `wijzig_kans`, `plan_afspraak` via `apiTaakOpslaan`, `apiActiviteitToevoegen`, `apiKansOpslaan`, `apiAfspraakPlannen`.
+- Het gesprek bewaart de app (localStorage `aa_chat`, gewist bij een andere koppelcode); de backend krijgt de laatste 12 beurten als platte tekst. Bij een mail op Vandaag/Home zet de knop "Concept" een vraag klaar in het Brein.
+
 ## CRM: gebruikers, mail en agenda, Capsule (v2.0)
 
 - **Gebruikers.** De koppelcode uit `setup()` is de beheerderscode (Menno). Accountmanagers krijgen een eigen code via Relaties → Rapport →
@@ -156,7 +169,7 @@ Alleen school- en contactpersoonniveau; nooit leerlingnamen.
 ## Claude API
 
 `claude()` in `Code.gs` doet een raw HTTP-call naar `POST https://api.anthropic.com/v1/messages` (Apps Script heeft geen SDK):
-model `claude-opus-5`, `fallbacks: "default"` met de beta-header `server-side-fallback-2026-07-01` (een door de veiligheidsfilters
+model `claude-opus-5-5` (of `CLAUDE_MODEL`), `fallbacks: "default"` met de beta-header `server-side-fallback-2026-07-01` (een door de veiligheidsfilters
 geweigerd verzoek wordt server-side op een ander model herhaald), `output_config.effort` uit `CLAUDE_EFFORT`, en een controle op
 `stop_reason === "refusal"`. Kosten: een vraag met zes documenten is grofweg 15-30k invoertokens.
 

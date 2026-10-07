@@ -21,6 +21,18 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/02_vandaag_na.png', full_page=True)
     page.click('nav button[data-view="brein"]'); page.wait_for_selector('#breinTegels .tegel'); page.wait_for_timeout(300)
     page.fill('#vraagInput', 'Wat is het uurtarief voor huiswerkbegeleiding?'); page.click('#vraagKnop'); page.wait_for_selector('.bron'); page.wait_for_timeout(200)
+    # v3.5: assistent met actiekaarten — offerte aanpassen en uitvoeren, taak annuleren
+    page.fill('#vraagInput', 'Schrijf offerte onderwijsondersteuning voor Voorbeeldcollege, 2 ondersteuners per dag van 10-16u'); page.click('#vraagKnop')
+    page.wait_for_selector('.actiekaart'); assert page.locator('.actiekaart').count() == 2
+    kaart = page.locator('.actiekaart').first
+    kaart.locator('[data-ak="aanpassen"]').click(); page.locator('.actiekaart').first.locator('[data-akveld="titel"]').fill('Onderwijsondersteuning leerplein')
+    page.screenshot(path=OUT + '/03b_brein_aanpassen.png', full_page=True)
+    page.locator('.actiekaart').first.locator('[data-ak="uitvoeren"]').click(); page.wait_for_selector('.actiekaart.uitgevoerd')
+    assert 'Openen' in page.locator('.actiekaart.uitgevoerd').inner_text()
+    page.locator('.actiekaart').nth(1).locator('[data-ak="annuleren"]').click(); page.wait_for_selector('.actiekaart.geannuleerd')
+    uit = page.evaluate("JSON.parse(localStorage.getItem('aa_chat')).slice(-1)[0].acties.map(function(a){return a.status + ':' + (a.invoer.titel||'')})")
+    assert uit == ['uitgevoerd:Onderwijsondersteuning leerplein', 'geannuleerd:'], uit
+    page.screenshot(path=OUT + '/03c_brein_acties.png', full_page=True)
     page.click('[data-typefilter="contract"]'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/03_brein.png', full_page=True)
     page.click('#indexeerKnop'); page.wait_for_timeout(700)
@@ -117,6 +129,9 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/27_desk_doelen.png')
     page.fill('#zbZoek', 'lyceum'); page.wait_for_selector('#zbResultaten.aan a'); page.click('#zbResultaten a'); page.wait_for_selector('.detail-grid h2:has-text("Lyceum Demo")')
     page.click('#zbNieuwKnop'); page.click('[data-desknieuw="taak"]'); page.wait_for_selector('#crmNieuw #cf-tekst')
+    page.click('.zb-item[data-desk="home"]'); page.wait_for_selector('#homeMails [data-concept]'); page.click('#homeMails [data-concept]')  # v3.5
+    page.wait_for_selector('.actiekaart:has-text("Conceptmail")'); assert page.locator('#view-brein').is_visible()
+    page.screenshot(path=OUT + '/28_desk_brein_concept.png')
     page.click('.zb-item[data-desk="brein"]'); page.wait_for_selector('#breinTegels .tegel')
     for breedte in (1280, 1024):
         page.set_viewport_size({'width': breedte, 'height': 800}); page.wait_for_timeout(200)

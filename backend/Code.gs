@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '3.3';
+var VERSIE = '3.5';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -309,7 +309,7 @@ function zoekMailsOnbeantwoord(max, minDagen) {
       if (van.toLowerCase().indexOf(mij) >= 0) return;
       var dagen = Math.floor((Date.now() - laatste.getDate().getTime()) / 86400000);
       if (dagen < minDagen) return;
-      uit.push({ onderwerp: t.getFirstMessageSubject() || '(geen onderwerp)', van: naamUitAdres(van), dagen: dagen, link: 'https://mail.google.com/mail/?authuser=' + encodeURIComponent(mij) + '#all/' + t.getId() });  // authuser: het juiste account, ook in de in-app browser
+      uit.push({ onderwerp: t.getFirstMessageSubject() || '(geen onderwerp)', van: naamUitAdres(van), dagen: dagen, threadId: t.getId(), link: 'https://mail.google.com/mail/?authuser=' + encodeURIComponent(mij) + '#all/' + t.getId() });  // authuser: het juiste account, ook in de in-app browser
     });
     return uit;
   } catch (e) { return []; }
@@ -1569,21 +1569,324 @@ function apiStatus() {
     rapportEmail: P.getProperty('RAPPORT_EMAIL') || '', reviewTrigger: triggers.indexOf('nachtelijkeReviewTrigger') >= 0, indexTrigger: triggers.indexOf('indexeerTrigger') >= 0, tijdzone: tz() };
 }
 
+/* ===================== 7. Brein als persoonlijke assistent (v3.5) ===================== */
+
+// Claude met tools. Leestools draaien direct; actietools voert de backend NIET uit maar geeft ze terug als voorstel.
+// De app toont een kaart (Uitvoeren / Aanpassen / Annuleren) en pas na bevestiging volgt apiBreinUitvoeren.
+var BREIN_LEES = {
+  zoek_crm: { description: 'Zoek scholen, personen, kansen (deals) en projecten (trajecten) in het CRM op naam, plaats, e-mail of onderwerp. Geeft id\'s terug die je in andere tools gebruikt.',
+    properties: { zoekterm: { type: 'string', description: 'Bijvoorbeeld een schoolnaam, plaats of achternaam.' } }, required: ['zoekterm'] },
+  lees_school: { description: 'Alles over één school: gegevens, personen, kansen, projecten, open taken en de laatste tijdlijn.',
+    properties: { schoolId: { type: 'string' } }, required: ['schoolId'] },
+  zoek_documenten: { description: 'Zoek in de kennisbank (contracten, werkwijzen, schooldossiers, voorstellen, prijslijst) en geef de tekst van de best passende documenten.',
+    properties: { zoekterm: { type: 'string' } }, required: ['zoekterm'] },
+  zoek_mail: { description: 'Zoek in de Gmail van de gebruiker (Gmail-zoeksyntax mag, bijvoorbeeld from:naam of subject:rooster). Geeft threadId, afzender, onderwerp en een fragment.',
+    properties: { zoekterm: { type: 'string' } }, required: ['zoekterm'] },
+  lees_mail: { description: 'Lees een mailgesprek uit de Gmail van de gebruiker (de laatste berichten, met afzender en tekst).',
+    properties: { threadId: { type: 'string' } }, required: ['threadId'] },
+  mijn_agenda: { description: 'De agenda van de gebruiker tussen twee datums (yyyy-MM-dd, maximaal 31 dagen).',
+    properties: { van: { type: 'string' }, tot: { type: 'string' } }, required: ['van', 'tot'] },
+  mijn_taken: { description: 'De open taken van de gebruiker.', properties: {}, required: [] }
+};
+var KOPPEL_PROPS = { schoolId: { type: 'string' }, persoonId: { type: 'string' }, kansId: { type: 'string' } };
+function metKoppeling(props) { var o = {}; Object.keys(props).forEach(function (k) { o[k] = props[k]; }); Object.keys(KOPPEL_PROPS).forEach(function (k) { o[k] = KOPPEL_PROPS[k]; }); return o; }
+var BREIN_ACTIES = {
+  maak_offerte: { titel: 'Offerte maken', description: 'Stel een offerte voor als Google Doc in de huisstijl. Zoek eerst de school en de tarieven op (zoek_crm, zoek_documenten met "prijslijst"). ' +
+      'Schrijf alle teksten volledig uit in het Nederlands; reken de kosten concreet door (aantal ondersteuners × uren × dagen × tarief). Verzin geen tarieven: staat het tarief nergens, zet dan "[tarief invullen]".',
+    properties: metKoppeling({ titel: { type: 'string' }, school: { type: 'string', description: 'Naam van de school.' }, contactpersoon: { type: 'string' },
+      inleiding: { type: 'string' }, hulpvraag: { type: 'string' }, aanpak: { type: 'string', description: 'De inzet: wie, wat, hoeveel ondersteuners.' },
+      rooster: { type: 'string', description: 'Dagen, tijden, periode.' }, kosten: { type: 'string', description: 'Tarief en berekening.' }, voorwaarden: { type: 'string' }, afsluiting: { type: 'string' } }),
+    required: ['titel', 'school', 'hulpvraag', 'aanpak', 'rooster', 'kosten'] },
+  maak_conceptmail: { titel: 'Conceptmail', description: 'Zet een concept klaar in de Gmail van de gebruiker (nooit versturen). Lees bij een reactie eerst de mail met lees_mail en geef dan de threadId mee; de reactie gaat naar de afzender van het laatste bericht.',
+    properties: { threadId: { type: 'string' }, aan: { type: 'string', description: 'E-mailadres; alleen nodig zonder threadId.' }, onderwerp: { type: 'string' }, tekst: { type: 'string', description: 'De volledige mailtekst met aanhef en afsluiting.' } },
+    required: ['tekst'] },
+  maak_taak: { titel: 'Taak aanmaken', description: 'Maak een taak in het CRM.',
+    properties: metKoppeling({ tekst: { type: 'string' }, deadline: { type: 'string', description: 'yyyy-MM-dd' }, prio: { type: 'string', enum: ['hoog', 'midden', 'laag'] }, eigenaar: { type: 'string', description: 'Naam van een collega; standaard de gebruiker zelf.' }, notitie: { type: 'string' } }),
+    required: ['tekst'] },
+  log_activiteit: { titel: 'Activiteit vastleggen', description: 'Leg een notitie, gesprek, mail of afspraak vast op de tijdlijn van een school, persoon of kans.',
+    properties: metKoppeling({ type: { type: 'string', enum: ['notitie', 'gesprek', 'mail', 'afspraak'] }, onderwerp: { type: 'string' }, tekst: { type: 'string' }, datum: { type: 'string', description: 'yyyy-MM-dd HH:mm, standaard nu' } }),
+    required: ['type', 'onderwerp'] },
+  wijzig_kans: { titel: 'Kans bijwerken', description: 'Wijzig een bestaande kans: mijlpaal (fase), waarde, volgende actie, deadline of verwachte sluiting. Geef alleen de velden die veranderen.',
+    properties: { kansId: { type: 'string' }, fase: { type: 'string' }, waarde: { type: 'number' }, volgendeActie: { type: 'string' }, deadline: { type: 'string' }, verwachteSluiting: { type: 'string' } },
+    required: ['kansId'] },
+  plan_afspraak: { titel: 'Afspraak plannen', description: 'Plan een afspraak in de agenda van de gebruiker, gekoppeld aan een school, persoon of kans.',
+    properties: metKoppeling({ titel: { type: 'string' }, start: { type: 'string', description: 'yyyy-MM-dd HH:mm' }, duurMin: { type: 'number' }, locatie: { type: 'string' }, notitie: { type: 'string' }, uitnodigen: { type: 'boolean', description: 'De gekoppelde persoon uitnodigen.' } }),
+    required: ['titel', 'start'] }
+};
+function breinTools() {
+  var maak = function (naam, t) { return { name: naam, description: t.description, input_schema: { type: 'object', properties: t.properties, required: t.required } }; };
+  return Object.keys(BREIN_LEES).map(function (n) { return maak(n, BREIN_LEES[n]); }).concat(Object.keys(BREIN_ACTIES).map(function (n) { return maak(n, BREIN_ACTIES[n]); }));
+}
+function breinSysteem() {
+  var h = huisstijl(), ik = ikUit(), rol = { beheerder: 'beheerder (management)', adviseur: 'onderwijsadviseur (haalt opdrachten binnen)', am: 'accountmanager (voert projecten uit)' }[ik.rol] || ik.rol;
+  var prijzen = lees('Documenten').filter(function (d) { return d.type === 'prijslijst'; }).slice(0, 3).map(function (d) {
+    return '<document titel="' + xmlAttr(d.titel) + '">\n' + String(d.tekst || '').slice(0, 6000) + '\n</document>';
+  }).join('\n');
+  return 'Je bent Athena, de persoonlijke assistent van ' + ik.naam + ', ' + rol + ' bij ' + h.bedrijf + '. Over het bedrijf: ' + h.omschrijving +
+    '\n\nVandaag is het ' + datumLang(new Date()) + ' ' + new Date().getFullYear() + ' (' + datumStr(new Date()) + ').' +
+    '\n\nJe helpt met vragen en met werk in het CRM: offertes, conceptmails, taken, activiteiten, kansen en afspraken. Werkwijze:' +
+    '\n- Zoek eerst op wat je nodig hebt met de leestools; vraag de gebruiker alleen iets als je het echt niet kunt vinden.' +
+    '\n- Acties (maak_offerte, maak_conceptmail, maak_taak, log_activiteit, wijzig_kans, plan_afspraak) worden niet direct uitgevoerd: de gebruiker ziet ze als voorstel en bevestigt zelf. Zeg dus "ik heb een voorstel klaargezet", niet "gedaan".' +
+    '\n- Koppel acties waar mogelijk aan een school, persoon of kans (met de id uit zoek_crm).' +
+    (ik.gekoppeld ? '' : '\n- De Gmail en agenda van deze gebruiker zijn nog niet gekoppeld: mail- en agendatools geven dan een melding. Bied in dat geval de mailtekst gewoon in je antwoord aan.') +
+    '\n- Antwoord in het Nederlands, kort en concreet, als een goed ingewerkte collega. Noem nooit namen van leerlingen.' +
+    '\n\nToon en stijl voor teksten namens het bedrijf:\n' + h.toon + '\n\nStandaardzinnen (alleen waar ze passen):\n' + h.zinnen +
+    (prijzen ? '\n\nPrijslijst:\n' + prijzen : '') +
+    '\n\nBedrijfsgegevens (uit de Sheet):\n' + feitenSamenvatting();
+}
+// bericht: de nieuwe vraag. gesprek: [{rol:'ik'|'bot', tekst}] — eerdere beurten als platte tekst (de app bewaart ze).
+function apiBrein(bericht, gesprek) {
+  bericht = String(bericht || '').trim(); if (!bericht) throw new Error('Geen vraag.');
+  var berichten = [];
+  (gesprek instanceof Array ? gesprek : []).slice(-12).forEach(function (m) {
+    var role = m && m.rol === 'ik' ? 'user' : 'assistant', tekst = String((m && m.tekst) || '').slice(0, 6000).trim();
+    if (!tekst) return;
+    if (!berichten.length && role === 'assistant') return;  // een gesprek begint altijd bij de gebruiker
+    var vorige = berichten[berichten.length - 1];
+    if (vorige && vorige.role === role) vorige.content += '\n\n' + tekst; else berichten.push({ role: role, content: tekst });
+  });
+  if (berichten.length && berichten[berichten.length - 1].role === 'user') berichten[berichten.length - 1].content += '\n\n' + bericht;
+  else berichten.push({ role: 'user', content: bericht });
+  var systeem = [{ type: 'text', text: breinSysteem(), cache_control: { type: 'ephemeral' } }], tools = breinTools();
+  var bronnen = [], acties = [], teksten = [], start = Date.now(), data = null;
+  for (var ronde = 0; ronde < 8; ronde++) {
+    data = claudeVerzoek({ max_tokens: 16000, system: systeem, tools: tools, messages: berichten });
+    if (data.stop_reason === 'refusal') { teksten = ['Hier kan ik niet bij helpen: het verzoek is door de veiligheidsfilters geweigerd.']; break; }
+    var t = tekstUit(data); if (t) teksten.push(t);
+    var gebruik = (data.content || []).filter(function (b) { return b.type === 'tool_use'; });
+    if (data.stop_reason === 'max_tokens') { teksten.push('(Antwoord afgekapt — maak de vraag kleiner.)'); break; }
+    if (data.stop_reason !== 'tool_use' || !gebruik.length) break;
+    berichten.push({ role: 'assistant', content: data.content });  // ongewijzigd terug, inclusief thinking-blokken
+    berichten.push({ role: 'user', content: gebruik.map(function (b) { return breinTool(b, bronnen, acties); }) });
+    if (Date.now() - start > 240000) { teksten.push('(Ik ben gestopt om binnen de tijd te blijven; vraag gerust verder.)'); break; }
+  }
+  return { antwoord: teksten.join('\n\n') || (acties.length ? 'Ik heb een voorstel klaargezet.' : 'Ik heb geen antwoord kunnen vormen.'), bronnen: bronnen, acties: acties };
+}
+function breinTool(blok, bronnen, acties) {
+  var uit = function (inhoud, fout) { var r = { type: 'tool_result', tool_use_id: blok.id, content: typeof inhoud === 'string' ? inhoud : JSON.stringify(inhoud) }; if (fout) r.is_error = true; return r; };
+  var invoer = blok.input || {};
+  try {
+    if (BREIN_ACTIES[blok.name]) {
+      var schoon = breinActieCheck(blok.name, invoer);
+      var a = { id: blok.id, soort: blok.name, titel: BREIN_ACTIES[blok.name].titel, invoer: schoon };
+      acties.push(a);
+      return uit('Voorstel klaargezet; de gebruiker bevestigt het zelf in de app.');
+    }
+    if (!BREIN_LEES[blok.name]) return uit('Onbekende tool: ' + blok.name, true);
+    return uit(breinLees(blok.name, invoer, bronnen));
+  } catch (e) { return uit(String((e && e.message) || e), true); }
+}
+function breinLees(naam, inv, bronnen) {
+  if (naam === 'zoek_crm') return breinZoekCrm(String(inv.zoekterm || ''));
+  if (naam === 'lees_school') {
+    var r = apiSchool(String(inv.schoolId || ''));
+    var trajecten = lees('Trajecten').filter(function (t) { return String(t.schoolId) === String(r.school.id) || klein(t.school) === klein(r.school.naam); });
+    return {
+      school: r.school, personen: r.personen.map(function (p) { return { id: p.id, naam: p.naam, functie: p.functie, email: p.email, telefoon: p.telefoon }; }),
+      kansen: r.kansen.map(function (k) { return { id: k.id, naam: k.naam, fase: k.fase, waarde: k.waarde, volgendeActie: k.volgendeActie, deadline: k.deadline, eigenaar: k.eigenaar }; }),
+      projecten: trajecten.map(function (t) { return { id: t.id, traject: t.traject, schooljaar: t.schooljaar, status: t.status, ondersteuners: t.ondersteuners, urenPerWeek: t.urenPerWeek, tarief: t.tarief, am: t.am }; }),
+      taken: (r.taken || []).slice(0, 15).map(function (a) { return { tekst: a.tekst, deadline: a.deadline, eigenaar: a.eigenaar }; }),
+      tijdlijn: (r.tijdlijn || []).slice(0, 15).map(function (a) { return { datum: a.datum, type: a.type, door: a.door, onderwerp: a.onderwerp, tekst: String(a.tekst || '').slice(0, 300) }; })
+    };
+  }
+  if (naam === 'zoek_documenten') {
+    var docs = relevanteDocumenten(String(inv.zoekterm || ''), lees('Documenten'), 4);
+    if (!docs.length) return 'Geen documenten gevonden.';
+    docs.forEach(function (d) { if (!bronnen.some(function (b) { return b.url === d.url; })) bronnen.push({ titel: d.titel, url: d.url, type: d.type }); });
+    return docs.map(function (d) { return '<document titel="' + xmlAttr(d.titel) + '" type="' + xmlAttr(d.type) + '"' + (d.school ? ' school="' + xmlAttr(d.school) + '"' : '') + '>\n' + String(d.tekst || '').slice(0, 6000) + '\n</document>'; }).join('\n\n');
+  }
+  if (naam === 'mijn_taken') {
+    var sMap = perId(lees('Scholen'));
+    return lees('Acties').filter(function (a) { return a.status !== 'af' && vanMij(a.eigenaar); }).sort(sorteerActies).slice(0, 30)
+      .map(function (a) { return { tekst: a.tekst, deadline: a.deadline, prio: a.prio, school: sMap[a.schoolId] ? sMap[a.schoolId].naam : '' }; });
+  }
+  if (!mijnMailbox()) return 'De Gmail en agenda van ' + ikNaam() + ' zijn nog niet gekoppeld.';
+  if (naam === 'zoek_mail') {
+    return GmailApp.search(String(inv.zoekterm || ''), 0, 8).map(function (t) {
+      var msgs = t.getMessages(), m = msgs[msgs.length - 1];
+      return { threadId: t.getId(), onderwerp: t.getFirstMessageSubject(), van: m.getFrom(), datum: datumTijdStr(m.getDate()), berichten: msgs.length, fragment: String(m.getPlainBody() || '').replace(/\s+/g, ' ').slice(0, 300) };
+    });
+  }
+  if (naam === 'lees_mail') {
+    var th = GmailApp.getThreadById(String(inv.threadId || '')); if (!th) throw new Error('Mail niet gevonden.');
+    return { onderwerp: th.getFirstMessageSubject(), berichten: th.getMessages().slice(-4).map(function (m) {
+      return { van: m.getFrom(), aan: m.getTo(), datum: datumTijdStr(m.getDate()), tekst: zonderCitaat(m.getPlainBody()).slice(0, 4000) };
+    }) };
+  }
+  if (naam === 'mijn_agenda') {
+    var van = parseDatum(inv.van), tot = parseDatum(inv.tot);
+    if (!van || !tot || tot < van) throw new Error('Geef van en tot als yyyy-MM-dd.');
+    if ((tot - van) / 86400000 > 31) throw new Error('Maximaal 31 dagen.');
+    return agendaItems(van, new Date(tot.getTime() + 86400000)).map(function (e) { return { titel: e.titel, start: e.start, eind: e.eind, heleDag: e.heleDag, locatie: e.locatie }; });
+  }
+  throw new Error('Onbekende tool.');
+}
+function zonderCitaat(s) {  // geciteerde eerdere mails weglaten: die staan al als eigen bericht in het gesprek
+  var regels = String(s || '').split('\n'), uit = [];
+  for (var i = 0; i < regels.length; i++) { if (/^On .+wrote:$|^Op .+schreef.*:$/.test(regels[i].trim())) break; if (!/^>/.test(regels[i])) uit.push(regels[i]); }
+  return uit.join('\n').trim();
+}
+function breinZoekCrm(zoekterm) {
+  var ts = uniek(termen(zoekterm)); if (!ts.length) ts = [zonderAccenten(klein(zoekterm))];
+  if (!ts[0]) throw new Error('Geef een zoekterm.');
+  var score = function (tekst) { tekst = zonderAccenten(String(tekst).toLowerCase()); return ts.filter(function (t) { return tekst.indexOf(t) >= 0; }).length; };
+  var top = function (lijst, tekstVan, uitVan) {
+    return lijst.map(function (x) { return { x: x, s: score(tekstVan(x)) }; }).filter(function (y) { return y.s > 0; }).sort(function (a, b) { return b.s - a.s; }).slice(0, 8).map(function (y) { return uitVan(y.x); });
+  };
+  var scholen = lees('Scholen'), sMap = perId(scholen);
+  return {
+    scholen: top(scholen, function (s) { return [s.naam, s.plaats, s.bestuur, s.email, s.website].join(' '); }, function (s) { return { id: s.id, naam: s.naam, plaats: s.plaats, status: s.status }; }),
+    personen: top(lees('Personen'), function (p) { return [persoonNaam(p), p.email, p.functie, sMap[p.schoolId] ? sMap[p.schoolId].naam : ''].join(' '); },
+      function (p) { return { id: p.id, naam: persoonNaam(p), functie: p.functie, email: p.email, schoolId: p.schoolId, school: sMap[p.schoolId] ? sMap[p.schoolId].naam : '' }; }),
+    kansen: top(lees('Kansen'), function (k) { return [k.naam, k.traject, k.school].join(' '); },
+      function (k) { return { id: k.id, naam: k.naam || k.traject, school: k.school, schoolId: k.schoolId, fase: k.fase, waarde: Number(k.waarde) || 0, eigenaar: k.eigenaar }; }),
+    projecten: top(lees('Trajecten'), function (t) { return [t.school, t.traject, t.plaats].join(' '); },
+      function (t) { return { id: t.id, traject: t.traject, school: t.school, schoolId: t.schoolId, schooljaar: t.schooljaar, status: t.status }; })
+  };
+}
+// Ook gebruikt bij uitvoeren: de app kan de invoer aangepast hebben.
+function breinActieCheck(soort, inv) {
+  var def = BREIN_ACTIES[soort]; if (!def) throw new Error('Onbekende actie.');
+  inv = (inv && typeof inv === 'object') ? inv : {};
+  var o = {};
+  Object.keys(def.properties).forEach(function (k) {
+    var v = inv[k]; if (v === undefined || v === null || v === '') return;
+    var type = def.properties[k].type;
+    if (type === 'number') { v = Number(String(v).replace(',', '.')); if (isNaN(v)) throw new Error(k + ' moet een getal zijn.'); }
+    else if (type === 'boolean') v = v === true || v === 'true' || v === 'ja';
+    else v = String(v).trim();
+    if (def.properties[k].enum && def.properties[k].enum.indexOf(v) < 0) throw new Error(k + ' moet een van deze zijn: ' + def.properties[k].enum.join(', ') + '.');
+    o[k] = v;
+  });
+  def.required.forEach(function (k) { if (o[k] === undefined || o[k] === '') throw new Error('Veld ' + k + ' ontbreekt.'); });
+  ['schoolId', 'persoonId', 'kansId'].forEach(function (k) {
+    var tab = { schoolId: 'Scholen', persoonId: 'Personen', kansId: 'Kansen' }[k];
+    if (o[k] && !vind(tab, o[k])) throw new Error(k + ' ' + o[k] + ' bestaat niet; zoek het juiste id op met zoek_crm.');
+  });
+  if (soort === 'maak_conceptmail' && !o.threadId && !/@/.test(o.aan || '')) throw new Error('Geef een threadId of een e-mailadres in aan.');
+  if (soort === 'plan_afspraak' && !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(o.start)) throw new Error('start als yyyy-MM-dd HH:mm.');
+  if ((soort === 'log_activiteit' || soort === 'plan_afspraak') && !o.schoolId && !o.persoonId && !o.kansId) throw new Error('Koppel aan een school, persoon of kans (id via zoek_crm).');
+  return o;
+}
+// actie: {soort, invoer} zoals apiBrein die voorstelde, eventueel aangepast door de gebruiker.
+function apiBreinUitvoeren(actie) {
+  actie = actie || {};
+  var soort = String(actie.soort || ''), o = breinActieCheck(soort, actie.invoer);
+  if (soort === 'maak_taak') {
+    var t = apiTaakOpslaan({ tekst: o.tekst, deadline: o.deadline || '', prio: o.prio || 'midden', eigenaar: o.eigenaar || '', notitie: o.notitie || '', schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '' });
+    return { melding: 'Taak aangemaakt: ' + t.tekst };
+  }
+  if (soort === 'log_activiteit') {
+    apiActiviteitToevoegen({ type: o.type, onderwerp: o.onderwerp, tekst: o.tekst || '', datum: o.datum || '', schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '' });
+    return { melding: 'Vastgelegd op de tijdlijn.' };
+  }
+  if (soort === 'wijzig_kans') {
+    var w = { id: o.kansId };
+    ['fase', 'waarde', 'volgendeActie', 'deadline', 'verwachteSluiting'].forEach(function (k) { if (o[k] !== undefined) w[k] = o[k]; });
+    if (w.fase) w.fase = klein(w.fase);
+    var k = apiKansOpslaan(w, false).kans;
+    return { melding: 'Kans bijgewerkt: ' + k.naam + ' (' + k.fase + ').' };
+  }
+  if (soort === 'plan_afspraak') {
+    if (!mijnMailbox()) throw new Error('Je agenda is nog niet gekoppeld.');
+    var a = apiAfspraakPlannen({ titel: o.titel, start: o.start, duurMin: o.duurMin || 60, locatie: o.locatie || '', notitie: o.notitie || '', uitnodigen: !!o.uitnodigen, schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '' });
+    return { melding: 'Afspraak gepland: ' + a.onderwerp + ' (' + a.datum + ').' };
+  }
+  if (soort === 'maak_conceptmail') return maakConceptmail(o);
+  if (soort === 'maak_offerte') return maakOfferte(o);
+  throw new Error('Onbekende actie.');
+}
+function maakConceptmail(o) {
+  if (!mijnMailbox()) throw new Error('Je Gmail is nog niet gekoppeld; kopieer de tekst uit het antwoord.');
+  var concept;
+  if (o.threadId) {
+    var th = GmailApp.getThreadById(o.threadId); if (!th) throw new Error('Mail niet gevonden.');
+    var msgs = th.getMessages();
+    concept = msgs[msgs.length - 1].createDraftReply(o.tekst);  // nooit versturen: alleen een concept
+  } else {
+    concept = GmailApp.createDraft(o.aan, o.onderwerp || '', o.tekst);
+  }
+  var mij = Session.getEffectiveUser().getEmail();
+  return { melding: 'Concept staat klaar in Gmail' + '.', url: 'https://mail.google.com/mail/?authuser=' + encodeURIComponent(mij) + '#drafts' };
+}
+var OFFERTE_DELEN = ['inleiding', 'hulpvraag', 'aanpak', 'rooster', 'kosten', 'voorwaarden', 'afsluiting'];
+var OFFERTE_KOPPEN = { inleiding: 'Inleiding', hulpvraag: 'Hulpvraag', aanpak: 'Onze aanpak', rooster: 'Rooster en planning', kosten: 'Investering', voorwaarden: 'Voorwaarden', afsluiting: 'Tot slot' };
+// Met scripteigenschap OFFERTE_SJABLOON_ID: kopie van dat Google Doc met {{titel}}, {{school}}, {{contactpersoon}}, {{datum}}, {{adviseur}} en
+// {{inleiding}} … {{afsluiting}}. Staan de inhoudsvelden er niet in, dan komen ze als hoofdstukken onderaan. Zonder sjabloon: een nieuw Doc in de huisstijl.
+function maakOfferte(o) {
+  var h = huisstijl(), map = offerteMap(), sjabloon = P.getProperty('OFFERTE_SJABLOON_ID'), datum = datumLang(new Date()) + ' ' + new Date().getFullYear();
+  var naam = 'Offerte ' + o.school + ' — ' + o.titel + ' (' + datumStr(new Date()) + ')', doc;
+  var waarden = { titel: o.titel, school: o.school, contactpersoon: o.contactpersoon || '', datum: datum, adviseur: ikNaam() };
+  OFFERTE_DELEN.forEach(function (k) { waarden[k] = o[k] || ''; });
+  if (sjabloon) {
+    var kopie = DriveApp.getFileById(sjabloon).makeCopy(naam, map);
+    doc = DocumentApp.openById(kopie.getId());
+    var body = doc.getBody(), metInhoud = !!body.findText('\\{\\{hulpvraag\\}\\}');
+    Object.keys(waarden).forEach(function (k) { vervangOveral(body, k, waarden[k]); });
+    if (!metInhoud) offerteHoofdstukken(body, waarden, h);
+  } else {
+    doc = DocumentApp.create(naam);
+    DriveApp.getFileById(doc.getId()).moveTo(map);
+    var b = doc.getBody();
+    b.editAsText().setFontFamily('Nunito');
+    var kop = b.getParagraphs()[0]; kop.setText(o.titel); kop.setHeading(DocumentApp.ParagraphHeading.TITLE); kop.editAsText().setForegroundColor(h.kleur_primair);
+    b.appendParagraph(h.bedrijf + ' · offerte voor ' + o.school + (o.contactpersoon ? ' · t.a.v. ' + o.contactpersoon : '') + ' · ' + datum).editAsText().setForegroundColor(h.kleur_tekst);
+    offerteHoofdstukken(b, waarden, h);
+    b.appendParagraph('\n' + ikNaam() + '\n' + h.bedrijf);
+    b.editAsText().setFontFamily('Nunito');
+  }
+  doc.saveAndClose();
+  var bestand = DriveApp.getFileById(doc.getId());
+  if (GEBRUIKER && GEBRUIKER.email && GEBRUIKER.id !== 'beheer') { try { bestand.addEditor(GEBRUIKER.email); } catch (e) {} }
+  if (o.schoolId || o.kansId || o.persoonId) {
+    var a = vulKoppeling({ type: 'notitie', datum: nu(), door: ikNaam(), schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '', bron: 'brein', aangemaakt: nu(),
+      onderwerp: 'Offerte gemaakt: ' + o.titel, tekst: bestand.getUrl() });
+    metLock(function () { schrijf('Activiteiten', a); });
+  }
+  return { melding: 'Offerte staat klaar in Drive.', url: bestand.getUrl() };
+}
+function offerteHoofdstukken(body, waarden, h) {
+  OFFERTE_DELEN.forEach(function (k) {
+    if (!waarden[k]) return;
+    body.appendParagraph(OFFERTE_KOPPEN[k]).setHeading(DocumentApp.ParagraphHeading.HEADING2).editAsText().setForegroundColor(h.kleur_primair);
+    String(waarden[k]).split(/\n{2,}/).forEach(function (alinea) { body.appendParagraph(alinea.trim()).setHeading(DocumentApp.ParagraphHeading.NORMAL).editAsText().setForegroundColor(h.kleur_tekst); });
+  });
+}
+function vervangOveral(body, sleutel, waarde) {  // zonder replaceText: daar zijn $ en \ in de waarde speciaal
+  var patroon = '\\{\\{' + sleutel + '\\}\\}', r, n = 0;
+  while ((r = body.findText(patroon)) && n++ < 25) {
+    var t = r.getElement().asText(), s = r.getStartOffset();
+    t.deleteText(s, r.getEndOffsetInclusive());
+    if (waarde) t.insertText(s, String(waarde));
+  }
+}
+function offerteMap() {
+  var id = P.getProperty('OFFERTE_MAP_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var basis = DriveApp.getFolderById(P.getProperty('DRIVE_MAP_ID')), it = basis.getFoldersByName('Offertes');
+  var map = it.hasNext() ? it.next() : basis.createFolder('Offertes');
+  P.setProperty('OFFERTE_MAP_ID', map.getId());
+  return map;
+}
+
 /* ===================== Claude API (raw HTTP via UrlFetchApp; Apps Script heeft geen SDK) ===================== */
 
-// Standaard claude-opus-5 met server-side fallbacks ('default'), zodat een geweigerd verzoek automatisch op een ander model landt.
+// Standaard claude-opus-5-5 met server-side fallbacks ('default'), zodat een geweigerd verzoek automatisch op een ander model landt.
 // Sleutel, model en effort staan in de scripteigenschappen: ANTHROPIC_API_KEY, CLAUDE_MODEL, CLAUDE_EFFORT.
 function claude(systeem, gebruiker, maxTokens, effort) {
+  var data = claudeVerzoek({ max_tokens: maxTokens || 16000, system: systeem, messages: [{ role: 'user', content: gebruiker }] }, effort);
+  if (data.stop_reason === 'refusal') return 'Hier kan ik niet bij helpen: het verzoek is door de veiligheidsfilters geweigerd.';
+  var uit = tekstUit(data);
+  if (data.stop_reason === 'max_tokens') uit += '\n\n(Antwoord afgekapt — stel een kortere vraag.)';
+  return uit;
+}
+// v3.5: één Messages API-verzoek; ook gebruikt door de tool-lus van het Brein.
+function claudeVerzoek(body, effort) {
   var sleutel = P.getProperty('ANTHROPIC_API_KEY');
   if (!sleutel) throw new Error('Geen ANTHROPIC_API_KEY ingesteld bij Projectinstellingen → Scripteigenschappen.');
-  var body = {
-    model: P.getProperty('CLAUDE_MODEL') || 'claude-opus-5',
-    max_tokens: maxTokens || 16000,
-    fallbacks: 'default',
-    output_config: { effort: effort || P.getProperty('CLAUDE_EFFORT') || 'medium' },
-    system: systeem,
-    messages: [{ role: 'user', content: gebruiker }]
-  };
+  body.model = P.getProperty('CLAUDE_MODEL') || 'claude-opus-5-5';
+  body.fallbacks = 'default';
+  body.output_config = { effort: effort || P.getProperty('CLAUDE_EFFORT') || 'medium' };
   var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     headers: { 'x-api-key': sleutel, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
@@ -1592,11 +1895,9 @@ function claude(systeem, gebruiker, maxTokens, effort) {
   var code = resp.getResponseCode(), tekst = resp.getContentText() || '', data;
   try { data = JSON.parse(tekst); } catch (e) { data = {}; }
   if (code !== 200) throw new Error('Claude API ' + code + ': ' + ((data.error && data.error.message) || tekst.slice(0, 200)));
-  if (data.stop_reason === 'refusal') return 'Hier kan ik niet bij helpen: het verzoek is door de veiligheidsfilters geweigerd.';
-  var uit = (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('\n').trim();
-  if (data.stop_reason === 'max_tokens') uit += '\n\n(Antwoord afgekapt — stel een kortere vraag.)';
-  return uit;
+  return data;
 }
+function tekstUit(data) { return (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('\n').trim(); }
 
 /* ===================== Hulpfuncties ===================== */
 
