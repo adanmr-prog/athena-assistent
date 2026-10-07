@@ -55,6 +55,13 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/12_school_detail.png', full_page=True)
     page.click('[data-composer="afspraak"]'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Gesprek Voorbeeldcollege Zuid")'); page.wait_for_timeout(100)
     page.click('[data-composer="persoon"]'); page.fill('#cf-voornaam', 'Dirk'); page.fill('#cf-achternaam', 'Smit'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.rij:has-text("Dirk Smit")')
+    # v3.3: bewerken stuurt alleen gewijzigde velden; een gelijktijdige wijziging van hetzelfde veld geeft een melding
+    page.click('[data-composer="bewerk"]'); page.fill('#cf-plaats', 'Schiedam')
+    page.evaluate("() => run('apiSchoolOpslaan', { id: 's1', plaats: 'Vlaardingen', _oud: { plaats: 'Rotterdam' } })")  # een collega was net eerder
+    page.wait_for_timeout(300); page.click('[data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Intussen gewijzigd")'); page.wait_for_timeout(600)
+    assert 'Vlaardingen' in page.inner_text('.detailkop p'), 'scherm ververst met de wijziging van de collega'
+    page.click('[data-composer="bewerk"]'); page.fill('#cf-bestuur', 'Stichting Nieuw'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.detailkop p:has-text("Stichting Nieuw")')
+    page.click('[data-archief]'); page.wait_for_selector('#archiefTijdlijn .t-item')
     page.go_back(); page.wait_for_selector('#crmLijstScherm [data-crmtab]'); page.wait_for_timeout(150)
     page.click('[data-crmtab="pipeline"]'); page.wait_for_selector('.kolom'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/13_pipeline.png', full_page=True)
@@ -70,7 +77,8 @@ with sync_playwright() as p:
     page.click('[data-crmtab="rapport"]'); page.wait_for_selector('.tabel'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/16_rapport.png', full_page=True)
     print('horizontale scroll (rapport):', page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
-    page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
+    page.wait_for_selector('#rapportActiviteit .t-item')  # v3.3: activiteit per gebruiker
+    page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.select_option('#cf-rol', 'adviseur'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/17_beheer_gebruikers.png', full_page=True)
     page.click('[data-beheer="capsule"]'); page.wait_for_selector('#crmBeheer:has-text("klaar")', timeout=8000)
     page.click('[data-crmtab="scholen"]'); page.click('[data-crmnieuw="school"]'); page.fill('#cf-naam', 'Testschool Noord'); page.fill('#cf-plaats', 'Groningen'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.detailkop h2:has-text("Testschool Noord")')

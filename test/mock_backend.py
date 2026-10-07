@@ -100,7 +100,7 @@ def basis():
     for s in SCHOLEN:
         open_ = [k for k in CRMKANSEN if k['schoolId'] == s['id'] and k['fase'] not in ('gewonnen', 'verloren')]
         scholen.append(dict(s, personen=len([p for p in PERSONEN if p['schoolId'] == s['id']]), openKansen=len(open_), openWaarde=sum(k['waarde'] for k in open_)))
-    return {'ik': {'naam': 'Menno', 'rol': 'beheerder'}, 'gebruikers': GEBRUIKERS_NAMEN, 'statussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'mijlpalen': MIJLPALEN,
+    return {'ik': {'naam': 'Menno', 'rol': 'beheerder', 'gekoppeld': True}, 'gebruikers': GEBRUIKERS_NAMEN, 'statussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'mijlpalen': MIJLPALEN,
             'categorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'activiteitTypes': ['notitie', 'gesprek', 'mail', 'afspraak'], 'tracks': TRACKS,
             'tags': sorted({t for s in SCHOLEN for t in s['tags']}), 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN]}
 def tijdlijn(f): return [act_uit(a) for a in sorted([a for a in ACTIVITEITEN if f(a)], key=lambda a: a['datum'], reverse=True)]
@@ -128,16 +128,21 @@ def handle_crm(fn, args):
                 'personen': [{'id': x['id'], 'naam': persoon_uit(x)['naam']} for x in PERSONEN if s and x['schoolId'] == s['id']],
                 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af' and t['kansId'] == k['id']], 'tijdlijn': tijdlijn(lambda a: a['kansId'] == k['id'])}
     if fn == 'apiSchoolOpslaan':
-        o = dict(args[0]); o['tags'] = [t.strip().lower() for t in str(o.get('tags', '')).split(',') if t.strip()] if isinstance(o.get('tags'), str) else o.get('tags', [])
+        o = dict(args[0]); oud = o.pop('_oud', None)
+        if oud and o.get('id'):  # v3.3: conflictcontrole zoals de echte backend
+            cur = per_id(SCHOLEN)[o['id']]; norm = lambda v: ', '.join(v).lower() if isinstance(v, list) else json.dumps(v) if isinstance(v, dict) else str(v if v is not None else '').strip()
+            botst = [k for k in oud if norm(cur.get(k)) != norm(oud[k]) and norm(cur.get(k)) != norm(o.get(k))]
+            if botst: raise ValueError('Intussen gewijzigd: ' + ', '.join(botst) + ' (laatst bewerkt door Mees om 14:02). Het scherm is ververst; voer je wijziging opnieuw in.')
+        if 'tags' in o or not o.get('id'): o['tags'] = [t.strip().lower() for t in str(o.get('tags', '')).split(',') if t.strip()] if isinstance(o.get('tags'), str) else o.get('tags', [])
         o.setdefault('velden', {}); new = not o.get('id')
         if new: o.update({'status': o.get('status') or 'lead', 'aangemaakt': nu(), 'laatsteContact': ''}); [o.setdefault(k, '') for k in ['plaats', 'type', 'bestuur', 'adres', 'website', 'leerlingen', 'telefoon', 'email', 'notities', 'eigenaar']]
         return opslaan(SCHOLEN, o, 's')
     if fn == 'apiPersoonOpslaan':
-        o = dict(args[0]); o['tags'] = [t.strip() for t in str(o.get('tags', '')).split(',') if t.strip()] if isinstance(o.get('tags'), str) else o.get('tags', [])
+        o = dict(args[0]); o.pop('_oud', None); o['tags'] = [t.strip() for t in str(o.get('tags', '')).split(',') if t.strip()] if isinstance(o.get('tags'), str) else o.get('tags', [])
         if not o.get('id'): [o.setdefault(k, '') for k in ['voornaam', 'achternaam', 'functie', 'schoolId', 'email', 'telefoon', 'linkedin', 'eigenaar', 'laatsteContact']]; o['aangemaakt'] = nu()
         return persoon_uit(opslaan(PERSONEN, o, 'p'))
     if fn == 'apiKansOpslaan':
-        o = dict(args[0]); maak = len(args) > 1 and args[1]; oud = per_id(CRMKANSEN).get(o.get('id'))
+        o = dict(args[0]); o.pop('_oud', None); maak = len(args) > 1 and args[1]; oud = per_id(CRMKANSEN).get(o.get('id'))
         if o.get('schoolId'): o['school'] = per_id(SCHOLEN)[o['schoolId']]['naam']
         for k in ('waarde', 'kans'):
             if o.get(k) not in (None, ''): o[k] = float(o[k])
@@ -187,7 +192,7 @@ def handle_crm(fn, args):
         o = args[0]; DOELEN[:] = [x for x in DOELEN if x['id'] != o['eigenaar'] + o['periode'] + o['metric']] + [dict(o, id=o['eigenaar'] + o['periode'] + o['metric'], doel=float(o.get('doel') or 0))]; return handle_crm('apiDoelen', [])
     if fn == 'apiMijlpalenOpslaan':
         MIJLPALEN[:] = [{'pipeline': m.get('pipeline') or 'Scholen', 'mijlpaal': m['mijlpaal'].lower(), 'volgorde': i + 1, 'kans': m['kans'], 'dagenNorm': m['dagenNorm']} for i, m in enumerate(args[0])]; return MIJLPALEN
-    if fn == 'apiGebruikers': return {'gebruikers': GEBRUIKERS}
+    if fn == 'apiGebruikers': return {'gebruikers': GEBRUIKERS, 'rollen': ['beheerder', 'adviseur', 'am']}
     if fn == 'apiGebruikerOpslaan':
         o = dict(args[0]); g = opslaan(GEBRUIKERS, dict(o, rol=o.get('rol') or 'am', actief=o.get('actief', 'ja') != 'nee', heeftCode=True), 'g')
         if g['naam'] not in GEBRUIKERS_NAMEN: GEBRUIKERS_NAMEN.append(g['naam'])
@@ -195,15 +200,22 @@ def handle_crm(fn, args):
     if fn == 'apiHome':  # v3.0
         open_ = [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')]
         return {'groet': 'Goedemorgen Menno', 'datum': 'dinsdag 22 september', 'ik': {'naam': 'Menno', 'rol': 'beheerder'}, 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af'],
-                'agenda': [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': ''}, {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}],
+                'agenda': [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': ''}, {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}], 'gekoppeld': True,
                 'pipeline': {'open': len(open_), 'waarde': sum(k['waarde'] for k in open_), 'gewogen': sum(k['gewogen'] for k in open_), 'stil': [k for k in open_ if k['stil']]},
                 'recent': [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if a['datum'] <= nu()], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}]}
+    if fn == 'apiActiviteiten':  # v3.3
+        door = args[0] if args else ''; l = [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if (not door or a['door'] == door) and a['datum'] <= nu()]
+        pt = {}
+        for a in l: pt[a['type']] = pt.get(a['type'], 0) + 1
+        return {'door': door, 'totaal': len(l), 'perType': pt, 'tijdlijn': l}
+    if fn == 'apiArchiefTijdlijn':
+        return [act_uit({'id': 'ar1', 'type': 'notitie', 'datum': '2025-03-01 10:00', 'door': 'Menno', 'schoolId': args[1], 'persoonId': '', 'kansId': '', 'onderwerp': 'Kennismaking (archief)', 'tekst': 'Eerste contact via de beurs.', 'duurMin': 0, 'bron': 'capsule'})]
     if fn == 'apiHomeMails': return [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}]  # v3.2
     if fn == 'apiAgenda':  # v3.0
         van, tot = args[0], args[1]
         ev = [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': '', 'schoolId': 's2', 'kansId': '', 'school': 'Lyceum Demo'},
               {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}]
-        return {'van': van, 'tot': tot, 'events': [e for e in ev if van <= e['start'][:10] <= tot],
+        return {'van': van, 'tot': tot, 'gekoppeld': True, 'events': [e for e in ev if van <= e['start'][:10] <= tot],
                 'afspraken': [act_uit(a) for a in ACTIVITEITEN if a['type'] == 'afspraak' and van <= a['datum'][:10] <= tot],
                 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af' and t['deadline'] and van <= t['deadline'] <= tot]}
     if fn == 'apiCrmSync': return {'mails': 3, 'afspraken': 1, 'bijgewerkt': 0}
