@@ -5,27 +5,28 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '3.2';
+var VERSIE = '3.3';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
 var TABELLEN = {
   Scholen:      ['id', 'naam', 'plaats', 'type', 'contactpersoon', 'email', 'telefoon', 'status', 'am', 'notities', 'bijgewerkt',
-                 'bestuur', 'adres', 'website', 'leerlingen', 'eigenaar', 'tags', 'velden', 'laatsteContact', 'capsuleId', 'aangemaakt'],
+                 'bestuur', 'adres', 'website', 'leerlingen', 'eigenaar', 'tags', 'velden', 'laatsteContact', 'capsuleId', 'aangemaakt', 'bijgewerktDoor'],
   Trajecten:    ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'bijgewerkt',
-                 'schoolId', 'capsuleId'],
+                 'schoolId', 'capsuleId', 'bijgewerktDoor'],
   Kansen:       ['id', 'school', 'traject', 'fase', 'waarde', 'volgendeActie', 'deadline', 'laatsteContact', 'eigenaar', 'notities', 'bijgewerkt',
-                 'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt'],
+                 'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt', 'bijgewerktDoor'],
   Acties:       ['id', 'tekst', 'bron', 'prio', 'deadline', 'status', 'link', 'aangemaakt', 'afgerond',
                  'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'trackRunId', 'notitie', 'capsuleId'],
   Documenten:   ['id', 'titel', 'type', 'school', 'url', 'driveId', 'gewijzigd', 'woorden', 'tekst', 'bijgewerkt'],
-  Reviews:      ['id', 'datum', 'gemaaktOp', 'samenvatting', 'gedaan', 'blijvenLiggen', 'vandaag'],
+  Reviews:      ['id', 'datum', 'gemaaktOp', 'samenvatting', 'gedaan', 'blijvenLiggen', 'vandaag', 'eigenaar'],  // v3.3: review per gebruiker
   Huisstijl:    ['sleutel', 'waarde'],
   Content:      ['id', 'datum', 'type', 'onderwerp', 'tekst'],
   Notities:     ['id', 'trajectId', 'datum', 'tekst'],
   // v2.0: CRM
-  Personen:     ['id', 'voornaam', 'achternaam', 'functie', 'schoolId', 'email', 'telefoon', 'linkedin', 'eigenaar', 'tags', 'velden', 'laatsteContact', 'capsuleId', 'aangemaakt', 'bijgewerkt'],
+  Personen:     ['id', 'voornaam', 'achternaam', 'functie', 'schoolId', 'email', 'telefoon', 'linkedin', 'eigenaar', 'tags', 'velden', 'laatsteContact', 'capsuleId', 'aangemaakt', 'bijgewerkt', 'bijgewerktDoor'],
   Activiteiten: ['id', 'type', 'datum', 'door', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'onderwerp', 'duurMin', 'gmailId', 'agendaId', 'bron', 'aangemaakt', 'tekst'],
+  Activiteiten_archief: ['id', 'type', 'datum', 'door', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'onderwerp', 'duurMin', 'gmailId', 'agendaId', 'bron', 'aangemaakt', 'tekst'],  // v3.3: ouder dan 12 maanden
   Mijlpalen:    ['id', 'pipeline', 'mijlpaal', 'volgorde', 'kans', 'dagenNorm'],
   Tracks:       ['id', 'naam', 'omschrijving', 'stappen', 'bijgewerkt'],
   Gebruikers:   ['id', 'naam', 'email', 'rol', 'actief', 'bijgewerkt'],
@@ -63,11 +64,12 @@ function setup() {
 
 function installeerTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['nachtelijkeReviewTrigger', 'indexeerTrigger', 'crmSyncTrigger'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+    if (['nachtelijkeReviewTrigger', 'indexeerTrigger', 'crmSyncTrigger', 'archiveerTrigger'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('indexeerTrigger').timeBased().everyDays(1).atHour(4).create();          // documenten opnieuw inlezen
   ScriptApp.newTrigger('nachtelijkeReviewTrigger').timeBased().everyDays(1).atHour(5).create(); // review klaar vóór de ochtend
   ScriptApp.newTrigger('crmSyncTrigger').timeBased().everyHours(1).create();                    // v2.0: mails en afspraken aan scholen koppelen
+  ScriptApp.newTrigger('archiveerTrigger').timeBased().onMonthDay(1).atHour(3).create();         // v3.3: oude activiteit naar het archief
 }
 
 // Optioneel: fictieve voorbeelddata om de app meteen gevuld te zien. Verwijder de rijen daarna gewoon in de Sheet.
@@ -185,6 +187,7 @@ function samenvoegen(naam, obj, hit) {
   var kop = TABELLEN[naam], samen = {};
   kop.forEach(function (k) { samen[k] = (obj[k] !== undefined && obj[k] !== null) ? obj[k] : (hit ? hit[k] : ''); });
   if (kop.indexOf('bijgewerkt') >= 0) samen.bijgewerkt = nu();
+  if (kop.indexOf('bijgewerktDoor') >= 0) samen.bijgewerktDoor = ikNaam();  // v3.3: voor de conflictmelding
   return samen;
 }
 // Upsert op id. Geeft het samengevoegde object terug.
@@ -252,7 +255,7 @@ function apiOverzicht() {
     kpi: { trajecten: actief.length, kansen: open.length, scholen: uniek(actief.map(function (t) { return t.school; })).length, omzet: omzet, schooljaar: sj,
            pijplijn: open.reduce(function (s, k) { return s + (Number(k.waarde) || 0); }, 0) },
     focus: acties.slice(0, 6).map(actieUit), aandacht: acties.slice(6).map(actieUit),
-    mails: mailsOnbeantwoord(5), agenda: agendaVoorDag(new Date()),
+    mails: mailsOnbeantwoord(5), agenda: agendaVoorDag(new Date()), gekoppeld: mijnMailbox(),
     kansen: open.slice(0, 8).map(function (k) { return kansUit(k, mp); }),
     tellingScholen: scholen.length
   };
@@ -292,6 +295,7 @@ function sorteerActies(a, b) {
 
 // Mails in de inbox waarvan het laatste bericht niet van jou is en ouder dan 2 dagen: die wachten op jouw antwoord.
 function mailsOnbeantwoord(max, minDagen) {
+  if (!mijnMailbox()) return [];  // v3.3: de backend leest alleen de mailbox van zijn eigenaar; anderen zien die nooit
   minDagen = minDagen || 2;
   return metCache('mails-' + max + '-' + minDagen, 300, function () { return zoekMailsOnbeantwoord(max, minDagen); });
 }
@@ -311,6 +315,7 @@ function zoekMailsOnbeantwoord(max, minDagen) {
   } catch (e) { return []; }
 }
 function agendaVoorDag(dag) {
+  if (!mijnMailbox()) return [];  // v3.3
   try {
     return CalendarApp.getDefaultCalendar().getEventsForDay(dag).map(function (ev) {
       var heleDag = ev.isAllDayEvent();
@@ -456,13 +461,22 @@ function feitenSamenvatting() {
 /* ===================== 3. Nachtelijke review: wat is gedaan, wat is blijven liggen, wat vraagt vandaag aandacht ===================== */
 
 function apiReview() {
-  var rs = lees('Reviews').sort(function (a, b) { return String(b.gemaaktOp).localeCompare(String(a.gemaaktOp)); });
+  var rs = lees('Reviews').filter(vanMijReview).sort(function (a, b) { return String(b.gemaaktOp).localeCompare(String(a.gemaaktOp)); });
   return { laatste: rs[0] ? reviewUit(rs[0]) : null, eerdere: rs.slice(1, 15).map(function (r) { var u = reviewUit(r); return { id: u.id, datum: u.datum, gemaaktOp: u.gemaaktOp, samenvatting: u.samenvatting, tellingen: u.tellingen }; }) };
 }
 function apiReviewNu() { return metLock(function () { return reviewUit(nachtelijkeReview()); }); }
+// v3.3: een review per gebruiker. De eigenaar van het script krijgt er mail en agenda bij; anderen (nog) niet, tot hun Gmail gekoppeld is.
+function vanMijReview(r) { return r.eigenaar ? String(r.eigenaar) === ikNaam() : mijnMailbox(); }
 function nachtelijkeReviewTrigger() {
-  try { var r = metLock(nachtelijkeReview); if (P.getProperty('RAPPORT_EMAIL')) mailRapport(reviewUit(r)); }  // v1.1: ook de trigger onder de lock
+  try { var r = metLock(nachtelijkeReview); if (P.getProperty('RAPPORT_EMAIL')) mailRapport(reviewUit(r), P.getProperty('RAPPORT_EMAIL')); }  // v1.1: ook de trigger onder de lock
   catch (e) { Logger.log('Review mislukt: ' + e); }
+  lees('Gebruikers').filter(actief).forEach(function (g) {
+    if (!g.naam || g.naam === ikNaam()) return;
+    GEBRUIKER = { id: g.id, naam: g.naam, email: g.email, rol: rolVan(g.rol) };
+    try { var r2 = metLock(nachtelijkeReview); if (g.email) mailRapport(reviewUit(r2), g.email); }
+    catch (e2) { Logger.log('Review ' + g.naam + ' mislukt: ' + e2); }
+  });
+  GEBRUIKER = null;
 }
 function reviewUit(r) {
   var lees_ = function (v) { try { return typeof v === 'string' ? JSON.parse(v || '[]') : (v || []); } catch (e) { return []; } };
@@ -476,11 +490,19 @@ function nachtelijkeReview() {
   var dag = nuD.getHours() >= 15 ? plusDagen(1) : nuD;   // 's avonds gaat de review over morgen, overdag over vandaag
   var dagStr = datumStr(dag);
   var acties = lees('Acties'), kansen = lees('Kansen'), trajecten = lees('Trajecten'), docs = lees('Documenten', true), mp = mijlpaalMap();
+  // v3.3: alleen het eigen werk; de eigenaar van het script houdt het volledige overzicht (en zijn mail en agenda)
+  var eigen = mijnMailbox();
+  acties = acties.filter(function (a) { return vanMij(a.eigenaar); });
+  if (!eigen) {
+    kansen = kansen.filter(function (k) { return k.eigenaar === ikNaam(); });
+    trajecten = trajecten.filter(function (t) { return t.am === ikNaam(); });
+    docs = [];
+  }
   var gedaan = [], blijven = [], vandaag = [];
   var naGrens = function (s) { var d = parseDatum(s); return d && d.getTime() >= grens.getTime(); };
 
   acties.filter(function (a) { return a.status === 'af' && naGrens(a.afgerond); }).forEach(function (a) { gedaan.push({ tekst: a.tekst, bron: 'actie' }); });
-  try {
+  if (eigen) try {
     var verzonden = GmailApp.search('from:me newer_than:1d', 0, 30);
     if (verzonden.length) gedaan.push({ tekst: verzonden.length + ' mail' + (verzonden.length === 1 ? '' : 's') + ' verstuurd' + (verzonden.length <= 3 ? ': ' + verzonden.map(function (t) { return t.getFirstMessageSubject(); }).join(' · ') : ''), bron: 'mail' });
   } catch (e) {}
@@ -505,24 +527,24 @@ function nachtelijkeReview() {
 
   var review = { datum: dagStr, gemaaktOp: nu(), gedaan: gedaan, blijvenLiggen: blijven, vandaag: vandaag };
   review.samenvatting = samenvattingReview(review);
-  return schrijf('Reviews', { datum: review.datum, gemaaktOp: review.gemaaktOp, samenvatting: review.samenvatting, gedaan: gedaan, blijvenLiggen: blijven, vandaag: vandaag });
+  return schrijf('Reviews', { datum: review.datum, gemaaktOp: review.gemaaktOp, samenvatting: review.samenvatting, gedaan: gedaan, blijvenLiggen: blijven, vandaag: vandaag, eigenaar: ikNaam() });
 }
 function samenvattingReview(r) {
-  var naam = P.getProperty('NAAM') || 'Menno';
+  var naam = String(ikNaam()).split(' ')[0];  // v3.3: de gebruiker van deze review
   var basis = 'Goedemorgen ' + naam + '. De afgelopen dag: ' + r.gedaan.length + ' ' + (r.gedaan.length === 1 ? 'ding' : 'dingen') + ' gedaan. ' +
     (r.blijvenLiggen.length ? 'Blijven liggen: ' + r.blijvenLiggen.length + ' punt' + (r.blijvenLiggen.length === 1 ? '' : 'en') + ', te beginnen met: ' + r.blijvenLiggen[0].tekst + '. ' : 'Niets is blijven liggen. ') +
     (r.vandaag.length ? 'Vandaag vraagt ' + r.vandaag.length + ' ' + (r.vandaag.length === 1 ? 'punt' : 'punten') + ' je aandacht.' : 'Vandaag staat er niets vast in de agenda.');
   if (!P.getProperty('ANTHROPIC_API_KEY')) return basis;
   try {
-    var systeem = 'Je bent Athena, de assistent van ' + naam + ' (eigenaar van AthenaSchool, onderwijsondersteuning voor scholen). Schrijf in het Nederlands, warm en nuchter, zonder uitroeptekens of emoji.';
+    var systeem = 'Je bent Athena, de assistent van ' + naam + ' (' + ({ beheerder: 'management', adviseur: 'onderwijsadviseur', am: 'accountmanager' }[ikUit().rol] || 'medewerker') + ' bij AthenaSchool, onderwijsondersteuning voor scholen). Schrijf in het Nederlands, warm en nuchter, zonder uitroeptekens of emoji.';
     var invoer = 'Schrijf een ochtendbriefing van 3 tot 5 zinnen, beginnend met "Goedemorgen ' + naam + '." Benoem wat gisteren is gedaan, wat is blijven liggen (met het belangrijkste punt) en wat vandaag aandacht vraagt. Geen opsommingstekens, alleen lopende tekst.\n\n' +
       'Gedaan:\n' + (r.gedaan.map(function (x) { return '- ' + x.tekst; }).join('\n') || '- niets geregistreerd') + '\n\nBlijven liggen:\n' + (r.blijvenLiggen.map(function (x) { return '- ' + x.tekst; }).join('\n') || '- niets') +
       '\n\nVandaag:\n' + (r.vandaag.map(function (x) { return '- ' + x.tekst; }).join('\n') || '- niets vast');
     return claude(systeem, invoer, 2000, 'low') || basis;
   } catch (e) { return basis; }
 }
-function mailRapport(r) {
-  var h = huisstijl(), naar = P.getProperty('RAPPORT_EMAIL'); if (!naar) return;
+function mailRapport(r, naar) {
+  var h = huisstijl(); if (!naar) return;
   var lijst = function (items, leeg) { return items.length ? '<ul style="padding-left:18px;margin:6px 0 14px">' + items.map(function (x) { return '<li style="margin:3px 0">' + escHtml(x.tekst) + (x.dagen ? ' <span style="color:#9A8FA0">(' + x.dagen + ' d)</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p style="color:#9A8FA0;margin:4px 0 14px">' + leeg + '</p>'; };
   var kop = function (t) { return '<h3 style="margin:16px 0 4px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:' + h.kleur_primair + '">' + t + '</h3>'; };
   var html = '<div style="font-family:' + h.lettertype_tekst + ',Arial,sans-serif;max-width:620px;margin:0 auto;color:' + h.kleur_tekst + '">' +
@@ -626,7 +648,7 @@ function apiTrajectOpslaan(obj) {
   if (!String(schoon.school || '').trim() && !schoon.id) throw new Error('School is verplicht.');
   if (schoon.status && TRAJECT_STATUSSEN.indexOf(schoon.status) < 0) throw new Error('Onbekende status.');
   if (!schoon.id && !schoon.schooljaar) schoon.schooljaar = huidigSchooljaar();
-  var t = metLock(function () { return schrijf('Trajecten', schoon); });
+  var t = metLock(function () { controleerConflict('Trajecten', schoon.id, schoon, obj._oud); return schrijf('Trajecten', schoon); });  // v3.3
   return trajectUit(t);
 }
 function apiNotitieToevoegen(trajectId, tekst) {
@@ -676,10 +698,18 @@ function wieIs(code) {
   var gid = codes()[code]; if (!gid) return null;
   var g = lees('Gebruikers').filter(function (x) { return String(x.id) === String(gid); })[0];
   if (!g || !actief(g)) return null;
-  return { id: g.id, naam: g.naam, email: g.email, rol: g.rol === 'beheerder' ? 'beheerder' : 'am' };
+  return { id: g.id, naam: g.naam, email: g.email, rol: rolVan(g.rol) };
+}
+// v3.3: drie rollen. Iedereen ziet alle scholen, kansen en projecten; mail, agenda, review en Home zijn per gebruiker.
+var ROLLEN = ['beheerder', 'adviseur', 'am'];
+function rolVan(r) { return ROLLEN.indexOf(r) >= 0 ? r : 'am'; }
+// De backend kan alleen de Gmail en Agenda lezen van het account waaronder hij draait (tot Fase B: eigen koppeling per gebruiker).
+function mijnMailbox() {
+  if (!GEBRUIKER || GEBRUIKER.id === 'beheer') return true;
+  try { return !!GEBRUIKER.email && adresZonderPlus(GEBRUIKER.email) === adresZonderPlus(Session.getEffectiveUser().getEmail()); } catch (e) { return false; }
 }
 function ikNaam() { return GEBRUIKER ? GEBRUIKER.naam : (P.getProperty('NAAM') || 'Menno'); }
-function ikUit() { return { naam: ikNaam(), rol: isBeheerder() ? 'beheerder' : 'am' }; }
+function ikUit() { return { naam: ikNaam(), rol: GEBRUIKER ? GEBRUIKER.rol : 'beheerder', gekoppeld: mijnMailbox() }; }
 function isBeheerder() { return !GEBRUIKER || GEBRUIKER.rol === 'beheerder'; }
 function alleenBeheerder() { if (!isBeheerder()) throw new Error('Alleen de beheerder kan dit.'); }
 function vanMij(eigenaar) { return eigenaar ? String(eigenaar) === ikNaam() : isBeheerder(); }
@@ -692,7 +722,7 @@ function apiGebruikers() {
   alleenBeheerder();
   var c = codes(), metCode = {};
   Object.keys(c).forEach(function (k) { metCode[c[k]] = true; });
-  return { gebruikers: lees('Gebruikers').map(function (g) { return { id: g.id, naam: g.naam, email: g.email, rol: g.rol || 'am', actief: actief(g), heeftCode: !!metCode[g.id] }; }) };
+  return { gebruikers: lees('Gebruikers').map(function (g) { return { id: g.id, naam: g.naam, email: g.email, rol: rolVan(g.rol), actief: actief(g), heeftCode: !!metCode[g.id] }; }), rollen: ROLLEN };
 }
 // Nieuwe gebruiker of nieuweCode = true: geeft de koppelcode één keer terug. Uitschakelen (actief = false) trekt de code in.
 function apiGebruikerOpslaan(obj, nieuweCodeMaken) {
@@ -701,7 +731,7 @@ function apiGebruikerOpslaan(obj, nieuweCodeMaken) {
   if (o.naam !== undefined) o.naam = String(o.naam).trim();
   if (!o.id && !o.naam) throw new Error('Naam is verplicht.');
   if (o.email !== undefined) o.email = String(o.email).trim().toLowerCase();
-  if (o.rol !== undefined && ['am', 'beheerder'].indexOf(o.rol) < 0) o.rol = 'am';
+  if (o.rol !== undefined) o.rol = rolVan(o.rol);
   if (o.actief !== undefined) o.actief = o.actief === true || o.actief === 'true' || o.actief === 'ja' ? 'ja' : 'nee';
   if (!o.id) { o.rol = o.rol || 'am'; o.actief = 'ja'; nieuweCodeMaken = true; }
   return metLock(function () {
@@ -739,6 +769,29 @@ function vulKoppeling(o) {
   if (!o.schoolId && o.kansId) { var k = vind('Kansen', o.kansId); if (k) { o.schoolId = k.schoolId; if (!o.persoonId) o.persoonId = k.persoonId; } }
   if (!o.schoolId && o.trajectId) { var t = vind('Trajecten', o.trajectId); if (t) o.schoolId = t.schoolId; }
   return o;
+}
+
+// v3.3: tegelijk werken. De app stuurt bij bewerken alleen de gewijzigde velden, plus _oud: die velden zoals hij ze had geladen.
+// Heeft iemand anders een van die velden intussen veranderd, dan volgt een duidelijke melding in plaats van stil overschrijven.
+// Velden die niemand anders aanraakte, worden gewoon samengevoegd. Altijd binnen metLock aanroepen.
+function normaal(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Array) return v.join(', ').toLowerCase();
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v).trim();
+}
+function controleerConflict(tab, id, nieuw, oud) {
+  if (!id || !oud || typeof oud !== 'object') return;
+  vergeet(tab);  // vers uit de Sheet: een ander verzoek kan net geschreven hebben
+  var hit = vind(tab, id); if (!hit) return;
+  var huidig = function (k) {
+    if (k === 'eigenaar' && tab === 'Scholen') return hit.eigenaar || hit.am;
+    if (k === 'naam' && tab === 'Kansen') return hit.naam || hit.traject;
+    return hit[k];
+  };
+  var botst = Object.keys(oud).filter(function (k) { return (k in hit) && normaal(huidig(k)) !== normaal(oud[k]) && normaal(huidig(k)) !== normaal(nieuw[k]); });
+  if (botst.length) throw new Error('Intussen gewijzigd: ' + botst.join(', ') + ' (laatst bewerkt door ' + (hit.bijgewerktDoor || 'iemand anders') +
+    (hit.bijgewerkt ? ' om ' + String(hit.bijgewerkt).slice(11, 16) : '') + '). Het scherm is ververst; voer je wijziging opnieuw in.');
 }
 
 function schoolUit(s) {
@@ -846,6 +899,7 @@ function apiSchoolOpslaan(obj) {
   if (o.email !== undefined) o.email = klein(o.email);
   if (!oud) { o.aangemaakt = nu(); o.eigenaar = o.eigenaar || ikNaam(); o.status = o.status || 'lead'; }
   return metLock(function () {
+    controleerConflict('Scholen', o.id, o, obj && obj._oud);  // v3.3
     var s = schrijf('Scholen', o);
     // naam gewijzigd: de naamkopie in kansen en trajecten meenemen (Vandaag, Review en Historie tonen die)
     if (oud && o.naam && o.naam !== oud.naam) {
@@ -868,7 +922,7 @@ function apiPersoonOpslaan(obj) {
   if (o.tags !== undefined) o.tags = tagsIn(o.tags);
   if (o.velden !== undefined) o.velden = veldenUit(o.velden);
   if (!oud) { o.aangemaakt = nu(); o.eigenaar = o.eigenaar || ikNaam(); }
-  var p = metLock(function () { return schrijf('Personen', o); });
+  var p = metLock(function () { controleerConflict('Personen', o.id, o, obj && obj._oud); return schrijf('Personen', o); });  // v3.3
   var sMap = {}; if (p.schoolId) { var s = vind('Scholen', p.schoolId); if (s) sMap[s.id] = s; }
   return persoonUit(p, sMap);
 }
@@ -961,6 +1015,7 @@ function apiKansOpslaan(obj, maakTraject) {
   if (o.tags !== undefined) o.tags = tagsIn(o.tags);
   if (o.velden !== undefined) o.velden = veldenUit(o.velden);
   return metLock(function () {
+    controleerConflict('Kansen', o.id, o, obj && obj._oud);  // v3.3
     var k = schrijf('Kansen', o), traject = null;
     if (faseWissel || !oud) {
       schrijf('Activiteiten', { type: 'fase', datum: nu(), door: ikNaam(), schoolId: k.schoolId, persoonId: k.persoonId, kansId: k.id, bron: 'app', aangemaakt: nu(),
@@ -992,7 +1047,7 @@ function apiTaakOpslaan(obj) {
   if (o.categorie && TAAK_CATEGORIEEN.indexOf(o.categorie) < 0) o.categorie = 'overig';
   if (!oud) { o.bron = 'crm'; o.status = 'open'; o.aangemaakt = nu(); o.prio = o.prio || 'midden'; o.eigenaar = o.eigenaar || ikNaam(); }
   vulKoppeling(o);
-  var a = metLock(function () { return schrijf('Acties', o); });
+  var a = metLock(function () { controleerConflict('Acties', o.id, o, obj && obj._oud); return schrijf('Acties', o); });  // v3.3
   return taakUit(a, perId(lees('Scholen')), perId(lees('Personen')), perId(lees('Kansen')));
 }
 function tracks() {
@@ -1116,6 +1171,7 @@ function crmSync() {
 /* ----- Home en Agenda voor de desktopweergave (v3.0) ----- */
 
 function agendaItems(van, tot) {
+  if (!mijnMailbox()) return [];  // v3.3
   try {
     return CalendarApp.getDefaultCalendar().getEvents(van, tot).map(function (ev) {
       return { id: ev.getId(), sleutel: agendaSleutel(ev), titel: ev.getTitle(), start: datumTijdStr(ev.getStartTime()), eind: datumTijdStr(ev.getEndTime()), heleDag: ev.isAllDayEvent(), locatie: ev.getLocation() || '' };
@@ -1132,7 +1188,7 @@ function apiHome() {
   return {
     groet: groet(), datum: datumLang(new Date()), ik: ikUit(),
     taken: taken.slice(0, 40).map(function (a) { return taakUit(a, sMap, pMap, kMap); }),
-    agenda: agendaItems(begin, new Date(begin.getTime() + 7 * 86400000)),
+    agenda: agendaItems(begin, new Date(begin.getTime() + 7 * 86400000)), gekoppeld: mijnMailbox(),
     pipeline: { open: open.length, waarde: som('waarde'), gewogen: som('gewogen'), stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 8) },
     recent: recent.map(function (a) { return activiteitUit(a, sMap, pMap, kMap); }),
     mails: []  // v3.2: Gmail is traag; de app haalt de mails apart op met apiHomeMails
@@ -1155,7 +1211,7 @@ function apiAgenda(van, tot) {
   var gezien = {}; events.forEach(function (e) { gezien[e.sleutel] = true; });
   var inBereik = function (d) { d = String(d || '').slice(0, 10); return d >= vanS && d <= totS; };
   return {
-    van: vanS, tot: totS, events: events,
+    van: vanS, tot: totS, events: events, gekoppeld: mijnMailbox(),
     afspraken: acts.filter(function (x) { return inBereik(x.datum) && !(x.agendaId && gezien[x.agendaId]); }).map(function (x) { return activiteitUit(x, sMap, pMap, kMap); }),
     taken: lees('Acties').filter(function (x) { return x.status !== 'af' && inBereik(x.deadline) && (isBeheerder() || vanMij(x.eigenaar)); }).sort(sorteerActies).map(function (x) { return taakUit(x, sMap, pMap, kMap); })
   };
@@ -1219,6 +1275,40 @@ function apiRapport(preset, eigenaar) {
     stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 15)
   };
 }
+// v3.3: activiteit per gebruiker. De beheerder kiest iemand; anderen zien alleen hun eigen activiteit.
+function apiActiviteiten(door, van, tot) {
+  if (!isBeheerder() || !door) door = isBeheerder() ? (door || '') : ikNaam();
+  var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kMap = perId(lees('Kansen')), perType = {};
+  var lijst = lees('Activiteiten').filter(function (a) {
+    var d = String(a.datum).slice(0, 10);
+    return (!door || a.door === door) && (!van || d >= van) && (!tot || d <= tot) && String(a.datum) <= nu();
+  });
+  lijst.forEach(function (a) { perType[a.type] = (perType[a.type] || 0) + 1; });
+  return { door: door, totaal: lijst.length, perType: perType, tijdlijn: tijdlijn(lijst, sMap, pMap, kMap) };
+}
+// Oudere activiteit van één school, persoon of kans uit het archief (op verzoek, zodat gewone schermen snel blijven)
+function apiArchiefTijdlijn(soort, id) {
+  var veld = { school: 'schoolId', persoon: 'persoonId', kans: 'kansId' }[soort]; if (!veld) throw new Error('Onbekend soort.');
+  var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kMap = perId(lees('Kansen'));
+  return tijdlijn(lees('Activiteiten_archief').filter(function (a) { return String(a[veld]) === String(id); }), sMap, pMap, kMap);
+}
+// Maandelijks: activiteit ouder dan 12 maanden naar Activiteiten_archief. Het tabblad wordt in één keer herschreven
+// (rij voor rij verwijderen is te traag bij duizenden rijen); het archief wordt eerst geschreven, zodat er niets verloren gaat.
+function archiveerTrigger() { try { metLock(archiveer); } catch (e) { Logger.log('Archiveren mislukt: ' + e); } }
+function apiArchiveer() { alleenBeheerder(); return metLock(archiveer); }
+function archiveer() {
+  var grens = datumStr(new Date(Date.now() - 365 * 86400000)), alle = lees('Activiteiten');
+  var isOud = function (a) { var d = String(a.datum).slice(0, 10); return !!d && d < grens; };
+  var oud = alle.filter(isOud), houden = alle.filter(function (a) { return !isOud(a); });
+  if (!oud.length) return { gearchiveerd: 0, over: houden.length };
+  schrijfVeel('Activiteiten_archief', oud);
+  var b = blad('Activiteiten'), kop = TABELLEN.Activiteiten, laatste = b.getLastRow();
+  if (laatste > 1) b.getRange(2, 1, laatste - 1, kop.length).clearContent();
+  if (houden.length) b.getRange(2, 1, houden.length, kop.length).setValues(houden.map(function (r) { return kop.map(function (k) { return celUit(r[k]); }); }));
+  vergeet('Activiteiten');
+  return { gearchiveerd: oud.length, over: houden.length };
+}
+
 function apiDoelen() {
   return { doelen: lees('Doelen').map(function (d) { return { id: d.id, eigenaar: d.eigenaar, periode: d.periode, metric: d.metric, doel: Number(d.doel) || 0 }; }),
     metrics: DOEL_METRICS, periodes: DOEL_PERIODES, gebruikers: gebruikersNamen() };
@@ -1237,6 +1327,7 @@ function apiDoelOpslaan(obj) {
 /* ----- Export (CSV) ----- */
 
 function apiExport(tabel) {
+  alleenBeheerder();  // v3.3
   var naam = { scholen: 'Scholen', personen: 'Personen', kansen: 'Kansen', activiteiten: 'Activiteiten', taken: 'Acties', trajecten: 'Trajecten' }[String(tabel || '').toLowerCase()];
   if (!naam) throw new Error('Onbekende tabel.');
   var kop = TABELLEN[naam], cel = function (v) { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[";\n,]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
@@ -1473,7 +1564,7 @@ function apiStatus() {
   var laatste = lees('Reviews').sort(function (a, b) { return String(b.gemaaktOp).localeCompare(String(a.gemaaktOp)); })[0];
   var beheer = isBeheerder();
   return { versie: VERSIE, sheetUrl: beheer ? sheet().getUrl() : '', mapUrl: mapUrl(), gebruiker: ikUit(),  // v2.0: Sheet-link alleen voor de beheerder
-    crmSyncTrigger: triggers.indexOf('crmSyncTrigger') >= 0, laatsteCrmSync: P.getProperty('LAATSTE_CRM_SYNC') || '', capsuleToken: !!P.getProperty('CAPSULE_TOKEN'), capsuleMigratie: P.getProperty('CAPSULE_MIGRATIE') || '', model: P.getProperty('CLAUDE_MODEL') || 'claude-opus-5', effort: P.getProperty('CLAUDE_EFFORT') || 'medium',
+    crmSyncTrigger: triggers.indexOf('crmSyncTrigger') >= 0, archiefTrigger: triggers.indexOf('archiveerTrigger') >= 0, laatsteCrmSync: P.getProperty('LAATSTE_CRM_SYNC') || '', capsuleToken: !!P.getProperty('CAPSULE_TOKEN'), capsuleMigratie: P.getProperty('CAPSULE_MIGRATIE') || '', model: P.getProperty('CLAUDE_MODEL') || 'claude-opus-5', effort: P.getProperty('CLAUDE_EFFORT') || 'medium',
     claudeIngesteld: !!P.getProperty('ANTHROPIC_API_KEY'), driveApi: typeof Drive !== 'undefined', laatsteIndex: P.getProperty('LAATSTE_INDEX') || '', laatsteReview: laatste ? laatste.gemaaktOp : '',
     rapportEmail: P.getProperty('RAPPORT_EMAIL') || '', reviewTrigger: triggers.indexOf('nachtelijkeReviewTrigger') >= 0, indexTrigger: triggers.indexOf('indexeerTrigger') >= 0, tijdzone: tz() };
 }

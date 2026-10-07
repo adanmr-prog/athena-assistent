@@ -96,6 +96,9 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiCrmInrichten` | — | `{ personen, kansen, trajecten, notities, eigenaren }` (oude velden overzetten; idempotent) |
 | `apiCapsuleMigratie` | stap, pagina | `{ stap, aantal, volgende:{stap,pagina}\|null }` (de app roept herhaald aan tot `volgende` null is) |
 | `apiHome` | — | `{ groet, datum, ik, taken:[taak], agenda:[{id,sleutel,titel,start,eind,heleDag,locatie}], pipeline:{open,waarde,gewogen,stil}, recent:[activiteit], mails }` (v3.0, desktop-Home) |
+| `apiActiviteiten` | door, van, tot | `{ door, totaal, perType, tijdlijn }` (v3.3; niet-beheerders krijgen altijd hun eigen activiteit) |
+| `apiArchiefTijdlijn` | `school\|persoon\|kans`, id | `[activiteit]` uit `Activiteiten_archief` (v3.3) |
+| `apiArchiveer` | — | `{ gearchiveerd, over }` (v3.3, alleen beheerder; draait ook elke 1e van de maand) |
 | `apiHomeMails` | — | `[{onderwerp,van,dagen,link}]` (v3.2: los van `apiHome`, omdat Gmail traag is; `apiHome` geeft `mails: []`) |
 | `apiAgenda` | van, tot (`yyyy-MM-dd`, max. 62 dagen) | `{ van, tot, events:[google-afspraak (+schoolId/school als hij aan het CRM hangt)], afspraken:[activiteit], taken:[taak] }` (v3.0) |
 | `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
@@ -103,6 +106,13 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
+
+## Rollen, privacy en tegelijk werken (v3.3)
+
+- **Rollen** (`Gebruikers.rol`): `beheerder` (management), `adviseur` (onderwijsadviseur: haalt opdrachten binnen, eigenaar van kansen) en `am` (accountmanager: voert projecten uit, `Trajecten.am`). Iedereen ziet alle scholen, kansen en projecten; beheren (gebruikers, doelen, mijlpalen, tracks, export, migratie) kan alleen de beheerder.
+- **Privé per gebruiker:** mail, agenda, nachtelijke review en Home. De backend leest alleen de Gmail en Agenda van het account waaronder hij draait (`mijnMailbox()`); andere gebruikers krijgen lege lijsten met de melding dat hun Gmail nog gekoppeld wordt. De nachtelijke review draait per actieve gebruiker (kolom `Reviews.eigenaar`) en wordt naar ieders eigen e-mailadres gestuurd.
+- **Tegelijk opslaan:** bij bewerken stuurt de app alleen de gewijzigde velden plus `_oud` (de waarden zoals geladen). `controleerConflict()` vergelijkt die binnen het lock met de Sheet; heeft iemand anders hetzelfde veld intussen gewijzigd, dan volgt de fout "Intussen gewijzigd: …" en ververst de app het scherm. Andere velden worden gewoon samengevoegd. Kolom `bijgewerktDoor` houdt bij wie het laatst wijzigde.
+- **Archief:** elke 1e van de maand (trigger `archiveerTrigger`) gaat activiteit ouder dan 12 maanden naar `Activiteiten_archief`. In een detailscherm haalt de knop "Oudere activiteit (archief)" die terug.
 
 ## CRM: gebruikers, mail en agenda, Capsule (v2.0)
 

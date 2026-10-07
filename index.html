@@ -488,6 +488,9 @@
   var TITELS = { vandaag: 'Vandaag', relaties: 'Relaties', brein: 'Bedrijfsbrein', review: 'Review', huisstijl: 'Huisstijl', trajecten: 'Geschiedenis', home: 'Home', agenda: 'Agenda', doelen: 'Doelen' };  // v2.0: Relaties; v3.0: desktop-weergaven
   var TYPE_LABEL = { contract: 'Contracten', werkwijze: 'Werkwijzen', schooldossier: 'Schooldossiers', voorstel: 'Voorstellen', prijslijst: 'Prijslijst', overig: 'Overig' };
   var TYPE_KORT = { contract: 'CTR', werkwijze: 'WW', schooldossier: 'DOS', voorstel: 'VST', prijslijst: 'PRS', overig: 'DOC' };
+  // v3.3: drie rollen; mail en agenda zijn per gebruiker en komen pas na het koppelen van de eigen Gmail
+  var ROL_LABEL = { beheerder: 'beheerder', adviseur: 'onderwijsadviseur', am: 'accountmanager' };
+  var GMAIL_HINT = 'Je eigen Gmail en Agenda worden binnenkort gekoppeld.';
   var BRON_LABEL = { kans: 'kans', mail: 'mail', contract: 'contract', handmatig: 'zelf', review: 'review', traject: 'traject', actie: 'actie', document: 'document', agenda: 'agenda', crm: 'crm', track: 'track', capsule: 'capsule' };  // v2.0: crm, track, capsule
   var LINK_SVG = '<svg class="ic" viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>';
 
@@ -562,7 +565,7 @@
     el('aandachtLijst').innerHTML = d.aandacht.length ? d.aandacht.map(actieRij).join('') : '<div class="leeg">Alles staat hierboven.</div>';
     el('mailLijst').innerHTML = d.mails.length ? d.mails.map(function (m) {
       return '<a class="rij klik" href="' + esc(m.link) + '"><div class="r-body"><div class="r-titel">' + esc(m.onderwerp) + '</div><div class="r-meta">' + esc(m.van) + ' · ' + (m.dagen >= 5 ? '<b>' : '') + m.dagen + ' dagen' + (m.dagen >= 5 ? '</b>' : '') + '</div></div>' + LINK_SVG + '</a>';
-    }).join('') : '<div class="leeg">Geen mails die op je wachten.</div>';
+    }).join('') : '<div class="leeg">' + (d.gekoppeld === false ? GMAIL_HINT : 'Geen mails die op je wachten.') + '</div>';  // v3.3
     el('pijplijn').textContent = d.kpi.pijplijn ? euro(d.kpi.pijplijn) + ' in de pijplijn' : '';
     el('kansenLijst').innerHTML = d.kansen.length ? d.kansen.map(function (k) {
       var stil = (k.dagenStil !== null && k.dagenStil !== undefined) ? (k.stil ? '<b>' + k.dagenStil + ' dagen stil</b>' : k.dagenStil + ' d geleden contact') : '';  // v2.0: norm per mijlpaal
@@ -571,7 +574,7 @@
     }).join('') : '<div class="leeg">Geen open kansen.</div>';
     el('agendaLijst').innerHTML = d.agenda.length ? d.agenda.map(function (a) {
       return '<div class="agenda-blok"><span class="tijd">' + esc(a.tijd) + '</span><div>' + esc(a.titel) + (a.duurMin ? ' <span style="color:var(--gedempt);font-size:12.5px">· ' + (a.duurMin >= 60 ? (Math.round(a.duurMin / 6) / 10) + ' u' : a.duurMin + ' min') + '</span>' : '') + '</div></div>';
-    }).join('') : '<div class="leeg">Niets in de agenda.</div>';
+    }).join('') : '<div class="leeg">' + (d.gekoppeld === false ? GMAIL_HINT : 'Niets in de agenda.') + '</div>';  // v3.3
   }
   function laadVandaag() {
     run('apiOverzicht').then(renderVandaag).catch(function () { el('focusLijst').innerHTML = '<div class="leeg">Kon niet laden — controleer de koppeling (tandwiel rechtsboven).</div>'; });
@@ -813,12 +816,12 @@
   });
   document.addEventListener('change', function (ev) {
     var s = ev.target.closest('[data-statuswijzig]'); if (!s) return;
-    var id = s.dataset.statuswijzig;
-    run('apiTrajectOpslaan', { id: id, status: s.value }).then(function (t) {
+    var id = s.dataset.statuswijzig, was = (S.trajecten.trajecten.filter(function (x) { return x.id === id; })[0] || {}).status;
+    run('apiTrajectOpslaan', { id: id, status: s.value, _oud: { status: was } }).then(function (t) {  // v3.3: _oud voor de conflictcontrole
       S.trajecten.trajecten = S.trajecten.trajecten.map(function (x) { return x.id === id ? t : x; });
       if (S.details[id]) S.details[id].traject = t;
       renderTrajecten(); toast('Status: ' + t.status);
-    });
+    }).catch(function () { S.details = {}; laadTrajecten(); });
   });
   el('nieuwTraject').addEventListener('click', function () {
     var f = el('trajectForm'), open = f.style.display !== 'none';
@@ -945,7 +948,7 @@
   // v3.2: de laatst geladen Home en CRM-lijsten op dit toestel bewaren, zodat een scherm meteen gevuld is; de backend werkt het daarna bij
   function uitBewaard(k) { try { return JSON.parse(leesOpslag(k) || 'null'); } catch (e) { return null; } }
   function bewaar(k, v) { try { var t = JSON.stringify(v); if (t.length < 1500000) zetOpslag(k, t); } catch (e) {} }
-  function laadCrmBasis() { return run('apiCrm').then(function (b) { CRM.basis = b; bewaar('aa_cache_crm', b); el('zbNaam').textContent = b.ik.naam + ' · ' + b.ik.rol; return b; }); }  // v3.0: naam in de zijbalk
+  function laadCrmBasis() { return run('apiCrm').then(function (b) { CRM.basis = b; bewaar('aa_cache_crm', b); el('zbNaam').textContent = b.ik.naam + ' · ' + (ROL_LABEL[b.ik.rol] || b.ik.rol); return b; }); }  // v3.0: naam in de zijbalk
   function laadRelaties() {
     if (history.state && history.state.crm) { try { history.replaceState(null, ''); } catch (e) {} }  // v2.0: Terug mag niet naar een oud detailscherm springen
     if (CRM.detail) { CRM.detail = null; el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block'; }
@@ -1082,13 +1085,21 @@
       '<div class="kop">Gewonnen en verloren</div><div class="tegels drie">' + tegel(R.winst.gewonnen, 'Gewonnen · ' + euro(R.winst.gewonnenWaarde)) + tegel(R.winst.verloren, 'Verloren · ' + euro(R.winst.verlorenWaarde)) + tegel(R.winst.ratio === null ? '—' : R.winst.ratio + '%', 'Winratio', 'oranje') + '</div>' +
       (R.redenen.length ? '<div class="balkjes">' + R.redenen.map(function (r) { return balk(r.reden, 0, r.aantal, R.redenen[0].aantal, r.aantal + '× verloren'); }).join('') + '</div>' : '') +
       '<div class="kop">Stille kansen <small>langer geen contact dan de norm</small></div>' + (R.stil.length ? R.stil.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Geen stille kansen.</div>');
+    h += '<div class="kop">Activiteit ' + (R.eigenaar ? 'van ' + esc(R.eigenaar) : (beheer ? 'van het team' : '')) + ' <small id="rapportActTelling"></small></div><div id="rapportActiviteit"><div class="spinner">Laden</div></div>';  // v3.3
     if (beheer) h += '<div class="kop">Beheer</div><div class="kaart"><div class="balk" style="margin-top:0">' +
       [['sync', 'Mail & agenda nu koppelen'], ['gebruikers', 'Gebruikers'], ['doelen', 'Doelen'], ['mijlpalen', 'Mijlpalen'], ['tracks', 'Tracks'], ['inrichten', 'Oude gegevens overzetten'], ['capsule', 'Capsule-migratie']]
         .map(function (b) { return '<button class="knop licht klein" data-beheer="' + b[0] + '">' + b[1] + '</button>'; }).join('') +
       '</div><div class="balk">' + ['scholen', 'personen', 'kansen', 'activiteiten', 'taken'].map(function (t) { return '<button class="chip" data-export="' + t + '">CSV ' + t + '</button>'; }).join('') + '</div>' +
-      '<div class="hint">Mails en afspraken met scholen worden elk uur automatisch aan de juiste school en persoon gekoppeld. Accountmanagers sturen hun mails door of in bcc naar het CRM-adres (label CRM).</div></div>' +
+      '<div class="hint">Mails en afspraken met scholen worden elk uur automatisch aan de juiste school en persoon gekoppeld. Tot ieders eigen Gmail gekoppeld is, kunnen collega\'s mails doorsturen of bcc\'en naar het CRM-adres (label CRM).</div></div>' +
       '<div class="composer" id="crmBeheer"></div>';
     el('crmInhoud').innerHTML = h;
+    // v3.3: activiteit per gebruiker (de beheerder kiest iemand bij "Hele team"; anderen zien hun eigen activiteit)
+    run('apiActiviteiten', R.eigenaar, R.van, R.tot).then(function (a) {
+      if (!el('rapportActiviteit')) return;
+      el('rapportActTelling').textContent = a.totaal + ' in deze periode';
+      el('rapportActiviteit').innerHTML = (Object.keys(a.perType).length ? '<div class="chips">' + Object.keys(a.perType).map(function (k) { return '<span class="chip">' + esc(ACT_LABEL[k] || k) + ' ' + esc(a.perType[k]) + '</span>'; }).join('') + '</div>' : '') +
+        (a.tijdlijn.length ? a.tijdlijn.slice(0, 60).map(function (x) { var b = {}; Object.keys(x).forEach(function (k) { b[k] = x[k]; }); b.onderwerp = (x.school ? x.school + ' — ' : '') + (x.onderwerp || ACT_LABEL[x.type] || x.type); return tijdlijnItem(b); }).join('') : '<div class="leeg">Geen activiteit in deze periode.</div>');
+    }).catch(function () { if (el('rapportActiviteit')) el('rapportActiviteit').innerHTML = '<div class="leeg">Kon de activiteit niet laden.</div>'; });
   }
   function download(naam, tekst) {
     // v2.0: in de iOS-standalone-PWA werkt a.download met een blob niet betrouwbaar; het deelmenu wel (Bewaar in Bestanden)
@@ -1106,12 +1117,12 @@
     var doel = el('crmBeheer'); doel.innerHTML = '<div class="spinner">Laden</div>';
     run('apiGebruikers').then(function (r) {
       var lijst = r.gebruikers.map(function (g) {
-        return '<div class="rij"><span class="avatar">' + esc(initialen(g.naam)) + '</span><div class="r-body"><div class="r-titel">' + esc(g.naam) + ' <span class="zacht">· ' + esc(g.rol) + (g.actief ? '' : ' · uit') + '</span></div><div class="r-meta">' + esc(g.email || 'geen e-mail') + (g.heeftCode ? ' · heeft een code' : '') + '</div>' +
+        return '<div class="rij"><span class="avatar">' + esc(initialen(g.naam)) + '</span><div class="r-body"><div class="r-titel">' + esc(g.naam) + ' <span class="zacht">· ' + esc(ROL_LABEL[g.rol] || g.rol) + (g.actief ? '' : ' · uit') + '</span></div><div class="r-meta">' + esc(g.email || 'geen e-mail') + (g.heeftCode ? ' · heeft een code' : '') + '</div>' +
           '<div class="balk"><button class="knop licht klein" data-gcode="' + esc(g.id) + '">Nieuwe code</button><button class="knop licht klein" data-gactief="' + esc(g.id) + '" data-waarde="' + (g.actief ? 'nee' : 'ja') + '">' + (g.actief ? 'Uitschakelen' : 'Inschakelen') + '</button></div></div></div>';
       }).join('');
       var code = nieuweCode ? '<div class="kaart"><b>Koppelcode voor ' + esc(nieuweCode.naam) + '</b><div class="codevak">' + esc(nieuweCode.code) + '</div><div class="balk"><button class="knop klein" data-kopieercode="' + esc(nieuweCode.code) + '">Kopieer</button></div><div class="hint">Deze code is maar één keer zichtbaar. Geef hem samen met de backend-URL aan de accountmanager.</div></div>' : '';
       toonForm(doel, code + '<div class="kop" style="margin-top:14px">Gebruikers</div>' + (lijst || '<div class="leeg">Nog geen accountmanagers.</div>') +
-        formHtml('Accountmanager toevoegen', [{ naam: 'naam', label: 'Naam' }, { naam: 'email', label: 'E-mail (werk)', type: 'email' }, { naam: 'rol', label: 'Rol', type: 'select', opties: [{ waarde: 'am', label: 'accountmanager' }, { waarde: 'beheerder', label: 'beheerder' }] }], {}, 'Toevoegen', function (f) {
+        formHtml('Gebruiker toevoegen', [{ naam: 'naam', label: 'Naam' }, { naam: 'email', label: 'E-mail (werk)', type: 'email' }, { naam: 'rol', label: 'Rol', type: 'select', opties: ['adviseur', 'am', 'beheerder'].map(function (x) { return { waarde: x, label: ROL_LABEL[x] }; }) }], {}, 'Toevoegen', function (f) {  // v3.3: drie rollen
           if (!f.naam) { toast('Naam is verplicht.'); return; }
           return run('apiGebruikerOpslaan', f).then(function (x) { CRM.basis = null; laadCrmBasis(); beheerGebruikers({ naam: x.gebruiker.naam, code: x.code }); });
         }));
@@ -1194,7 +1205,10 @@
     return '<div class="t-item' + (String(a.tekst || '').length > 220 ? ' kort' : '') + '"><span class="t-ic ' + esc(a.type) + '">' + (ACT_KORT[a.type] || 'ACT') + '</span><div class="r-body"><div class="r-titel">' + esc(a.onderwerp || ACT_LABEL[a.type] || a.type) +
       (a.gepland ? ' <span class="tag">gepland</span>' : '') + '</div><div class="r-meta">' + meta + '</div>' + (a.tekst ? '<div class="t-tekst" data-uitklap="1">' + esc(a.tekst) + '</div>' : '') + '</div></div>';
   }
-  function tijdlijnSectie(lijst) { return sectie('Tijdlijn', lijst.length, lijst.map(tijdlijnItem).join(''), 'Nog niets gelogd. Mails en afspraken met deze school komen er elk uur vanzelf bij.'); }
+  function tijdlijnSectie(lijst) {
+    var D = CRM.detail, archief = D ? '<div id="archiefTijdlijn"></div><div style="margin-top:10px"><button class="knop licht klein" data-archief="' + D.soort + ':' + esc(D.id) + '">Oudere activiteit (archief)</button></div>' : '';  // v3.3
+    return sectie('Tijdlijn', lijst.length, lijst.map(tijdlijnItem).join(''), 'Nog niets gelogd. Mails en afspraken met deze school komen er elk uur vanzelf bij.') + archief;
+  }
   function verwijderKnop(soort, id) { return '<div style="margin-top:22px"><button class="knop licht klein" data-crmverwijder="' + soort + ':' + esc(id) + '">Verwijderen</button></div>'; }
   // v3.0: dezelfde onderdelen als voorheen; op mobiel onder elkaar, op desktop in twee kolommen (links info, rechts acties, taken en tijdlijn)
   function renderDetail() {
@@ -1294,25 +1308,36 @@
         var s = d.school, w = {}; Object.keys(s).forEach(function (k2) { w[k2] = s[k2]; }); w.tags = (s.tags || []).join(', '); w.velden = veldenTekst(s.velden);
         h = formHtml('School bewerken', schoolVelden(s), w, 'Opslaan', function (f) {
           if (!f.naam) { toast('Naam is verplicht.'); return; }
-          f.id = s.id; f.velden = veldenUitTekst(f.velden);
-          return run('apiSchoolOpslaan', f).then(naOpslaan('School opgeslagen.'));
+          return slaWijzigingenOp('apiSchoolOpslaan', s, w, f, 'School opgeslagen.');
         });
       } else if (D.soort === 'persoon') {
         var p = d.persoon, wp = {}; Object.keys(p).forEach(function (k2) { wp[k2] = p[k2]; }); wp.tags = (p.tags || []).join(', '); wp.velden = veldenTekst(p.velden);
         h = formHtml('Persoon bewerken', persoonVelden(true, p), wp, 'Opslaan', function (f) {
-          f.id = p.id; f.velden = veldenUitTekst(f.velden);
-          return run('apiPersoonOpslaan', f).then(naOpslaan('Persoon opgeslagen.'));
+          return slaWijzigingenOp('apiPersoonOpslaan', p, wp, f, 'Persoon opgeslagen.');
         });
       } else {
         var k = d.kans, wk = {}; Object.keys(k).forEach(function (k2) { wk[k2] = k[k2]; }); wk.tags = (k.tags || []).join(', '); wk.velden = veldenTekst(k.velden);
         h = formHtml('Kans bewerken', kansVelden(k, false, personen), wk, 'Opslaan', function (f) {
           if (!f.naam) { toast('Naam is verplicht.'); return; }
-          f.id = k.id; f.velden = veldenUitTekst(f.velden);
-          return run('apiKansOpslaan', f).then(naOpslaan('Kans opgeslagen.'));
+          return slaWijzigingenOp('apiKansOpslaan', k, wk, f, 'Kans opgeslagen.');
         });
       }
     }
     if (h) toonForm(doel, h);
+  }
+  // v3.3: tegelijk werken. Alleen de velden die jij wijzigde gaan mee, met _oud (zoals je ze laadde). Heeft iemand anders
+  // hetzelfde veld intussen gewijzigd, dan meldt de backend dat en laden we het scherm opnieuw in plaats van stil te overschrijven.
+  function slaWijzigingenOp(fn, origineel, formWaarden, f, melding) {
+    var obj = { id: origineel.id, _oud: {} }, aantal = 0;
+    Object.keys(f).forEach(function (k) {
+      var was = formWaarden[k] === null || formWaarden[k] === undefined ? '' : String(formWaarden[k]);
+      if (String(f[k]) === was) return;
+      obj[k] = k === 'velden' ? veldenUitTekst(f[k]) : f[k];
+      obj._oud[k] = origineel[k] === undefined ? '' : origineel[k];
+      aantal++;
+    });
+    if (!aantal) { toast('Niets gewijzigd.'); el('crmComposer').innerHTML = ''; return; }
+    return run(fn, obj).then(naOpslaan(melding)).catch(function (e) { if (/Intussen gewijzigd/.test(String(e && e.message))) { crmVerouderd(); herlaadDetail(); } throw e; });
   }
   function nieuwVanuitLijst(soort) {
     var doel = el('crmNieuw'), h;
@@ -1370,6 +1395,12 @@
     if ((x = t.closest('[data-crmnieuw]'))) { if (CRM.basis) nieuwVanuitLijst(x.dataset.crmnieuw); return; }
     if ((x = t.closest('[data-crmpreset]'))) { CRM.preset = x.dataset.crmpreset; laadRapport(); return; }
     if ((x = t.closest('[data-composer]'))) { if (CRM.detail && CRM.detail.data) openComposer(x.dataset.composer); return; }
+    if ((x = t.closest('[data-archief]'))) {  // v3.3
+      var av = x.dataset.archief, ai = av.indexOf(':'), knopA = x; knopA.disabled = true;
+      run('apiArchiefTijdlijn', av.slice(0, ai), av.slice(ai + 1)).then(function (l) { el('archiefTijdlijn').innerHTML = l.length ? l.map(tijdlijnItem).join('') : '<div class="leeg">Geen oudere activiteit.</div>'; knopA.style.display = 'none'; })
+        .catch(function () { knopA.disabled = false; });
+      return;
+    }
     if ((x = t.closest('[data-uitklap]'))) { x.closest('.t-item').classList.remove('kort'); return; }
     if ((x = t.closest('[data-crmverwijder]'))) {
       var v = x.dataset.crmverwijder, j = v.indexOf(':');
@@ -1404,7 +1435,7 @@
     if (t.id === 'crmFPipeline') { CRM.fPipeline = t.value; renderCrm(); return; }
     if (t.id === 'crmREigenaar') { CRM.rEigenaar = t.value; laadRapport(); return; }
     var s = t.closest('[data-kansfase]'); if (!s) return;
-    var obj = { id: s.dataset.kansfase, fase: s.value }, maakTraject = false;
+    var obj = { id: s.dataset.kansfase, fase: s.value, _oud: { fase: CRM.detail && CRM.detail.data ? CRM.detail.data.kans.fase : '' } }, maakTraject = false;  // v3.3
     if (obj.fase === 'verloren') { var r = window.prompt('Waarom is deze kans verloren?', ''); if (r === null) { herlaadDetail(); return; } obj.verliesReden = r.trim(); }
     if (obj.fase === 'gewonnen') maakTraject = window.confirm('Gewonnen. Meteen een actief traject aanmaken in Historie?');
     s.disabled = true;
@@ -1533,7 +1564,8 @@
     if (bewaard && bewaard.taken && !el('homeInhoud').querySelector('.hkaart')) renderHome(bewaard);
     run('apiHome').then(function (h) { bewaar('aa_cache_home', h); renderHome(h); })
       .catch(function () { if (!el('homeInhoud').querySelector('.hkaart')) el('homeInhoud').innerHTML = '<div class="leeg">Kon Home niet laden — controleer de koppeling (tandwiel linksonder).</div>'; });
-    run('apiHomeMails').then(function (m) { DESK.mails = m; var x = el('homeMails'); if (x) x.innerHTML = mailsHtml(m); }).catch(function () { var x = el('homeMails'); if (x) x.innerHTML = '<div class="leeg">Kon de mails niet ophalen.</div>'; });
+    // v3.3: niet gekoppeld = geen Gmail ophalen
+    if (bewaard && bewaard.gekoppeld === false) { DESK.mails = []; } else run('apiHomeMails').then(function (m) { DESK.mails = m; var x = el('homeMails'); if (x) x.innerHTML = mailsHtml(m); }).catch(function () { var x = el('homeMails'); if (x) x.innerHTML = '<div class="leeg">Kon de mails niet ophalen.</div>'; });
   }
   function mailsHtml(m) {
     if (!m) return '<div class="spinner">Mail nakijken</div>';
@@ -1546,14 +1578,14 @@
     el('homeInhoud').innerHTML = '<div class="tegels">' + tegel(h.taken.length, 'Open taken') + tegel(laat.length, 'Te laat', 'oranje') + tegel(P.open, 'Open kansen') + tegel(euro(P.gewogen), 'Gewogen pijplijn') + '</div>' +
       '<div class="home-grid">' +
       hkaart('Mijn taken', laat.concat(nu_).concat(rest).map(function (t) { return taakRij(t, true); }).join('') || '<div class="leeg">Geen open taken.</div>', 'taken') +
-      hkaart('Agenda komende 7 dagen', h.agenda.map(agendaRegel).join('') || '<div class="leeg">Niets gepland.</div>', 'agenda') +
+      hkaart('Agenda komende 7 dagen', h.agenda.map(agendaRegel).join('') || '<div class="leeg">' + (h.gekoppeld === false ? GMAIL_HINT : 'Niets gepland.') + '</div>', 'agenda') +
       hkaart('Stille kansen', P.stil.map(function (k) { return kansRij(k, true); }).join('') || '<div class="leeg">Geen stille kansen. Pijplijn: ' + euro(P.waarde) + '.</div>', 'pipeline') +
       hkaart('Recente activiteit', h.recent.map(function (a) {
         var b = {}; Object.keys(a).forEach(function (k) { b[k] = a[k]; });
         b.onderwerp = (a.school ? a.school + ' — ' : '') + (a.onderwerp || ACT_LABEL[a.type] || a.type);
         return a.schoolId ? '<div class="klik" data-crm-open="school:' + esc(a.schoolId) + '" style="cursor:pointer">' + tijdlijnItem(b) + '</div>' : tijdlijnItem(b);
       }).join('') || '<div class="leeg">Nog geen activiteit.</div>', 'contacten') +
-      hkaart('Wacht op jouw antwoord', '<div id="homeMails">' + mailsHtml(DESK.mails) + '</div>') +
+      hkaart('Wacht op jouw antwoord', '<div id="homeMails">' + (h.gekoppeld === false ? '<div class="leeg">' + GMAIL_HINT + '</div>' : mailsHtml(DESK.mails)) + '</div>') +
       '</div>';
   }
 
@@ -1587,6 +1619,7 @@
     }).join('');
     el('agendaInhoud').innerHTML = '<div class="balk" style="margin-top:0"><button class="chip" data-agnav="-1" aria-label="Vorige maand">‹</button><button class="chip" data-agnav="0">Vandaag</button><button class="chip" data-agnav="1" aria-label="Volgende maand">›</button>' +
       '<h2 style="font-size:20px;font-weight:800;margin-left:6px">' + MAANDEN_LANG[m.getMonth()] + ' ' + m.getFullYear() + '</h2></div>' +
+      (DESK.agenda.gekoppeld === false ? '<div class="hint">' + GMAIL_HINT + ' Tot die tijd zie je hier je taken en de CRM-afspraken.</div>' : '') +  // v3.3
       '<div class="legenda"><span><span class="ai ev">agenda</span>Google Agenda</span><span><span class="ai crm">CRM</span>afspraak met een school</span><span><span class="ai taak">taak</span>deadline</span></div>' +
       '<div class="agenda-wrap"><div class="maand">' + DAGEN_KORT.map(function (x) { return '<div class="mkop">' + x + '</div>'; }).join('') + cellen + '</div>' +
       '<div class="hkaart"><div class="kop">' + esc(DAGEN_KORT[(gd.getDay() + 6) % 7] + ' ' + kortDatum(DESK.gekozen)) + '</div>' + (lijst || '<div class="leeg">Niets op deze dag.</div>') + '</div></div>';
