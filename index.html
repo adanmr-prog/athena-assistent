@@ -100,7 +100,7 @@
   .veld input, .veld select, .veld textarea { width: 100%; border: 1.5px solid var(--lijn); background: var(--wit); border-radius: 10px; padding: 9px 12px; outline: none; }
   .veld textarea { min-height: 84px; resize: vertical; line-height: 1.45; }
   .veld input:focus, .veld select:focus, .veld textarea:focus { border-color: var(--paars); }
-  .velden-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .velden-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }  /* v2.0: datetime-velden op iOS mogen het raster niet oprekken */
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .chip { font-size: 12.5px; font-weight: 700; border: 1.5px solid var(--lijn); background: var(--wit); border-radius: 999px; padding: 5px 12px; cursor: pointer; color: var(--inkt2); }
   .chip.aan { border-color: var(--paars); background: var(--paars-l); color: var(--paars); }
@@ -148,7 +148,7 @@
   .agenda-blok .tijd { font-family: var(--mono); font-size: 12.5px; color: var(--gedempt); width: 44px; flex-shrink: 0; padding-top: 2px; }
 
   nav { display: flex; justify-content: center; border-top: 1.5px solid var(--lijn); background: var(--wit); padding: 8px 4px calc(10px + env(safe-area-inset-bottom)); }
-  nav button { flex: 1; max-width: 150px; background: none; border: none; cursor: pointer; color: var(--gedempt); text-align: center; padding: 2px 0; }
+  nav button { flex: 1; min-width: 0; max-width: 150px; background: none; border: none; cursor: pointer; color: var(--gedempt); text-align: center; padding: 2px 0; }
   nav button svg.ic { width: 20px; height: 20px; margin: 0 auto 3px; display: block; }
   nav button span { font-size: 9.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; display: block; white-space: nowrap; }  /* v2.0: zes knoppen passen op 375 px */
   nav button.actief { color: var(--paars); }
@@ -176,7 +176,7 @@
   .balk .knop { flex-shrink: 0; }
   .tegels.drie { grid-template-columns: repeat(3, 1fr); }
   .tegels.drie .t-cijfer { font-size: 19px; white-space: nowrap; }
-  .bord { display: flex; gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; margin: 12px -18px 0; padding: 0 18px 8px; }
+  .bord { display: flex; gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; scroll-padding-left: 18px; margin: 12px -18px 0; padding: 0 18px 8px; }
   .kolom { flex: 0 0 78%; max-width: 280px; scroll-snap-align: start; background: var(--vlak); border-radius: 14px; padding: 10px; }
   .kolom h3 { font-size: 11.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--paars); }
   .kolom .k-som { font-size: 12px; color: var(--inkt2); margin-top: 2px; }
@@ -195,6 +195,7 @@
   .composer { background: var(--wit); border: 1.5px solid var(--paars-l); border-radius: 14px; padding: 4px 16px 16px; margin-top: 12px; }
   .composer:empty { display: none; }
   .veld.breed { grid-column: 1 / -1; }
+  .veld input, .veld select, .veld textarea { min-width: 0; }
   .veld.vinkje label { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600; color: var(--inkt); }
   .veld.vinkje input { width: auto; }
   .t-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--lijn); }
@@ -793,7 +794,7 @@
     ['crmNieuw', 'crmComposer', 'crmBeheer'].forEach(function (id) { var x = el(id); if (x && x !== doel) x.innerHTML = ''; });
     doel.innerHTML = html;
     doel.scrollIntoView({ block: 'nearest' });
-    var eerste = doel.querySelector('input:not([type=checkbox]), textarea'); if (eerste) eerste.focus();
+    var eerste = doel.querySelector('input:not([type=checkbox]):not([type=date]):not([type=datetime-local]), textarea'); if (eerste && eerste === doel.querySelector('input, textarea, select')) eerste.focus();  // v2.0: geen datumkiezer of keuzelijst openklappen
   }
   function optiesGebruikers(huidig) { return metHuidig(CRM.basis ? CRM.basis.gebruikers.slice() : [], huidig); }
   function optiesScholen() { return [{ waarde: '', label: 'Kies een school' }].concat((CRM.basis ? CRM.basis.scholen : []).slice().sort(naamSort).map(function (s) { return { waarde: s.id, label: s.naam + (s.plaats ? ' (' + s.plaats + ')' : '') }; })); }
@@ -845,6 +846,7 @@
   /* --- laden en lijsten --- */
   function laadCrmBasis() { return run('apiCrm').then(function (b) { CRM.basis = b; return b; }); }
   function laadRelaties() {
+    if (history.state && history.state.crm) { try { history.replaceState(null, ''); } catch (e) {} }  // v2.0: Terug mag niet naar een oud detailscherm springen
     if (CRM.detail) { CRM.detail = null; el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block'; }
     renderCrm();
     laadCrmBasis().then(function () { CRM.pipeline = null; CRM.taken = null; CRM.rapport = null; renderCrm(); })
@@ -874,7 +876,7 @@
     return '<div class="rij klik" data-crm-open="persoon:' + esc(p.id) + '"><span class="avatar">' + esc(initialen(p.naam)) + '</span><div class="r-body"><div class="r-titel">' + esc(p.naam) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div></div>';
   }
   function kansRij(k, metSchool) {
-    var meta = [k.kans + '%', k.verwachteSluiting ? 'sluiting ' + esc(kortDatum(k.verwachteSluiting)) : '', esc(k.eigenaar), k.stil ? '<b>' + k.dagenStil + ' dagen stil</b>' : '', k.fase === 'verloren' && k.verliesReden ? esc(k.verliesReden) : ''].filter(Boolean).join(' · ');
+    var meta = [esc(k.kans) + '%', k.verwachteSluiting ? 'sluiting ' + esc(kortDatum(k.verwachteSluiting)) : '', esc(k.eigenaar), k.stil ? '<b>' + esc(k.dagenStil) + ' dagen stil</b>' : '', k.fase === 'verloren' && k.verliesReden ? esc(k.verliesReden) : ''].filter(Boolean).join(' · ');
     return '<div class="rij klik" data-crm-open="kans:' + esc(k.id) + '"><div class="r-body"><div class="r-titel">' + esc(metSchool && k.school ? k.school : k.naam) + (metSchool && k.school ? ' <span class="zacht">· ' + esc(k.naam) + '</span>' : '') + '</div><div class="r-meta">' + meta + '</div></div>' +
       '<div class="r-rechts"><span class="tag ' + esc(k.fase) + '">' + esc(k.fase) + '</span>' + (k.waarde ? '<div class="r-bedrag">' + euro(k.waarde) + '</div>' : '') + '</div></div>';
   }
@@ -911,7 +913,7 @@
     return m ? m.pipeline : P.pipelines[0];
   }
   function kaartje(k) {
-    return '<div class="kaartje" data-crm-open="kans:' + esc(k.id) + '"><b>' + esc(k.school || k.naam) + '</b><div class="r-meta">' + [k.school ? esc(k.naam) : '', euro(k.waarde), esc(k.eigenaar), k.stil ? '<b>' + k.dagenStil + ' d stil</b>' : ''].filter(Boolean).join(' · ') + '</div></div>';
+    return '<div class="kaartje" data-crm-open="kans:' + esc(k.id) + '"><b>' + esc(k.school || k.naam) + '</b><div class="r-meta">' + [k.school ? esc(k.naam) : '', euro(k.waarde), esc(k.eigenaar), k.stil ? '<b>' + esc(k.dagenStil) + ' d stil</b>' : ''].filter(Boolean).join(' · ') + '</div></div>';
   }
   function kolomHtml(titel, sub, ks) {
     ks.sort(function (a, b) { return b.waarde - a.waarde; });
@@ -966,7 +968,7 @@
       '<div class="kop">Per accountmanager <small>/ = doel</small></div><div class="tabel-wrap"><table class="tabel"><tr><th>Naam</th>' + kol.map(function (k) { return '<th>' + METRIC_KORT[k] + '</th>'; }).join('') + '</tr>' +
       R.perPersoon.map(function (p) {
         return '<tr><td>' + esc(p.naam) + '</td>' + kol.map(function (k) {
-          var w = p.cijfers[k] || 0, d = p.doelen[k], f = function (x) { return k === 'gewonnenWaarde' ? euro(x) : x; };
+          var w = p.cijfers[k] || 0, d = p.doelen[k], f = function (x) { return k === 'gewonnenWaarde' ? euro(x) : esc(x); };
           return '<td' + (d && w >= d ? ' class="gehaald"' : '') + '>' + f(w) + (d ? ' <small>/' + f(d) + '</small>' : '') + '</td>';
         }).join('') + '</tr>';
       }).join('') + '</table></div>' +
@@ -985,10 +987,15 @@
     el('crmInhoud').innerHTML = h;
   }
   function download(naam, tekst) {
+    // v2.0: in de iOS-standalone-PWA werkt a.download met een blob niet betrouwbaar; het deelmenu wel (Bewaar in Bestanden)
+    try {
+      var bestand = new File(['\ufeff' + tekst], naam, { type: 'text/csv' });
+      if (navigator.canShare && navigator.share && navigator.canShare({ files: [bestand] })) { navigator.share({ files: [bestand] }).catch(function () {}); return; }
+    } catch (e0) {}
     try {
       var b = new Blob(['﻿' + tekst], { type: 'text/csv;charset=utf-8' }), u = URL.createObjectURL(b), a = document.createElement('a');
       a.href = u; a.download = naam; document.body.appendChild(a); a.click();
-      setTimeout(function () { URL.revokeObjectURL(u); document.body.removeChild(a); }, 2000);
+      setTimeout(function () { URL.revokeObjectURL(u); document.body.removeChild(a); }, 60000);
     } catch (e) { toast('Downloaden lukt hier niet.'); }
   }
   function beheerGebruikers(nieuweCode) {
@@ -1115,9 +1122,9 @@
         knoppen(['notitie', 'gesprek', 'afspraak', 'taak', 'track', 'bewerk']) +
         '<div class="kaart"><div class="k-rij"><span>Mijlpaal</span><select data-kansfase="' + esc(k.id) + '" style="border:1.5px solid var(--lijn);border-radius:8px;padding:4px 8px;background:var(--wit)">' +
         fases.map(function (f) { return '<option value="' + esc(f.waarde) + '"' + (f.waarde === k.fase ? ' selected' : '') + '>' + esc(f.label) + '</option>'; }).join('') + '</select></div>' +
-        kRij('Waarde', euro(k.waarde)) + kRij('Kans', k.kans + '% · gewogen ' + euro(k.gewogen)) + kRij('Verwachte sluiting', k.verwachteSluiting ? esc(kortDatum(k.verwachteSluiting)) : '') + kRij('Eigenaar', esc(k.eigenaar)) +
+        kRij('Waarde', euro(k.waarde)) + kRij('Kans', esc(k.kans) + '% · gewogen ' + euro(k.gewogen)) + kRij('Verwachte sluiting', k.verwachteSluiting ? esc(kortDatum(k.verwachteSluiting)) : '') + kRij('Eigenaar', esc(k.eigenaar)) +
         kRij('Volgende actie', k.volgendeActie ? esc(k.volgendeActie) + (k.deadline ? ' · ' + esc(kortDatum(k.deadline)) : '') : '') +
-        kRij('Laatste contact', k.dagenStil !== null && k.dagenStil !== undefined ? (k.stil ? '<b style="color:var(--rood)">' + k.dagenStil + ' dagen geleden</b>' : k.dagenStil + ' dagen geleden') : '') +
+        kRij('Laatste contact', k.dagenStil !== null && k.dagenStil !== undefined ? (k.stil ? '<b style="color:var(--rood)">' + esc(k.dagenStil) + ' dagen geleden</b>' : esc(k.dagenStil) + ' dagen geleden') : '') +
         kRij('Gesloten', k.gesloten ? esc(kortDatum(k.gesloten)) : '') + kRij('Reden verloren', esc(k.verliesReden)) + kRij('Omschrijving', esc(k.notities)) + '</div>' +
         sectie('Open taken', d.taken.length, d.taken.map(function (t) { return taakRij(t, false); }).join(''), 'Geen open taken. Start een track voor een vaste reeks.') +
         tijdlijnSectie(d.tijdlijn) + verwijderKnop('kans', k.id);
@@ -1138,7 +1145,7 @@
     var koppelVelden = (personen.length ? [{ naam: 'persoonId', label: 'Met', type: 'select', opties: optiesLijst(personen) }] : []).concat(kansen.length ? [{ naam: 'kansId', label: 'Over kans', type: 'select', opties: optiesLijst(kansen) }] : []);
     var naam = D.soort === 'school' ? d.school.naam : D.soort === 'persoon' ? d.persoon.naam : d.kans.naam;
     if (soort === 'notitie' || soort === 'gesprek') {
-      var velden = soort === 'gesprek' ? [{ naam: 'onderwerp', label: 'Onderwerp', breed: true, plaats: 'Waar ging het over?' }, { naam: 'datum', label: 'Wanneer', type: 'datetime-local', standaard: nuLokaal() }, { naam: 'duurMin', label: 'Duur (min)', type: 'number', standaard: 15 }]
+      var velden = soort === 'gesprek' ? [{ naam: 'onderwerp', label: 'Onderwerp', breed: true, plaats: 'Waar ging het over?' }, { naam: 'datum', label: 'Wanneer', type: 'datetime-local', standaard: nuLokaal(), breed: true }, { naam: 'duurMin', label: 'Duur (min)', type: 'number', standaard: 15 }]
         : [];
       velden = velden.concat(koppelVelden).concat([{ naam: 'tekst', label: soort === 'gesprek' ? 'Verslag' : 'Notitie', type: 'textarea' }]);
       h = formHtml(soort === 'gesprek' ? 'Gesprek loggen' : 'Notitie', velden, {}, 'Opslaan', function (f) {
@@ -1148,7 +1155,7 @@
       });
     } else if (soort === 'afspraak') {
       var email = D.soort === 'persoon' ? d.persoon.email : d.persoon ? d.persoon.email : '';
-      h = formHtml('Afspraak plannen in Google Agenda', [{ naam: 'titel', label: 'Titel', breed: true, standaard: 'Gesprek ' + naam }, { naam: 'start', label: 'Begin', type: 'datetime-local', standaard: morgenNegen() },
+      h = formHtml('Afspraak plannen in Google Agenda', [{ naam: 'titel', label: 'Titel', breed: true, standaard: 'Gesprek ' + naam }, { naam: 'start', label: 'Begin', type: 'datetime-local', standaard: morgenNegen(), breed: true },
         { naam: 'duurMin', label: 'Duur (min)', type: 'number', standaard: 60 }, { naam: 'locatie', label: 'Locatie', breed: true }].concat(personen.length ? [{ naam: 'persoonId', label: 'Met', type: 'select', opties: optiesLijst(personen) }] : [])
         .concat([{ naam: 'uitnodigen', label: email || personen.length ? 'Stuur een agenda-uitnodiging naar de contactpersoon' : 'Uitnodiging sturen (geen e-mailadres bekend)', type: 'vinkje', standaard: !!email }, { naam: 'notitie', label: 'Agenda en notities', type: 'textarea' }]), {}, 'Inplannen', function (f) {
         if (!f.titel || !f.start) { toast('Titel en begin zijn nodig.'); return; }
@@ -1176,7 +1183,7 @@
       h = formHtml('Track starten', [{ naam: 'trackId', label: 'Track', type: 'select', opties: ts.map(function (t) { return { waarde: t.id, label: t.naam + ' (' + t.stappen.length + ' taken)' }; }), breed: true },
         { naam: 'start', label: 'Startdatum', type: 'date', standaard: vandaagStr() }, { naam: 'eigenaar', label: 'Voor', type: 'select', opties: optiesGebruikers() }], { eigenaar: ikNaam() }, 'Start', function (f) {
         return run('apiTrackStart', f.trackId, kop, f.start, f.eigenaar).then(naOpslaan('Track gestart.'));
-      }, '<div class="hint">' + ts.map(function (t) { return '<b>' + esc(t.naam) + '</b>: ' + t.stappen.map(function (s) { return esc(s.tekst) + ' (dag ' + s.dagenNaStart + ')'; }).join(', '); }).join('<br>') + '</div>');
+      }, '<div class="hint">' + ts.map(function (t) { return '<b>' + esc(t.naam) + '</b>: ' + t.stappen.map(function (s) { return esc(s.tekst) + ' (dag ' + esc(s.dagenNaStart) + ')'; }).join(', '); }).join('<br>') + '</div>');
     } else if (soort === 'bewerk') {
       if (D.soort === 'school') {
         var s = d.school, w = {}; Object.keys(s).forEach(function (k2) { w[k2] = s[k2]; }); w.tags = (s.tags || []).join(', '); w.velden = veldenTekst(s.velden);
