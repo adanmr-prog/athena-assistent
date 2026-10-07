@@ -100,9 +100,9 @@ def basis():
     for s in SCHOLEN:
         open_ = [k for k in CRMKANSEN if k['schoolId'] == s['id'] and k['fase'] not in ('gewonnen', 'verloren')]
         scholen.append(dict(s, personen=len([p for p in PERSONEN if p['schoolId'] == s['id']]), openKansen=len(open_), openWaarde=sum(k['waarde'] for k in open_)))
-    return {'ik': {'naam': 'Menno', 'rol': 'beheerder', 'gekoppeld': True}, 'gebruikers': GEBRUIKERS_NAMEN, 'statussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'mijlpalen': MIJLPALEN,
+    return {'ik': {'naam': 'Menno', 'rol': 'beheerder', 'gekoppeld': True}, 'gebruikers': GEBRUIKERS_NAMEN, 'statussen': INSTELLINGEN['schoolStatussen'], 'mijlpalen': MIJLPALEN,
             'categorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'activiteitTypes': ['notitie', 'gesprek', 'mail', 'afspraak'], 'tracks': TRACKS,
-            'tags': sorted({t for s in SCHOLEN for t in s['tags']}), 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN]}
+            'tags': sorted({t for s in SCHOLEN for t in s['tags']}), 'trajectStatussen': INSTELLINGEN['trajectStatussen'], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN]}
 def tijdlijn(f): return [act_uit(a) for a in sorted([a for a in ACTIVITEITEN if f(a)], key=lambda a: a['datum'], reverse=True)]
 def opslaan(lijst, o, prefix):
     o = dict(o)
@@ -171,8 +171,43 @@ def handle_crm(fn, args):
     if fn == 'apiPipeline': return {'mijlpalen': MIJLPALEN, 'pipelines': ['Scholen'], 'kansen': [kans_uit(k) for k in CRMKANSEN], 'verliesRedenen': ['Te duur']}
     if fn == 'apiTaken': return {'taken': [taak_uit(t) for t in TAKEN], 'categorieen': basis()['categorieen'], 'gebruikers': GEBRUIKERS_NAMEN, 'tracks': TRACKS}
     if fn == 'apiTaakOpslaan':
-        o = dict(args[0]); o.update({'bron': 'crm', 'status': 'open', 'link': '', 'over': None, 'afgerond': ''}); [o.setdefault(k, '') for k in ['schoolId', 'persoonId', 'kansId', 'deadline', 'categorie', 'notitie']]
+        o = dict(args[0]); o.pop('_oud', None)
+        if not o.get('id'): o.update({'bron': 'crm', 'status': 'open', 'link': '', 'over': None, 'afgerond': ''}); [o.setdefault(k, '') for k in ['schoolId', 'persoonId', 'kansId', 'deadline', 'categorie', 'notitie', 'eigenaar']]
         return taak_uit(opslaan(TAKEN, o, 'tk'))
+    if fn == 'apiTaakHeropen':  # v3.7
+        t = per_id(TAKEN)[args[0]]; t.update({'status': 'open', 'afgerond': ''}); return taak_uit(t)
+    if fn == 'apiTrackStoppen':
+        n = len([t for t in TAKEN if t.get('trackRunId') == args[0] and t['status'] != 'af']); TAKEN[:] = [t for t in TAKEN if not (t.get('trackRunId') == args[0] and t['status'] != 'af')]; return {'aantal': n}
+    if fn == 'apiTrackVerwijderen':
+        TRACKS[:] = [t for t in TRACKS if t['id'] != args[0]]; return TRACKS
+    if fn == 'apiActiviteitOpslaan':
+        o = dict(args[0]); o.pop('_oud', None); o.pop('agendaBijwerken', None)
+        if 'datum' in o: o['datum'] = o['datum'].replace('T', ' ')
+        if o['id'] not in per_id(ACTIVITEITEN):  # notitie uit Historie
+            for l in NOTITIES.values():
+                for n in l:
+                    if n['id'] == o['id']: n['tekst'] = o.get('tekst', n['tekst'])
+            return {'id': o['id']}
+        a = per_id(ACTIVITEITEN)[o['id']]; a.update(o); return dict(act_uit(a), agendaBijgewerkt=bool(a.get('agenda')))
+    if fn == 'apiInstellingen': return INSTELLINGEN
+    if fn == 'apiKeuzelijstOpslaan':
+        INSTELLINGEN[args[0]] = [x['waarde'].lower() for x in args[1]]
+        if args[0] == 'schoolStatussen':
+            for x in args[1]:
+                for sc in SCHOLEN:
+                    if x.get('oud') and sc['status'] == x['oud']: sc['status'] = x['waarde'].lower()
+        return INSTELLINGEN
+    if fn == 'apiVelden':
+        tags = {}
+        for sc in SCHOLEN:
+            for t in sc['tags']: tags[t] = tags.get(t, 0) + 1
+        return {'tags': [{'naam': k, 'aantal': v} for k, v in sorted(tags.items())], 'velden': [{'naam': 'Regio', 'aantal': 2}]}
+    if fn == 'apiTagHernoem':
+        n = 0
+        for sc in SCHOLEN:
+            if args[0] in sc['tags']: sc['tags'] = [args[1] if t == args[0] else t for t in sc['tags'] if args[1] or t != args[0]]; n += 1
+        return {'aantal': n}
+    if fn == 'apiVeldHernoem': return {'aantal': 2}
     if fn == 'apiTrackStart':
         t = per_id(TRACKS)[args[0]]; kop = args[1]
         for st in t['stappen']: TAKEN.append({'id': 'tk' + uuid.uuid4().hex[:5], 'tekst': st['tekst'], 'bron': 'track', 'prio': st['prio'], 'deadline': (datetime.date.fromisoformat(args[2]) + datetime.timedelta(days=st['dagenNaStart'])).isoformat(), 'link': '', 'over': None, 'categorie': st['categorie'], 'eigenaar': args[3] if len(args) > 3 else 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': kop.get('schoolId', ''), 'persoonId': kop.get('persoonId', ''), 'kansId': kop.get('kansId', '')})
@@ -189,7 +224,7 @@ def handle_crm(fn, args):
                 'winst': {'gewonnen': 1, 'gewonnenWaarde': 12000, 'verloren': 1, 'verlorenWaarde': 4000, 'ratio': 50}, 'redenen': [{'reden': 'Te duur', 'aantal': 1}], 'stil': [kans_uit(k) for k in CRMKANSEN if kans_uit(k)['stil']]}
     if fn == 'apiDoelen': return {'doelen': DOELEN, 'metrics': ['gesprekken', 'mails', 'afspraken', 'nieuweKansen', 'voorstellen', 'gewonnen', 'gewonnenWaarde'], 'periodes': ['week', 'maand', 'kwartaal'], 'gebruikers': GEBRUIKERS_NAMEN}
     if fn == 'apiDoelOpslaan':
-        o = args[0]; DOELEN[:] = [x for x in DOELEN if x['id'] != o['eigenaar'] + o['periode'] + o['metric']] + [dict(o, id=o['eigenaar'] + o['periode'] + o['metric'], doel=float(o.get('doel') or 0))]; return handle_crm('apiDoelen', [])
+        o = args[0]; DOELEN[:] = [x for x in DOELEN if x['id'] != o['eigenaar'] + o['periode'] + o['metric'] and x['id'] != o.get('id')] + [dict(o, id=o['eigenaar'] + o['periode'] + o['metric'], doel=float(o.get('doel') or 0))]; return handle_crm('apiDoelen', [])
     if fn == 'apiMijlpalenOpslaan':
         MIJLPALEN[:] = [{'pipeline': m.get('pipeline') or 'Scholen', 'mijlpaal': m['mijlpaal'].lower(), 'volgorde': i + 1, 'kans': m['kans'], 'dagenNorm': m['dagenNorm']} for i, m in enumerate(args[0])]; return MIJLPALEN
     if fn == 'apiGebruikers': return {'gebruikers': GEBRUIKERS, 'rollen': ['beheerder', 'adviseur', 'am']}
@@ -225,10 +260,15 @@ def handle_crm(fn, args):
         return {'stap': args[0], 'aantal': 3, 'volgende': {'stap': stappen[i + 1], 'pagina': 1} if i + 1 < len(stappen) else None}
     if fn == 'apiExport': return {'bestandsnaam': 'athena-' + args[0] + '.csv', 'csv': 'id,naam\ns1,Voorbeeldcollege Zuid'}
     if fn == 'apiVerwijder':
-        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN}[args[0]]; lijst[:] = [x for x in lijst if x['id'] != args[1]]; return None
+        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN, 'activiteit': ACTIVITEITEN, 'traject': TRAJECTEN, 'doel': DOELEN, 'content': CONTENT}.get(args[0])
+        if lijst is None:  # notitie (Historie)
+            for l in NOTITIES.values(): l[:] = [x for x in l if x['id'] != args[1]]
+            return None
+        lijst[:] = [x for x in lijst if x['id'] != args[1]]; return None
     raise ValueError('onbekende functie ' + fn)
 
 BREIN_UITGEVOERD = []
+INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['offerte', 'actief', 'afgerond', 'gestopt']}
 
 
 def handle(fn, args):
@@ -240,7 +280,7 @@ def handle(fn, args):
     if fn == 'apiActieKlaar':
         for t in TAKEN:
             if t['id'] == args[0]: t['status'] = 'af'; t['afgerond'] = nu()
-        ACTIES[:] = [a for a in ACTIES if a['id'] != args[0]]; return None
+        ACTIES[:] = [a for a in ACTIES if a['id'] != args[0]]; return {'id': args[0], 'status': 'af', 'afgerond': nu()}
     if fn == 'apiActieToevoegen':
         a = {'id': uuid.uuid4().hex[:6], 'tekst': args[0], 'bron': 'handmatig', 'prio': args[1] or 'midden', 'deadline': args[2] if len(args) > 2 else '', 'link': '', 'over': None}; ACTIES.append(a); return a
     if fn == 'apiKennisbank':
@@ -273,7 +313,13 @@ def handle(fn, args):
     if fn == 'apiHuisstijl':
         return {'velden': HUIS, 'kleuren': [{'naam': 'Paars', 'hex': HUIS['kleur_primair'], 'gebruik': 'primair'}, {'naam': 'Oranje', 'hex': HUIS['kleur_accent'], 'gebruik': 'accent'}, {'naam': 'Diep paars', 'hex': '#5D0095', 'gebruik': 'secundair'}, {'naam': 'Inkt', 'hex': '#241A28', 'gebruik': 'tekst'}, {'naam': 'Achtergrond', 'hex': '#FBF9F6', 'gebruik': 'achtergrond'}],
                 'toon': HUIS['toon'].split('\n'), 'zinnen': [{'titel': z.split('|')[0].strip(), 'tekst': z.split('|')[1].strip()} for z in HUIS['zinnen'].split('\n')],
-                'types': [{'id': 'linkedin', 'naam': 'LinkedIn-post'}, {'id': 'mail', 'naam': 'E-mail aan een school'}, {'id': 'nieuwsbrief', 'naam': 'Nieuwsbriefitem'}, {'id': 'vacature', 'naam': 'Vacaturetekst'}, {'id': 'voorstel', 'naam': 'Intro voor een samenwerkingsvoorstel'}], 'recent': CONTENT}
+                'types': [{'id': 'linkedin', 'naam': 'LinkedIn-post'}, {'id': 'mail', 'naam': 'E-mail aan een school'}, {'id': 'nieuwsbrief', 'naam': 'Nieuwsbriefitem'}, {'id': 'vacature', 'naam': 'Vacaturetekst'}, {'id': 'voorstel', 'naam': 'Intro voor een samenwerkingsvoorstel'}], 'recent': [dict(c, magWijzigen=True) for c in CONTENT], 'magBewerken': True}
+    if fn == 'apiHuisstijlOpslaan':  # v3.7
+        HUIS.update(args[0]); return handle('apiHuisstijl', [])
+    if fn == 'apiContentOpslaan':
+        c = per_id(CONTENT)[args[0]['id']]; c.update({k: v for k, v in args[0].items() if k in ('onderwerp', 'tekst')}); return dict(c, magWijzigen=True)
+    if fn == 'apiDocumentOpslaan':
+        dd = per_id(DOCS)[args[0]]; dd.update(args[1]); return dd
     if fn == 'apiZetHuisstijl':
         HUIS[args[0]] = args[1]; return None
     if fn == 'apiMaakContent':
@@ -283,15 +329,18 @@ def handle(fn, args):
         return {'trajecten': TRAJECTEN, 'filters': {'schooljaren': ['2026-2027', '2025-2026'], 'trajecten': sorted({t['traject'] for t in TRAJECTEN}), 'statussen': ['offerte', 'actief', 'afgerond', 'gestopt']}}
     if fn == 'apiTraject':
         t = [x for x in TRAJECTEN if x['id'] == args[0]][0]
-        return {'traject': t, 'documenten': [x for x in DOCS if x['school'] == t['school']], 'notities': NOTITIES.get(t['id'], []), 'kansen': [k for k in KANSEN if k['school'] == t['school']], 'school': {'naam': t['school'], 'plaats': t['plaats'], 'contactpersoon': t['contactpersoon'], 'email': 'contact@voorbeeld.nl', 'telefoon': '', 'status': 'klant', 'am': t['am']}}
+        return {'traject': t, 'documenten': [x for x in DOCS if x['school'] == t['school']], 'notities': [dict(n, soort='activiteit', door='Menno', onderwerp='', ruw=n['tekst']) for n in NOTITIES.get(t['id'], [])], 'kansen': [k for k in KANSEN if k['school'] == t['school']], 'school': {'naam': t['school'], 'plaats': t['plaats'], 'contactpersoon': t['contactpersoon'], 'email': 'contact@voorbeeld.nl', 'telefoon': '', 'status': 'klant', 'am': t['am']}}
     if fn == 'apiTrajectOpslaan':
         o = args[0]
         if o.get('id'):
             for t in TRAJECTEN:
-                if t['id'] == o['id']: t.update(o); return t
+                if t['id'] == o['id']:
+                    o = {k: v for k, v in o.items() if k != '_oud'}; t.update(o)
+                    if o.get('schoolId'): t['school'] = per_id(SCHOLEN)[o['schoolId']]['naam']
+                    return t
         o = dict(o); o['id'] = uuid.uuid4().hex[:6]; o.setdefault('omzet', 0); o['bijgewerkt'] = nu(); TRAJECTEN.insert(0, o); return o
     if fn == 'apiNotitieToevoegen':
-        n = {'id': uuid.uuid4().hex[:6], 'datum': nu(), 'tekst': args[1]}; NOTITIES.setdefault(args[0], []).insert(0, n); return n
+        n = {'id': uuid.uuid4().hex[:6], 'datum': nu(), 'tekst': args[1]}; NOTITIES.setdefault(args[0], []).insert(0, n); return dict(n, soort='activiteit', door='Menno', ruw=args[1], onderwerp='')
     if fn == 'apiStatus':
         return {'versie': '2.0', 'sheetUrl': 'https://docs.google.com/', 'mapUrl': 'https://drive.google.com/', 'model': 'claude-opus-5', 'effort': 'medium', 'claudeIngesteld': True, 'driveApi': False, 'laatsteIndex': d(0) + ' 04:01', 'laatsteReview': d(0) + ' 05:02', 'rapportEmail': 'menno@voorbeeld.nl', 'reviewTrigger': True, 'indexTrigger': True, 'tijdzone': 'Europe/Amsterdam',
                 'gebruiker': {'naam': 'Menno', 'rol': 'beheerder'}, 'crmSyncTrigger': True, 'laatsteCrmSync': nu(), 'capsuleToken': True, 'capsuleMigratie': ''}

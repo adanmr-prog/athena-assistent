@@ -34,6 +34,9 @@ with sync_playwright() as p:
     assert uit == ['uitgevoerd:Onderwijsondersteuning leerplein', 'geannuleerd:'], uit
     page.screenshot(path=OUT + '/03c_brein_acties.png', full_page=True)
     page.click('[data-typefilter="contract"]'); page.wait_for_timeout(200)
+    page.click('[data-typefilter=""]'); page.locator('#docLijst [data-docbewerk]').first.click(); page.wait_for_selector('#venster.aan #vf-type')  # v3.7
+    page.select_option('#vf-type', 'voorstel'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan', state='detached'); page.wait_for_selector('#toast.aan:has-text("Document bijgewerkt")')
+    page.click('[data-typefilter="contract"]'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/03_brein.png', full_page=True)
     page.click('#indexeerKnop'); page.wait_for_timeout(700)
     page.click('nav button[data-view="review"]'); page.wait_for_selector('.quote'); page.wait_for_timeout(200)
@@ -43,12 +46,17 @@ with sync_playwright() as p:
     page.click('nav button[data-view="huisstijl"]'); page.wait_for_selector('.swatch'); page.wait_for_timeout(200)
     page.fill('#contentOnderwerp', 'Start huiswerkbegeleiding op Lyceum Demo'); page.click('#maakContent'); page.wait_for_selector('#contentTekst'); page.wait_for_timeout(400)
     page.screenshot(path=OUT + '/05_huisstijl.png', full_page=True)
-    page.click('#huisBewerk'); page.fill('#hToon', 'Nieuwe toonregel\nTweede regel'); page.click('#huisOpslaan'); page.wait_for_timeout(700)
+    page.locator('#recentContent .recent').first.click(); page.locator('#recentContent [data-contentbewerk]').first.click(); page.wait_for_selector('#venster.aan #vf-tekst')  # v3.7
+    page.fill('#vf-tekst', 'Aangepaste tekst uit de test'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#recentContent:has-text("Aangepaste tekst uit de test")')
+    page.click('#huisBewerk'); page.fill('#hToon', 'Nieuwe toonregel\nTweede regel'); page.fill('#hBedrijf', 'AthenaSchool BV'); page.click('#huisOpslaan'); page.wait_for_selector('#toast.aan:has-text("Huisstijl opgeslagen")')
     page.screenshot(path=OUT + '/05b_huisstijl_na_bewerken.png', full_page=True)
     page.click('nav button[data-view="trajecten"]'); page.wait_for_selector('[data-traject]'); page.wait_for_timeout(200)
     page.click('[data-traject="t1"]'); page.wait_for_selector('#tdet-t1 .k-rij'); page.wait_for_timeout(200)
     page.fill('[data-notitieinput="t1"]', 'Notitie uit de test'); page.click('[data-notitie="t1"]'); page.wait_for_timeout(500)
     page.select_option('[data-statuswijzig="t1"]', 'afgerond'); page.wait_for_timeout(500)
+    page.click('[data-trajectbewerk="t1"]'); page.wait_for_selector('#venster.aan #vf-urenPerWeek'); page.fill('#vf-urenPerWeek', '12'); page.click('#venster [data-cf-opslaan]')  # v3.7
+    page.wait_for_selector('#tdet-t1:has-text("12 u/wk")')
+    page.locator('#tdet-t1 [data-notitiebewerk]').first.click(); page.wait_for_selector('#venster.aan #vf-tekst'); page.fill('#vf-tekst', 'Notitie aangepast'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#tdet-t1:has-text("Notitie aangepast")')
     page.screenshot(path=OUT + '/06_trajecten_detail.png', full_page=True)
     page.fill('#trajectZoek', 'demo'); page.wait_for_timeout(200); page.select_option('#fStatus', 'actief'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/07_trajecten_filter.png', full_page=True)
@@ -64,8 +72,16 @@ with sync_playwright() as p:
     page.click('[data-crm-open="school:s1"]'); page.wait_for_selector('.detailkop h2'); page.wait_for_timeout(200)
     page.click('[data-composer="gesprek"]'); page.fill('#cf-onderwerp', 'Evaluatie periode 1'); page.fill('#cf-tekst', 'Tevreden over de ondersteuner.'); page.click('[data-cf-opslaan]')
     page.wait_for_selector('.t-item:has-text("Evaluatie periode 1")'); page.wait_for_timeout(200)
+    page.locator('.t-item:has-text("Evaluatie periode 1") [data-actbewerk]').click(); page.wait_for_selector('#venster.aan #vf-onderwerp')  # v3.7
+    page.fill('#vf-onderwerp', 'Evaluatie periode 1 (bijgesteld)'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("(bijgesteld)")')
+    page.screenshot(path=OUT + '/12b_tijdlijn_bewerken.png', full_page=True)
+    page.click('[data-composer="notitie"]'); page.fill('#crmComposer #cf-tekst', 'Notitie naast het venster')  # v3.7: een open formulier blijft werken na het venster
+    page.locator('.t-item [data-actbewerk]').first.click(); page.wait_for_selector('#venster.aan'); page.click('#venster [data-cf-annuleer]')
+    page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Notitie naast het venster")')
     page.screenshot(path=OUT + '/12_school_detail.png', full_page=True)
     page.click('[data-composer="afspraak"]'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Gesprek Voorbeeldcollege Zuid")'); page.wait_for_timeout(100)
+    page.locator('.t-item:has-text("Gesprek Voorbeeldcollege Zuid") [data-actbewerk]').first.click(); page.wait_for_selector('#venster.aan [data-actweg]'); page.click('#venster [data-actweg]')  # v3.7: verwijderen
+    page.wait_for_selector('.t-item:has-text("Gesprek Voorbeeldcollege Zuid")', state='detached')
     page.click('[data-composer="persoon"]'); page.fill('#cf-voornaam', 'Dirk'); page.fill('#cf-achternaam', 'Smit'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.rij:has-text("Dirk Smit")')
     # v3.3: bewerken stuurt alleen gewijzigde velden; een gelijktijdige wijziging van hetzelfde veld geeft een melding
     page.click('[data-composer="bewerk"]'); page.fill('#cf-plaats', 'Schiedam')
@@ -86,12 +102,24 @@ with sync_playwright() as p:
     page.click('[data-taakklaar="tk1"]'); page.wait_for_timeout(500)
     page.click('[data-crmnieuw="taak"]'); page.fill('#cf-tekst', 'Offerte surveillance maken'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.rij:has-text("Offerte surveillance maken")'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/15_taken.png', full_page=True)
+    page.click('.rij [data-taakbewerk]:has-text("Offerte surveillance maken")'); page.wait_for_selector('#venster.aan #vf-tekst')  # v3.7
+    page.screenshot(path=OUT + '/15b_taak_venster.png', full_page=True)
+    page.fill('#vf-tekst', 'Offerte surveillance versturen'); page.select_option('#vf-prio', 'hoog'); page.click('#venster [data-cf-opslaan]')
+    page.wait_for_selector('.rij:has-text("Offerte surveillance versturen")', timeout=1500)  # meteen zichtbaar, zonder te herladen
+    page.click('[data-taakbewerk="tk1"]'); page.wait_for_selector('#venster.aan [data-taakheropen]'); page.click('[data-taakheropen]'); page.wait_for_selector('[data-taakklaar="tk1"]')
+    page.click('[data-taakbewerk="tk2"]'); page.wait_for_selector('#venster.aan [data-taakweg]'); page.click('[data-taakweg]'); page.wait_for_selector('[data-taakbewerk="tk2"]', state='detached')
     page.click('[data-crmtab="rapport"]'); page.wait_for_selector('.tabel'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/16_rapport.png', full_page=True)
     print('horizontale scroll (rapport):', page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
     page.wait_for_selector('#rapportActiviteit .t-item')  # v3.3: activiteit per gebruiker
     page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.select_option('#cf-rol', 'adviseur'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/17_beheer_gebruikers.png', full_page=True)
+    page.click('[data-gbewerk="g1"]'); page.wait_for_selector('#venster.aan #vf-naam'); page.fill('#vf-naam', 'Mees de Jong'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#crmBeheer:has-text("Mees de Jong")')  # v3.7
+    page.click('[data-beheer="keuzelijsten"]'); page.wait_for_selector('#le-schoolStatussen .le-rij'); page.locator('#le-schoolStatussen .le-rij input').first.fill('nieuw'); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Keuzelijsten opgeslagen")')
+    page.click('[data-beheer="mijlpalen"]'); page.wait_for_selector('#leMijlpalen .le-rij'); page.click('[data-le-erbij="leMijlpalen"]'); inp = page.locator('#leMijlpalen .le-rij').last.locator('input')
+    inp.nth(0).fill('Scholen'); inp.nth(1).fill('contract'); inp.nth(2).fill('90'); inp.nth(3).fill('5'); page.screenshot(path=OUT + '/17b_beheer_mijlpalen.png', full_page=True); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Mijlpalen opgeslagen")')
+    page.click('[data-beheer="tags"]'); page.wait_for_selector('#crmBeheer [data-hernoem]')
+    page.click('[data-beheer="doelen"]'); page.wait_for_selector('#venster.aan [data-doelbewerk]'); page.locator('[data-doelbewerk]').first.click(); page.wait_for_selector('#venster.aan #vf-doel'); page.fill('#vf-doel', '12'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan [data-doelbewerk]'); page.click('#venster [data-cf-annuleer]')
     page.click('[data-beheer="capsule"]'); page.wait_for_selector('#crmBeheer:has-text("klaar")', timeout=8000)
     page.click('[data-crmtab="scholen"]'); page.click('[data-crmnieuw="school"]'); page.fill('#cf-naam', 'Testschool Noord'); page.fill('#cf-plaats', 'Groningen'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.detailkop h2:has-text("Testschool Noord")')
     page.click('[data-composer="kans"]'); page.fill('#cf-naam', 'Studentdocenten'); page.fill('#cf-waarde', '8000'); page.click('[data-cf-opslaan]'); page.wait_for_selector('[data-kansfase]')
@@ -115,6 +143,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/22_desk_school.png')
     page.click('.zb-item[data-desk="taken"]'); page.wait_for_selector('.dtabel [data-taakklaar]'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/23_desk_taken.png')
+    page.locator('.dtabel tr[data-taakbewerk] td:nth-child(2)').first.click(); page.wait_for_selector('#venster.aan #vf-tekst'); page.screenshot(path=OUT + '/23b_desk_taak_venster.png'); page.click('#venster [data-cf-annuleer]')  # v3.7
     page.click('.zb-item[data-desk="agenda"]'); page.wait_for_selector('.maand .dag'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/24_desk_agenda.png')
     page.click('[data-agnav="1"]'); page.wait_for_timeout(300); page.click('[data-agnav="0"]'); page.wait_for_selector('.maand .dag.vandaag')
