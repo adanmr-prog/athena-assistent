@@ -202,7 +202,7 @@ def handle_crm(fn, args):
         return {'groet': 'Goedemorgen Menno', 'datum': 'dinsdag 22 september', 'ik': {'naam': 'Menno', 'rol': 'beheerder'}, 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af'],
                 'agenda': [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': ''}, {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}], 'gekoppeld': True,
                 'pipeline': {'open': len(open_), 'waarde': sum(k['waarde'] for k in open_), 'gewogen': sum(k['gewogen'] for k in open_), 'stil': [k for k in open_ if k['stil']]},
-                'recent': [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if a['datum'] <= nu()], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}]}
+                'recent': [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if a['datum'] <= nu()], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}]}
     if fn == 'apiActiviteiten':  # v3.3
         door = args[0] if args else ''; l = [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if (not door or a['door'] == door) and a['datum'] <= nu()]
         pt = {}
@@ -210,7 +210,7 @@ def handle_crm(fn, args):
         return {'door': door, 'totaal': len(l), 'perType': pt, 'tijdlijn': l}
     if fn == 'apiArchiefTijdlijn':
         return [act_uit({'id': 'ar1', 'type': 'notitie', 'datum': '2025-03-01 10:00', 'door': 'Menno', 'schoolId': args[1], 'persoonId': '', 'kansId': '', 'onderwerp': 'Kennismaking (archief)', 'tekst': 'Eerste contact via de beurs.', 'duurMin': 0, 'bron': 'capsule'})]
-    if fn == 'apiHomeMails': return [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}]  # v3.2
+    if fn == 'apiHomeMails': return [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}]  # v3.2
     if fn == 'apiAgenda':  # v3.0
         van, tot = args[0], args[1]
         ev = [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': '', 'schoolId': 's2', 'kansId': '', 'school': 'Lyceum Demo'},
@@ -228,11 +228,14 @@ def handle_crm(fn, args):
         lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN}[args[0]]; lijst[:] = [x for x in lijst if x['id'] != args[1]]; return None
     raise ValueError('onbekende functie ' + fn)
 
+BREIN_UITGEVOERD = []
+
+
 def handle(fn, args):
     if fn == 'apiOverzicht':
         open_ = [a for a in ACTIES]
         return {'datum': 'dinsdag 22 september', 'groet': 'Goedemorgen Menno', 'kpi': {'trajecten': 3, 'kansen': 2, 'scholen': 3, 'omzet': 64260, 'schooljaar': '2026-2027', 'pijplijn': 24040},
-                'focus': open_[:3], 'aandacht': open_[3:], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}, {'onderwerp': 'Factuur september', 'van': 'Administratie Lyceum Demo', 'dagen': 2, 'link': 'https://mail.google.com/'}],
+                'focus': open_[:3], 'aandacht': open_[3:], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}, {'onderwerp': 'Factuur september', 'van': 'Administratie Lyceum Demo', 'dagen': 2, 'link': 'https://mail.google.com/'}],
                 'agenda': [{'tijd': '10:00', 'titel': 'Gesprek teamleider Lyceum Demo', 'duurMin': 60}, {'tijd': '14:30', 'titel': 'Intake ondersteuner', 'duurMin': 45}], 'kansen': [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')], 'tellingScholen': 4}
     if fn == 'apiActieKlaar':
         for t in TAKEN:
@@ -245,6 +248,21 @@ def handle(fn, args):
         for x in DOCS: t[x['type']] += 1
         return {'tellingen': t, 'documenten': DOCS, 'laatsteIndex': d(0) + ' 04:01', 'mapUrl': 'https://drive.google.com/'}
     if fn == 'apiIndexeer': return {'aantal': 6, 'nieuw': 0, 'bijgewerkt': 1, 'verwijderd': 0}
+    if fn == 'apiBrein':  # v3.5: assistent met voorgestelde acties
+        v = str(args[0]).lower()
+        if 'offerte' in v:
+            return {'antwoord': 'Ik heb een offerte voor Voorbeeldcollege Zuid klaargezet: 2 ondersteuners, ma t/m vr van 10 tot 16 uur, tegen het tarief uit de prijzenlijst [2]. Bevestig hieronder.',
+                    'bronnen': [{'titel': 'Prijzenlijst 2026-2027', 'url': 'https://drive.google.com/', 'type': 'prijslijst'}],
+                    'acties': [{'id': 'tu1', 'soort': 'maak_offerte', 'titel': 'Offerte maken', 'invoer': {'titel': 'Onderwijsondersteuning', 'school': 'Voorbeeldcollege Zuid', 'hulpvraag': 'De school zoekt dagelijkse ondersteuning in het leerplein.', 'aanpak': 'Twee ondersteuners per dag.', 'rooster': 'Maandag t/m vrijdag 10:00-16:00.', 'kosten': '2 x 6 uur x 5 dagen x EUR 42 = EUR 2.520 per week.', 'schoolId': 's1'}},
+                               {'id': 'tu2', 'soort': 'maak_taak', 'titel': 'Taak aanmaken', 'invoer': {'tekst': 'Offerte Voorbeeldcollege nabellen', 'deadline': d(5), 'prio': 'midden', 'schoolId': 's1'}}]}
+        if 'concept' in v:
+            return {'antwoord': 'Ik heb een conceptreactie klaargezet.', 'bronnen': [], 'acties': [{'id': 'tu3', 'soort': 'maak_conceptmail', 'titel': 'Conceptmail', 'invoer': {'threadId': 'th1', 'tekst': 'Beste mevrouw De Vries,\n\nDank voor uw mail over het rooster.'}}]}
+        return {'antwoord': 'Het uurtarief voor huiswerkbegeleiding bij Lyceum Demo is **€ 42** per uur [1].', 'bronnen': [{'titel': 'Schooldossier Lyceum Demo', 'url': 'https://drive.google.com/', 'type': 'schooldossier'}], 'acties': []}
+    if fn == 'apiBreinUitvoeren':
+        a = args[0]; BREIN_UITGEVOERD.append(a)
+        if a['soort'] == 'maak_offerte': return {'melding': 'Offerte staat klaar in Drive.', 'url': 'https://docs.google.com/document/d/x'}
+        if a['soort'] == 'maak_conceptmail': return {'melding': 'Concept staat klaar in Gmail.', 'url': 'https://mail.google.com/mail/#drafts'}
+        return {'melding': 'Taak aangemaakt: ' + a['invoer'].get('tekst', '')}
     if fn == 'apiVraag':
         return {'antwoord': 'Het uurtarief voor huiswerkbegeleiding bij Lyceum Demo is **€ 42** per uur, bij 8 uur per week [1]. In de prijzenlijst 2026-2027 staat een range van € 40 tot € 45 [2].', 'bronnen': [{'titel': 'Schooldossier Lyceum Demo', 'url': 'https://drive.google.com/', 'type': 'schooldossier'}, {'titel': 'Prijzenlijst 2026-2027', 'url': 'https://drive.google.com/', 'type': 'prijslijst'}]}
     if fn == 'apiReview':

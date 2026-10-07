@@ -1,6 +1,6 @@
 # Athena Assistent (athena-assistent)
 
-Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder), de onderwijsadviseurs en de accountmanagers (circa 20 gebruikers; mail, agenda en review zijn per gebruiker privé). Zes modules: Vandaag (operations-dashboard), Relaties (het eigen CRM dat Capsule vervangt: scholen, personen, pipeline, taken/tracks, tijdlijn, rapportage), Brein (kennisbank met vraag-en-antwoord), Review (nachtelijke review), Huisstijl (huisstijl-kit en on-brand teksten), Historie (geschiedenis van elke schoolopdracht). UI, code en commentaar zijn Nederlands.
+Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder), de onderwijsadviseurs en de accountmanagers (circa 20 gebruikers; mail, agenda en review zijn per gebruiker privé). Zes modules: Vandaag (operations-dashboard), Relaties (het eigen CRM dat Capsule vervangt: scholen, personen, pipeline, taken/tracks, tijdlijn, rapportage), Brein (kennisbank en persoonlijke assistent die offertes, conceptmails, taken en afspraken voorstelt; uitvoeren pas na bevestiging), Review (nachtelijke review), Huisstijl (huisstijl-kit en on-brand teksten), Historie (geschiedenis van elke schoolopdracht). UI, code en commentaar zijn Nederlands.
 
 ## Structuur
 - `index.html`: de volledige app (CSS + HTML + inline script in één bestand). Geen build-stap, geen bundler, geen npm-dependencies.

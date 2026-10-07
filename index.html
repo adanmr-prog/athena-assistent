@@ -115,6 +115,24 @@
   .bronnen { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .bron { font-size: 12px; font-weight: 700; color: var(--paars); background: var(--paars-l); border-radius: 999px; padding: 3px 10px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
   .bron svg.ic { width: 12px; height: 12px; }
+  /* v3.5: actiekaarten van de Brein-assistent */
+  .actiekaart { white-space: normal; border: 1.5px solid var(--lijn); border-left: 4px solid var(--oranje); border-radius: 12px; padding: 10px 12px; margin-top: 10px; background: var(--wit); }
+  .actiekaart.uitgevoerd { border-left-color: var(--paars); }
+  .actiekaart.geannuleerd { opacity: .55; }
+  .ak-kop { font-weight: 800; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .ak-status { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--gedempt); text-transform: uppercase; letter-spacing: .05em; }
+  .ak-veld { font-size: 13px; margin-top: 4px; color: var(--inkt2); overflow-wrap: anywhere; }
+  .ak-veld b { color: var(--inkt); }
+  .ak-veld.lang span { white-space: pre-wrap; display: block; max-height: 12em; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .ak-form label { display: block; font-size: 12px; font-weight: 700; margin-top: 8px; color: var(--inkt2); }
+  .ak-form input, .ak-form textarea { width: 100%; box-sizing: border-box; border: 1.5px solid var(--lijn); border-radius: 8px; padding: 7px 8px; font: inherit; font-size: 16px; }
+  .ak-form textarea { min-height: 90px; resize: vertical; }
+  .ak-knoppen { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .ak-klaar { font-size: 13px; margin-top: 8px; }
+  .ak-knoppen .knop, .mailrij .knop { min-height: 44px; }
+  .mailrij { gap: 10px; }
+  .mailrij { align-items: center; }
+  .mailrij > a.r-body { color: inherit; text-decoration: none; }
 
   .doc .d-type { display: inline-block; width: 34px; height: 34px; border-radius: 9px; background: var(--paars-l); color: var(--paars); font-size: 10px; font-weight: 800; letter-spacing: .04em; display: flex; align-items: center; justify-content: center; flex-shrink: 0; text-transform: uppercase; }
   .doc .d-type.contract { background: var(--oranje-l); color: #B86E00; }
@@ -361,11 +379,11 @@
 
   <!-- 2. Bedrijfsbrein: elk contract, elke werkwijze en elk schooldossier op één plek — en je kunt het vragen stellen -->
   <div class="view" id="view-brein">
-    <div class="hero"><h2>Elk contract, elke werkwijze en elk schooldossier op één plek.</h2><p>Stel een vraag zoals je die aan een collega stelt. Athena kent de documenten.</p></div>
+    <div class="hero"><h2>Je assistent die het bedrijf kent.</h2><p>Stel een vraag of geef een opdracht: een offerte, een conceptmail, een taak of een afspraak. Athena zet het klaar; jij bevestigt.</p></div>
     <div class="tegels" id="breinTegels"><div class="spinner">Laden</div></div>
-    <div class="kop">Vraag het Athena</div>
+    <div class="kop">Vraag het Athena <button class="knop licht klein" id="nieuwGesprek" style="margin-left:auto">Nieuw gesprek</button></div>
     <div id="breinBerichten"></div>
-    <div class="invoer"><input id="vraagInput" placeholder="Wat is het uurtarief voor huiswerkbegeleiding?" autocomplete="off"><button id="vraagKnop" aria-label="Vragen"><svg class="ic" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button></div>
+    <div class="invoer"><input id="vraagInput" placeholder="Schrijf een offerte voor … / Wat is het tarief voor …" autocomplete="off"><button id="vraagKnop" aria-label="Vragen"><svg class="ic" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button></div>
     <div class="kop">Documenten <small id="docTelling"></small></div>
     <div class="invoer" style="margin-top:0"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="docZoek" placeholder="Zoek op titel of school" autocomplete="off"></div>
     <div class="chips" id="docChips"></div>
@@ -499,6 +517,11 @@
   function md(s) {
     return esc(s).replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>').replace(/`([^`\n]+)`/g, '<code>$1</code>');
   }
+  // v3.5: mailregel met een knop om het Brein een conceptreactie te laten schrijven
+  function mailRij(m, meta) {
+    var knop = m.threadId ? '<button class="knop licht klein" data-concept="' + esc(m.threadId) + '" data-onderwerp="' + esc(m.onderwerp) + '" data-van="' + esc(m.van) + '">Concept</button>' : '';
+    return '<div class="rij mailrij"><a class="r-body" href="' + esc(m.link) + '"><div class="r-titel">' + esc(m.onderwerp) + '</div><div class="r-meta">' + meta + '</div></a>' + knop + '</div>';
+  }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
   function euro(n) { n = Math.round(Number(n) || 0); return '€ ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
   var MAANDEN_KORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
@@ -506,10 +529,10 @@
   function leesOpslag(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
   function zetOpslag(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   function leesChat() {
-    try { var h = JSON.parse(leesOpslag('aa_chat') || 'x'); if (h && h.length) return h; } catch (e) {}
-    return [{ rol: 'bot', tekst: 'Vraag me naar contracten, werkwijzen, tarieven of een school. Ik zoek het op in de documenten.' }];
+    try { var h = JSON.parse(leesOpslag('aa_chat') || 'x'); if (h && h.length) { h.forEach(function (m) { (m.acties || []).forEach(function (a) { if (a.status === 'bezig' || a.status === 'bewerken') a.status = ''; }); }); return h; } } catch (e) {}  // v3.5: een afgebroken actie weer als voorstel tonen
+    return [{ rol: 'bot', tekst: 'Vraag me naar contracten, werkwijzen, tarieven of een school, of geef me een opdracht: "schrijf een offerte voor …", "schrijf een conceptreactie op de mail van …", "maak een taak …". Ik zet het klaar; jij bevestigt.' }];
   }
-  function saveChat() { zetOpslag('aa_chat', JSON.stringify(S.chat.slice(-40))); }
+  function saveChat() { zetOpslag('aa_chat', JSON.stringify(S.chat.slice(-24))); }  // v3.5: acties met volledige offerteteksten zijn groot
   var _toastTimer;
   function toast(msg) {
     var t = el('toast'); t.textContent = msg; t.classList.add('aan');
@@ -564,7 +587,7 @@
     el('focusLijst').innerHTML = d.focus.length ? d.focus.map(actieRij).join('') : '<div class="leeg">Niets dringends. Kijk bij de kansen en de mails.</div>';
     el('aandachtLijst').innerHTML = d.aandacht.length ? d.aandacht.map(actieRij).join('') : '<div class="leeg">Alles staat hierboven.</div>';
     el('mailLijst').innerHTML = d.mails.length ? d.mails.map(function (m) {
-      return '<a class="rij klik" href="' + esc(m.link) + '"><div class="r-body"><div class="r-titel">' + esc(m.onderwerp) + '</div><div class="r-meta">' + esc(m.van) + ' · ' + (m.dagen >= 5 ? '<b>' : '') + m.dagen + ' dagen' + (m.dagen >= 5 ? '</b>' : '') + '</div></div>' + LINK_SVG + '</a>';
+      return mailRij(m, esc(m.van) + ' · ' + (m.dagen >= 5 ? '<b>' : '') + esc(m.dagen) + ' dagen' + (m.dagen >= 5 ? '</b>' : ''));
     }).join('') : '<div class="leeg">' + (d.gekoppeld === false ? GMAIL_HINT : 'Geen mails die op je wachten.') + '</div>';  // v3.3
     el('pijplijn').textContent = d.kpi.pijplijn ? euro(d.kpi.pijplijn) + ' in de pijplijn' : '';
     el('kansenLijst').innerHTML = d.kansen.length ? d.kansen.map(function (k) {
@@ -622,32 +645,101 @@
     run('apiIndexeer').then(function (r) { k.disabled = false; k.textContent = 'Documenten inlezen'; toast(r.aantal + ' bestanden · ' + r.nieuw + ' nieuw · ' + r.bijgewerkt + ' bijgewerkt'); laadBrein(); })
       .catch(function () { k.disabled = false; k.textContent = 'Documenten inlezen'; });
   });
-  function maakBerichtDiv(rol, tekst, bronnen) {
-    var div = document.createElement('div');
+  // v3.5: het Brein is een assistent. Antwoorden kunnen voorgestelde acties bevatten; die voert de backend pas uit na Uitvoeren.
+  var AK_LABEL = { titel: 'Titel', school: 'School', contactpersoon: 'T.a.v.', inleiding: 'Inleiding', hulpvraag: 'Hulpvraag', aanpak: 'Aanpak', rooster: 'Rooster', kosten: 'Kosten', voorwaarden: 'Voorwaarden', afsluiting: 'Afsluiting',
+    aan: 'Aan', onderwerp: 'Onderwerp', tekst: 'Tekst', deadline: 'Deadline', prio: 'Prio', eigenaar: 'Voor', notitie: 'Notitie', type: 'Soort', datum: 'Datum',
+    fase: 'Mijlpaal', waarde: 'Waarde', volgendeActie: 'Volgende actie', verwachteSluiting: 'Verwachte sluiting', start: 'Start', duurMin: 'Duur (min)', locatie: 'Locatie', uitnodigen: 'Persoon uitnodigen' };
+  var AK_LANG = { inleiding: 1, hulpvraag: 1, aanpak: 1, rooster: 1, kosten: 1, voorwaarden: 1, afsluiting: 1, tekst: 1, notitie: 1 };
+  var AK_VERBORGEN = { schoolId: 1, persoonId: 1, kansId: 1, threadId: 1 };
+  var AK_STATUS = { bezig: 'bezig…', uitgevoerd: 'uitgevoerd', geannuleerd: 'geannuleerd' };
+  function actieKaartHtml(a, mi, ai) {
+    var inv = a.invoer || {}, sleutels = Object.keys(inv).filter(function (k) { return !AK_VERBORGEN[k]; }), open = !a.status || a.status === 'bewerken';
+    var binnen;
+    if (a.status === 'bewerken') {
+      binnen = '<div class="ak-form">' + sleutels.map(function (k) {
+        var v = inv[k], lab = '<label>' + esc(AK_LABEL[k] || k);
+        if (typeof v === 'boolean') return lab + ' <input type="checkbox" data-akveld="' + esc(k) + '"' + (v ? ' checked' : '') + ' style="width:auto"></label>';
+        if (AK_LANG[k]) return lab + '</label><textarea data-akveld="' + esc(k) + '">' + esc(v) + '</textarea>';
+        return lab + '</label><input data-akveld="' + esc(k) + '"' + (typeof v === 'number' ? ' inputmode="decimal" data-getal="1"' : '') + ' value="' + esc(v) + '">';
+      }).join('') + '</div>';
+    } else {
+      binnen = sleutels.map(function (k) {
+        var v = inv[k] === true ? 'ja' : inv[k] === false ? 'nee' : inv[k];
+        return '<div class="ak-veld' + (AK_LANG[k] ? ' lang' : '') + '"><b>' + esc(AK_LABEL[k] || k) + ':</b> <span>' + esc(v) + '</span></div>';
+      }).join('');
+    }
+    var klaar = a.status === 'uitgevoerd' && a.resultaat ? '<div class="ak-klaar">' + esc(a.resultaat.melding || 'Uitgevoerd.') + (a.resultaat.url ? ' <a href="' + esc(a.resultaat.url) + '" target="_blank" rel="noopener">Openen</a>' : '') + '</div>' : '';
+    var knoppen = open ? '<div class="ak-knoppen"><button class="knop klein" data-ak="uitvoeren">Uitvoeren</button>' +
+      (a.status === 'bewerken' ? '' : '<button class="knop licht klein" data-ak="aanpassen">Aanpassen</button>') + '<button class="knop licht klein" data-ak="annuleren">Annuleren</button></div>' : '';
+    return '<div class="actiekaart ' + esc(a.status || '') + '" data-akmsg="' + mi + '" data-akidx="' + ai + '"><div class="ak-kop">' + esc(a.titel || a.soort) + '<span class="ak-status">' + esc(AK_STATUS[a.status] || (open ? 'voorstel' : '')) + '</span></div>' + binnen + klaar + knoppen + '</div>';
+  }
+  function maakBerichtDiv(m, mi) {
+    var div = document.createElement('div'), rol = m.rol;
     div.className = 'msg ' + (rol === 'bot' ? 'bot' : rol === 'denkt' ? 'denkt' : 'ik');
-    var bron = (bronnen && bronnen.length) ? '<div class="bronnen">' + bronnen.map(function (b) { return '<a class="bron" href="' + esc(b.url) + '">' + LINK_SVG + esc(b.titel) + '</a>'; }).join('') + '</div>' : '';
-    div.innerHTML = '<div class="avatar">' + (rol === 'ik' ? 'M' : 'A') + '</div><div class="m-tekst">' + md(tekst) + bron + '</div>';
+    var bron = (m.bronnen && m.bronnen.length) ? '<div class="bronnen">' + m.bronnen.map(function (b) { return '<a class="bron" href="' + esc(b.url) + '">' + LINK_SVG + esc(b.titel) + '</a>'; }).join('') + '</div>' : '';
+    var acties = (m.acties || []).map(function (a, ai) { return actieKaartHtml(a, mi, ai); }).join('');
+    if (mi >= 0) div.setAttribute('data-mi', mi);  // herrenderBericht zoekt hierop: foutmeldingen staan wel in de DOM, niet in S.chat
+    div.innerHTML = '<div class="avatar">' + (rol === 'ik' ? 'M' : 'A') + '</div><div class="m-tekst">' + md(m.tekst) + bron + acties + '</div>';
     el('breinBerichten').appendChild(div);
     return div;
   }
-  function herrenderChat() { el('breinBerichten').innerHTML = ''; S.chat.forEach(function (m) { maakBerichtDiv(m.rol, m.tekst, m.bronnen); }); }
-  function vraag() {
+  function herrenderChat() { el('breinBerichten').innerHTML = ''; S.chat.forEach(function (m, i) { maakBerichtDiv(m, i); }); }
+  function herrenderBericht(mi) {
+    var oud = el('breinBerichten').querySelector('[data-mi="' + mi + '"]'); if (!oud) { herrenderChat(); return; }
+    var tmp = maakBerichtDiv(S.chat[mi], mi); el('breinBerichten').replaceChild(tmp, oud);
+  }
+  // Eerdere beurten als platte tekst voor de backend, met de afloop van voorstellen erbij.
+  function gesprekVoorBackend() {
+    return S.chat.slice(-12).map(function (m) {
+      var t = String(m.tekst || '');
+      (m.acties || []).forEach(function (a) { t += '\n[Voorstel ' + (a.titel || a.soort) + ': ' + (a.status === 'uitgevoerd' ? 'uitgevoerd' + (a.resultaat && a.resultaat.url ? ' (' + a.resultaat.url + ')' : '') : a.status === 'geannuleerd' ? 'geannuleerd' : 'nog niet bevestigd') + ']'; });
+      return { rol: m.rol, tekst: t };
+    });
+  }
+  function vraag(tekstVan) {
     if (S.bezig) return;
-    var v = el('vraagInput').value.trim(); if (!v) return;
-    el('vraagInput').value = '';
-    S.chat.push({ rol: 'ik', tekst: v }); saveChat(); maakBerichtDiv('ik', v);
-    var wacht = maakBerichtDiv('denkt', 'Athena zoekt in de documenten');
+    var v = typeof tekstVan === 'string' ? tekstVan : el('vraagInput').value.trim(); if (!v) return;
+    if (typeof tekstVan !== 'string') el('vraagInput').value = '';
+    var eerder = gesprekVoorBackend();
+    S.chat.push({ rol: 'ik', tekst: v }); saveChat(); maakBerichtDiv(S.chat[S.chat.length - 1], S.chat.length - 1);
+    var wacht = maakBerichtDiv({ rol: 'denkt', tekst: 'Athena is bezig' }, -1);
     wacht.scrollIntoView({ block: 'nearest' });
     S.bezig = true;
-    run('apiVraag', v).then(function (r) {
+    run('apiBrein', v, eerder).then(function (r) {
       wacht.remove();
-      S.chat.push({ rol: 'bot', tekst: r.antwoord, bronnen: r.bronnen || [] }); saveChat();
-      maakBerichtDiv('bot', r.antwoord, r.bronnen).scrollIntoView({ block: 'nearest' });
+      S.chat.push({ rol: 'bot', tekst: r.antwoord, bronnen: r.bronnen || [], acties: r.acties || [] }); saveChat();
+      maakBerichtDiv(S.chat[S.chat.length - 1], S.chat.length - 1).scrollIntoView({ block: 'nearest' });
       S.bezig = false;
     }).catch(function () { wacht.querySelector('.m-tekst').textContent = 'Er ging iets mis — probeer het nog eens.'; S.bezig = false; });
   }
-  el('vraagKnop').addEventListener('click', vraag);
+  el('vraagKnop').addEventListener('click', function () { vraag(); });
   el('vraagInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') vraag(); });
+  el('nieuwGesprek').addEventListener('click', function () { if (S.bezig) return; zetOpslag('aa_chat', ''); S.chat = leesChat(); herrenderChat(); });
+  el('breinBerichten').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-ak]'); if (!b) return;
+    var kaart = b.closest('.actiekaart'), mi = Number(kaart.dataset.akmsg), m = S.chat[mi], a = m && m.acties && m.acties[Number(kaart.dataset.akidx)];
+    if (!a || a.status === 'bezig') return;
+    if (b.dataset.ak === 'annuleren') { a.status = 'geannuleerd'; saveChat(); herrenderBericht(mi); return; }
+    if (b.dataset.ak === 'aanpassen') { a.status = 'bewerken'; herrenderBericht(mi); return; }
+    kaart.querySelectorAll('[data-akveld]').forEach(function (x) {
+      var k = x.dataset.akveld;
+      a.invoer[k] = x.type === 'checkbox' ? x.checked : x.dataset.getal ? (Number(String(x.value).replace(',', '.')) || 0) : x.value;
+    });
+    a.status = 'bezig'; herrenderBericht(mi);
+    run('apiBreinUitvoeren', { soort: a.soort, invoer: a.invoer }).then(function (r) {
+      a.status = 'uitgevoerd'; a.resultaat = r || {}; saveChat(); herrenderBericht(mi);
+      toast((r && r.melding) || 'Uitgevoerd.');
+      CRM.basis = null;  // CRM-lijsten opnieuw ophalen bij de volgende keer openen
+    }).catch(function () { a.status = ''; herrenderBericht(mi); });
+  });
+  // Vanuit een mail op Vandaag of Home: het Brein een conceptreactie laten schrijven.
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-concept]'); if (!b) return;
+    ev.preventDefault();
+    if (S.bezig) { toast('Athena is nog bezig met je vorige vraag.'); return; }
+    if (isDesk()) deskNaar('brein'); else wisselView('brein');
+    vraag('Schrijf een conceptreactie op de mail "' + b.dataset.onderwerp + '" van ' + b.dataset.van + ' (threadId ' + b.dataset.concept + '). Lees de mail eerst.');
+  });
 
   /* ===== 3. Nachtelijke review ===== */
   function reviewLijst(items, leeg) {
@@ -1569,7 +1661,7 @@
   }
   function mailsHtml(m) {
     if (!m) return '<div class="spinner">Mail nakijken</div>';
-    return m.map(function (x) { return '<a class="rij klik" href="' + esc(x.link) + '"><div class="r-body"><div class="r-titel">' + esc(x.onderwerp) + '</div><div class="r-meta">' + esc(x.van) + ' · ' + esc(x.dagen) + ' dagen</div></div>' + LINK_SVG + '</a>'; }).join('') || '<div class="leeg">Geen mails die op je wachten.</div>';
+    return m.map(function (x) { return mailRij(x, esc(x.van) + ' · ' + esc(x.dagen) + ' dagen'); }).join('') || '<div class="leeg">Geen mails die op je wachten.</div>';
   }
   function renderHome(h) {
     var vandaag = vandaagStr(), laat = h.taken.filter(function (t) { return t.deadline && t.deadline < vandaag; }), nu_ = h.taken.filter(function (t) { return t.deadline === vandaag; });
@@ -1787,8 +1879,10 @@
     var u = el('apiInput').value.trim().replace(/\?.*$/, ''), c = el('codeInput').value.trim();
     if (!/^https:\/\/.+\/exec$/.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1)/.test(u)) { toast('De backend-URL moet eindigen op /exec.'); return; }
     if (!c) { toast('Vul de koppelcode in.'); return; }
+    var oudeCode = secret();
     zetOpslag('aa_api', u); zetOpslag('aa_secret', c);
     zetOpslag('aa_cache_home', ''); zetOpslag('aa_cache_crm', ''); CRM.basis = null; DESK.mails = null;  // v3.2: andere code = mogelijk andere gebruiker
+    if (c !== oudeCode) { zetOpslag('aa_chat', ''); S.chat = leesChat(); }  // v3.5: het gesprek is van één gebruiker
     el('statusInfo').innerHTML = '';
     if (checkKoppeling()) { toast('Gekoppeld.'); startApp(); }  // v3.0
   });

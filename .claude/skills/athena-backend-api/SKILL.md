@@ -15,7 +15,7 @@ user-invocable: false
 
 ## Functies
 De volledige tabel met argumenten en resultaatvorm staat in `backend/README.md` (sectie "Contract met de app"). Kern:
-`apiOverzicht`, `apiActieKlaar`, `apiActieToevoegen`, `apiKennisbank`, `apiIndexeer`, `apiVraag`, `apiReview`, `apiReviewNu`,
+`apiOverzicht`, `apiActieKlaar`, `apiActieToevoegen`, `apiKennisbank`, `apiIndexeer`, `apiVraag`, `apiBrein`, `apiBreinUitvoeren`, `apiReview`, `apiReviewNu`,
 `apiHuisstijl`, `apiZetHuisstijl`, `apiMaakContent`, `apiTrajecten`, `apiTraject`, `apiTrajectOpslaan`, `apiNotitieToevoegen`, `apiImporteer`, `apiStatus`.
 CRM (v2.0, module Relaties): `apiCrm`, `apiSchool`, `apiSchoolOpslaan`, `apiPersoon`, `apiPersoonOpslaan`, `apiKans`, `apiKansOpslaan`, `apiPipeline`,
 `apiMijlpalenOpslaan`, `apiActiviteitToevoegen`, `apiAfspraakPlannen`, `apiTaken`, `apiTaakOpslaan`, `apiTrackOpslaan`, `apiTrackStart`, `apiRapport`,
@@ -29,7 +29,7 @@ CRM (v2.0, module Relaties): `apiCrm`, `apiSchool`, `apiSchoolOpslaan`, `apiPers
 ## Data
 - Google Sheet met tabbladen `Scholen`, `Trajecten`, `Kansen`, `Acties`, `Documenten`, `Reviews`, `Huisstijl`, `Content`, `Notities`, `Personen`, `Activiteiten`, `Mijlpalen`, `Tracks`, `Gebruikers`, `Doelen`; kolommen staan in `TABELLEN` bovenin `Code.gs`. Nieuwe kolommen alleen achteraan toevoegen: `blad()` vult de kop van een bestaand tabblad aan. `lees(naam)`, `schrijf(naam, obj)` (upsert op `id`) en `schrijfVeel(naam, lijst)` zijn de enige toegang. `lees` onthoudt per verzoek (v3.2); wie buiten de schrijffuncties om schrijft, roept `vergeet(naam)` aan.
 - Drive-map met submappen `Contracten`, `Werkwijzen`, `Schooldossiers`, `Voorstellen`, `Prijslijst`; `indexeerDocumenten()` vult het tabblad `Documenten`.
-- Sleutels in scripteigenschappen: `SECRET`, `SHEET_ID`, `DRIVE_MAP_ID`, `ANTHROPIC_API_KEY`, `RAPPORT_EMAIL`, `NAAM`, `CLAUDE_MODEL`, `CLAUDE_EFFORT`, `CAPSULE_TOKEN`, `CODES`. Nooit in de Sheet of in de repo.
+- Sleutels in scripteigenschappen: `SECRET`, `SHEET_ID`, `DRIVE_MAP_ID`, `ANTHROPIC_API_KEY`, `RAPPORT_EMAIL`, `NAAM`, `CLAUDE_MODEL`, `CLAUDE_EFFORT`, `OFFERTE_SJABLOON_ID`, `CAPSULE_TOKEN`, `CODES`. Nooit in de Sheet of in de repo.
 
 ## Nieuwe functie toevoegen
 1. `apiNaam(...)` in `backend/Code.gs`; alleen via `lees()`/`schrijf()` bij de Sheet, schrijfacties binnen `metLock()`.
