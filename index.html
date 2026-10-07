@@ -232,7 +232,8 @@
   body.desk { flex-direction: row; }
   body.desk header, body.desk nav { display: none; }
   body.desk main { flex: 1; min-width: 0; }
-  body.desk #zijbalk { display: flex; flex-direction: column; width: 236px; flex-shrink: 0; background: var(--paars-d); color: #fff; padding: 16px 12px 14px; overflow-y: auto; }
+  body.desk #zijbalk { display: flex; flex-direction: column; width: 236px; flex-shrink: 0; background: var(--paars-d); color: #fff; padding: 16px 12px calc(14px + env(safe-area-inset-bottom)); overflow-y: auto; }
+  body.desk #toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   body.desk #deskKop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; background: var(--wit); border-bottom: 1px solid var(--lijn); padding: 14px 32px; }
   #deskKop h1 { font-size: 20px; font-weight: 800; letter-spacing: -.01em; margin-right: auto; }
   body.desk .view { max-width: 1280px; padding: 18px 32px 60px; }
@@ -264,7 +265,7 @@
   body.desk .kolom { flex: 1 1 0; max-width: none; min-width: 210px; }
   body.desk .detail-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 32px; align-items: start; }
   body.desk .detail-grid .knoppenrij { margin: 14px 0 0; padding: 0; flex-wrap: wrap; overflow: visible; }
-  .tabel-scroll { overflow-x: auto; }
+  .tabel-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .dtabel { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--wit); border: 1px solid var(--lijn); border-radius: 12px; overflow: hidden; font-size: 14px; margin-top: 10px; }
   .dtabel th { text-align: left; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--inkt2); background: var(--vlak); padding: 9px 12px; white-space: nowrap; }
   .dtabel th[data-sorteer] { cursor: pointer; user-select: none; }
@@ -1664,7 +1665,19 @@
   if (deskMq) {
     var deskWissel = function () {
       var was = isDesk(); zetDesk(); if (isDesk() === was || !apiUrl() || !secret()) return;
-      if (isDesk()) { deskNaar(huidigItem()); return; }
+      // v3.0: een half ingevuld formulier nooit weggooien bij draaien of Split View; alleen de layout wisselt dan
+      var concept = ['crmComposer', 'crmNieuw', 'crmBeheer', 'agendaForm', 'doelForm'].some(function (id) { var f = el(id); return f && f.innerHTML.trim(); });
+      if (isDesk()) {
+        var it = huidigItem();
+        if (concept || (CRM.detail && el('view-relaties').classList.contains('actief'))) {
+          DESK.item = it; document.querySelectorAll('.zb-item').forEach(function (b) { b.classList.toggle('aan', b.dataset.desk === it); }); zetDeskKop();
+          if (!concept && CRM.detail && CRM.detail.data) renderDetail();
+          return;
+        }
+        if (it === 'contacten') DESK.contacten = CRM.tab === 'personen' ? 'personen' : 'scholen';
+        deskNaar(it); return;
+      }
+      if (concept) return;
       var v = document.querySelector('.view.actief');
       if (v && /^view-(home|agenda|doelen)$/.test(v.id)) wisselView('vandaag');
       else if (CRM.detail && CRM.detail.data) renderDetail();

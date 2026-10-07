@@ -113,6 +113,11 @@ with sync_playwright() as p:
     for breedte in (1280, 1024):
         page.set_viewport_size({'width': breedte, 'height': 800}); page.wait_for_timeout(200)
         print('horizontale scroll desktop', breedte, page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
+    page.click('.zb-item[data-desk="contacten"]'); page.click('.dtabel tr[data-crm-open="school:s1"]'); page.wait_for_selector('.detail-grid')
+    page.click('[data-composer="notitie"]'); page.fill('#cf-tekst', 'Half getypt')
+    page.set_viewport_size({'width': 900, 'height': 800}); page.wait_for_timeout(200); page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(200)
+    assert page.input_value('#cf-tekst') == 'Half getypt', 'concept blijft bij wisselen van breedte'
+    page.click('[data-cf-annuleer]')
     page.set_viewport_size({'width': 390, 'height': 844}); page.wait_for_timeout(300)
     assert not page.locator('#zijbalk').is_visible() and page.locator('nav').is_visible(), 'terug naar mobiel'
     page.set_viewport_size({'width': 1100, 'height': 800}); page.wait_for_timeout(300); page.click('.zb-item[data-desk="home"]'); page.wait_for_selector('#homeInhoud .hkaart'); page.wait_for_timeout(300)
