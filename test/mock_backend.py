@@ -198,6 +198,7 @@ def handle_crm(fn, args):
                 'agenda': [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': ''}, {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}],
                 'pipeline': {'open': len(open_), 'waarde': sum(k['waarde'] for k in open_), 'gewogen': sum(k['gewogen'] for k in open_), 'stil': [k for k in open_ if k['stil']]},
                 'recent': [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if a['datum'] <= nu()], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}]}
+    if fn == 'apiHomeMails': return [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}]  # v3.2
     if fn == 'apiAgenda':  # v3.0
         van, tot = args[0], args[1]
         ev = [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': '', 'schoolId': 's2', 'kansId': '', 'school': 'Lyceum Demo'},

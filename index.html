@@ -942,10 +942,14 @@
   }
 
   /* --- laden en lijsten --- */
-  function laadCrmBasis() { return run('apiCrm').then(function (b) { CRM.basis = b; el('zbNaam').textContent = b.ik.naam + ' · ' + b.ik.rol; return b; }); }  // v3.0: naam in de zijbalk
+  // v3.2: de laatst geladen Home en CRM-lijsten op dit toestel bewaren, zodat een scherm meteen gevuld is; de backend werkt het daarna bij
+  function uitBewaard(k) { try { return JSON.parse(leesOpslag(k) || 'null'); } catch (e) { return null; } }
+  function bewaar(k, v) { try { var t = JSON.stringify(v); if (t.length < 1500000) zetOpslag(k, t); } catch (e) {} }
+  function laadCrmBasis() { return run('apiCrm').then(function (b) { CRM.basis = b; bewaar('aa_cache_crm', b); el('zbNaam').textContent = b.ik.naam + ' · ' + b.ik.rol; return b; }); }  // v3.0: naam in de zijbalk
   function laadRelaties() {
     if (history.state && history.state.crm) { try { history.replaceState(null, ''); } catch (e) {} }  // v2.0: Terug mag niet naar een oud detailscherm springen
     if (CRM.detail) { CRM.detail = null; el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block'; }
+    if (!CRM.basis) { var bewaard = uitBewaard('aa_cache_crm'); if (bewaard && bewaard.scholen && bewaard.ik) CRM.basis = bewaard; }  // v3.2: meteen de vorige lijst tonen
     renderCrm();
     laadCrmBasis().then(function () { CRM.pipeline = null; CRM.taken = null; CRM.rapport = null; renderCrm(); })
       .catch(function () { if (!CRM.basis) el('crmInhoud').innerHTML = '<div class="leeg">Kon de relaties niet laden — controleer de koppeling (tandwiel rechtsboven).</div>'; });
@@ -1524,7 +1528,16 @@
   function hkaart(titel, inhoud, item) { return '<div class="hkaart"><div class="kop">' + esc(titel) + (item ? ' <small><a data-desk="' + item + '">Alles</a></small>' : '') + '</div>' + inhoud + '</div>'; }
   function agendaRegel(e) { return '<div class="agenda-blok"><span class="tijd">' + (e.heleDag ? 'dag' : esc(String(e.start).slice(11, 16))) + '</span><div>' + esc(e.titel) + ' <span style="color:var(--gedempt);font-size:12.5px">· ' + esc(kortDatum(e.start)) + '</span></div></div>'; }
   function laadHome() {
-    run('apiHome').then(renderHome).catch(function () { el('homeInhoud').innerHTML = '<div class="leeg">Kon Home niet laden — controleer de koppeling (tandwiel linksonder).</div>'; });
+    // v3.2: eerst de vorige Home van dit toestel, dan de verse; de mails (Gmail, traag) komen los
+    var bewaard = uitBewaard('aa_cache_home');
+    if (bewaard && bewaard.taken && !el('homeInhoud').querySelector('.hkaart')) renderHome(bewaard);
+    run('apiHome').then(function (h) { bewaar('aa_cache_home', h); renderHome(h); })
+      .catch(function () { if (!el('homeInhoud').querySelector('.hkaart')) el('homeInhoud').innerHTML = '<div class="leeg">Kon Home niet laden — controleer de koppeling (tandwiel linksonder).</div>'; });
+    run('apiHomeMails').then(function (m) { DESK.mails = m; var x = el('homeMails'); if (x) x.innerHTML = mailsHtml(m); }).catch(function () { var x = el('homeMails'); if (x) x.innerHTML = '<div class="leeg">Kon de mails niet ophalen.</div>'; });
+  }
+  function mailsHtml(m) {
+    if (!m) return '<div class="spinner">Mail nakijken</div>';
+    return m.map(function (x) { return '<a class="rij klik" href="' + esc(x.link) + '"><div class="r-body"><div class="r-titel">' + esc(x.onderwerp) + '</div><div class="r-meta">' + esc(x.van) + ' · ' + esc(x.dagen) + ' dagen</div></div>' + LINK_SVG + '</a>'; }).join('') || '<div class="leeg">Geen mails die op je wachten.</div>';
   }
   function renderHome(h) {
     var vandaag = vandaagStr(), laat = h.taken.filter(function (t) { return t.deadline && t.deadline < vandaag; }), nu_ = h.taken.filter(function (t) { return t.deadline === vandaag; });
@@ -1540,7 +1553,7 @@
         b.onderwerp = (a.school ? a.school + ' — ' : '') + (a.onderwerp || ACT_LABEL[a.type] || a.type);
         return a.schoolId ? '<div class="klik" data-crm-open="school:' + esc(a.schoolId) + '" style="cursor:pointer">' + tijdlijnItem(b) + '</div>' : tijdlijnItem(b);
       }).join('') || '<div class="leeg">Nog geen activiteit.</div>', 'contacten') +
-      hkaart('Wacht op jouw antwoord', h.mails.map(function (m) { return '<a class="rij klik" href="' + esc(m.link) + '"><div class="r-body"><div class="r-titel">' + esc(m.onderwerp) + '</div><div class="r-meta">' + esc(m.van) + ' · ' + esc(m.dagen) + ' dagen</div></div>' + LINK_SVG + '</a>'; }).join('') || '<div class="leeg">Geen mails die op je wachten.</div>') +
+      hkaart('Wacht op jouw antwoord', '<div id="homeMails">' + mailsHtml(DESK.mails) + '</div>') +
       '</div>';
   }
 
@@ -1742,6 +1755,7 @@
     if (!/^https:\/\/.+\/exec$/.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1)/.test(u)) { toast('De backend-URL moet eindigen op /exec.'); return; }
     if (!c) { toast('Vul de koppelcode in.'); return; }
     zetOpslag('aa_api', u); zetOpslag('aa_secret', c);
+    zetOpslag('aa_cache_home', ''); zetOpslag('aa_cache_crm', ''); CRM.basis = null; DESK.mails = null;  // v3.2: andere code = mogelijk andere gebruiker
     el('statusInfo').innerHTML = '';
     if (checkKoppeling()) { toast('Gekoppeld.'); startApp(); }  // v3.0
   });

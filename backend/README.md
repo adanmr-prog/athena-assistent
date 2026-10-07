@@ -96,6 +96,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiCrmInrichten` | — | `{ personen, kansen, trajecten, notities, eigenaren }` (oude velden overzetten; idempotent) |
 | `apiCapsuleMigratie` | stap, pagina | `{ stap, aantal, volgende:{stap,pagina}\|null }` (de app roept herhaald aan tot `volgende` null is) |
 | `apiHome` | — | `{ groet, datum, ik, taken:[taak], agenda:[{id,sleutel,titel,start,eind,heleDag,locatie}], pipeline:{open,waarde,gewogen,stil}, recent:[activiteit], mails }` (v3.0, desktop-Home) |
+| `apiHomeMails` | — | `[{onderwerp,van,dagen,link}]` (v3.2: los van `apiHome`, omdat Gmail traag is; `apiHome` geeft `mails: []`) |
 | `apiAgenda` | van, tot (`yyyy-MM-dd`, max. 62 dagen) | `{ van, tot, events:[google-afspraak (+schoolId/school als hij aan het CRM hangt)], afspraken:[activiteit], taken:[taak] }` (v3.0) |
 | `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
 | `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak`, id | null (school alleen zonder personen en kansen) |
@@ -151,6 +152,7 @@ geweigerd verzoek wordt server-side op een ander model herhaald), `output_config
 
 ## Bekende grenzen
 
+- Snelheid (v3.2): per verzoek wordt de Sheet één keer geopend en elk tabblad hooguit één keer gelezen (`_SS`, `_BLAD`, `_LEES` in `Code.gs`); elke schrijffunctie roept `vergeet(tabblad)` aan. Schrijf je ergens buiten `schrijf`/`schrijfVeel`/`verwijderRijen` om naar de Sheet, roep dan zelf `vergeet()` aan.
 - Apps Script kapt een verzoek na ongeveer 60 seconden af. Duurt een antwoord te lang: zet `CLAUDE_EFFORT` op `low`.
 - Cellen in Sheets bevatten maximaal 50.000 tekens; van elk document worden de eerste 45.000 tekens geïndexeerd.
 - De review kijkt naar de afgelopen 24 uur en naar wat in de Sheet, Gmail en Agenda staat. Wat nergens geregistreerd is, ziet hij niet.

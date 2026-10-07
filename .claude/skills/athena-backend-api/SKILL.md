@@ -19,14 +19,14 @@ De volledige tabel met argumenten en resultaatvorm staat in `backend/README.md` 
 `apiHuisstijl`, `apiZetHuisstijl`, `apiMaakContent`, `apiTrajecten`, `apiTraject`, `apiTrajectOpslaan`, `apiNotitieToevoegen`, `apiImporteer`, `apiStatus`.
 CRM (v2.0, module Relaties): `apiCrm`, `apiSchool`, `apiSchoolOpslaan`, `apiPersoon`, `apiPersoonOpslaan`, `apiKans`, `apiKansOpslaan`, `apiPipeline`,
 `apiMijlpalenOpslaan`, `apiActiviteitToevoegen`, `apiAfspraakPlannen`, `apiTaken`, `apiTaakOpslaan`, `apiTrackOpslaan`, `apiTrackStart`, `apiRapport`,
-`apiDoelen`, `apiDoelOpslaan`, `apiHome`, `apiAgenda` (v3.0), `apiGebruikers`, `apiGebruikerOpslaan`, `apiCrmSync`, `apiCrmInrichten`, `apiCapsuleMigratie`, `apiExport`, `apiVerwijder`.
+`apiDoelen`, `apiDoelOpslaan`, `apiHome`, `apiAgenda` (v3.0), `apiHomeMails` (v3.2), `apiGebruikers`, `apiGebruikerOpslaan`, `apiCrmSync`, `apiCrmInrichten`, `apiCapsuleMigratie`, `apiExport`, `apiVerwijder`.
 
 ## Gebruikers (v2.0)
 - `doPost` zet `GEBRUIKER` via `wieIs(secret)`: `SECRET` = beheerder, een code uit scripteigenschap `CODES` = accountmanager. Geen geldige code → `fout: 'secret'`.
 - `ikNaam()` is de naam voor `door`/`eigenaar`; `alleenBeheerder()` bovenaan elke beheerfunctie; `vanMij(eigenaar)` filtert eigen werk.
 
 ## Data
-- Google Sheet met tabbladen `Scholen`, `Trajecten`, `Kansen`, `Acties`, `Documenten`, `Reviews`, `Huisstijl`, `Content`, `Notities`, `Personen`, `Activiteiten`, `Mijlpalen`, `Tracks`, `Gebruikers`, `Doelen`; kolommen staan in `TABELLEN` bovenin `Code.gs`. Nieuwe kolommen alleen achteraan toevoegen: `blad()` vult de kop van een bestaand tabblad aan. `lees(naam)`, `schrijf(naam, obj)` (upsert op `id`) en `schrijfVeel(naam, lijst)` zijn de enige toegang.
+- Google Sheet met tabbladen `Scholen`, `Trajecten`, `Kansen`, `Acties`, `Documenten`, `Reviews`, `Huisstijl`, `Content`, `Notities`, `Personen`, `Activiteiten`, `Mijlpalen`, `Tracks`, `Gebruikers`, `Doelen`; kolommen staan in `TABELLEN` bovenin `Code.gs`. Nieuwe kolommen alleen achteraan toevoegen: `blad()` vult de kop van een bestaand tabblad aan. `lees(naam)`, `schrijf(naam, obj)` (upsert op `id`) en `schrijfVeel(naam, lijst)` zijn de enige toegang. `lees` onthoudt per verzoek (v3.2); wie buiten de schrijffuncties om schrijft, roept `vergeet(naam)` aan.
 - Drive-map met submappen `Contracten`, `Werkwijzen`, `Schooldossiers`, `Voorstellen`, `Prijslijst`; `indexeerDocumenten()` vult het tabblad `Documenten`.
 - Sleutels in scripteigenschappen: `SECRET`, `SHEET_ID`, `DRIVE_MAP_ID`, `ANTHROPIC_API_KEY`, `RAPPORT_EMAIL`, `NAAM`, `CLAUDE_MODEL`, `CLAUDE_EFFORT`, `CAPSULE_TOKEN`, `CODES`. Nooit in de Sheet of in de repo.
 

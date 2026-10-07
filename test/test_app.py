@@ -122,6 +122,13 @@ with sync_playwright() as p:
     assert not page.locator('#zijbalk').is_visible() and page.locator('nav').is_visible(), 'terug naar mobiel'
     page.set_viewport_size({'width': 1100, 'height': 800}); page.wait_for_timeout(300); page.click('.zb-item[data-desk="home"]'); page.wait_for_selector('#homeInhoud .hkaart'); page.wait_for_timeout(300)
     page.screenshot(path=OUT + '/10_desktop.png', full_page=True)
+    # v3.2: met een trage backend (2 s) moet Home na herladen meteen gevuld zijn uit de bewaarde gegevens
+    def traag(route):
+        import time; time.sleep(2); route.continue_()
+    page.route('**/api*', traag)
+    page.reload(); page.wait_for_selector('#homeInhoud .hkaart', timeout=1500)
+    print('home direct uit bewaarde gegevens: ja')
+    page.wait_for_selector('#homeMails .rij', timeout=15000); page.unroute('**/api*', traag)
     print('sw-registraties:', page.evaluate("() => navigator.serviceWorker.getRegistrations().then(r => r.length)"))
     print('--paars:', page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--paars')"))
     print('localStorage:', page.evaluate("() => Object.keys(localStorage)"))
