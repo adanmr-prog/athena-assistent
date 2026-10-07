@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '3.5';
+var VERSIE = '3.6';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -1650,7 +1650,7 @@ function apiBrein(bericht, gesprek) {
   var systeem = [{ type: 'text', text: breinSysteem(), cache_control: { type: 'ephemeral' } }], tools = breinTools();
   var bronnen = [], acties = [], teksten = [], start = Date.now(), data = null;
   for (var ronde = 0; ronde < 8; ronde++) {
-    data = claudeVerzoek({ max_tokens: 16000, system: systeem, tools: tools, messages: berichten });
+    data = claudeVerzoek({ max_tokens: 16000, system: systeem, tools: tools, messages: berichten }, P.getProperty('BREIN_EFFORT') || 'medium', P.getProperty('BREIN_MODEL') || 'claude-sonnet-5-5');  // v3.6: Sonnet is sneller en goedkoper voor deze taken
     if (data.stop_reason === 'refusal') { teksten = ['Hier kan ik niet bij helpen: het verzoek is door de veiligheidsfilters geweigerd.']; break; }
     var t = tekstUit(data); if (t) teksten.push(t);
     var gebruik = (data.content || []).filter(function (b) { return b.type === 'tool_use'; });
@@ -1881,10 +1881,10 @@ function claude(systeem, gebruiker, maxTokens, effort) {
   return uit;
 }
 // v3.5: één Messages API-verzoek; ook gebruikt door de tool-lus van het Brein.
-function claudeVerzoek(body, effort) {
+function claudeVerzoek(body, effort, model) {
   var sleutel = P.getProperty('ANTHROPIC_API_KEY');
   if (!sleutel) throw new Error('Geen ANTHROPIC_API_KEY ingesteld bij Projectinstellingen → Scripteigenschappen.');
-  body.model = P.getProperty('CLAUDE_MODEL') || 'claude-opus-5-5';
+  body.model = model || P.getProperty('CLAUDE_MODEL') || 'claude-opus-5-5';
   body.fallbacks = 'default';
   body.output_config = { effort: effort || P.getProperty('CLAUDE_EFFORT') || 'medium' };
   var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {

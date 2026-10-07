@@ -16,6 +16,8 @@ Draai hem onder het werkaccount (`menno.adan@athenastudies.nl`), dan ziet hij de
    | `RAPPORT_EMAIL` | adres waar de nachtelijke review naartoe moet | nee (zonder: alleen in de app) |
    | `NAAM` | voornaam in de begroeting (standaard `Menno`) | nee |
    | `CLAUDE_MODEL` | standaard `claude-opus-5-5` | nee |
+   | `BREIN_MODEL` | model van de Brein-assistent, standaard `claude-sonnet-5-5` | nee |
+   | `BREIN_EFFORT` | effort van de Brein-assistent: `low`, `medium` (standaard), `high` | nee |
    | `OFFERTE_SJABLOON_ID` | id van het Google Doc dat als offertesjabloon dient (zie Brein-assistent) | nee (zonder: een nieuw Doc in de huisstijl) |
    | `CLAUDE_EFFORT` | `low`, `medium` (standaard), `high` | nee — `low` als antwoorden te lang duren |
    | `CAPSULE_TOKEN` | API-token uit Capsule (My Preferences → API Authentication Tokens) | alleen voor de eenmalige Capsule-migratie; daarna verwijderen |
@@ -119,7 +121,7 @@ Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewo
 
 ## Brein als persoonlijke assistent (v3.5)
 
-- `apiBrein` laat Claude met tools werken (lus van maximaal 8 rondes, stopt na ±4 minuten). De systeemprompt kent de gebruiker (naam, rol), de huisstijl, de prijslijst-documenten en `feitenSamenvatting()`.
+- `apiBrein` laat Claude (standaard `claude-sonnet-5-5`, instelbaar met `BREIN_MODEL`) met tools werken (lus van maximaal 8 rondes, stopt na ±4 minuten). De systeemprompt kent de gebruiker (naam, rol), de huisstijl, de prijslijst-documenten en `feitenSamenvatting()`.
 - **Leestools** draaien direct: `zoek_crm`, `lees_school`, `zoek_documenten`, `mijn_taken`, en (alleen met eigen mailbox, `mijnMailbox()`) `zoek_mail`, `lees_mail`, `mijn_agenda`.
 - **Actietools** worden nooit door het model zelf uitgevoerd: `breinActieCheck()` controleert de invoer en de backend geeft ze terug in `acties`. De app toont per actie een kaart met Uitvoeren / Aanpassen / Annuleren; pas Uitvoeren roept `apiBreinUitvoeren` aan, dat opnieuw controleert en de bestaande functies gebruikt:
   - `maak_offerte`: Google Doc in de map `Offertes` (in de documentenmap, dus ook in de kennisbank). Met `OFFERTE_SJABLOON_ID` een kopie van dat sjabloon met de velden `{{titel}} {{school}} {{contactpersoon}} {{datum}} {{adviseur}} {{inleiding}} {{hulpvraag}} {{aanpak}} {{rooster}} {{kosten}} {{voorwaarden}} {{afsluiting}}` (ontbreken de inhoudsvelden, dan komen ze als hoofdstukken onderaan); zonder sjabloon een nieuw Doc in Nunito en paars. Gedeeld met de vrager, tijdlijnregel "Offerte gemaakt".
