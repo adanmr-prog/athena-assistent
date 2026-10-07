@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '3.0';
+var VERSIE = '3.2';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -120,13 +120,20 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
 
 /* ===================== Sheet als database ===================== */
 
+// v3.2: per verzoek onthouden (Apps Script start elk verzoek met een schone globale scope). Spreadsheet openen en een tabblad
+// lezen zijn de traagste stappen; zonder dit gebeurden ze tientallen keren per verzoek. Elke schrijffunctie roept vergeet() aan.
+var _SS = null, _BLAD = {}, _LEES = {};
 function sheet() {
+  if (_SS) return _SS;
   var id = P.getProperty('SHEET_ID');
   if (!id) throw new Error('Backend niet ingericht — draai setup() in de Apps Script-editor.');
-  return SpreadsheetApp.openById(id);
+  _SS = SpreadsheetApp.openById(id);
+  return _SS;
 }
+function vergeet(naam) { delete _LEES[naam]; delete _LEES[naam + '|licht']; }
 var KOP_GECONTROLEERD = {};
 function blad(naam) {
+  if (_BLAD[naam] && KOP_GECONTROLEERD[naam]) return _BLAD[naam];
   var ss = sheet(), b = ss.getSheetByName(naam), kop = TABELLEN[naam];
   if (!b) { b = ss.insertSheet(naam); b.appendRow(kop); b.setFrozenRows(1); KOP_GECONTROLEERD[naam] = true; }
   else if (!KOP_GECONTROLEERD[naam]) {
@@ -137,6 +144,7 @@ function blad(naam) {
     else if (breed < kop.length) b.getRange(1, breed + 1, 1, kop.length - breed).setValues([kop.slice(breed)]);
     KOP_GECONTROLEERD[naam] = true;
   }
+  _BLAD[naam] = b;
   return b;
 }
 function celWaarde(v, kolom) {
@@ -146,6 +154,12 @@ function celWaarde(v, kolom) {
 // Alle rijen van een tabblad als objecten; _rij = rijnummer in de Sheet (voor updates).
 // licht = true laat de kolom 'tekst' en alles erna weg (Documenten kan megabytes tekst bevatten).
 function lees(naam, licht) {
+  var sleutel = naam + (licht ? '|licht' : '');
+  if (!_LEES[sleutel]) _LEES[sleutel] = leesUitSheet(naam, licht);
+  // kopieën, zodat een aanroeper die een rij aanpast de onthouden versie niet verandert
+  return _LEES[sleutel].map(function (r) { var o = {}; for (var k in r) o[k] = r[k]; return o; });
+}
+function leesUitSheet(naam, licht) {
   var kop = TABELLEN[naam], b = blad(naam), aantal = kop.length;
   if (licht && kop.indexOf('tekst') > 0) aantal = kop.indexOf('tekst');
   var laatste = b.getLastRow(), waarden = laatste > 0 ? b.getRange(1, 1, laatste, aantal).getValues() : [], uit = [];
@@ -180,6 +194,7 @@ function schrijf(naam, obj) {
   if (!obj.id) obj.id = nieuwId();
   var samen = samenvoegen(naam, obj, hit), rij = kop.map(function (k) { return celUit(samen[k]); });
   if (hit) b.getRange(hit._rij, 1, 1, kop.length).setValues([rij]); else b.appendRow(rij);
+  vergeet(naam);
   return samen;
 }
 // Veel rijen in één keer (import, index): één keer lezen, updates per rij, nieuwe rijen in één blok.
@@ -195,11 +210,13 @@ function schrijfVeel(naam, lijst) {
     else { nieuw.push(rij); bestaand[String(obj.id)] = samen; stats.ingevoegd++; }
   });
   if (nieuw.length) b.getRange(b.getLastRow() + 1, 1, nieuw.length, kop.length).setValues(nieuw);
+  vergeet(naam);
   return stats;
 }
 function verwijderRijen(naam, filterFn) {
   var b = blad(naam), weg = lees(naam, true).filter(filterFn).map(function (r) { return r._rij; }).sort(function (a, c) { return c - a; });
   weg.forEach(function (r) { b.deleteRow(r); });
+  vergeet(naam);
   return weg.length;
 }
 // Kort cachen (seconden) van trage bronnen zoals Gmail; bij een cachefout gewoon opnieuw ophalen.
@@ -563,6 +580,7 @@ function apiZetHuisstijl(sleutel, waarde) {
   metLock(function () {
     var b = blad('Huisstijl'), hit = lees('Huisstijl').filter(function (r) { return r.sleutel === sleutel; })[0];
     if (hit) b.getRange(hit._rij, 2).setValue(celUit(waarde)); else b.appendRow([sleutel, celUit(waarde)]);  // v1.1: een regel die met = of + begint mag geen formule worden
+    vergeet('Huisstijl');
   });
   return null;
 }
@@ -1117,9 +1135,10 @@ function apiHome() {
     agenda: agendaItems(begin, new Date(begin.getTime() + 7 * 86400000)),
     pipeline: { open: open.length, waarde: som('waarde'), gewogen: som('gewogen'), stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 8) },
     recent: recent.map(function (a) { return activiteitUit(a, sMap, pMap, kMap); }),
-    mails: mailsOnbeantwoord(5)
+    mails: []  // v3.2: Gmail is traag; de app haalt de mails apart op met apiHomeMails
   };
 }
+function apiHomeMails() { return mailsOnbeantwoord(5); }
 // van, tot: 'yyyy-MM-dd' (tot en met). Maximaal 62 dagen.
 function apiAgenda(van, tot) {
   var a = parseDatum(van), b = parseDatum(tot);
