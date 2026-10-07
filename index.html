@@ -213,17 +213,19 @@
   .composer { background: var(--wit); border: 1.5px solid var(--paars-l); border-radius: 14px; padding: 4px 16px 16px; margin-top: 12px; }
   .composer:empty { display: none; }
   /* v3.7: bewerkvenster (onderin op de telefoon, midden op desktop), potlood, lijsteditor */
-  .venster { position: fixed; inset: 0; z-index: 90; background: rgba(36,26,40,.45); display: none; align-items: flex-end; justify-content: center; }
+  .venster { position: fixed; left: 0; right: 0; top: 0; height: 100%; z-index: 90; touch-action: none; background: rgba(36,26,40,.45); display: none; align-items: flex-end; justify-content: center; }
   .venster.aan { display: flex; }
-  .venster .venster-binnen { width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 0; border: none; border-radius: 18px 18px 0 0; padding: 4px 18px calc(18px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgba(36,26,40,.25); }
+  .venster .venster-binnen { width: 100%; max-width: 640px; max-height: 92%; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; margin: 0; border: none; border-radius: 18px 18px 0 0; padding: 4px calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); box-shadow: 0 -8px 30px rgba(36,26,40,.25); }
   body.desk .venster { align-items: center; }
-  body.desk .venster .venster-binnen { border-radius: 16px; max-height: 84vh; padding-bottom: 18px; }
+  body.desk .venster .venster-binnen { border-radius: 16px; max-height: 88%; padding-bottom: 18px; }
   .t-bewerk { background: none; border: none; color: var(--gedempt); width: 44px; height: 44px; margin: -8px -10px -8px 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; border-radius: 10px; }
   .t-bewerk:active, .t-bewerk:hover { color: var(--paars); background: var(--paars-l); }
+  body.venster-open main { overflow: hidden; }
+  #venster .knop { min-height: 44px; }
   .knop.gevaar { color: var(--rood); border-color: var(--rood); background: none; }
   .le-rij { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
   .le-rij input { min-width: 0; border: 1.5px solid var(--lijn); border-radius: 8px; padding: 8px; font-size: 16px; background: var(--wit); }
-  .le-k { flex-shrink: 0; width: 36px; height: 40px; border: 1.5px solid var(--lijn); border-radius: 8px; background: var(--wit); color: var(--inkt2); cursor: pointer; }
+  .le-k { flex-shrink: 0; width: 44px; height: 44px; border: 1.5px solid var(--lijn); border-radius: 8px; background: var(--wit); color: var(--inkt2); cursor: pointer; }
   .doc-link { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
   [data-taakbewerk] { cursor: pointer; }
   .veld.breed { grid-column: 1 / -1; }
@@ -1011,7 +1013,9 @@
       '<div class="balk"><button class="knop" data-cf-opslaan="1">' + esc(knop || 'Opslaan') + '</button><button class="knop licht" data-cf-annuleer="1">Annuleren</button></div>';
   }
   function leesForm(root) { var o = {}; root.querySelectorAll('[data-cf]').forEach(function (e) { o[e.dataset.cf] = e.type === 'checkbox' ? e.checked : e.value.trim(); }); return o; }
+  var INLINE = { actie: null };  // v3.7: de actie van het formulier op de pagina (het venster heeft een eigen)
   function toonForm(doel, html) {
+    INLINE.actie = formActie;
     ['crmNieuw', 'crmComposer', 'crmBeheer', 'agendaForm', 'doelForm'].forEach(function (id) { var x = el(id); if (x && x !== doel) x.innerHTML = ''; });
     doel.innerHTML = html;
     doel.scrollIntoView({ block: 'nearest' });
@@ -1470,8 +1474,9 @@
   document.addEventListener('click', function (ev) {
     var t = ev.target, x;
     if ((x = t.closest('[data-cf-opslaan]'))) {
-      if (!formActie) return;
-      var knop = x, p = formActie(leesForm(x.closest('.composer')));
+      var actie = x.closest('#venster') ? VENSTER.actie : formActie;  // v3.7
+      if (!actie) return;
+      var knop = x, p = actie(leesForm(x.closest('.composer')));
       if (p && p.then) { knop.disabled = true; p.then(null, function () { knop.disabled = false; }); }
       return;
     }
@@ -1551,11 +1556,21 @@
   var BEHEER = {};
   var POTLOOD = '<svg class="ic" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   function potloodKnop(attr, id) { return '<button class="t-bewerk" ' + attr + '="' + esc(id) + '" aria-label="Wijzigen">' + POTLOOD + '</button>'; }
+  // Het venster heeft een eigen opslaan-actie en eigen veld-id's (vf-), zodat een open formulier op de pagina blijft werken.
+  var VENSTER = { actie: null };
   function openVenster(html) {
-    el('vensterInhoud').innerHTML = html; el('venster').classList.add('aan'); document.body.classList.add('venster-open');
-    el('vensterInhoud').scrollTop = 0;
+    VENSTER.actie = formActie; formActie = INLINE.actie;  // formHtml zette formActie voor het venster; die van de pagina terugzetten
+    el('vensterInhoud').innerHTML = String(html).replace(/(id|for)="cf-/g, '$1="vf-'); el('venster').classList.add('aan'); document.body.classList.add('venster-open');
+    el('vensterInhoud').scrollTop = 0; pasVensterAan();
   }
-  function sluitVenster() { el('venster').classList.remove('aan'); el('vensterInhoud').innerHTML = ''; document.body.classList.remove('venster-open'); formActie = null; }
+  function sluitVenster() { el('venster').classList.remove('aan'); el('vensterInhoud').innerHTML = ''; document.body.classList.remove('venster-open'); VENSTER.actie = null; }
+  // iOS: het toetsenbord verkleint vh niet; het venster volgt de zichtbare viewport, zodat Opslaan bereikbaar blijft
+  function pasVensterAan() {
+    var v = el('venster'), vv = window.visualViewport;
+    if (!vv || !v.classList.contains('aan')) { v.style.height = ''; v.style.top = ''; return; }
+    v.style.height = vv.height + 'px'; v.style.top = vv.offsetTop + 'px';
+  }
+  if (window.visualViewport) { window.visualViewport.addEventListener('resize', pasVensterAan); window.visualViewport.addEventListener('scroll', pasVensterAan); }
   function ikBen() { return CRM.basis ? CRM.basis.ik : null; }
   function magWijzigen(eigenaar) { var ik = ikBen(); return !ik || ik.rol === 'beheerder' || !eigenaar || eigenaar === ik.naam; }
   function isBeheerderApp() { var ik = ikBen(); return !!ik && ik.rol === 'beheerder'; }
@@ -2217,7 +2232,7 @@
   }
   el('instellingenKnop').addEventListener('click', function () {
     el('apiInput').value = apiUrl(); el('codeInput').value = secret();
-    el('koppel').classList.add('aan');
+    sluitVenster(); el('koppel').classList.add('aan');  // v3.7
     el('koppelSluit').style.display = (apiUrl() && secret()) ? 'inline-block' : 'none';
     if (apiUrl() && secret()) toonStatus(); else el('statusInfo').innerHTML = '';
   });
