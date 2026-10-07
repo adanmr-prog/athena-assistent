@@ -192,6 +192,19 @@ def handle_crm(fn, args):
         o = dict(args[0]); g = opslaan(GEBRUIKERS, dict(o, rol=o.get('rol') or 'am', actief=o.get('actief', 'ja') != 'nee', heeftCode=True), 'g')
         if g['naam'] not in GEBRUIKERS_NAMEN: GEBRUIKERS_NAMEN.append(g['naam'])
         return {'gebruiker': g, 'code': 'am' + uuid.uuid4().hex[:12] if (not o.get('id') or (len(args) > 1 and args[1])) else ''}
+    if fn == 'apiHome':  # v3.0
+        open_ = [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')]
+        return {'groet': 'Goedemorgen Menno', 'datum': 'dinsdag 22 september', 'ik': {'naam': 'Menno', 'rol': 'beheerder'}, 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af'],
+                'agenda': [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': ''}, {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}],
+                'pipeline': {'open': len(open_), 'waarde': sum(k['waarde'] for k in open_), 'gewogen': sum(k['gewogen'] for k in open_), 'stil': [k for k in open_ if k['stil']]},
+                'recent': [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if a['datum'] <= nu()], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'link': 'https://mail.google.com/'}]}
+    if fn == 'apiAgenda':  # v3.0
+        van, tot = args[0], args[1]
+        ev = [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': '', 'schoolId': 's2', 'kansId': '', 'school': 'Lyceum Demo'},
+              {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}]
+        return {'van': van, 'tot': tot, 'events': [e for e in ev if van <= e['start'][:10] <= tot],
+                'afspraken': [act_uit(a) for a in ACTIVITEITEN if a['type'] == 'afspraak' and van <= a['datum'][:10] <= tot],
+                'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af' and t['deadline'] and van <= t['deadline'] <= tot]}
     if fn == 'apiCrmSync': return {'mails': 3, 'afspraken': 1, 'bijgewerkt': 0}
     if fn == 'apiCrmInrichten': return {'personen': 0, 'kansen': 0, 'trajecten': 0, 'notities': 1, 'eigenaren': 0}
     if fn == 'apiCapsuleMigratie':

@@ -4,6 +4,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno en de accou
 
 ## Structuur
 - `index.html`: de volledige app (CSS + HTML + inline script in één bestand). Geen build-stap, geen bundler, geen npm-dependencies.
+- Desktop (v3.0): vanaf 1024 px zet `zetDesk()` de class `desk` op `body`; dan verschijnt de zijbalk `#zijbalk` (Home, Contacten, Taken, Agenda, Pipeline, Projecten, Rapporten, Doelen + Brein, Review, Huisstijl) en kiezen lijsten en detailschermen hun brede variant via `isDesk()`. Navigatie via `deskNaar(item)`. Desktop-CSS altijd onder `body.desk`, zodat de telefoonweergave ongewijzigd blijft.
 - `sw.js`: service worker met app-shell cache. De cache-naam `CACHE` (`athena-assistent-vX.Y`) moet bij elke release omhoog.
 - `manifest.webmanifest` en de icon-PNG's (AthenaSchool-logo op paars): PWA-metadata.
 - `backend/Code.gs`: de Google Apps Script-backend (Sheet als database, Drive-index, Gmail/Agenda, triggers, Claude API). Wordt in een eigen Apps Script-project geplakt; installatie in `backend/README.md`. Het contract staat in de skill `athena-backend-api`.

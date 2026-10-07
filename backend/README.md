@@ -95,6 +95,8 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiCrmSync` | — | `{ mails, afspraken, bijgewerkt }` |
 | `apiCrmInrichten` | — | `{ personen, kansen, trajecten, notities, eigenaren }` (oude velden overzetten; idempotent) |
 | `apiCapsuleMigratie` | stap, pagina | `{ stap, aantal, volgende:{stap,pagina}\|null }` (de app roept herhaald aan tot `volgende` null is) |
+| `apiHome` | — | `{ groet, datum, ik, taken:[taak], agenda:[{id,sleutel,titel,start,eind,heleDag,locatie}], pipeline:{open,waarde,gewogen,stil}, recent:[activiteit], mails }` (v3.0, desktop-Home) |
+| `apiAgenda` | van, tot (`yyyy-MM-dd`, max. 62 dagen) | `{ van, tot, events:[google-afspraak (+schoolId/school als hij aan het CRM hangt)], afspraken:[activiteit], taken:[taak] }` (v3.0) |
 | `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
 | `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak`, id | null (school alleen zonder personen en kansen) |
 

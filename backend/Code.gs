@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '2.0';
+var VERSIE = '3.0';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -1093,6 +1093,53 @@ function crmSync() {
   zetLaatsteContact(nieuw.filter(function (a) { return a.schoolId || a.persoonId; }));
   P.setProperty('LAATSTE_CRM_SYNC', nu());
   return stats;
+}
+
+/* ----- Home en Agenda voor de desktopweergave (v3.0) ----- */
+
+function agendaItems(van, tot) {
+  try {
+    return CalendarApp.getDefaultCalendar().getEvents(van, tot).map(function (ev) {
+      return { id: ev.getId(), sleutel: agendaSleutel(ev), titel: ev.getTitle(), start: datumTijdStr(ev.getStartTime()), eind: datumTijdStr(ev.getEndTime()), heleDag: ev.isAllDayEvent(), locatie: ev.getLocation() || '' };
+    });
+  } catch (e) { return []; }
+}
+function apiHome() {
+  var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kansen = lees('Kansen'), kMap = perId(kansen), mp = mijlpaalMap();
+  var taken = lees('Acties').filter(function (a) { return a.status !== 'af' && vanMij(a.eigenaar); }).sort(sorteerActies);
+  var open = kansen.filter(kansOpen).filter(function (k) { return isBeheerder() || k.eigenaar === ikNaam(); }).map(function (k) { return kansUit(k, mp); });
+  var som = function (veld) { return open.reduce(function (t, k) { return t + (Number(k[veld]) || 0); }, 0); };
+  var recent = lees('Activiteiten').filter(function (a) { return String(a.datum) <= nu(); }).sort(function (a, b) { return String(b.datum).localeCompare(String(a.datum)); }).slice(0, 25);
+  var begin = new Date(); begin.setHours(0, 0, 0, 0);
+  return {
+    groet: groet(), datum: datumLang(new Date()), ik: ikUit(),
+    taken: taken.slice(0, 40).map(function (a) { return taakUit(a, sMap, pMap, kMap); }),
+    agenda: agendaItems(begin, new Date(begin.getTime() + 7 * 86400000)),
+    pipeline: { open: open.length, waarde: som('waarde'), gewogen: som('gewogen'), stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 8) },
+    recent: recent.map(function (a) { return activiteitUit(a, sMap, pMap, kMap); }),
+    mails: mailsOnbeantwoord(5)
+  };
+}
+// van, tot: 'yyyy-MM-dd' (tot en met). Maximaal 62 dagen.
+function apiAgenda(van, tot) {
+  var a = parseDatum(van), b = parseDatum(tot);
+  if (!a || !b || b < a) throw new Error('Ongeldige periode.');
+  if ((b - a) / 86400000 > 62) throw new Error('Kies maximaal twee maanden.');
+  var eind = new Date(b.getTime() + 86400000), vanS = datumStr(a), totS = datumStr(b);
+  var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kMap = perId(lees('Kansen'));
+  var acts = lees('Activiteiten').filter(function (x) { return x.type === 'afspraak'; }), perSleutel = {};
+  acts.forEach(function (x) { if (x.agendaId) perSleutel[x.agendaId] = x; });
+  var events = agendaItems(a, eind).map(function (e) {
+    var x = perSleutel[e.sleutel]; if (x) { e.schoolId = x.schoolId || ''; e.kansId = x.kansId || ''; e.school = sMap[x.schoolId] ? sMap[x.schoolId].naam : ''; }
+    return e;
+  });
+  var gezien = {}; events.forEach(function (e) { gezien[e.sleutel] = true; });
+  var inBereik = function (d) { d = String(d || '').slice(0, 10); return d >= vanS && d <= totS; };
+  return {
+    van: vanS, tot: totS, events: events,
+    afspraken: acts.filter(function (x) { return inBereik(x.datum) && !(x.agendaId && gezien[x.agendaId]); }).map(function (x) { return activiteitUit(x, sMap, pMap, kMap); }),
+    taken: lees('Acties').filter(function (x) { return x.status !== 'af' && inBereik(x.deadline) && (isBeheerder() || vanMij(x.eigenaar)); }).sort(sorteerActies).map(function (x) { return taakUit(x, sMap, pMap, kMap); })
+  };
 }
 
 /* ----- Rapportage en activity tracking ----- */

@@ -19,7 +19,7 @@ De volledige tabel met argumenten en resultaatvorm staat in `backend/README.md` 
 `apiHuisstijl`, `apiZetHuisstijl`, `apiMaakContent`, `apiTrajecten`, `apiTraject`, `apiTrajectOpslaan`, `apiNotitieToevoegen`, `apiImporteer`, `apiStatus`.
 CRM (v2.0, module Relaties): `apiCrm`, `apiSchool`, `apiSchoolOpslaan`, `apiPersoon`, `apiPersoonOpslaan`, `apiKans`, `apiKansOpslaan`, `apiPipeline`,
 `apiMijlpalenOpslaan`, `apiActiviteitToevoegen`, `apiAfspraakPlannen`, `apiTaken`, `apiTaakOpslaan`, `apiTrackOpslaan`, `apiTrackStart`, `apiRapport`,
-`apiDoelen`, `apiDoelOpslaan`, `apiGebruikers`, `apiGebruikerOpslaan`, `apiCrmSync`, `apiCrmInrichten`, `apiCapsuleMigratie`, `apiExport`, `apiVerwijder`.
+`apiDoelen`, `apiDoelOpslaan`, `apiHome`, `apiAgenda` (v3.0), `apiGebruikers`, `apiGebruikerOpslaan`, `apiCrmSync`, `apiCrmInrichten`, `apiCapsuleMigratie`, `apiExport`, `apiVerwijder`.
 
 ## Gebruikers (v2.0)
 - `doPost` zet `GEBRUIKER` via `wieIs(secret)`: `SECRET` = beheerder, een code uit scripteigenschap `CODES` = accountmanager. Geen geldige code → `fout: 'secret'`.
