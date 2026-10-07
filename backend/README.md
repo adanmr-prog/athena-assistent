@@ -17,10 +17,15 @@ Draai hem onder het werkaccount (`menno.adan@athenastudies.nl`), dan ziet hij de
    | `NAAM` | voornaam in de begroeting (standaard `Menno`) | nee |
    | `CLAUDE_MODEL` | standaard `claude-opus-5` | nee |
    | `CLAUDE_EFFORT` | `low`, `medium` (standaard), `high` | nee — `low` als antwoorden te lang duren |
+   | `CAPSULE_TOKEN` | API-token uit Capsule (My Preferences → API Authentication Tokens) | alleen voor de eenmalige Capsule-migratie; daarna verwijderen |
+
+   `CODES` (koppelcodes van accountmanagers), `CAPSULE_MIJLPALEN`, `LAATSTE_CRM_SYNC` en `CAPSULE_MIGRATIE` zet de backend zelf; niet met de hand aanpassen.
 
 4. Kies bovenin de functie `setup` en klik **Uitvoeren**. Geef de gevraagde rechten (Sheets, Drive, Gmail, Agenda, externe verbindingen).
    De log toont drie dingen: de URL van de Sheet, de URL van de documentenmap en de **koppelcode**. Bewaar die koppelcode.
-   `setup()` maakt ook twee dagelijkse triggers aan: documenten inlezen (04:00) en de nachtelijke review (05:00).
+   `setup()` maakt ook de triggers aan: documenten inlezen (04:00), de nachtelijke review (05:00) en (v2.0) elk uur mail en agenda aan het CRM koppelen.
+   Bestaande installatie bijwerken naar v2.0: plak de nieuwe `Code.gs`, draai `setup()` één keer opnieuw (maakt de nieuwe tabbladen en kolommen,
+   zet contactpersonen en notities over, installeert de uurlijkse trigger) en implementeer een nieuwe versie.
 5. Optioneel: **Services → + → Drive API** toevoegen. Dan leest de index ook de tekst uit PDF's en Word-bestanden (met OCR).
    Zonder deze service worden die bestanden alleen op titel geïndexeerd.
 6. **Implementeren → Nieuwe implementatie → Web-app**: uitvoeren als *Ik*, toegang *Iedereen*. Kopieer de `/exec`-URL.
@@ -31,8 +36,10 @@ Bij elke wijziging in `Code.gs`: Implementeren → Implementaties beheren → po
 
 ## Wat er waar staat
 
-- **Sheet `Athena Assistent — data`**, tabbladen: `Scholen`, `Trajecten`, `Kansen`, `Acties`, `Documenten`, `Reviews`, `Huisstijl`, `Content`, `Notities`.
+- **Sheet `Athena Assistent — data`**, tabbladen: `Scholen`, `Trajecten`, `Kansen`, `Acties`, `Documenten`, `Reviews`, `Huisstijl`, `Content`, `Notities`,
+  en voor het CRM (v2.0) `Personen`, `Activiteiten`, `Mijlpalen`, `Tracks`, `Gebruikers`, `Doelen`.
   Je mag rijen direct in de Sheet bewerken; de eerste rij is de kolomkop en moet blijven staan. Kolom `id` is de sleutel.
+  Nieuwe kolommen komen altijd achteraan; `blad()` vult een oude kop automatisch aan. Verschuif dus nooit kolommen in de Sheet.
 - **Drive-map `Athena Assistent — documenten`** met submappen `Contracten`, `Werkwijzen`, `Schooldossiers`, `Voorstellen`, `Prijslijst`.
   Alles wat hierin staat (ook in diepere submappen) wordt geïndexeerd; de submapnaam bepaalt het type. Google Docs, Sheets, tekst en (met Drive API) PDF/Word.
   Zet in een schooldossier de schoolnaam in de titel of de eerste alinea; dan koppelt Athena het document aan het traject.
@@ -61,7 +68,54 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiTrajectOpslaan` | object (met of zonder id) | traject |
 | `apiNotitieToevoegen` | trajectId, tekst | `{ id, datum, tekst }` |
 | `apiImporteer` | tabel, rijen | `{ ingevoegd, bijgewerkt, ongewijzigd }` |
-| `apiStatus` | — | status van de installatie |
+| `apiStatus` | — | status van de installatie (v2.0: ook `gebruiker`, `crmSyncTrigger`, `laatsteCrmSync`, `capsuleToken`, `capsuleMigratie`) |
+
+### CRM (v2.0, module Relaties)
+
+| fn | args | result |
+|---|---|---|
+| `apiCrm` | — | `{ ik:{naam,rol}, gebruikers, statussen, mijlpalen, categorieen, activiteitTypes, tracks, tags, scholen:[school+{personen,openKansen,openWaarde}], personen:[persoon] }` |
+| `apiSchool` | id | `{ school, personen, kansen, trajecten, taken, tijdlijn:[activiteit], documenten }` |
+| `apiSchoolOpslaan` | object (met of zonder id) | school |
+| `apiPersoon` | id | `{ persoon, school, kansen, taken, tijdlijn }` |
+| `apiPersoonOpslaan` | object | persoon |
+| `apiKans` | id | `{ kans, mijlpalen, school, persoon, personen, taken, tijdlijn }` |
+| `apiKansOpslaan` | object, maakTraject | `{ kans, traject }` (mijlpaalwissel wordt gelogd; `gewonnen` + maakTraject maakt een actief traject) |
+| `apiPipeline` | — | `{ mijlpalen, pipelines, kansen, verliesRedenen }` (open kansen + gesloten in de laatste 60 dagen) |
+| `apiMijlpalenOpslaan` | `[{pipeline,mijlpaal,kans,dagenNorm}]` | mijlpalen (alleen beheerder) |
+| `apiActiviteitToevoegen` | `{type:notitie\|gesprek\|mail\|afspraak, schoolId?, persoonId?, kansId?, onderwerp, tekst, datum?, duurMin?}` | activiteit |
+| `apiAfspraakPlannen` | `{titel, start:'yyyy-MM-ddTHH:mm', duurMin, locatie, notitie, uitnodigen, schoolId?, persoonId?, kansId?}` | activiteit (zet ook een afspraak in Google Agenda) |
+| `apiTaken` | — | `{ taken:[taak], categorieen, gebruikers, tracks }` (open + afgerond in de laatste 14 dagen) |
+| `apiTaakOpslaan` | object | taak (afvinken gaat via `apiActieKlaar`) |
+| `apiTrackOpslaan` | `{id?, naam, omschrijving, stappen:[{tekst,categorie,dagenNaStart,prio}]}` | tracks (alleen beheerder) |
+| `apiTrackStart` | trackId, `{schoolId?,persoonId?,kansId?}`, startdatum, eigenaar | `{ aantal, track }` |
+| `apiRapport` | `week\|maand\|kwartaal`, eigenaar? | `{ team, perPersoon:[{naam,cijfers,doelen}], totaal, forecast, trechter, winst, redenen, stil, ... }` |
+| `apiDoelen` / `apiDoelOpslaan` | — / `{eigenaar, periode, metric, doel}` | `{ doelen, metrics, periodes, gebruikers }` |
+| `apiGebruikers` / `apiGebruikerOpslaan` | — / object, nieuweCode | gebruikers / `{ gebruiker, code }` (code alleen bij nieuw of nieuweCode; alleen beheerder) |
+| `apiCrmSync` | — | `{ mails, afspraken, bijgewerkt }` |
+| `apiCrmInrichten` | — | `{ personen, kansen, trajecten, notities, eigenaren }` (oude velden overzetten; idempotent) |
+| `apiCapsuleMigratie` | stap, pagina | `{ stap, aantal, volgende:{stap,pagina}\|null }` (de app roept herhaald aan tot `volgende` null is) |
+| `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
+| `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak`, id | null (school alleen zonder personen en kansen) |
+
+Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
+(`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
+
+## CRM: gebruikers, mail en agenda, Capsule (v2.0)
+
+- **Gebruikers.** De koppelcode uit `setup()` is de beheerderscode (Menno). Accountmanagers krijgen een eigen code via Relaties → Rapport →
+  Beheer → Gebruikers. Een accountmanager ziet in Vandaag alleen zijn eigen acties en kansen, in het rapport alleen zijn eigen cijfers, en kan
+  geen huisstijl, import, mijlpalen, tracks, doelen of gebruikers wijzigen. Uitschakelen trekt de code direct in.
+- **Mail en agenda.** De backend draait onder Menno's account en ziet dus zijn Gmail en agenda. Elk uur worden mails van de laatste twee dagen en
+  afspraken van -7 tot +14 dagen gekoppeld aan een persoon (op e-mailadres) of een school (op het domein van de website of het e-mailadres van
+  de school). Accountmanagers sturen hun mails met scholen door of in bcc naar Menno's adres met `+crm` (bijv. `menno.adan+crm@athenastudies.nl`).
+  Maak in Gmail een filter: *Aan: `+crm`* → *Label toepassen: `CRM`*. Mails met dat label worden ook gekoppeld; het schooladres mag in de
+  doorgestuurde tekst staan.
+- **Capsule vervangen.** Zet `CAPSULE_TOKEN`, draai `setup()` (of Relaties → Rapport → Beheer → Oude gegevens overzetten) en start daarna
+  Beheer → Capsule-migratie. Die haalt in stappen mijlpalen, organisaties en personen, kansen, projecten, taken en historie op. Ids beginnen met
+  `cap-`; opnieuw draaien werkt rijen bij in plaats van ze te verdubbelen. Bestaande scholen worden op naam gekoppeld, bestaande trajecten op
+  school + naam. Controleer daarna de aantallen tegen Capsule. Zet de data-run die scholen en kansen importeert daarna uit: de app is vanaf dan
+  de bron, en een nieuwe import zou velden die in de app zijn bijgewerkt overschrijven.
 
 Een `actie` is `{ id, tekst, bron, prio, deadline, link, over }` (`over` = dagen over de deadline, negatief = nog te gaan).
 Een `kans` is `{ id, school, traject, fase, waarde, volgendeActie, deadline, dagenStil }`.
@@ -98,3 +152,8 @@ geweigerd verzoek wordt server-side op een ander model herhaald), `output_config
 - Apps Script kapt een verzoek na ongeveer 60 seconden af. Duurt een antwoord te lang: zet `CLAUDE_EFFORT` op `low`.
 - Cellen in Sheets bevatten maximaal 50.000 tekens; van elk document worden de eerste 45.000 tekens geïndexeerd.
 - De review kijkt naar de afgelopen 24 uur en naar wat in de Sheet, Gmail en Agenda staat. Wat nergens geregistreerd is, ziet hij niet.
+- De Sheet is de CRM-database. Tot enkele duizenden rijen per tabblad blijft dat vlot; de historie (`Activiteiten`) groeit het snelst.
+- Mail en agenda van accountmanagers komen alleen binnen via doorsturen/bcc (label `CRM`); volledige synchronisatie van hun mailbox vraagt een
+  Google Workspace-serviceaccount.
+- De Capsule-migratie volgt de Capsule API v2 (`/milestones`, `/parties`, `/opportunities`, `/kases`, `/tasks`, `/entries`). Draai hem eerst op
+  een kopie van de Sheet en vergelijk de aantallen.

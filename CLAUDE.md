@@ -1,6 +1,6 @@
 # Athena Assistent (athena-assistent)
 
-Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno. Vijf modules: Vandaag (operations-dashboard), Brein (kennisbank met vraag-en-antwoord), Review (nachtelijke review), Huisstijl (huisstijl-kit en on-brand teksten), Historie (geschiedenis van elke schoolopdracht). UI, code en commentaar zijn Nederlands.
+Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno en de accountmanagers. Zes modules: Vandaag (operations-dashboard), Relaties (het eigen CRM dat Capsule vervangt: scholen, personen, pipeline, taken/tracks, tijdlijn, rapportage), Brein (kennisbank met vraag-en-antwoord), Review (nachtelijke review), Huisstijl (huisstijl-kit en on-brand teksten), Historie (geschiedenis van elke schoolopdracht). UI, code en commentaar zijn Nederlands.
 
 ## Structuur
 - `index.html`: de volledige app (CSS + HTML + inline script in één bestand). Geen build-stap, geen bundler, geen npm-dependencies.
@@ -29,7 +29,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno. Vijf modul
 
 ## Testen
 - Geen testsuite voor de backend; `node --check` op een `.js`-kopie van `backend/Code.gs` is het vangnet.
-- Browsertest: `python3 test/mock_backend.py` serveert de repo op http://127.0.0.1:8765 met een mock-API op `/api` (koppelcode `test123`); `python3 test/test_app.py` doorloopt alle vijf schermen met Playwright (Chromium uit `/opt/pw-browsers`) en zet screenshots in `test/shots/`.
+- Browsertest: `python3 test/mock_backend.py` serveert de repo op http://127.0.0.1:8765 met een mock-API op `/api` (koppelcode `test123`); `python3 test/test_app.py` doorloopt alle zes schermen met Playwright (Chromium uit `/opt/pw-browsers`) en zet screenshots in `test/shots/`. De mock houdt state vast: herstart hem voor een tweede run.
 - Laat wijzigingen aan layout, caching of navigatie reviewen door de subagent `ios-pwa-reviewer`.
 
 ## Git
