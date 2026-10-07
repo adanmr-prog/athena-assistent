@@ -1,2 +1,4 @@
 test/shots/
 __pycache__/
+# Lokale datadumps en snapshots (Capsule-export, salespaneel): nooit in de repo.
+data/
