@@ -493,6 +493,15 @@
   .zb-voet .bel-teller { min-width: 18px; opacity: 1; flex: none; }
   .rij.nieuw { box-shadow: inset 3px 0 0 var(--oranje); padding-left: 10px; }
   .rij.nieuw .r-titel { font-weight: 800; }
+  /* v4.2: rapporten en doelen per team */
+  .tegel.gehaald { border-color: var(--groen); }
+  .tegel .t-doel { font-size: 11.5px; color: var(--gedempt); margin-top: 2px; }
+  .tegel.gehaald .t-doel { color: var(--groen); font-weight: 700; }
+  .doel-kaart .doel-rij span:first-child { min-width: 0; }
+  .doel-rij .getal { white-space: nowrap; }
+  .doel-rij { grid-template-columns: 130px minmax(0, 1fr) minmax(110px, auto); }
+  body:not(.desk) .doel-rij { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }  /* telefoon: naam en cijfer boven, balk eronder */
+  body:not(.desk) .doel-rij .b-spoor { grid-column: 1 / -1; grid-row: 2; }
   .f-balk { display: flex; height: 10px; border-radius: 3px; overflow: hidden; width: 120px; background: var(--vlak); }
   .f-balk i { display: block; height: 100%; background-image: none !important; padding: 0 !important; }
 
@@ -1307,7 +1316,7 @@
   function openProjectVanuit(terug, id) { CRM.terugNaar = terug; if (isDesk()) { wisselView('relaties'); zetZijbalk(terug); } else wisselView('relaties'); openDetail('project', id, true); }
 
   /* ===== 6. Relaties (v2.0): het eigen CRM — vervangt Capsule. Scholen, personen, pipeline, taken, tracks, tijdlijn en rapportage. ===== */
-  var CRM = { tab: 'scholen', basis: null, pipeline: null, taken: null, rapport: null, mijn: false, zoek: '', fStatus: '', fTag: '', fPipeline: '', preset: 'week', rEigenaar: '', detail: null };
+  var CRM = { tab: 'scholen', basis: null, pipeline: null, taken: null, rapport: null, pijp: null, mijn: false, zoek: '', fStatus: '', fTag: '', fPipeline: '', preset: 'maand', rTeam: '', rEigenaar: '', detail: null };  // v4.2: rTeam, pijp
   var CRM_TABS = [['scholen', 'Scholen'], ['personen', 'Personen'], ['pipeline', 'Pipeline'], ['taken', 'Taken'], ['rapport', 'Rapport']];
   var ACT_KORT = { notitie: 'NOT', gesprek: 'BEL', mail: 'MAIL', afspraak: 'AFS', fase: 'FASE', taak: 'TAAK' };
   var ACT_LABEL = { notitie: 'Notitie', gesprek: 'Gesprek', mail: 'Mail', afspraak: 'Afspraak', fase: 'Mijlpaal', taak: 'Taak' };
@@ -1534,35 +1543,56 @@
   /* --- rapport en beheer --- */
   function laadRapport() {
     el('crmBalk').innerHTML = ''; el('crmInhoud').innerHTML = '<div class="spinner">Rapport maken</div>';
-    run('apiRapport', CRM.preset, CRM.rEigenaar).then(function (r) { CRM.rapport = r; if (CRM.tab === 'rapport') renderRapport(); })
+    // v4.2: rapport per team (met bedrijfscijfers); de pipeline-onderdelen alleen voor wie de pipeline mag zien
+    Promise.all([run('apiTeamRapport', CRM.preset, CRM.rTeam, CRM.rEigenaar), magApp('pipeline') ? run('apiRapport', CRM.preset, CRM.rEigenaar) : null]).then(function (r) { CRM.rapport = r[0]; CRM.pijp = r[1]; CRM.rTeam = r[0].team; if (CRM.tab === 'rapport') renderRapport(); })
       .catch(function () { if (CRM.tab === 'rapport') el('crmInhoud').innerHTML = '<div class="leeg">Kon het rapport niet maken.</div>'; });
   }
   function balk(label, waarde, sterk, max, tekst) {
     var pct = function (v) { return Math.max(0, Math.min(100, Math.round(100 * (Number(v) || 0) / (max || 1)))); };
     return '<div class="b-rij"><span class="b-label">' + esc(label) + '</span><div class="b-spoor"><div class="b-vul" style="width:' + pct(waarde) + '%"></div><div class="b-vul sterk" style="width:' + pct(sterk) + '%"></div></div><span class="b-getal">' + esc(tekst) + '</span></div>';
   }
+  // v4.2: maatstaven per team; tekst zonder opmaak (tegel() escapet zelf)
+  function metriekTekst(d, v) { if (v === null || v === undefined || v === '') return '—'; if (d.soort === 'euro') return euro(v); if (d.soort === 'procent') return v + '%'; if (d.soort === 'dagen') return v + ' d'; return String(v); }
+  function doelGehaald(d, v, doel) { if (!doel || v === null || v === undefined) return false; return d.laagIsGoed ? v <= doel : v >= doel; }
+  function metriekTegel(d, v, doel) {
+    var ok = doelGehaald(d, v, doel);
+    return '<div class="tegel' + (ok ? ' gehaald' : '') + '" title="' + esc(d.label) + '"><div class="t-cijfer">' + esc(metriekTekst(d, v)) + '</div><div class="t-label">' + esc(d.label) + '</div>' + (doel ? '<div class="t-doel">doel ' + esc(metriekTekst(d, doel)) + (ok ? ' · gehaald' : '') + '</div>' : '') + '</div>';
+  }
+  function doelBalk(d, v, doel) {
+    var ok = doelGehaald(d, v, doel), pct = !doel ? 0 : d.laagIsGoed ? (v === null || v === undefined ? 0 : Math.min(100, Math.round(100 * doel / Math.max(v, 1)))) : Math.min(100, Math.round(100 * (Number(v) || 0) / doel));
+    return '<div class="doel-rij"><span>' + esc(d.label) + '</span><div class="b-spoor"><div class="b-vul sterk' + (ok ? ' gehaald' : '') + '" style="width:' + pct + '%"></div></div><span class="getal">' + esc(metriekTekst(d, v)) + (doel ? ' / ' + esc(metriekTekst(d, doel)) : '') + '</span></div>';
+  }
+  // Bedrijfsdoelen van het schooljaar: iedereen ziet dezelfde cijfers
+  function bedrijfsBlok(B) {
+    if (!B) return '';
+    return '<div class="kop">Bedrijfsdoelen <small>schooljaar ' + esc(B.schooljaar) + '</small></div><div class="kaart doel-kaart">' + B.metrieken.map(function (d) { return doelBalk(d, B.cijfers[d.id], B.doelen[d.id]); }).join('') + '</div>';
+  }
+  var PERIODE_LABEL = { week: 'Deze week', maand: 'Deze maand', kwartaal: 'Dit kwartaal', schooljaar: 'Dit schooljaar' };
   function renderRapport() {
-    var R = CRM.rapport, T = R.team, beheer = !!R.ik.beheer, rr = R.ik.rechten || {}, kiezer = beheer || !!rr.teamlead, pijp = magApp('pipeline');  // v4.0: teamlead kiest uit zijn team
-    el('crmBalk').innerHTML = ['week', 'maand', 'kwartaal'].map(function (p) { return '<button class="chip' + (CRM.preset === p ? ' aan' : '') + '" data-crmpreset="' + p + '">' + { week: 'Deze week', maand: 'Deze maand', kwartaal: 'Dit kwartaal' }[p] + '</button>'; }).join('') +
-      (kiezer ? '<select id="crmREigenaar"><option value="">' + (beheer ? 'Iedereen' : 'Hele team') + '</option>' + opts(R.gebruikers, CRM.rEigenaar) + '</select>' : '');
-    var kol = ['gesprekken', 'mails', 'afspraken', 'nieuweKansen', 'voorstellen', 'gewonnen', 'gewonnenWaarde'];
-    var maxF = Math.max.apply(null, [1].concat(R.forecast.map(function (f) { return f.waarde; }))), maxT = Math.max.apply(null, [1].concat(R.trechter.map(function (t) { return t.waarde; })));
-    var h = '<div class="hint">' + esc(kortDatum(R.van)) + ' t/m ' + esc(kortDatum(R.tot)) + ' · ' + (R.eigenaar ? esc(R.eigenaar) : 'hele team') + '</div>' +
-      '<div class="kop">Activiteit</div><div class="tegels">' + tegel(T.gesprekken, 'Gesprekken') + tegel(T.mails, 'Mails verstuurd') + tegel(T.afspraken, 'Afspraken') + tegel(T.voorstellen, 'Voorstellen', 'oranje') + '</div>' +
-      '<div class="tegels">' + tegel(T.nieuweKansen, 'Nieuwe kansen') + tegel(T.gewonnen, 'Gewonnen · ' + euro(T.gewonnenWaarde)) + tegel(T.verloren, 'Verloren') + tegel(T.takenAf, 'Taken afgerond') + '</div>' +
-      '<div class="kop">Per persoon <small>/ = doel</small></div><div class="tabel-wrap"><table class="tabel"><tr><th>Naam</th>' + kol.map(function (k) { return '<th>' + METRIC_KORT[k] + '</th>'; }).join('') + '</tr>' +
-      R.perPersoon.map(function (p) {
-        return '<tr><td>' + esc(p.naam) + '</td>' + kol.map(function (k) {
-          var w = p.cijfers[k] || 0, d = p.doelen[k], f = function (x) { return k === 'gewonnenWaarde' ? euro(x) : esc(x); };
-          return '<td' + (d && w >= d ? ' class="gehaald"' : '') + '>' + f(w) + (d ? ' <small>/' + f(d) + '</small>' : '') + '</td>';
-        }).join('') + '</tr>';
-      }).join('') + '</table></div>' +
-      (!pijp ? '' : '<div class="kop">Forecast <small>' + euro(R.totaal.gewogen) + ' gewogen van ' + euro(R.totaal.waarde) + '</small></div>' +
-      (R.forecast.length ? '<div class="balkjes">' + R.forecast.map(function (f) { return balk(maandLabel(f.maand), f.waarde, f.gewogen, maxF, euro(f.gewogen) + ' gewogen · ' + euro(f.waarde) + ' · ' + f.aantal + (f.aantal === 1 ? ' kans' : ' kansen')); }).join('') + '</div>' : '<div class="leeg">Geen open kansen.</div>') +
-      '<div class="kop">Pijplijn per mijlpaal</div><div class="balkjes">' + R.trechter.map(function (t) { return balk(t.mijlpaal, t.waarde, t.gewogen, maxT, t.aantal + ' · ' + euro(t.waarde) + ' · gewogen ' + euro(t.gewogen)); }).join('') + '</div>' +
-      '<div class="kop">Gewonnen en verloren</div><div class="tegels drie">' + tegel(R.winst.gewonnen, 'Gewonnen · ' + euro(R.winst.gewonnenWaarde)) + tegel(R.winst.verloren, 'Verloren · ' + euro(R.winst.verlorenWaarde)) + tegel(R.winst.ratio === null ? '—' : R.winst.ratio + '%', 'Winratio', 'oranje') + '</div>' +
-      (R.redenen.length ? '<div class="balkjes">' + R.redenen.map(function (r) { return balk(r.reden, 0, r.aantal, R.redenen[0].aantal, r.aantal + '× verloren'); }).join('') + '</div>' : '') +
-      '<div class="kop">Stille kansen <small>langer geen contact dan de norm</small></div>' + (R.stil.length ? R.stil.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Geen stille kansen.</div>'));
+    var R = CRM.rapport, P = CRM.pijp, beheer = !!R.ik.beheer, rr = R.ik.rechten || {}, defs = R.metrieken || [], kies = R.kiesbaar || [];
+    el('crmBalk').innerHTML = ['week', 'maand', 'kwartaal', 'schooljaar'].map(function (p) { return '<button class="chip' + (CRM.preset === p ? ' aan' : '') + '" data-crmpreset="' + p + '">' + PERIODE_LABEL[p] + '</button>'; }).join('') +
+      (R.teams.length > 1 ? R.teams.map(function (t) { return '<button class="chip' + (R.team === t ? ' aan' : '') + '" data-rteam="' + esc(t) + '">' + esc(TEAM_NAAM[t] || t) + '</button>'; }).join('') : '') +
+      (kies.length > 1 ? '<select id="crmREigenaar"><option value="">Hele team</option>' + opts(kies, CRM.rEigenaar) + '</select>' : '');
+    var h = '<div class="hint">' + esc(kortDatum(R.van)) + ' t/m ' + esc(kortDatum(R.tot)) + (R.team ? ' · ' + esc(R.eigenaar || TEAM_NAAM[R.team] || R.team) : '') + '</div>' + bedrijfsBlok(R.bedrijf);
+    if (R.team) {
+      var T = R.totaal;
+      h += '<div class="kop">' + esc(TEAM_NAAM[R.team] || R.team) + ' <small>' + (R.eigenaar ? esc(R.eigenaar) : 'teamtotaal') + '</small></div><div class="tegels">' +
+        defs.map(function (d) { var x = R.eigenaar && R.perPersoon[0] ? R.perPersoon[0] : T; return metriekTegel(d, x.cijfers[d.id], x.doelen[d.id]); }).join('') + '</div>';
+      if (!R.eigenaar) h += '<div class="kop">Per persoon <small>/ = doel</small></div><div class="tabel-wrap"><table class="tabel"><tr><th>Naam</th>' + defs.map(function (d) { return '<th title="' + esc(d.label) + '">' + esc(d.kort) + '</th>'; }).join('') + '</tr>' +
+        R.perPersoon.map(function (p) {
+          return '<tr><td>' + esc(p.naam) + '</td>' + defs.map(function (d) { var v = p.cijfers[d.id], doel = p.doelen[d.id]; return '<td' + (doelGehaald(d, v, doel) ? ' class="gehaald"' : '') + '>' + esc(metriekTekst(d, v)) + (doel ? ' <small>/' + esc(metriekTekst(d, doel)) + '</small>' : '') + '</td>'; }).join('') + '</tr>';
+        }).join('') + '</table></div>';
+    } else h += '<div class="leeg">Kies een team.</div>';
+    if (P && R.team === 'consultancy') {  // de pipeline hoort bij de consultants
+      var maxF = Math.max.apply(null, [1].concat(P.forecast.map(function (f) { return f.waarde; }))), maxT = Math.max.apply(null, [1].concat(P.trechter.map(function (t) { return t.waarde; })));
+      h += '<div class="kop">Forecast <small>' + euro(P.totaal.gewogen) + ' gewogen van ' + euro(P.totaal.waarde) + '</small></div>' +
+        (P.forecast.length ? '<div class="balkjes">' + P.forecast.map(function (f) { return balk(maandLabel(f.maand), f.waarde, f.gewogen, maxF, euro(f.gewogen) + ' gewogen · ' + euro(f.waarde) + ' · ' + f.aantal + (f.aantal === 1 ? ' kans' : ' kansen')); }).join('') + '</div>' : '<div class="leeg">Geen open kansen.</div>') +
+        '<div class="kop">Pijplijn per mijlpaal</div><div class="balkjes">' + P.trechter.map(function (t) { return balk(t.mijlpaal, t.waarde, t.gewogen, maxT, t.aantal + ' · ' + euro(t.waarde) + ' · gewogen ' + euro(t.gewogen)); }).join('') + '</div>' +
+        '<div class="kop">Gewonnen en verloren</div><div class="tegels drie">' + tegel(P.winst.gewonnen, 'Gewonnen · ' + euro(P.winst.gewonnenWaarde)) + tegel(P.winst.verloren, 'Verloren · ' + euro(P.winst.verlorenWaarde)) + tegel(P.winst.ratio === null ? '—' : P.winst.ratio + '%', 'Winratio', 'oranje') + '</div>' +
+        (P.redenen.length ? '<div class="balkjes">' + P.redenen.map(function (r) { return balk(r.reden, 0, r.aantal, P.redenen[0].aantal, r.aantal + '× verloren'); }).join('') + '</div>' : '') +
+        '<div class="kop">Stille kansen <small>langer geen contact dan de norm</small></div>' + (P.stil.length ? P.stil.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Geen stille kansen.</div>');
+    }
+    var kiezer = beheer || !!rr.teamlead;
     h += '<div class="kop">Activiteit ' + (R.eigenaar ? 'van ' + esc(R.eigenaar) : (kiezer ? 'van het team' : '')) + ' <small id="rapportActTelling"></small></div><div id="rapportActiviteit"><div class="spinner">Laden</div></div>';  // v3.3
     if (!beheer && rr.doelen) h += '<div class="kop">Team</div><div class="kaart"><div class="balk" style="margin-top:0"><button class="knop licht klein" data-beheer="doelen">Doelen van mijn team</button></div></div>';  // v4.0: teamlead
     if (beheer) h += '<div class="kop">Beheer</div><div class="kaart"><div class="balk" style="margin-top:0">' +
@@ -1979,6 +2009,7 @@
     if (t.closest('[data-crmmijn]')) { CRM.mijn = !CRM.mijn; renderCrm(); return; }
     if ((x = t.closest('[data-crmnieuw]'))) { if (CRM.basis) nieuwVanuitLijst(x.dataset.crmnieuw); return; }
     if ((x = t.closest('[data-crmpreset]'))) { CRM.preset = x.dataset.crmpreset; laadRapport(); return; }
+    if ((x = t.closest('[data-rteam]'))) { CRM.rTeam = x.getAttribute('data-rteam'); CRM.rEigenaar = ''; laadRapport(); return; }  // v4.2
     if ((x = t.closest('[data-composer]'))) { if (CRM.detail && CRM.detail.data) openComposer(x.dataset.composer); return; }
     if ((x = t.closest('[data-archief]'))) {  // v3.3
       var av = x.dataset.archief, ai = av.indexOf(':'), knopA = x; knopA.disabled = true;
@@ -2266,7 +2297,8 @@
     run('apiDoelen').then(function (r) {
       BEHEER.doelen = r;
       var lijst = r.doelen.filter(function (d) { return d.doel; }).map(function (d) {
-        return '<div class="rij"><div class="r-body"><div class="r-titel">' + esc(d.eigenaar) + ' <span class="zacht">· per ' + esc(d.periode) + '</span></div><div class="r-meta">' + esc(METRIC_LABEL[d.metric] || d.metric) + ': <b>' + (d.metric === 'gewonnenWaarde' ? euro(d.doel) : esc(d.doel)) + '</b></div></div>' +
+        var md = metriekDef(r, d.metric);
+        return '<div class="rij"><div class="r-body"><div class="r-titel">' + esc(doelEigenaarLabel(r, d.eigenaar)) + ' <span class="zacht">· per ' + esc(d.periode) + '</span></div><div class="r-meta">' + esc(md.label) + ': <b>' + esc(metriekTekst(md, d.doel)) + '</b></div></div>' +
           '<button class="knop licht klein" data-doelbewerk="' + esc(d.id) + '">Wijzigen</button><button class="knop licht klein gevaar" data-doelweg="' + esc(d.id) + '">Weg</button></div>';
       }).join('');
       openVenster('<div class="kop" style="margin-top:14px">Doelen</div>' + (lijst || '<div class="leeg">Nog geen doelen.</div>') + doelForm(null));
@@ -2274,13 +2306,20 @@
   }
   function doelForm(d) {
     var r = BEHEER.doelen;
-    return formHtml(d ? 'Doel wijzigen' : 'Doel instellen', [{ naam: 'eigenaar', label: 'Medewerker', type: 'select', opties: metHuidig(r.gebruikers.slice(), d && d.eigenaar) }, { naam: 'periode', label: 'Per', type: 'select', opties: r.periodes },
-      { naam: 'metric', label: 'Maatstaf', type: 'select', opties: r.metrics.map(function (m) { return { waarde: m, label: METRIC_LABEL[m] || m }; }) }, { naam: 'doel', label: 'Doel', type: 'number' }], d || { periode: DESK.doelPreset || 'maand' }, 'Opslaan', function (f) {
+    // v4.2: voor wie (bedrijf, team of persoon) en maatstaven gegroepeerd per team
+    var eig = (r.eigenaren || []).map(function (e) { return { waarde: e.waarde, label: e.waarde.indexOf('team:') === 0 || e.waarde === 'bedrijf' ? e.label : '· ' + e.label }; });
+    if (d && !eig.some(function (e) { return e.waarde === d.eigenaar; })) eig.push({ waarde: d.eigenaar, label: doelEigenaarLabel(r, d.eigenaar) });
+    var mets = (r.metrieken || []).map(function (m) { return { waarde: m.id, label: (TEAM_NAAM[m.team] || (m.team === 'bedrijf' ? 'Bedrijf' : m.team)) + ': ' + m.label }; });
+    return formHtml(d ? 'Doel wijzigen' : 'Doel instellen', [{ naam: 'eigenaar', label: 'Voor', type: 'select', opties: eig }, { naam: 'periode', label: 'Per', type: 'select', opties: r.periodes },
+      { naam: 'metric', label: 'Maatstaf', type: 'select', opties: mets }, { naam: 'doel', label: 'Doel', type: 'number' }], d || { periode: DESK.doelPreset || 'maand' }, 'Opslaan', function (f) {
+      if (f.eigenaar === 'bedrijf') f.periode = 'schooljaar';  // bedrijfsdoelen gaan over het schooljaar
       if (d) f.id = d.id;
       return run('apiDoelOpslaan', f).then(function () { toast('Doel opgeslagen.'); naDoelen(); beheerDoelen(); });
     });
   }
-  function naDoelen() { CRM.rapport = null; if (el('view-doelen').classList.contains('actief')) laadDoelen(); }
+  function metriekDef(r, id) { return (r.metrieken || []).filter(function (m) { return m.id === id; })[0] || { id: id, label: METRIC_LABEL[id] || id, soort: id === 'gewonnenWaarde' ? 'euro' : 'aantal' }; }
+  function doelEigenaarLabel(r, e) { if (e === 'bedrijf') return 'Bedrijf'; if (String(e).indexOf('team:') === 0) return (r.teamNamen && r.teamNamen[e.slice(5)]) || e; return e; }
+  function naDoelen() { CRM.rapport = null; if (el('view-doelen').classList.contains('actief')) laadDoelen(); else if (CRM.tab === 'rapport' && el('view-relaties').classList.contains('actief')) laadRapport(); }
   function beheerMijlpalen() {
     var ms = CRM.basis.mijlpalen;
     toonForm(el('crmBeheer'), formHtml('Mijlpalen', [], {}, 'Opslaan', function () {
@@ -2606,7 +2645,7 @@
     else if (i === 'agenda') a = '<button class="knop klein" data-agendaplan="1">Afspraak plannen</button>';
     else if (i === 'projecten') a = magApp('projecten', 'wijzigen') ? '<button class="knop klein" data-nieuwproject="1">+ Project</button>' : '';  // v4.0: weergaven staan nu boven het bord
     else if (i === 'facturatie') a = '<button class="knop klein licht" data-factexport="aangemaakt">CSV voor Exact</button>';  // v3.8
-    else if (i === 'doelen') a = ['week', 'maand', 'kwartaal'].map(function (p) { return '<button class="chip' + (DESK.doelPreset === p ? ' aan' : '') + '" data-doelpreset="' + p + '">' + { week: 'Deze week', maand: 'Deze maand', kwartaal: 'Dit kwartaal' }[p] + '</button>'; }).join('');
+    else if (i === 'doelen') a = ['week', 'maand', 'kwartaal', 'schooljaar'].map(function (p) { return '<button class="chip' + (DESK.doelPreset === p ? ' aan' : '') + '" data-doelpreset="' + p + '">' + PERIODE_LABEL[p] + '</button>'; }).join('');  // v4.2: ook schooljaar
     el('deskActies').innerHTML = a;
   }
   function contactenSchakelaar() {
@@ -2686,7 +2725,7 @@
     var rest = h.taken.filter(function (t) { return !t.deadline || t.deadline > vandaag; }).slice(0, 5), P = h.pipeline;
     el('homeGroet').textContent = h.groet; el('homeDatum').textContent = h.datum;
     el('homeInhoud').innerHTML = '<div class="tegels">' + tegel(h.taken.length, 'Open taken') + tegel(laat.length, 'Te laat', 'oranje') + tegel(P.open, 'Open kansen') + tegel(euro(P.gewogen), 'Gewogen pijplijn') + '</div>' +
-      '<div class="home-grid">' +
+      '<div class="home-grid">' + (h.bedrijf ? hkaart('Bedrijfsdoelen ' + h.bedrijf.schooljaar, h.bedrijf.metrieken.map(function (d) { return doelBalk(d, h.bedrijf.cijfers[d.id], h.bedrijf.doelen[d.id]); }).join(''), 'doelen') : '') +  // v4.2
       hkaart('Mijn taken', laat.concat(nu_).concat(rest).map(function (t) { return taakRij(t, true); }).join('') || '<div class="leeg">Geen open taken.</div>', 'taken') +
       hkaart('Agenda komende 7 dagen', h.agenda.map(agendaRegel).join('') || '<div class="leeg">' + (h.gekoppeld === false ? GMAIL_HINT : 'Niets gepland.') + '</div>', 'agenda') +
       hkaart('Stille kansen', P.stil.map(function (k) { return kansRij(k, true); }).join('') || '<div class="leeg">Geen stille kansen. Pijplijn: ' + euro(P.waarde) + '.</div>', 'pipeline') +
@@ -2747,24 +2786,23 @@
   /* --- Doelen --- */
   function laadDoelen() {
     el('doelenInhoud').innerHTML = '<div class="spinner">Laden</div>';
-    Promise.all([run('apiRapport', DESK.doelPreset, ''), run('apiDoelen')]).then(function (r) { renderDoelen(r[0], r[1]); })
+    run('apiTeamRapport', DESK.doelPreset, DESK.doelTeam || '', '').then(function (R) { DESK.doelTeam = R.team; renderDoelen(R); })  // v4.2: per team, met bedrijfsdoelen
       .catch(function () { el('doelenInhoud').innerHTML = '<div class="leeg">Kon de doelen niet laden.</div>'; });
   }
-  function renderDoelen(R, D) {
-    var gehaald = 0, totaal = 0, f = function (k, x) { return k === 'gewonnenWaarde' ? euro(x) : esc(x); };
-    var kaarten = R.perPersoon.map(function (p) {
-      var ks = Object.keys(p.doelen);
-      return hkaart(p.naam, ks.length ? ks.map(function (k) {
-        var w = p.cijfers[k] || 0, d = p.doelen[k], pct = Math.min(100, Math.round(100 * w / (d || 1))), ok = w >= d;
-        totaal++; if (ok) gehaald++;
-        return '<div class="doel-rij"><span>' + esc(METRIC_LABEL[k] || k) + '</span><div class="b-spoor"><div class="b-vul sterk' + (ok ? ' gehaald' : '') + '" style="width:' + pct + '%"></div></div><span class="getal">' + f(k, w) + ' / ' + f(k, d) + '</span></div>';
-      }).join('') : '<div class="leeg">Geen doelen voor deze periode.</div>');
-    }).join('');
-    el('doelenInhoud').innerHTML = '<div class="hint">' + esc(kortDatum(R.van)) + ' t/m ' + esc(kortDatum(R.tot)) + '</div>' +
-      '<div class="tegels drie">' + tegel(gehaald + ' / ' + totaal, 'Doelen gehaald') + tegel(R.team.gesprekken + R.team.afspraken, 'Gesprekken en afspraken') + tegel(euro(R.team.gewonnenWaarde), 'Gewonnen', 'oranje') + '</div>' +
-      '<div class="home-grid">' + (kaarten || '<div class="leeg">Nog geen accountmanagers.</div>') + '</div>' +
+  function renderDoelen(R) {
+    var gehaald = 0, totaal = 0, defs = R.metrieken || [];
+    var kaart = function (titel, x) {
+      var ks = defs.filter(function (d) { return x.doelen[d.id]; });
+      ks.forEach(function (d) { totaal++; if (doelGehaald(d, x.cijfers[d.id], x.doelen[d.id])) gehaald++; });
+      return hkaart(titel, ks.length ? ks.map(function (d) { return doelBalk(d, x.cijfers[d.id], x.doelen[d.id]); }).join('') : '<div class="leeg">Geen doelen voor deze periode.</div>');
+    };
+    var teamKaart = R.team ? kaart(TEAM_NAAM[R.team] || R.team, R.totaal) : '';
+    var kaarten = R.perPersoon.map(function (p) { return kaart(p.naam, p); }).join('');
+    el('doelenInhoud').innerHTML = (R.teams.length > 1 ? '<div class="chips">' + R.teams.map(function (t) { return '<button class="chip' + (R.team === t ? ' aan' : '') + '" data-doelteam="' + esc(t) + '">' + esc(TEAM_NAAM[t] || t) + '</button>'; }).join('') + '</div>' : '') +
+      '<div class="hint">' + esc(kortDatum(R.van)) + ' t/m ' + esc(kortDatum(R.tot)) + '</div>' + bedrijfsBlok(R.bedrijf) +
+      '<div class="tegels drie">' + tegel(gehaald + ' / ' + totaal, 'Doelen gehaald') + tegel(R.perPersoon.length, 'Personen') + tegel(TEAM_NAAM[R.team] || '—', 'Team', 'oranje') + '</div>' +
+      '<div class="home-grid">' + teamKaart + (kaarten || '<div class="leeg">Nog niemand in dit team.</div>') + '</div>' +
       (R.ik.rechten && R.ik.rechten.doelen ? '<div style="margin-top:16px"><button class="knop licht klein" data-doelinstellen="1">Doelen beheren</button></div>' : '');  // v4.0: ook de teamlead
-    DESK.doelData = D;
   }
 
   /* --- events --- */
@@ -2800,6 +2838,7 @@
     }
     if (t.closest('[data-agendaplan]')) { afspraakFormulier(); return; }
     if ((x = t.closest('[data-doelpreset]'))) { DESK.doelPreset = x.dataset.doelpreset; zetDeskKop(); laadDoelen(); return; }
+    if ((x = t.closest('[data-doelteam]'))) { DESK.doelTeam = x.getAttribute('data-doelteam'); laadDoelen(); return; }  // v4.2
     if (t.closest('[data-doelinstellen]')) { beheerDoelen(); return; }  // v3.7: één beheerscherm voor doelen
   });
   // Wisselen tussen telefoon- en desktopbreedte (venster verkleinen, iPad draaien)

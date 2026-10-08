@@ -125,6 +125,26 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
 
+## Rapporten en doelen per team (v4.2)
+
+- **Maatstaven** staan in `METRIEKEN` (sectie 12 van `Code.gs`), per team, met soort `aantal|euro|procent|dagen` (`laagIsGoed` bij dagen). Zie `docs/teams-en-processen.md` §5.
+- **Teamtotalen** kloppen ook voor percentages en gemiddelden: elke maatstaf telt als teller/noemer.
+- **Doelen:**
+  - per persoon, per team (`eigenaar: 'team:<team>'`) of voor het bedrijf (`'bedrijf'`, alleen met een bedrijfscijfer);
+  - periodes week, maand, kwartaal en schooljaar;
+  - management zet alles, een teamlead zijn team; iedereen ziet de bedrijfsdoelen.
+- **Nieuwe kolommen:**
+  - `Kandidaten.statusHistorie` (JSON, de datum van elke status);
+  - `Vacatures.ingevuld` (datum).
+- **Omzet:** de omzet-KPI telt nu ook projecten in opstart mee, want dat zijn gewonnen projecten.
+
+| Functie | Argumenten | Resultaat |
+|---|---|---|
+| `apiTeamRapport` | preset (`week\|maand\|kwartaal\|schooljaar`), team?, eigenaar? | `{ preset, van, tot, team, teams, metrieken:[{id,team,label,kort,soort,laagIsGoed,stand}], perPersoon:[{naam,cijfers,doelen}], totaal:{cijfers,doelen}, bedrijf:{schooljaar,metrieken,cijfers,doelen}, kiesbaar, eigenaar, ik }` |
+| `apiDoelen` | — | `{ doelen, metrieken, periodes, eigenaren:[{waarde,label,team}], teamNamen, magZetten }` |
+
+`apiHome` geeft `bedrijf` mee (de bedrijfscijfers en -doelen).
+
 ## Taskforce, vacatures en bezetting (v4.1)
 
 - **Proces:**

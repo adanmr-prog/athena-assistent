@@ -1,6 +1,6 @@
 # Voorstel: teams, rechten en het trajectproces (v4)
 
-Status: **v4.1 gebouwd** (teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen); v4.2 en verder volgen. ⚠️ = aanname die bevestigd moet worden.
+Status: **v4.2 gebouwd**: teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen; rapporten en doelen per team, plus bedrijfsdoelen. v4.3 (koppelingen) volgt. ⚠️ = aanname die bevestigd moet worden.
 
 **Besluiten (oktober 2026):** rechtentabel akkoord. Consultants zien de facturatie van hun eigen projecten (alleen lezen). Een AM ziet de historie van de kans achter zijn project, en alleen die. Teamlead accountmanagers: Mees; teamlead onderwijsconsultants: Mariama; management: Anne-Maartje en Menno. XPS blijft voor diensten en roosters (export/API later). De academy is een eigen platform.
 
@@ -95,14 +95,25 @@ Hetzelfde beeld als nu in monday, maar dan gekoppeld aan scholen, kansen en fact
 
 Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en facturatie. De statussen zijn nu `actief/afgerond/…`; die zetten we om naar Opstart, Bezig, Afgelopen, Onduidelijk en Gestopt (instelbaar via Keuzelijsten).
 
-## 5. Rapporten en doelen per team
+## 5. Rapporten en doelen per team (v4.2)
 
-| Team | Rapport (eigen / teamlead: per persoon) | Voorbeelden van doelen |
-|---|---|---|
-| Consultants | pipeline, nieuwe kansen, voorstellen, gewonnen waarde, conversie, gesprekken | € gewonnen per kwartaal, x nieuwe scholen |
-| Accountmanagers | lopende projecten, bezetting (gevuld/nodig), dagen tot bezetting, evaluaties, verlengingen, facturatie op tijd | 100 % bezet op startdatum, evaluatie elke periode |
-| Talent | open vacatures, voordrachten, time-to-fill, match → plaatsing, doorlooptijd academy/contract/VOG | time-to-fill < 14 dagen |
-| Bedrijf (iedereen) | omzet schooljaar, scholen, geplaatste ondersteuners, verlengingspercentage | door de directie gezet |
+Het rapport (Relaties → Rapport) en het scherm Doelen werken per team.
+- Management kiest het team.
+- Een teamlead ziet zijn team per persoon.
+- Een medewerker ziet zichzelf plus het teamtotaal.
+
+Bovenaan staan altijd de **bedrijfsdoelen** van het schooljaar. Iedereen ziet ze; alleen het management zet ze. Ze staan ook op Home.
+
+| Team | Maatstaven (per periode, tenzij "stand") |
+|---|---|
+| Onderwijsconsultants | gesprekken, afspraken, mails, nieuwe kansen, nieuwe scholen, voorstellen, gewonnen (aantal en €), conversie (gewonnen van gesloten); daarnaast forecast, pijplijn, winst en verlies en stille kansen |
+| Accountmanagers | lopende projecten (stand), bezetting gevuld/nodig (stand), dagen tot bezetting, gesprekken en afspraken in eigen projecten, verlengd dit schooljaar (stand), facturatie op tijd (verzonden of betaald op de factuurdatum) |
+| Talent | voordrachten, klaar voor start, match → plaatsing (klaar van klaar plus afgewezen), time-to-fill (vacature geopend → ingevuld), doorlooptijd (geselecteerd → klaar voor start) |
+| Bedrijf (schooljaar) | omzet (projecten behalve gestopt, offerte en onduidelijk), scholen met een project, ondersteuners ingezet, verlengingspercentage (verlengd van verlengd plus stopt) |
+
+**Doelen** worden gezet per persoon, per team (`team:<team>`) of voor het bedrijf (`bedrijf`), steeds per week, maand, kwartaal of schooljaar. Bij "dagen" is een doel gehaald als je er onder blijft.
+- Management zet alle doelen.
+- Een teamlead zet doelen voor zijn team en de teamleden.
 
 ## 6. XPS en AFAS naast het dashboard (advies, oktober 2026)
 
@@ -172,7 +183,7 @@ Verder staan in het menu onder meer Declaraties, Factureren, Klokuren en Onderte
    - statussen voor academy, contract en VOG;
    - meldingen en taken;
    - weergaven Huidig schooljaar en Verlenging volgend schooljaar; het huidige schooljaar is instelbaar.
-4. **v4.2 Rapporten en doelen per team**, plus bedrijfsdoelen.
+4. **v4.2 Rapporten en doelen per team, plus bedrijfsdoelen (klaar).**
 5. **v4.3 Koppelingen:**
    - XPS-import (Plaatsingen, Contracten, Roosters/uren) via een export of API;
    - monday-import (bestaande borden overzetten);
