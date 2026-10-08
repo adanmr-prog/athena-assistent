@@ -83,9 +83,22 @@ DOELEN = [{'id': 'mees-week-gesprekken', 'eigenaar': 'Mees', 'periode': 'week', 
 GEBRUIKERS = [{'id': 'g1', 'naam': 'Mees', 'email': 'mees@voorbeeld.nl', 'rol': 'am', 'actief': True, 'heeftCode': True}]
 
 def per_id(lijst): return {x['id']: x for x in lijst}
+# v3.8: projecten aan scholen koppelen en facturatievelden geven
+_NAAR_ID = {x['naam']: x['id'] for x in SCHOLEN}
+for _t in TRAJECTEN:
+    _t.setdefault('schoolId', _NAAR_ID.get(_t['school'], '')); _t.setdefault('kansId', ''); _t.setdefault('adviseur', '')
+    for _v in ('soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer'): _t.setdefault(_v, '')
+TRAJECTEN[0].update({'soortFacturatie': 'vooraf', 'gefactureerd': 'ja', 'vakanties': 'doorbetaald', 'factuurnummer': '20210009', 'adviseur': 'Menno'})
+TRAJECTEN[1].update({'soortFacturatie': 'achteraf', 'gefactureerd': 'nee', 'vakanties': 'niet doorbetaald', 'bijzonderheden': 'Wachten op akkoord'})
+FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'bedrag': 20370, 'datum': d(-2), 'status': 'verzonden', 'factuurnummer': '20210009', 'bijzonderheden': 'op basis van 38 weken', 'exactId': '', 'door': 'Menno'},
+            {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
+KEUZES = {'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['offerte', 'actief', 'afgerond', 'gestopt']}
+def project_uit(t): return dict(t, facturen=[f for f in FACTUREN if f['trajectId'] == t['id']])
+def projectnaam(tid):
+    t = per_id(TRAJECTEN).get(tid); return (t['traject'] + ' ' + t['schooljaar']) if t else ''
 def act_uit(a):
     s, p, k = per_id(SCHOLEN).get(a.get('schoolId')), per_id(PERSONEN).get(a.get('persoonId')), per_id(CRMKANSEN).get(a.get('kansId'))
-    return dict(a, school=s['naam'] if s else '', persoon=(p['voornaam'] + ' ' + p['achternaam']) if p else '', kans=k['naam'] if k else '', gepland=a['datum'] > nu())
+    return dict(a, school=s['naam'] if s else '', persoon=(p['voornaam'] + ' ' + p['achternaam']) if p else '', kans=k['naam'] if k else '', gepland=a['datum'] > nu(), trajectId=a.get('trajectId', ''), project=projectnaam(a.get('trajectId')))
 def persoon_uit(p):
     s = per_id(SCHOLEN).get(p.get('schoolId')); return dict(p, naam=(p.get('voornaam', '') + ' ' + p.get('achternaam', '')).strip() or p.get('email', ''), school=s['naam'] if s else '')
 def kans_uit(k):
@@ -94,7 +107,7 @@ def kans_uit(k):
     return k
 def taak_uit(t):
     s, p, k = per_id(SCHOLEN).get(t.get('schoolId')), per_id(PERSONEN).get(t.get('persoonId')), per_id(CRMKANSEN).get(t.get('kansId'))
-    return dict(t, school=s['naam'] if s else '', persoon=persoon_uit(p)['naam'] if p else '', kans=k['naam'] if k else '')
+    return dict(t, school=s['naam'] if s else '', persoon=persoon_uit(p)['naam'] if p else '', kans=k['naam'] if k else '', trajectId=t.get('trajectId', ''), project=projectnaam(t.get('trajectId')))
 def basis():
     scholen = []
     for s in SCHOLEN:
@@ -102,7 +115,8 @@ def basis():
         scholen.append(dict(s, personen=len([p for p in PERSONEN if p['schoolId'] == s['id']]), openKansen=len(open_), openWaarde=sum(k['waarde'] for k in open_)))
     return {'ik': {'naam': 'Menno', 'rol': 'beheerder', 'gekoppeld': True}, 'gebruikers': GEBRUIKERS_NAMEN, 'statussen': INSTELLINGEN['schoolStatussen'], 'mijlpalen': MIJLPALEN,
             'categorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'activiteitTypes': ['notitie', 'gesprek', 'mail', 'afspraak'], 'tracks': TRACKS,
-            'tags': sorted({t for s in SCHOLEN for t in s['tags']}), 'trajectStatussen': INSTELLINGEN['trajectStatussen'], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN]}
+            'tags': sorted({t for s in SCHOLEN for t in s['tags']}), 'trajectStatussen': INSTELLINGEN['trajectStatussen'], 'keuzes': KEUZES,
+            'projecten': [{'id': t['id'], 'naam': t['traject'] + ' ' + t['schooljaar'], 'schoolId': t['schoolId'], 'school': t['school'], 'kansId': t['kansId'], 'status': t['status'], 'am': t['am']} for t in TRAJECTEN], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN]}
 def tijdlijn(f): return [act_uit(a) for a in sorted([a for a in ACTIVITEITEN if f(a)], key=lambda a: a['datum'], reverse=True)]
 def opslaan(lijst, o, prefix):
     o = dict(o)
@@ -115,9 +129,34 @@ def handle_crm(fn, args):
     if fn == 'apiSchool':
         s = per_id(SCHOLEN)[args[0]]; ps = [p for p in PERSONEN if p['schoolId'] == s['id']]; ks = [k for k in CRMKANSEN if k['schoolId'] == s['id']]
         pids, kids = {p['id'] for p in ps}, {k['id'] for k in ks}
-        return {'school': s, 'personen': [persoon_uit(p) for p in ps], 'kansen': [kans_uit(k) for k in ks], 'trajecten': [t for t in TRAJECTEN if t['school'] == s['naam']],
+        tr = [t for t in TRAJECTEN if t['schoolId'] == s['id']]; tids = {t['id'] for t in tr}
+        return {'school': s, 'personen': [persoon_uit(p) for p in ps], 'kansen': [kans_uit(k) for k in ks], 'trajecten': tr,
+                'cijfers': {'laatsteContact': s.get('laatsteContact') or d(-2), 'openProjecten': len([t for t in tr if t['status'] not in ('afgerond', 'gestopt')]), 'pipeline': sum(k['waarde'] for k in ks if k['fase'] not in ('gewonnen', 'verloren')), 'gewonnen': sum(k['waarde'] for k in ks if k['fase'] == 'gewonnen')},
                 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af' and (t['schoolId'] == s['id'] or t['persoonId'] in pids or t['kansId'] in kids)],
-                'tijdlijn': tijdlijn(lambda a: a['schoolId'] == s['id'] or a['persoonId'] in pids), 'documenten': [x for x in DOCS if x['school'] == s['naam']]}
+                'tijdlijn': tijdlijn(lambda a: a['schoolId'] == s['id'] or a['persoonId'] in pids or a.get('trajectId') in tids), 'documenten': [x for x in DOCS if x['school'] == s['naam']]}
+    if fn == 'apiProject':  # v3.8
+        t = per_id(TRAJECTEN)[args[0]]; s = per_id(SCHOLEN).get(t['schoolId']); k = per_id(CRMKANSEN).get(t.get('kansId'))
+        hoort = lambda a: a.get('trajectId') == t['id'] or (k and a.get('kansId') == k['id'])
+        return {'project': t, 'school': {'id': s['id'], 'naam': s['naam'], 'plaats': s['plaats'], 'email': s.get('email', ''), 'telefoon': s.get('telefoon', '')} if s else None, 'kans': kans_uit(k) if k else None,
+                'personen': [persoon_uit(p) for p in PERSONEN if s and p['schoolId'] == s['id']], 'taken': [taak_uit(x) for x in TAKEN if x['status'] != 'af' and hoort(x)],
+                'tijdlijn': tijdlijn(hoort), 'losseMails': [act_uit(a) for a in ACTIVITEITEN if s and a['type'] == 'mail' and not a.get('trajectId') and a['schoolId'] == s['id']],
+                'facturen': [f for f in FACTUREN if f['trajectId'] == t['id']], 'keuzes': KEUZES}
+    if fn == 'apiFacturatie':
+        return {'projecten': [project_uit(t) for t in sorted(TRAJECTEN, key=lambda t: (t['am'], t['school']))], 'keuzes': KEUZES, 'gebruikers': GEBRUIKERS_NAMEN, 'ik': {'naam': 'Menno', 'rol': 'beheerder'}}
+    if fn == 'apiFactuurOpslaan':
+        o = dict(args[0]); o.pop('_oud', None)
+        if 'bedrag' in o: o['bedrag'] = float(str(o['bedrag']).replace(',', '.') or 0)
+        if not o.get('id'): o.setdefault('status', 'nog te doen')
+        return opslaan(FACTUREN, o, 'f')
+    if fn == 'apiFacturenMaken':
+        t = per_id(TRAJECTEN)[args[0]]; maanden = ['September', 'Oktober', 'November'] if (args[1] or {}).get('per') != 'eenmalig' else ['Factuur vooraf']
+        for m in maanden: FACTUREN.append({'id': 'f' + uuid.uuid4().hex[:5], 'trajectId': t['id'], 'omschrijving': m, 'bedrag': 1000, 'datum': d(30), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'})
+        return [f for f in FACTUREN if f['trajectId'] == t['id']]
+    if fn == 'apiFacturenExport':
+        rij = [f for f in FACTUREN if f['status'] == (args[0] if args else 'aangemaakt')]
+        return {'bestandsnaam': 'facturen.csv', 'csv': 'Factuurdatum;Debiteur\n' + '\n'.join(f['datum'] + ';x' for f in rij), 'aantal': len(rij)}
+    if fn == 'apiSchoolSamenvatting':
+        return {'tekst': '- Klant sinds 2025, twee lopende projecten.\n- Open kans NT2 (€ 15.040), voorstel ligt er.\n- Laatste contact 2 dagen geleden (mail Anna de Vries).', 'gemaakt': nu()}
     if fn == 'apiPersoon':
         p = per_id(PERSONEN)[args[0]]; s = per_id(SCHOLEN).get(p['schoolId'])
         return {'persoon': persoon_uit(p), 'school': {'id': s['id'], 'naam': s['naam'], 'plaats': s['plaats']} if s else None, 'kansen': [kans_uit(k) for k in CRMKANSEN if k['persoonId'] == p['id']],
@@ -126,7 +165,8 @@ def handle_crm(fn, args):
         k = per_id(CRMKANSEN)[args[0]]; s = per_id(SCHOLEN).get(k['schoolId']); p = per_id(PERSONEN).get(k['persoonId'])
         return {'kans': kans_uit(k), 'mijlpalen': MIJLPALEN, 'school': {'id': s['id'], 'naam': s['naam'], 'plaats': s['plaats']} if s else None, 'persoon': {'id': p['id'], 'naam': persoon_uit(p)['naam'], 'email': p['email']} if p else None,
                 'personen': [{'id': x['id'], 'naam': persoon_uit(x)['naam']} for x in PERSONEN if s and x['schoolId'] == s['id']],
-                'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af' and t['kansId'] == k['id']], 'tijdlijn': tijdlijn(lambda a: a['kansId'] == k['id'])}
+                'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af' and t['kansId'] == k['id']], 'tijdlijn': tijdlijn(lambda a: a['kansId'] == k['id']),
+                'project': next((t for t in TRAJECTEN if t.get('kansId') == k['id']), None)}
     if fn == 'apiSchoolOpslaan':
         o = dict(args[0]); oud = o.pop('_oud', None)
         if oud and o.get('id'):  # v3.3: conflictcontrole zoals de echte backend
@@ -155,9 +195,12 @@ def handle_crm(fn, args):
             o['gesloten'] = d(0) if o['fase'] in ('gewonnen', 'verloren') else ''
             ACTIVITEITEN.append({'id': 'e' + uuid.uuid4().hex[:5], 'type': 'fase', 'datum': nu(), 'door': 'Menno', 'schoolId': oud['schoolId'], 'persoonId': oud['persoonId'], 'kansId': oud['id'], 'onderwerp': 'Mijlpaal: ' + oud['fase'] + ' → ' + o['fase'], 'tekst': o.get('verliesReden', ''), 'duurMin': 0, 'bron': 'app'})
         k = opslaan(CRMKANSEN, o, 'k'); traject = None
-        if wissel and k['fase'] == 'gewonnen' and maak:
-            traject = {'id': uuid.uuid4().hex[:6], 'school': k['school'], 'plaats': '', 'traject': k['naam'], 'schooljaar': '2026-2027', 'start': '', 'eind': '', 'status': 'actief', 'ondersteuners': 0, 'urenPerWeek': 0, 'tarief': 0, 'omzet': k['waarde'], 'contactpersoon': '', 'am': k['eigenaar'], 'samenvatting': 'Uit gewonnen kans.', 'bijgewerkt': nu()}
+        if wissel and k['fase'] == 'gewonnen' and not any(t.get('kansId') == k['id'] for t in TRAJECTEN):  # v3.8: altijd een project
+            traject = {'id': 'p' + uuid.uuid4().hex[:5], 'schoolId': k['schoolId'], 'school': k['school'], 'plaats': '', 'traject': k['naam'], 'schooljaar': '2026-2027', 'start': '', 'eind': '', 'status': 'actief', 'ondersteuners': 0, 'urenPerWeek': 0, 'tarief': 0, 'omzet': k['waarde'], 'contactpersoon': '', 'am': k.get('am', ''), 'adviseur': k['eigenaar'], 'kansId': k['id'], 'samenvatting': '', 'bijgewerkt': nu(),
+                       'soortFacturatie': '', 'gefactureerd': '', 'factuurDatum': '', 'vakanties': '', 'bijzonderheden': '', 'factuurnummer': ''}
             TRAJECTEN.insert(0, traject)
+            ACTIVITEITEN.append({'id': 'e' + uuid.uuid4().hex[:5], 'type': 'notitie', 'datum': nu(), 'door': k['eigenaar'], 'schoolId': k['schoolId'], 'persoonId': k.get('persoonId', ''), 'kansId': k['id'], 'trajectId': traject['id'], 'onderwerp': 'Overdracht naar ' + (k.get('am') or 'de accountmanager'), 'tekst': 'Kans gewonnen.', 'duurMin': 0, 'bron': 'app'})
+            TAKEN.append({'id': 'tk' + uuid.uuid4().hex[:5], 'tekst': 'Startgesprek plannen', 'bron': 'project', 'prio': 'hoog', 'deadline': d(3), 'link': '', 'over': -3, 'categorie': 'afspraak', 'eigenaar': k.get('am') or 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': k['schoolId'], 'persoonId': '', 'kansId': k['id'], 'trajectId': traject['id']})
         return {'kans': kans_uit(k), 'traject': traject}
     if fn == 'apiActiviteitToevoegen':
         o = dict(args[0]); o.update({'id': 'e' + uuid.uuid4().hex[:5], 'door': 'Menno', 'bron': 'app', 'datum': (o.get('datum') or nu()).replace('T', ' '), 'duurMin': int(float(o.get('duurMin') or 0))})
@@ -260,7 +303,7 @@ def handle_crm(fn, args):
         return {'stap': args[0], 'aantal': 3, 'volgende': {'stap': stappen[i + 1], 'pagina': 1} if i + 1 < len(stappen) else None}
     if fn == 'apiExport': return {'bestandsnaam': 'athena-' + args[0] + '.csv', 'csv': 'id,naam\ns1,Voorbeeldcollege Zuid'}
     if fn == 'apiVerwijder':
-        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN, 'activiteit': ACTIVITEITEN, 'traject': TRAJECTEN, 'doel': DOELEN, 'content': CONTENT}.get(args[0])
+        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN, 'activiteit': ACTIVITEITEN, 'traject': TRAJECTEN, 'doel': DOELEN, 'content': CONTENT, 'factuur': FACTUREN}.get(args[0])
         if lijst is None:  # notitie (Historie)
             for l in NOTITIES.values(): l[:] = [x for x in l if x['id'] != args[1]]
             return None
@@ -338,7 +381,10 @@ def handle(fn, args):
                     o = {k: v for k, v in o.items() if k != '_oud'}; t.update(o)
                     if o.get('schoolId'): t['school'] = per_id(SCHOLEN)[o['schoolId']]['naam']
                     return t
-        o = dict(o); o['id'] = uuid.uuid4().hex[:6]; o.setdefault('omzet', 0); o['bijgewerkt'] = nu(); TRAJECTEN.insert(0, o); return o
+        o = dict(o); o['id'] = uuid.uuid4().hex[:6]; o.setdefault('omzet', 0); o['bijgewerkt'] = nu()
+        if o.get('schoolId'): o['school'] = per_id(SCHOLEN)[o['schoolId']]['naam']
+        for _v in ('kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer', 'am', 'schoolId', 'plaats', 'contactpersoon', 'samenvatting', 'start', 'eind'): o.setdefault(_v, '')
+        TRAJECTEN.insert(0, o); return o
     if fn == 'apiNotitieToevoegen':
         n = {'id': uuid.uuid4().hex[:6], 'datum': nu(), 'tekst': args[1]}; NOTITIES.setdefault(args[0], []).insert(0, n); return dict(n, soort='activiteit', door='Menno', ruw=args[1], onderwerp='')
     if fn == 'apiStatus':

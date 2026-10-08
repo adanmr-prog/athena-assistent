@@ -108,6 +108,11 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiAgenda` | van, tot (`yyyy-MM-dd`, max. 62 dagen) | `{ van, tot, events:[google-afspraak (+schoolId/school als hij aan het CRM hangt)], afspraken:[activiteit], taken:[taak] }` (v3.0) |
 | `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
 | `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak\|traject\|notitie\|content\|doel`, id, opties? `{agenda: true}` | null (school alleen zonder personen en kansen; eigenaar of beheerder; `agenda` haalt een afspraak ook uit Google Agenda) |
+| `apiProject` (v3.8) | id | `{ project, school, kans, personen, taken, tijdlijn (incl. historie van de kans), losseMails, facturen, keuzes }` |
+| `apiFacturatie` | — | `{ projecten (+facturen), keuzes, gebruikers, ik }` |
+| `apiFactuurOpslaan` / `apiFacturenMaken` | `{id?, trajectId, omschrijving, bedrag, datum, status, factuurnummer, bijzonderheden, _oud?}` / trajectId, `{per: 'maand'\|'eenmalig', van, tot, bedrag, zomer}` | termijn / termijnen van het project |
+| `apiFacturenExport` | status (standaard `aangemaakt`) | `{ bestandsnaam, csv, aantal }` (puntkomma-CSV voor import in Exact) |
+| `apiSchoolSamenvatting` | schoolId | `{ tekst }` (AI-samenvatting met `BREIN_MODEL`) |
 | `apiActiviteitOpslaan` (v3.7) | `{id, type?, datum?, onderwerp?, tekst?, duurMin?, schoolId?, persoonId?, kansId?, trajectId?, _oud}` | activiteit + `agendaBijgewerkt` (afspraak ook in Google Agenda verzet/hernoemd) |
 | `apiTaakHeropen` | id | taak |
 | `apiTrackStoppen` / `apiTrackVerwijderen` | trackRunId / trackId | `{aantal}` / tracks |
@@ -119,6 +124,18 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
+
+## Projecten en facturatie (v3.8)
+
+- **Gewonnen kans = project.** `apiKansOpslaan` maakt bij `gewonnen` altijd (één keer) een project. Daarin staan: `kansId`, `adviseur` = eigenaar van de kans, `am` = het nieuwe kansveld `am` ("Accountmanager na winst"), omzet, contactpersoon en omschrijving. Er komt een overdrachtsnotitie in de tijdlijn en er komen taken voor de AM: startgesprek en facturatie instellen. Zonder AM krijgt de beheerder de taak "Accountmanager toewijzen".
+- **Projectpagina:** tijdlijn (ook alle historie van de kans), updates, gesprekken, mails, afspraken, taken en tracks in het project (`trajectId` op Activiteiten en Acties), plus "Mails van de school, nog niet in dit project" met een knop Koppelen.
+- **Facturatie** (zoals het monday-bord):
+  - Projectvelden: `soortFacturatie`, `gefactureerd`, `factuurDatum`, `vakanties`, `bijzonderheden`, `factuurnummer`.
+  - Termijnen staan in het tabblad `Facturen`.
+  - De keuzes zijn aan te passen via Beheer → Keuzelijsten.
+  - Het scherm Facturatie groepeert per accountmanager.
+- **Exact Online:** voorlopig via `apiFacturenExport` (CSV van de termijnen met status "aangemaakt"). Een directe koppeling (verkoopfacturen aanmaken via de Exact-API, `exactId` per termijn) vraagt een Exact-app (client-id/secret) en OAuth. Die komt mee bij de overstap naar Supabase (zie `docs/supabase-migratie.md`).
+- **Schoolpagina** in Capsule-opbouw: info links; in het midden kerncijfers, tabs (Historie, Kansen, Projecten, Personen, Bestanden), een AI-samenvatting, tracks en de activiteit met filters (zoeken, wie, soort, kans, project, periode, volgorde); rechts taken en komende afspraken.
 
 ## Alles aanpasbaar (v3.7)
 

@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '3.7';
+var VERSIE = '3.8';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -13,11 +13,12 @@ var TABELLEN = {
   Scholen:      ['id', 'naam', 'plaats', 'type', 'contactpersoon', 'email', 'telefoon', 'status', 'am', 'notities', 'bijgewerkt',
                  'bestuur', 'adres', 'website', 'leerlingen', 'eigenaar', 'tags', 'velden', 'laatsteContact', 'capsuleId', 'aangemaakt', 'bijgewerktDoor'],
   Trajecten:    ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'bijgewerkt',
-                 'schoolId', 'capsuleId', 'bijgewerktDoor'],
+                 'schoolId', 'capsuleId', 'bijgewerktDoor',
+                 'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer'],  // v3.8: project uit gewonnen kans + facturatie
   Kansen:       ['id', 'school', 'traject', 'fase', 'waarde', 'volgendeActie', 'deadline', 'laatsteContact', 'eigenaar', 'notities', 'bijgewerkt',
-                 'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt', 'bijgewerktDoor'],
+                 'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt', 'bijgewerktDoor', 'am'],  // v3.8: am = accountmanager na winst
   Acties:       ['id', 'tekst', 'bron', 'prio', 'deadline', 'status', 'link', 'aangemaakt', 'afgerond',
-                 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'trackRunId', 'notitie', 'capsuleId'],
+                 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'trackRunId', 'notitie', 'capsuleId', 'trajectId'],  // v3.8: taak in een project
   Documenten:   ['id', 'titel', 'type', 'school', 'url', 'driveId', 'gewijzigd', 'woorden', 'tekst', 'bijgewerkt'],
   Reviews:      ['id', 'datum', 'gemaaktOp', 'samenvatting', 'gedaan', 'blijvenLiggen', 'vandaag', 'eigenaar'],  // v3.3: review per gebruiker
   Huisstijl:    ['sleutel', 'waarde'],
@@ -31,6 +32,7 @@ var TABELLEN = {
   Tracks:       ['id', 'naam', 'omschrijving', 'stappen', 'bijgewerkt'],
   Gebruikers:   ['id', 'naam', 'email', 'rol', 'actief', 'bijgewerkt'],
   Doelen:       ['id', 'eigenaar', 'periode', 'metric', 'doel', 'bijgewerkt'],
+  Facturen:     ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden', 'exactId', 'aangemaakt', 'bijgewerkt', 'door'],  // v3.8: factuurtermijnen per project
   Instellingen: ['sleutel', 'waarde']  // v3.7: keuzelijsten en correcties die de beheerder zelf instelt (JSON)
 };
 var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1 };
@@ -133,7 +135,7 @@ function sheet() {
   _SS = SpreadsheetApp.openById(id);
   return _SS;
 }
-function vergeet(naam) { delete _LEES[naam]; delete _LEES[naam + '|licht']; }
+function vergeet(naam) { delete _LEES[naam]; delete _LEES[naam + '|licht']; if (naam === 'Trajecten') _TRAJECTNAMEN = null; }
 var KOP_GECONTROLEERD = {};
 function blad(naam) {
   if (_BLAD[naam] && KOP_GECONTROLEERD[naam]) return _BLAD[naam];
@@ -283,7 +285,7 @@ function kansUit(k, mp) {
   var norm = m && m.dagenNorm ? m.dagenNorm : 7;
   return { id: k.id, naam: k.naam || k.traject, school: k.school, schoolId: k.schoolId || '', persoonId: k.persoonId || '', traject: k.traject, fase: k.fase, pipeline: k.pipeline || '',
     waarde: waarde, kans: kans, gewogen: Math.round(waarde * kans / 100), volgendeActie: k.volgendeActie, deadline: k.deadline, verwachteSluiting: k.verwachteSluiting || '',
-    gesloten: k.gesloten || '', verliesReden: k.verliesReden || '', eigenaar: k.eigenaar || '', tags: tagsUit(k.tags), velden: veldenUit(k.velden), notities: k.notities || '', aangemaakt: k.aangemaakt || '',
+    gesloten: k.gesloten || '', verliesReden: k.verliesReden || '', eigenaar: k.eigenaar || '', am: k.am || '', tags: tagsUit(k.tags), velden: veldenUit(k.velden), notities: k.notities || '', aangemaakt: k.aangemaakt || '',
     dagenStil: stil, stil: kansOpen(k) && stil !== null && stil > norm };
 }
 function kansOpen(k) { return ['gewonnen', 'verloren'].indexOf(k.fase) < 0; }
@@ -639,11 +641,15 @@ function apiTraject(id) {
 }
 function apiTrajectOpslaan(obj) {
   obj = obj || {};
-  var velden = ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'schoolId'], schoon = {};
+  var velden = ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'schoolId',
+    'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer'], schoon = {};  // v3.8
   velden.forEach(function (k) { if (obj[k] !== undefined) schoon[k] = obj[k]; });
   if (schoon.schoolId) { var sch = vind('Scholen', schoon.schoolId); if (!sch) throw new Error('School niet gevonden.'); schoon.school = sch.naam; if (!schoon.plaats) schoon.plaats = sch.plaats || ''; }  // v3.7: project aan een CRM-school koppelen
   if (!String(schoon.school || '').trim() && !schoon.id) throw new Error('School is verplicht.');
   if (schoon.status && trajectStatussen().indexOf(schoon.status) < 0) throw new Error('Onbekende status.');
+  [['soortFacturatie', 'soortFacturatie'], ['gefactureerd', 'gefactureerd'], ['vakanties', 'vakanties']].forEach(function (x) {  // v3.8
+    if (schoon[x[0]] && keuzelijst(x[1]).indexOf(schoon[x[0]]) < 0) throw new Error('Onbekende waarde voor ' + x[0] + '.');
+  });
   if (!schoon.id && !schoon.schooljaar) schoon.schooljaar = huidigSchooljaar();
   var t = metLock(function () { controleerConflict('Trajecten', schoon.id, schoon, obj._oud); return schrijf('Trajecten', schoon); });  // v3.3
   return trajectUit(t);
@@ -657,7 +663,9 @@ function apiNotitieToevoegen(trajectId, tekst) {
 }
 function trajectUit(t) {
   return { id: t.id, schoolId: t.schoolId || '', school: t.school, plaats: t.plaats, traject: t.traject, schooljaar: t.schooljaar, start: t.start, eind: t.eind, status: t.status, ondersteuners: t.ondersteuners,
-    urenPerWeek: Number(t.urenPerWeek) || 0, tarief: Number(t.tarief) || 0, omzet: Number(t.omzet) || 0, contactpersoon: t.contactpersoon, am: t.am, samenvatting: t.samenvatting, bijgewerkt: t.bijgewerkt };
+    urenPerWeek: Number(t.urenPerWeek) || 0, tarief: Number(t.tarief) || 0, omzet: Number(t.omzet) || 0, contactpersoon: t.contactpersoon, am: t.am, samenvatting: t.samenvatting, bijgewerkt: t.bijgewerkt,
+    kansId: t.kansId || '', adviseur: t.adviseur || '', soortFacturatie: t.soortFacturatie || '', gefactureerd: t.gefactureerd || '', factuurDatum: t.factuurDatum || '', vakanties: t.vakanties || '',
+    bijzonderheden: t.bijzonderheden || '', factuurnummer: t.factuurnummer || '' };  // v3.8
 }
 
 /* ===================== 6. CRM: scholen, personen, kansen, taken, tracks, historie en rapportage (v2.0: vervangt Capsule) ===================== */
@@ -809,13 +817,16 @@ function taakUit(a, sMap, pMap, kMap) {
   u.categorie = a.categorie || ''; u.eigenaar = a.eigenaar || ''; u.status = a.status; u.afgerond = a.afgerond || ''; u.notitie = a.notitie || '';
   u.schoolId = a.schoolId || ''; u.persoonId = a.persoonId || ''; u.kansId = a.kansId || ''; u.trackRunId = a.trackRunId || '';
   u.school = s ? s.naam : ''; u.persoon = p ? persoonNaam(p) : ''; u.kans = k ? (k.naam || k.traject) : '';
+  u.trajectId = a.trajectId || ''; var t = a.trajectId ? trajectNamen()[a.trajectId] : ''; u.project = t || '';  // v3.8
   return u;
 }
+var _TRAJECTNAMEN = null;
+function trajectNamen() { if (!_TRAJECTNAMEN) { _TRAJECTNAMEN = {}; lees('Trajecten').forEach(function (t) { _TRAJECTNAMEN[t.id] = t.traject + (t.schooljaar ? ' ' + t.schooljaar : ''); }); } return _TRAJECTNAMEN; }
 function activiteitUit(a, sMap, pMap, kMap) {
   var s = sMap && sMap[String(a.schoolId)], p = pMap && pMap[String(a.persoonId)], k = kMap && kMap[String(a.kansId)];
   return { id: a.id, type: a.type, datum: a.datum, door: a.door, onderwerp: a.onderwerp, tekst: String(a.tekst || '').slice(0, 3000), duurMin: Number(a.duurMin) || 0, bron: a.bron,
     schoolId: a.schoolId || '', persoonId: a.persoonId || '', kansId: a.kansId || '', school: s ? s.naam : '', persoon: p ? persoonNaam(p) : '', kans: k ? (k.naam || k.traject) : '',
-    gepland: String(a.datum) > nu(), agenda: !!a.agendaId, trajectId: a.trajectId || '' };  // v3.7: agenda = staat ook in Google Agenda
+    gepland: String(a.datum) > nu(), agenda: !!a.agendaId, trajectId: a.trajectId || '', project: a.trajectId ? (trajectNamen()[a.trajectId] || '') : '' };  // v3.7: agenda = staat ook in Google Agenda
 }
 function tijdlijn(acts, sMap, pMap, kMap) {
   return acts.sort(function (a, b) { return String(b.datum).localeCompare(String(a.datum)); }).slice(0, 250).map(function (a) { return activiteitUit(a, sMap, pMap, kMap); });
@@ -870,7 +881,10 @@ function apiCrm() {
     ik: ikUit(), gebruikers: gebruikersNamen(), statussen: schoolStatussen(), trajectStatussen: trajectStatussen(), mijlpalen: mijlpalen(), categorieen: taakCategorieen(), activiteitTypes: ACTIVITEIT_TYPES, tracks: tracks(),
     tags: uniek(tags.map(function (t) { return t.toLowerCase(); })).sort(),
     scholen: scholen.map(function (s) { var u = schoolUit(s), x = per[s.id]; u.personen = x.personen; u.openKansen = x.open; u.openWaarde = x.waarde; delete u.velden; return u; }),
-    personen: personen.map(function (p) { var u = persoonUit(p, sMap); delete u.velden; return u; })
+    personen: personen.map(function (p) { var u = persoonUit(p, sMap); delete u.velden; return u; }),
+    // v3.8: projecten (kort) voor keuzelijsten en links, en de facturatie-keuzelijsten
+    projecten: lees('Trajecten').map(function (t) { return { id: t.id, naam: t.traject + (t.schooljaar ? ' ' + t.schooljaar : ''), schoolId: t.schoolId || '', school: t.school, kansId: t.kansId || '', status: t.status, am: t.am || '' }; }),
+    keuzes: { soortFacturatie: keuzelijst('soortFacturatie'), gefactureerd: keuzelijst('gefactureerd'), vakanties: keuzelijst('vakanties'), factuurStatussen: keuzelijst('factuurStatussen') }
   };
 }
 function apiSchool(id) {
@@ -878,12 +892,17 @@ function apiSchool(id) {
   var naam = klein(s.naam), mp = mijlpaalMap(), sMap = {}; sMap[s.id] = s;
   var personen = lees('Personen').filter(function (p) { return String(p.schoolId) === String(id); }), pMap = perId(personen);
   var kansen = lees('Kansen').filter(function (k) { return String(k.schoolId) === String(id) || (!k.schoolId && klein(k.school) === naam); }), kMap = perId(kansen);
-  var acts = lees('Activiteiten').filter(function (a) { return String(a.schoolId) === String(id) || pMap[a.persoonId] || kMap[a.kansId]; });
-  var taken = lees('Acties').filter(function (a) { return a.status !== 'af' && (String(a.schoolId) === String(id) || pMap[a.persoonId] || kMap[a.kansId]); }).sort(sorteerActies);
+  var trajecten = lees('Trajecten').filter(function (t) { return String(t.schoolId) === String(id) || (!t.schoolId && klein(t.school) === naam); }), tMap = perId(trajecten);
+  var acts = lees('Activiteiten').filter(function (a) { return String(a.schoolId) === String(id) || pMap[a.persoonId] || kMap[a.kansId] || tMap[a.trajectId]; });
+  var taken = lees('Acties').filter(function (a) { return a.status !== 'af' && (String(a.schoolId) === String(id) || pMap[a.persoonId] || kMap[a.kansId] || tMap[a.trajectId]); }).sort(sorteerActies);
+  var som = function (lijst) { return lijst.reduce(function (t, k) { return t + (Number(k.waarde) || 0); }, 0); };
   return {
+    // v3.8: kerncijfers bovenaan de schoolpagina (zoals Capsule)
+    cijfers: { laatsteContact: s.laatsteContact || '', openProjecten: trajecten.filter(function (t) { return ['afgerond', 'gestopt'].indexOf(t.status) < 0; }).length,
+      pipeline: som(kansen.filter(kansOpen)), gewonnen: som(kansen.filter(function (k) { return k.fase === 'gewonnen'; })) },
     school: schoolUit(s), personen: personen.map(function (p) { return persoonUit(p, sMap); }),
     kansen: kansen.map(function (k) { return kansUit(k, mp); }).sort(function (a, b) { return (kansOpen(a) ? 0 : 1) - (kansOpen(b) ? 0 : 1) || String(b.aangemaakt).localeCompare(String(a.aangemaakt)); }),
-    trajecten: lees('Trajecten').filter(function (t) { return String(t.schoolId) === String(id) || (!t.schoolId && klein(t.school) === naam); }).map(trajectUit),
+    trajecten: trajecten.map(trajectUit),
     taken: taken.map(function (a) { return taakUit(a, sMap, pMap, kMap); }),
     tijdlijn: tijdlijn(acts, sMap, pMap, kMap),
     documenten: lees('Documenten', true).filter(function (d) { return (d.school && klein(d.school) === naam) || klein(d.titel).indexOf(naam) >= 0; }).map(function (d) { return { id: d.id, titel: d.titel, type: d.type, url: d.url }; })
@@ -943,13 +962,15 @@ function apiPersoonOpslaan(obj) {
 }
 // Verwijderen kan alleen voor wat niets meer aan zich heeft hangen; de beheerder of de eigenaar.
 // v3.7: ook projecten, oude notities, gegenereerde teksten en doelen; opties.agenda = true haalt een afspraak ook uit Google Agenda.
-var VERWIJDER_TABBLAD = { school: 'Scholen', persoon: 'Personen', kans: 'Kansen', activiteit: 'Activiteiten', taak: 'Acties', traject: 'Trajecten', notitie: 'Notities', content: 'Content', doel: 'Doelen' };
+var VERWIJDER_TABBLAD = { school: 'Scholen', persoon: 'Personen', kans: 'Kansen', activiteit: 'Activiteiten', taak: 'Acties', traject: 'Trajecten', notitie: 'Notities', content: 'Content', doel: 'Doelen', factuur: 'Facturen' };
 function apiVerwijder(soort, id, opties) {
   var tab = VERWIJDER_TABBLAD[soort];
   if (!tab) throw new Error('Onbekend soort.');
   var r = vind(tab, id); if (!r) throw new Error('Niet gevonden.');
   if (soort === 'doel') alleenBeheerder();
-  if (!isBeheerder() && (r.eigenaar || r.door || r.am) !== ikNaam()) throw new Error('Alleen de eigenaar of de beheerder kan dit verwijderen.');
+  var verantwoordelijk = [r.eigenaar || r.door || r.am];
+  if (soort === 'factuur' || soort === 'traject') { var pr = soort === 'traject' ? r : vind('Trajecten', r.trajectId); if (pr) verantwoordelijk = verantwoordelijk.concat([pr.am, pr.adviseur]); }  // v3.8
+  if (!isBeheerder() && verantwoordelijk.indexOf(ikNaam()) < 0) throw new Error('Alleen de eigenaar of de beheerder kan dit verwijderen.');
   if (soort === 'activiteit' && opties && opties.agenda && r.agendaId) agendaEvent(r.agendaId, function (ev) { ev.deleteEvent(); });
   if (soort === 'school' && (lees('Personen').some(function (p) { return String(p.schoolId) === String(id); }) || lees('Kansen').some(function (k) { return String(k.schoolId) === String(id); })))
     throw new Error('Deze school heeft nog personen of kansen. Verwijder of verplaats die eerst.');
@@ -1009,10 +1030,11 @@ function apiKans(id) {
     kans: kansUit(k, mijlpaalMap()), mijlpalen: mijlpalen(), school: s ? { id: s.id, naam: s.naam, plaats: s.plaats } : null, persoon: p ? { id: p.id, naam: persoonNaam(p), email: p.email, telefoon: p.telefoon } : null,
     personen: s ? lees('Personen').filter(function (x) { return String(x.schoolId) === String(s.id); }).map(function (x) { return { id: x.id, naam: persoonNaam(x) }; }) : [],
     taken: lees('Acties').filter(function (a) { return a.status !== 'af' && String(a.kansId) === String(id); }).sort(sorteerActies).map(function (a) { return taakUit(a, sMap, pMap, kMap); }),
+    project: (lees('Trajecten').filter(function (t) { return String(t.kansId) === String(id); }).map(trajectUit)[0]) || null,  // v3.8
     tijdlijn: tijdlijn(lees('Activiteiten').filter(function (a) { return String(a.kansId) === String(id); }), sMap, pMap, kMap)
   };
 }
-var KANS_VELDEN = ['id', 'naam', 'schoolId', 'persoonId', 'pipeline', 'fase', 'kans', 'waarde', 'verwachteSluiting', 'volgendeActie', 'deadline', 'eigenaar', 'verliesReden', 'tags', 'velden', 'notities', 'traject'];
+var KANS_VELDEN = ['id', 'naam', 'schoolId', 'persoonId', 'pipeline', 'fase', 'kans', 'waarde', 'verwachteSluiting', 'volgendeActie', 'deadline', 'eigenaar', 'verliesReden', 'tags', 'velden', 'notities', 'traject', 'am'];
 // maakTraject = true bij 'gewonnen': meteen een actief traject in Historie aanmaken.
 function apiKansOpslaan(obj, maakTraject) {
   var o = schoon(obj || {}, KANS_VELDEN), oud = o.id ? vind('Kansen', o.id) : null, mp = mijlpaalMap(), ms = mijlpalen();
@@ -1041,11 +1063,8 @@ function apiKansOpslaan(obj, maakTraject) {
       schrijf('Activiteiten', { type: 'fase', datum: nu(), door: ikNaam(), schoolId: k.schoolId, persoonId: k.persoonId, kansId: k.id, bron: 'app', aangemaakt: nu(),
         onderwerp: oud ? 'Mijlpaal: ' + oud.fase + ' → ' + k.fase : 'Kans aangemaakt: ' + (k.naam || k.traject) + ' (' + k.fase + ')', tekst: k.fase === 'verloren' && k.verliesReden ? 'Reden: ' + k.verliesReden : '' });
     }
-    if (k.fase === 'gewonnen' && maakTraject && (faseWissel || !oud)) {
-      var s = school || vind('Scholen', k.schoolId) || {};
-      traject = schrijf('Trajecten', { schoolId: k.schoolId, school: k.school, plaats: s.plaats || '', traject: k.traject || k.naam, schooljaar: huidigSchooljaar(), status: 'actief',
-        omzet: Number(k.waarde) || 0, am: k.eigenaar, samenvatting: 'Uit gewonnen kans: ' + (k.naam || k.traject) + '.' });
-    }
+    // v3.8: een gewonnen kans wordt altijd een project voor de accountmanager (maakTraject wordt niet meer gebruikt)
+    if (k.fase === 'gewonnen' && (faseWissel || !oud)) traject = projectUitKans(k, school);
     return { kans: kansUit(k, mp), traject: traject ? trajectUit(traject) : null };
   });
 }
@@ -1057,7 +1076,7 @@ function apiTaken() {
   var acties = lees('Acties').filter(function (a) { return a.status !== 'af' || (dagenSinds(a.afgerond) || 0) <= 14; }).sort(sorteerActies);
   return { taken: acties.map(function (a) { return taakUit(a, sMap, pMap, kMap); }), categorieen: taakCategorieen(), gebruikers: gebruikersNamen(), tracks: tracks() };
 }
-var TAAK_VELDEN = ['id', 'tekst', 'prio', 'deadline', 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'notitie'];
+var TAAK_VELDEN = ['id', 'tekst', 'prio', 'deadline', 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'notitie', 'trajectId'];
 function apiTaakOpslaan(obj) {
   var o = schoon(obj || {}, TAAK_VELDEN), oud = o.id ? vind('Acties', o.id) : null;
   if (o.id && !oud) throw new Error('Taak niet gevonden.');
@@ -1093,12 +1112,12 @@ function apiTrackOpslaan(obj) {
 function apiTrackStart(trackId, koppeling, startdatum, eigenaar) {
   var t = tracks().filter(function (x) { return String(x.id) === String(trackId); })[0];
   if (!t) throw new Error('Track niet gevonden.');
-  var k = vulKoppeling(schoon(koppeling || {}, ['schoolId', 'persoonId', 'kansId']));
+  var k = vulKoppeling(schoon(koppeling || {}, ['schoolId', 'persoonId', 'kansId', 'trajectId']));  // v3.8
   if (!k.schoolId && !k.persoonId && !k.kansId) throw new Error('Koppel de track aan een school, persoon of kans.');
   var start = parseDatum(startdatum) || parseDatum(datumStr(new Date())), run = nieuwId(), eig = eigenaar || ikNaam();
   var taken = t.stappen.map(function (s) {
     return { tekst: s.tekst, categorie: s.categorie || 'overig', prio: s.prio || 'midden', deadline: datumStr(new Date(start.getTime() + (Number(s.dagenNaStart) || 0) * 86400000 + 3600000)),
-      status: 'open', bron: 'track', aangemaakt: nu(), eigenaar: eig, schoolId: k.schoolId || '', persoonId: k.persoonId || '', kansId: k.kansId || '', trackRunId: run };
+      status: 'open', bron: 'track', aangemaakt: nu(), eigenaar: eig, schoolId: k.schoolId || '', persoonId: k.persoonId || '', kansId: k.kansId || '', trackRunId: run, trajectId: k.trajectId || '' };
   });
   metLock(function () {
     schrijfVeel('Acties', taken);
@@ -1116,7 +1135,7 @@ function apiAfspraakPlannen(obj) {
   if (!/\d{2}:\d{2}/.test(String(obj.start || ''))) throw new Error('Kies een datum en tijd.');
   var start = parseDatum(String(obj.start).replace('T', ' ')); if (!start) throw new Error('Ongeldige datum.');
   var duur = Math.max(5, Number(obj.duurMin) || 60), eind = new Date(start.getTime() + duur * 60000);
-  var k = vulKoppeling(schoon(obj, ['schoolId', 'persoonId', 'kansId']));
+  var k = vulKoppeling(schoon(obj, ['schoolId', 'persoonId', 'kansId', 'trajectId']));  // v3.8: ook in een project
   if (!k.schoolId && !k.persoonId && !k.kansId) throw new Error('Koppel de afspraak aan een school, persoon of kans.');
   var gasten = [];
   if (obj.uitnodigen && k.persoonId) { var p = vind('Personen', k.persoonId); if (p && p.email) gasten.push(p.email); }
@@ -1124,7 +1143,7 @@ function apiAfspraakPlannen(obj) {
   var ev = CalendarApp.getDefaultCalendar().createEvent(titel, start, eind, { description: String(obj.notitie || ''), location: String(obj.locatie || ''), guests: gasten.join(','), sendInvites: gasten.length > 0 });
   var a = metLock(function () {
     return schrijf('Activiteiten', { type: 'afspraak', datum: datumTijdStr(start), duurMin: duur, door: ikNaam(), schoolId: k.schoolId || '', persoonId: k.persoonId || '', kansId: k.kansId || '',
-      onderwerp: titel, tekst: String(obj.notitie || ''), agendaId: agendaSleutel(ev), bron: 'app', aangemaakt: nu() });
+      onderwerp: titel, tekst: String(obj.notitie || ''), agendaId: agendaSleutel(ev), bron: 'app', aangemaakt: nu(), trajectId: k.trajectId || '' });
   });
   return activiteitUit(a);
 }
@@ -1600,7 +1619,12 @@ function apiStatus() {
 var KEUZELIJSTEN = {
   schoolStatussen:  { standaard: SCHOOL_STATUSSEN, tab: 'Scholen', kolom: 'status' },
   taakCategorieen:  { standaard: TAAK_CATEGORIEEN, tab: 'Acties', kolom: 'categorie' },
-  trajectStatussen: { standaard: TRAJECT_STATUSSEN, tab: 'Trajecten', kolom: 'status' }
+  trajectStatussen: { standaard: TRAJECT_STATUSSEN, tab: 'Trajecten', kolom: 'status' },
+  // v3.8: facturatie (zoals het monday-bord)
+  soortFacturatie:  { standaard: ['vooraf', 'achteraf'], tab: 'Trajecten', kolom: 'soortFacturatie' },
+  gefactureerd:     { standaard: ['ja', 'nee', 'n.v.t.'], tab: 'Trajecten', kolom: 'gefactureerd' },
+  vakanties:        { standaard: ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], tab: 'Trajecten', kolom: 'vakanties' },
+  factuurStatussen: { standaard: ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], tab: 'Facturen', kolom: 'status' }
 };
 function instelling(sleutel) {
   var r = lees('Instellingen').filter(function (x) { return x.sleutel === sleutel; })[0];
@@ -1809,6 +1833,134 @@ function apiDocumentOpslaan(id, obj) {
     c[d.driveId] = corr; zetInstelling('documentCorrecties', c); vergeet('Documenten');
     return { id: d.id, titel: d.titel, type: d.type, school: d.school, url: d.url, gewijzigd: d.gewijzigd, woorden: Number(d.woorden) || 0 };
   });
+}
+
+/* ===================== 9. Projecten en facturatie (v3.8) ===================== */
+
+// Een gewonnen kans wordt een project voor de accountmanager, met alles wat de adviseur wist (altijd binnen metLock).
+// Bestaat er al een project bij deze kans (bijv. na heropenen en opnieuw winnen), dan blijft het bij dat project.
+function projectUitKans(k, school) {
+  var bestaand = lees('Trajecten').filter(function (t) { return String(t.kansId) === String(k.id); })[0];
+  if (bestaand) return bestaand;
+  var s = school || vind('Scholen', k.schoolId) || {}, p = k.persoonId ? vind('Personen', k.persoonId) : null;
+  var am = k.am || '', adviseur = k.eigenaar || ikNaam();
+  var t = schrijf('Trajecten', { schoolId: k.schoolId, school: k.school || s.naam || '', plaats: s.plaats || '', traject: k.traject || k.naam, schooljaar: huidigSchooljaar(), status: 'actief',
+    omzet: Number(k.waarde) || 0, am: am, adviseur: adviseur, kansId: k.id, contactpersoon: p ? persoonNaam(p) + (p.email ? ' <' + p.email + '>' : '') : '', samenvatting: String(k.notities || '').trim() });
+  var regels = ['Kans gewonnen door ' + adviseur + ': ' + (k.naam || k.traject) + '.'];
+  if (Number(k.waarde)) regels.push('Waarde: € ' + Math.round(Number(k.waarde)) + '.');
+  if (p) regels.push('Contactpersoon: ' + persoonNaam(p) + [p.functie, p.email, p.telefoon].filter(Boolean).map(function (x) { return ', ' + x; }).join('') + '.');
+  if (k.volgendeActie) regels.push('Afgesproken vervolg: ' + k.volgendeActie + (k.deadline ? ' (' + k.deadline + ')' : '') + '.');
+  if (k.notities) regels.push('\nOmschrijving van de adviseur:\n' + k.notities);
+  regels.push('\nDe volledige historie van de kans staat hieronder in de tijdlijn.');
+  schrijf('Activiteiten', { type: 'notitie', datum: nu(), door: adviseur, schoolId: k.schoolId, persoonId: k.persoonId || '', kansId: k.id, trajectId: t.id, bron: 'app', aangemaakt: nu(),
+    onderwerp: 'Overdracht naar ' + (am || 'de accountmanager'), tekst: regels.join('\n') });
+  var voor = am || (P.getProperty('NAAM') || 'Menno'), basis = { status: 'open', bron: 'project', aangemaakt: nu(), eigenaar: voor, schoolId: k.schoolId, persoonId: k.persoonId || '', kansId: k.id, trajectId: t.id };
+  var taken = am ? [] : [{ tekst: 'Accountmanager toewijzen aan ' + (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + ')', categorie: 'opvolgen', prio: 'hoog', deadline: datumStr(plusDagen(1)) }];
+  taken = taken.concat([
+    { tekst: 'Startgesprek plannen met ' + (p ? persoonNaam(p) : (k.school || s.naam || 'de school')), categorie: 'afspraak', prio: 'hoog', deadline: datumStr(plusDagen(3)) },
+    { tekst: 'Facturatie instellen voor ' + (k.naam || k.traject), categorie: 'overig', prio: 'midden', deadline: datumStr(plusDagen(5)) }]);
+  schrijfVeel('Acties', taken.map(function (x) { var o = {}; Object.keys(basis).forEach(function (b) { o[b] = basis[b]; }); Object.keys(x).forEach(function (b) { o[b] = x[b]; }); return o; }));
+  return t;
+}
+
+// Alles van één project: info, school, kans, tijdlijn (ook de historie van de kans), taken, facturen, en mails van de school die nog niet aan een project hangen.
+function apiProject(id) {
+  var t = vind('Trajecten', id); if (!t) throw new Error('Project niet gevonden.');
+  var s = t.schoolId ? vind('Scholen', t.schoolId) : lees('Scholen').filter(function (x) { return klein(x.naam) === klein(t.school); })[0] || null;
+  var k = t.kansId ? vind('Kansen', t.kansId) : null, sMap = {}, kMap = {};
+  if (s) sMap[s.id] = s; if (k) kMap[k.id] = k;
+  var personen = s ? lees('Personen').filter(function (p) { return String(p.schoolId) === String(s.id); }) : [], pMap = perId(personen);
+  var hoort = function (x) { return String(x.trajectId) === String(id) || (k && String(x.kansId) === String(k.id)); };
+  var acts = lees('Activiteiten'), grens = datumStr(plusDagen(-60));
+  return {
+    project: trajectUit(t), school: s ? { id: s.id, naam: s.naam, plaats: s.plaats, email: s.email, telefoon: s.telefoon } : null,
+    kans: k ? kansUit(k, mijlpaalMap()) : null,
+    personen: personen.map(function (p) { return persoonUit(p, sMap); }),
+    taken: lees('Acties').filter(function (a) { return a.status !== 'af' && hoort(a); }).sort(sorteerActies).map(function (a) { return taakUit(a, sMap, pMap, kMap); }),
+    tijdlijn: tijdlijn(acts.filter(hoort), sMap, pMap, kMap),
+    losseMails: s ? tijdlijn(acts.filter(function (a) { return a.type === 'mail' && !a.trajectId && String(a.schoolId) === String(s.id) && String(a.datum).slice(0, 10) >= grens; }), sMap, pMap, kMap).slice(0, 15) : [],
+    facturen: facturenVan(id),
+    keuzes: facturatieKeuzes()
+  };
+}
+function facturatieKeuzes() { return { soortFacturatie: keuzelijst('soortFacturatie'), gefactureerd: keuzelijst('gefactureerd'), vakanties: keuzelijst('vakanties'), factuurStatussen: keuzelijst('factuurStatussen'), trajectStatussen: trajectStatussen() }; }
+function factuurUit(f) {
+  return { id: f.id, trajectId: f.trajectId, omschrijving: f.omschrijving, bedrag: Number(f.bedrag) || 0, datum: f.datum || '', status: f.status || 'nog te doen', factuurnummer: f.factuurnummer || '',
+    bijzonderheden: f.bijzonderheden || '', exactId: f.exactId || '', door: f.door || '' };
+}
+function facturenVan(trajectId, alle) {
+  return (alle || lees('Facturen')).filter(function (f) { return String(f.trajectId) === String(trajectId); })
+    .sort(function (a, b) { return String(a.datum || '9999').localeCompare(String(b.datum || '9999')); }).map(factuurUit);
+}
+// Het facturatiebord: alle projecten met hun facturatievelden en termijnen. Gestopte en afgeronde projecten van vorige schooljaren blijven weg.
+function apiFacturatie() {
+  var alle = lees('Facturen'), sj = huidigSchooljaar();
+  var ts = lees('Trajecten').filter(function (t) { return ['gestopt', 'afgerond'].indexOf(t.status) < 0 || t.schooljaar === sj || alle.some(function (f) { return String(f.trajectId) === String(t.id) && f.status !== 'betaald'; }); });
+  return {
+    projecten: ts.map(function (t) { var u = trajectUit(t); u.facturen = facturenVan(t.id, alle); return u; })
+      .sort(function (a, b) { return String(a.am).localeCompare(String(b.am)) || String(a.school).localeCompare(String(b.school)); }),
+    keuzes: facturatieKeuzes(), gebruikers: gebruikersNamen(), ik: ikUit()
+  };
+}
+var FACTUUR_VELDEN = ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden'];
+function apiFactuurOpslaan(obj) {
+  obj = obj || {};
+  var o = schoon(obj, FACTUUR_VELDEN), oud = o.id ? vind('Facturen', o.id) : null;
+  if (o.id && !oud) throw new Error('Termijn niet gevonden.');
+  var tid = o.trajectId || (oud && oud.trajectId); if (!tid || !vind('Trajecten', tid)) throw new Error('Project niet gevonden.');
+  if (o.status !== undefined && keuzelijst('factuurStatussen').indexOf(o.status) < 0) throw new Error('Onbekende status.');
+  if (o.bedrag !== undefined && o.bedrag !== '') o.bedrag = Number(String(o.bedrag).replace(',', '.')) || 0;
+  if (o.omschrijving !== undefined) o.omschrijving = String(o.omschrijving).trim();
+  if (!oud && !o.omschrijving) throw new Error('Geef de termijn een omschrijving.');
+  if (!oud) { o.aangemaakt = nu(); o.door = ikNaam(); o.status = o.status || keuzelijst('factuurStatussen')[0]; }
+  var f = metLock(function () { controleerConflict('Facturen', o.id, o, obj._oud); return schrijf('Facturen', o); });
+  return factuurUit(f);
+}
+// Termijnen in één keer: per maand van start tot eind (schoolvakantie juli/augustus overslaan), of één factuur vooraf.
+function apiFacturenMaken(trajectId, opties) {
+  opties = opties || {};
+  var t = vind('Trajecten', trajectId); if (!t) throw new Error('Project niet gevonden.');
+  var start = parseDatum(opties.van || t.start), eind = parseDatum(opties.tot || t.eind), lijst = [];
+  if (opties.per === 'eenmalig') lijst.push({ omschrijving: opties.omschrijving || 'Factuur vooraf', datum: datumStr(start || new Date()), bedrag: Number(opties.bedrag) || Number(t.omzet) || '' });
+  else {
+    if (!start || !eind || eind < start) throw new Error('Vul eerst de start- en einddatum van het project in.');
+    var d = new Date(start.getFullYear(), start.getMonth(), 1), zomer = opties.zomer !== true;
+    while (d <= eind && lijst.length < 24) {
+      if (!(zomer && (d.getMonth() === 6 || d.getMonth() === 7))) lijst.push({ omschrijving: MAANDEN[d.getMonth()].charAt(0).toUpperCase() + MAANDEN[d.getMonth()].slice(1) + ' ' + d.getFullYear(), datum: datumStr(new Date(d.getFullYear(), d.getMonth() + 1, 0)) });
+      d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    }
+    var per = opties.bedrag !== undefined && opties.bedrag !== '' ? Number(opties.bedrag) : (Number(t.omzet) && lijst.length ? Math.round(Number(t.omzet) / lijst.length * 100) / 100 : '');
+    lijst.forEach(function (f) { f.bedrag = per; });
+  }
+  var status = keuzelijst('factuurStatussen')[0];
+  metLock(function () { schrijfVeel('Facturen', lijst.map(function (f) { f.trajectId = trajectId; f.status = status; f.aangemaakt = nu(); f.door = ikNaam(); return f; })); });
+  return facturenVan(trajectId);
+}
+// CSV voor import in Exact Online (tot de directe koppeling er is): standaard de termijnen met status 'aangemaakt'.
+function apiFacturenExport(status) {
+  status = status || 'aangemaakt';
+  var tMap = perId(lees('Trajecten')), sMap = perId(lees('Scholen'));
+  var cel = function (v) { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  var rijen = lees('Facturen').filter(function (f) { return !status || f.status === status; }).map(function (f) {
+    var t = tMap[f.trajectId] || {}, s = sMap[t.schoolId] || {};
+    return [f.datum, t.school || s.naam || '', s.email || '', t.traject || '', f.omschrijving, String(Number(f.bedrag) || 0).replace('.', ','), f.factuurnummer || '', t.am || '', f.bijzonderheden || ''].map(cel).join(';');
+  });
+  return { bestandsnaam: 'facturen-' + (status || 'alle').replace(/\W+/g, '-') + '-' + datumStr(new Date()) + '.csv', csv: ['Factuurdatum;Debiteur;E-mail;Project;Omschrijving;Bedrag;Factuurnummer;Accountmanager;Bijzonderheden'].concat(rijen).join('\n'), aantal: rijen.length };
+}
+
+// AI-samenvatting van alles rond een school (zoals "Summarise history" in Capsule), met het snelle model van het Brein.
+function apiSchoolSamenvatting(id) {
+  var d = apiSchool(id), regels = [];
+  regels.push('School: ' + d.school.naam + (d.school.plaats ? ' (' + d.school.plaats + ')' : '') + ', status ' + (d.school.status || '-') + ', eigenaar ' + (d.school.eigenaar || '-') + '.');
+  d.kansen.forEach(function (k) { regels.push('Kans: ' + k.naam + ', ' + k.fase + ', € ' + k.waarde + (k.volgendeActie ? ', volgende actie: ' + k.volgendeActie : '') + '.'); });
+  d.trajecten.forEach(function (t) { regels.push('Project: ' + t.traject + ' ' + t.schooljaar + ', ' + t.status + (t.am ? ', AM ' + t.am : '') + '.'); });
+  d.taken.slice(0, 10).forEach(function (t) { regels.push('Open taak: ' + t.tekst + (t.deadline ? ' (' + t.deadline + ')' : '') + ', ' + t.eigenaar + '.'); });
+  d.tijdlijn.slice(0, 60).forEach(function (a) { regels.push('[' + a.datum + '] ' + a.type + ' door ' + a.door + ': ' + (a.onderwerp || '') + (a.tekst ? ' — ' + String(a.tekst).replace(/\s+/g, ' ').slice(0, 400) : '')); });
+  var systeem = 'Je vat de relatie van AthenaSchool met één school samen voor een collega. Nederlands, zakelijk en kort: maximaal 8 opsommingstekens. ' +
+    'Volgorde: stand van zaken, lopende projecten, open kansen, recente contacten (wie, wanneer), afspraken en wat nu moet gebeuren. Geen namen van leerlingen. Verzin niets.';
+  var data = claudeVerzoek({ max_tokens: 2000, system: systeem, messages: [{ role: 'user', content: regels.join('\n').slice(0, 30000) }] }, 'low', P.getProperty('BREIN_MODEL') || 'claude-sonnet-5-5');
+  if (data.stop_reason === 'refusal') return { tekst: 'Samenvatten lukte niet voor deze school.' };
+  return { tekst: tekstUit(data), gemaakt: nu() };
 }
 
 /* ===================== 7. Brein als persoonlijke assistent (v3.5) ===================== */
