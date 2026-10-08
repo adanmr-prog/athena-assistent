@@ -100,14 +100,43 @@ FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'b
             {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
 KEUZES = {'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
 # v4.0: twee gebruikers. test123 = Menno (management), am123 = Joris (accountmanager): ziet geen pipeline, alleen zijn eigen projecten en facturatie
-ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie')}
+ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten')}
 IKKEN = {'test123': {'naam': 'Menno', 'team': 'management', 'rol': 'management', 'beheer': True, 'gekoppeld': True, 'rechten': dict(ALLES, beheer=True, teamlead=False, doelen=True)},
          'am123': {'naam': 'Joris', 'team': 'accountmanagement', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'alles'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
-                   'projecten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'facturatie': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'beheer': False, 'teamlead': False, 'doelen': False}}}
+                   'projecten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'facturatie': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'vacatures': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'kandidaten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},
+         # v4.1: talentscout Lotte (code talent123): bezetting, geen pipeline of facturatie
+         'talent123': {'naam': 'Lotte', 'team': 'talent', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'geen'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
+                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'}, 'beheer': False, 'teamlead': False, 'doelen': False}}}
 HUIDIG = ['test123']
 def ik(): return dict(IKKEN[HUIDIG[0]])
 def beheer(): return ik()['beheer']
-def eigen_project(t): return beheer() or t.get('am') == ik()['naam']
+def eigen_project(t):
+    if ik()['team'] == 'talent': return t.get('status') == 'opstart' or any(v['trajectId'] == t['id'] and v['status'] == 'open' for v in VACATURES)
+    return beheer() or t.get('am') == ik()['naam']
+# v4.1: vacatures, kandidaten, taskforce en meldingen
+VACATURES = [{'id': 'v1', 'trajectId': 't4', 'titel': 'NT2-ondersteuner', 'aantal': 2, 'dagen': 'ma t/m do 9-15 uur', 'urenPerWeek': 16, 'start': '2026-11-02', 'eind': '2027-04-30', 'profiel': 'Ervaring met NT2, liefst pabo', 'status': 'open', 'door': 'Menno', 'aangemaakt': nu()}]
+KANDIDATEN = [{'id': 'c1', 'vacatureId': 'v1', 'trajectId': 't4', 'naam': 'Eva de Wit', 'email': 'eva@voorbeeld.nl', 'telefoon': '', 'bron': 'XPS-bestand', 'xpsId': 'X123', 'afasNummer': '', 'status': 'voorgesteld', 'statusSinds': d(-2) + ' 10:00', 'gesprek': '', 'notitie': '', 'door': 'Lotte'}]
+MELDINGEN = [{'id': 'm1', 'voor': 'Menno', 'tekst': 'Nieuwe kandidaat voor NT2-ondersteuner bij ISK Voorbeeld: Eva de Wit. Plan het matchinggesprek.', 'link': 'project:t4', 'datum': nu(), 'gelezen': '', 'door': 'Lotte'},
+             {'id': 'm2', 'voor': 'Lotte', 'tekst': 'Nieuwe vacature: NT2-ondersteuner (2×) bij ISK Voorbeeld', 'link': 'project:t4', 'datum': nu(), 'gelezen': '', 'door': 'Menno'}]
+KSTATUS = ['voorgesteld', 'gesprek', 'geselecteerd', 'academy', 'contract', 'vog', 'klaar voor start', 'afgewezen']
+VRAGEN = [{'naam': 'hulpvraag', 'label': 'Hulpvraag van de school'}, {'naam': 'inzet', 'label': 'Inzet (aantal ondersteuners, rol)'}, {'naam': 'rooster', 'label': 'Rooster (dagen en tijden)'},
+          {'naam': 'startdatum', 'label': 'Gewenste startdatum'}, {'naam': 'bijzonderheden', 'label': 'Bijzonderheden'}, {'naam': 'contactpersonen', 'label': 'Contactpersonen op school'}]
+def kand_uit(k): return dict(k, dagenInStatus=2)
+def vac_uit(v, met=True):
+    ks = [k for k in KANDIDATEN if k['vacatureId'] == v['id']]
+    u = dict(v, gevuld=len([k for k in ks if k['status'] == 'klaar voor start']), inProces=len([k for k in ks if k['status'] not in ('afgewezen', 'klaar voor start')]))
+    if met: u['kandidaten'] = [kand_uit(k) for k in sorted(ks, key=lambda k: KSTATUS.index(k['status']))]
+    return u
+def bezetting_van(tid):
+    vs = [vac_uit(v, False) for v in VACATURES if v['trajectId'] == tid and v['status'] != 'gesloten']
+    return {'nodig': sum(v['aantal'] for v in vs), 'gevuld': sum(min(v['gevuld'], v['aantal']) for v in vs), 'inProces': sum(v['inProces'] for v in vs), 'openVacatures': len([v for v in vs if v['status'] == 'open'])}
+def project_bezetting(t):
+    return {'trajectId': t['id'], 'projectStatus': t['status'], 'vacatures': [vac_uit(v) for v in VACATURES if v['trajectId'] == t['id']], 'bezetting': bezetting_van(t['id']),
+            'taskforce': t.get('taskforce') or {}, 'taskforceVragen': VRAGEN, 'afspraken': [{'id': x['id'], 'tekst': x['tekst'], 'eigenaar': x['eigenaar'], 'deadline': x['deadline'], 'status': x['status']} for x in TAKEN if x.get('trajectId') == t['id'] and x.get('bron') == 'taskforce'],
+            'keuzesBezetting': {'kandidaatStatussen': KSTATUS, 'vacatureStatussen': ['open', 'ingevuld', 'gesloten'], 'bronnen': ['XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders']},
+            'rechtenBezetting': {'vacatures': ik()['team'] != 'consultancy', 'kandidatenZien': True, 'kandidaten': True, 'taskforce': True}}
+def meld(voor, tekst, link):
+    if voor and voor != ik()['naam']: MELDINGEN.append({'id': 'm' + uuid.uuid4().hex[:5], 'voor': voor, 'tekst': tekst, 'link': link, 'datum': nu(), 'gelezen': '', 'door': ik()['naam']})
 def geen_toegang(): raise ValueError('Daar heb je geen toegang toe.')
 def project_uit(t): return dict(t, facturen=[f for f in FACTUREN if f['trajectId'] == t['id']])
 def projectnaam(tid):
@@ -129,7 +158,8 @@ def basis():
     for s in SCHOLEN:
         open_ = [k for k in CRMKANSEN if k['schoolId'] == s['id'] and k['fase'] not in ('gewonnen', 'verloren')]
         scholen.append(dict(s, personen=len([p for p in PERSONEN if p['schoolId'] == s['id']]), openKansen=len(open_), openWaarde=sum(k['waarde'] for k in open_)))
-    return {'ik': ik(), 'gebruikers': GEBRUIKERS_NAMEN, 'teams': {'management': ['Menno'], 'accountmanagement': ['Joris', 'Mees'], 'consultancy': [], 'talent': []}, 'statussen': INSTELLINGEN['schoolStatussen'], 'mijlpalen': MIJLPALEN,
+    return {'ik': ik(), 'gebruikers': GEBRUIKERS_NAMEN, 'teams': {'management': ['Menno'], 'accountmanagement': ['Joris', 'Mees'], 'consultancy': [], 'talent': ['Lotte']},
+            'meldingen': len([m for m in MELDINGEN if m['voor'] == ik()['naam'] and not m['gelezen']]), 'schooljaar': INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027', 'statussen': INSTELLINGEN['schoolStatussen'], 'mijlpalen': MIJLPALEN,
             'categorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'activiteitTypes': ['notitie', 'gesprek', 'mail', 'afspraak'], 'tracks': TRACKS,
             'tags': sorted({t for s in SCHOLEN for t in s['tags']}), 'trajectStatussen': INSTELLINGEN['trajectStatussen'], 'keuzes': KEUZES,
             'projecten': [{'id': t['id'], 'naam': t['traject'] + ' ' + t['schooljaar'], 'schoolId': t['schoolId'], 'school': t['school'], 'kansId': t['kansId'], 'status': t['status'], 'am': t['am']} for t in TRAJECTEN if eigen_project(t)], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN]}
@@ -157,7 +187,8 @@ def handle_crm(fn, args):
         return {'project': t, 'school': {'id': s['id'], 'naam': s['naam'], 'plaats': s['plaats'], 'email': s.get('email', ''), 'telefoon': s.get('telefoon', '')} if s else None, 'kans': kans_uit(k) if k else None,
                 'personen': [persoon_uit(p) for p in PERSONEN if s and p['schoolId'] == s['id']], 'taken': [taak_uit(x) for x in TAKEN if x['status'] != 'af' and hoort(x)],
                 'tijdlijn': tijdlijn(hoort), 'losseMails': [act_uit(a) for a in ACTIVITEITEN if s and a['type'] == 'mail' and not a.get('trajectId') and a['schoolId'] == s['id']],
-                'facturen': [f for f in FACTUREN if f['trajectId'] == t['id']], 'keuzes': KEUZES, 'rechten': {'wijzigen': True, 'facturatie': True, 'facturatieWijzigen': True}}
+                'facturen': [f for f in FACTUREN if f['trajectId'] == t['id']] if ik()['team'] != 'talent' else None, 'keuzes': KEUZES,
+                'rechten': {'wijzigen': ik()['team'] != 'talent', 'facturatie': ik()['team'] != 'talent', 'facturatieWijzigen': ik()['team'] != 'talent'}, **project_bezetting(t)}
     if fn == 'apiFacturatie':
         return {'projecten': [dict(project_uit(t), magWijzigen=True) for t in sorted(TRAJECTEN, key=lambda t: (t['am'], t['school'])) if eigen_project(t)], 'keuzes': KEUZES, 'gebruikers': GEBRUIKERS_NAMEN, 'ik': ik()}
     if fn == 'apiFactuurOpslaan':
@@ -250,7 +281,47 @@ def handle_crm(fn, args):
                     if n['id'] == o['id']: n['tekst'] = o.get('tekst', n['tekst'])
             return {'id': o['id']}
         a = per_id(ACTIVITEITEN)[o['id']]; a.update(o); return dict(act_uit(a), agendaBijgewerkt=bool(a.get('agenda')))
-    if fn == 'apiInstellingen': return INSTELLINGEN
+    if fn == 'apiInstellingen': return dict(INSTELLINGEN, schooljaar=INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027', schooljaarOpDatum='2026-2027', schooljaarHandmatig=INSTELLINGEN.get('schooljaarHandmatig', ''),
+                                            verlenging=KEUZES['verlenging'], kandidaatBronnen=['XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders'])
+    if fn == 'apiSchooljaarOpslaan': INSTELLINGEN['schooljaarHandmatig'] = args[0]; return {'schooljaar': args[0] or '2026-2027'}  # v4.1
+    if fn == 'apiMeldingen': return sorted([m for m in MELDINGEN if m['voor'] == ik()['naam']], key=lambda m: m['datum'], reverse=True)
+    if fn == 'apiMeldingenGelezen':
+        n = 0
+        for m in MELDINGEN:
+            if m['voor'] == ik()['naam'] and not m['gelezen']: m['gelezen'] = nu(); n += 1
+        return {'aantal': n}
+    if fn == 'apiBezetting':
+        tm = per_id(TRAJECTEN); l = []
+        for v in VACATURES:
+            t = tm[v['trajectId']]
+            if not (beheer() or ik()['team'] == 'talent' or t['am'] == ik()['naam']): continue
+            u = vac_uit(v); u['project'] = {'id': t['id'], 'school': t['school'], 'traject': t['traject'], 'schooljaar': t['schooljaar'], 'status': t['status'], 'am': t['am'], 'adviseur': t.get('adviseur', ''), 'start': t['start']}
+            u['magWijzigen'] = True; u['magKandidaten'] = True; l.append(u)
+        tel = {'openVacatures': len([v for v in l if v['status'] == 'open']), 'openPlekken': sum(max(0, v['aantal'] - v['gevuld']) for v in l if v['status'] == 'open'), 'inProces': sum(v['inProces'] for v in l), 'klaar': sum(v['gevuld'] for v in l)}
+        return {'vacatures': l, 'tellingen': tel, 'keuzes': project_bezetting(TRAJECTEN[0])['keuzesBezetting'], 'ik': ik()}
+    if fn == 'apiVacatureOpslaan':
+        o = dict(args[0]); o.pop('_oud', None)
+        if not o.get('id'): o.update({'status': 'open', 'door': ik()['naam'], 'aangemaakt': nu()}); o['aantal'] = int(o.get('aantal') or 1); [o.setdefault(k, '') for k in ['dagen', 'urenPerWeek', 'start', 'eind', 'profiel']]; meld('Lotte', 'Nieuwe vacature: ' + o.get('titel', ''), 'project:' + o['trajectId'])
+        elif 'aantal' in o: o['aantal'] = int(o['aantal'] or 1)
+        v = opslaan(VACATURES, o, 'v'); return project_bezetting(per_id(TRAJECTEN)[v['trajectId']])
+    if fn == 'apiKandidaatOpslaan':
+        o = dict(args[0]); o.pop('_oud', None)
+        if not o.get('id'): o.update({'status': o.get('status') or 'voorgesteld', 'door': ik()['naam'], 'statusSinds': nu()}); [o.setdefault(k, '') for k in ['email', 'telefoon', 'bron', 'xpsId', 'afasNummer', 'gesprek', 'notitie']]
+        if o.get('vacatureId') or not o.get('id'): o['trajectId'] = per_id(VACATURES)[o['vacatureId']]['trajectId']
+        k = opslaan(KANDIDATEN, o, 'c'); t = per_id(TRAJECTEN)[k['trajectId']]
+        if not args[0].get('id'): meld(t['am'], 'Nieuwe kandidaat: ' + k['naam'], 'project:' + t['id'])
+        for v in VACATURES:
+            u = vac_uit(v, False)
+            if v['status'] == 'open' and u['gevuld'] >= v['aantal']: v['status'] = 'ingevuld'
+        b = bezetting_van(t['id'])
+        if t['status'] == 'opstart' and b['nodig'] and b['gevuld'] >= b['nodig']: t['status'] = 'bezig'
+        return project_bezetting(t)
+    if fn == 'apiTaskforceOpslaan':
+        t = per_id(TRAJECTEN)[args[0]]; o = dict(args[1]); af = o.pop('afspraken', [])
+        t['taskforce'] = dict(t.get('taskforce') or {}, **o, bijgewerkt=nu())
+        for a in af: TAKEN.append({'id': 'tk' + uuid.uuid4().hex[:5], 'tekst': a['tekst'], 'bron': 'taskforce', 'prio': 'midden', 'deadline': a.get('deadline', ''), 'link': '', 'over': None, 'categorie': 'overig', 'eigenaar': a.get('eigenaar') or ik()['naam'], 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': t['schoolId'], 'persoonId': '', 'kansId': '', 'trajectId': t['id']})
+        ACTIVITEITEN.append({'id': uuid.uuid4().hex[:6], 'type': 'notitie', 'datum': nu(), 'door': ik()['naam'], 'schoolId': t['schoolId'], 'persoonId': '', 'kansId': '', 'trajectId': t['id'], 'onderwerp': 'Taskforce', 'tekst': o.get('hulpvraag', ''), 'duurMin': 0, 'bron': 'app'})
+        return project_bezetting(t)
     if fn == 'apiKeuzelijstOpslaan':
         INSTELLINGEN[args[0]] = [x['waarde'].lower() for x in args[1]]
         if args[0] == 'schoolStatussen':
@@ -321,7 +392,7 @@ def handle_crm(fn, args):
         return {'stap': args[0], 'aantal': 3, 'volgende': {'stap': stappen[i + 1], 'pagina': 1} if i + 1 < len(stappen) else None}
     if fn == 'apiExport': return {'bestandsnaam': 'athena-' + args[0] + '.csv', 'csv': 'id,naam\ns1,Voorbeeldcollege Zuid'}
     if fn == 'apiVerwijder':
-        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN, 'activiteit': ACTIVITEITEN, 'traject': TRAJECTEN, 'doel': DOELEN, 'content': CONTENT, 'factuur': FACTUREN}.get(args[0])
+        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN, 'activiteit': ACTIVITEITEN, 'traject': TRAJECTEN, 'doel': DOELEN, 'content': CONTENT, 'factuur': FACTUREN, 'vacature': VACATURES, 'kandidaat': KANDIDATEN}.get(args[0])
         if lijst is None:  # notitie (Historie)
             for l in NOTITIES.values(): l[:] = [x for x in l if x['id'] != args[1]]
             return None
@@ -387,8 +458,8 @@ def handle(fn, args):
         c = {'id': uuid.uuid4().hex[:6], 'datum': nu(), 'type': args[0], 'typeNaam': {'linkedin': 'LinkedIn-post', 'mail': 'E-mail aan een school'}.get(args[0], args[0]), 'onderwerp': args[1], 'tekst': 'Onderwerp: ' + args[1] + '\n\nBeste [naam],\n\nDit is een voorbeeldtekst uit de mock-backend, in de toon van AthenaSchool.\n\nMet vriendelijke groet,\nMenno Adan\nAthenaSchool'}
         CONTENT.insert(0, c); return c
     if fn == 'apiTrajecten':
-        ts = [dict(t, updates=len([a for a in ACTIVITEITEN if a.get('trajectId') == t['id']]), magWijzigen=eigen_project(t)) for t in TRAJECTEN if eigen_project(t)]  # v4.0
-        return {'trajecten': ts, 'am': ['Joris', 'Mees', 'Menno'], 'ik': ik(), 'gebruikers': GEBRUIKERS_NAMEN,
+        ts = [dict(t, updates=len([a for a in ACTIVITEITEN if a.get('trajectId') == t['id']]), magWijzigen=eigen_project(t) and ik()['team'] != 'talent', bezetting=bezetting_van(t['id'])) for t in TRAJECTEN if eigen_project(t)]  # v4.0
+        return {'trajecten': ts, 'am': ['Joris', 'Mees', 'Menno'], 'ik': ik(), 'gebruikers': GEBRUIKERS_NAMEN, 'schooljaar': INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027',
                 'filters': {'schooljaren': ['2026-2027', '2025-2026'], 'trajecten': sorted({t['traject'] for t in ts}), 'statussen': KEUZES['trajectStatussen'], 'verlenging': KEUZES['verlenging']}}
     if fn == 'apiTraject':
         t = [x for x in TRAJECTEN if x['id'] == args[0]][0]

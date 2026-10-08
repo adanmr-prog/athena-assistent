@@ -1,6 +1,6 @@
 # Voorstel: teams, rechten en het trajectproces (v4)
 
-Status: **v4.0 gebouwd** (teams, rollen, rechtentabel, projectstatussen, projectenbord); v4.1 en verder volgen. ⚠️ = aanname die bevestigd moet worden.
+Status: **v4.1 gebouwd** (teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen); v4.2 en verder volgen. ⚠️ = aanname die bevestigd moet worden.
 
 **Besluiten (oktober 2026):** rechtentabel akkoord. Consultants zien de facturatie van hun eigen projecten (alleen lezen). Een AM ziet de historie van de kans achter zijn project, en alleen die. Teamlead accountmanagers: Mees; teamlead onderwijsconsultants: Mariama; management: Anne-Maartje en Menno. XPS blijft voor diensten en roosters (export/API later). De academy is een eigen platform.
 
@@ -104,16 +104,37 @@ Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en fact
 | Talent | open vacatures, voordrachten, time-to-fill, match → plaatsing, doorlooptijd academy/contract/VOG | time-to-fill < 14 dagen |
 | Bedrijf (iedereen) | omzet schooljaar, scholen, geplaatste ondersteuners, verlengingspercentage | door de directie gezet |
 
-## 6. XPS en AFAS InSite naast het dashboard
+## 6. XPS en AFAS naast het dashboard (advies, oktober 2026)
 
-**Uitgangspunt:** XPS en AFAS blijven de bron voor wat ze nu doen. Het dashboard bewaart alleen een verwijzing (XPS-id, AFAS-medewerkernummer) en de status die nodig is voor het proces. Zo hoeft niemand dubbel in te voeren.
+**Uitgangspunt:** elk systeem blijft de bron voor wat het al goed doet. Het dashboard is de plek waar het proces per school en project samenkomt, en bewaart van de andere systemen alleen een verwijzing en de status.
 
-| Koppeling | Wat | Hoe (in volgorde van voorkeur) |
+| Systeem | Bron voor | Het dashboard |
 |---|---|---|
-| XPS → dashboard | kandidaten/flexkrachten, beschikbaarheid ⚠️ | 1. API als XPS die heeft. 2. Dagelijkse export (CSV/Excel) in een vaste Drive-map, die het dashboard 's nachts inleest. 3. Alleen een link per kandidaat ("open in XPS"). |
-| Dashboard → XPS | geselecteerde kandidaat + project | knop "Kopieer naar XPS" (de velden klaar om te plakken) of via de API |
-| AFAS InSite / Profit | contract- en VOG-status | AFAS Profit heeft een REST-API (GetConnectors met een token): het dashboard leest 's nachts de status van contracten en VOG's. De workflows blijven in InSite. |
-| Academy | modules afgerond | ⚠️ afhankelijk van het platform; anders een vinkje door de talentscout |
+| **XPS** (XPSLogic, app FlexPS) | diensten openzetten, roosters, inschrijven op klussen, uren en declaraties, contracten en loonstroken in de app | XPS-nummer per kandidaat; "Kopieer voor XPS" (v4.1); later geplande en gewerkte uren per project |
+| **AFAS Profit en InSite** | personeelsdossier, contract, salaris, onboarding-workflows, VOG-registratie | AFAS-medewerkernummer per kandidaat; later contract- en VOG-status automatisch |
+| **Dashboard** | scholen, kansen, projecten, taskforce, vacatures, matching (kandidaat per vacature), facturatie | — |
+| **Academy** (eigen platform) | modules | status academy op de kandidaatkaart (nu met de hand) |
+
+**XPS: wat we nu het best kunnen doen**
+1. Niets dubbel bijhouden. Diensten, roosters en uren blijven in XPS; het dashboard toont alleen per kandidaat het XPS-nummer.
+2. De knop "Kopieer voor XPS" op de kandidaatkaart (v4.1) zet naam, contactgegevens, school, functie, dagen en tijden en start klaar om te plakken. Zo hoeft niemand dubbel te typen tot er een koppeling is.
+3. Vraag XPSLogic (info@xps.nl) om:
+   - een API of webhooks;
+   - anders standaardexports (CSV/Excel) van de flexpool, de diensten per opdrachtgever (school) met de bezetting, en de gewerkte uren per opdracht.
+4. v4.3: een nachtelijke import van die export (vaste Drive-map of API). Per project ziet de AM dan geplande en gevulde diensten en gewerkte uren. Die uren voeden de facturatie: uren × tarief naar Exact. Dat is de grootste winst, want facturatie wordt nu met de hand ingevuld.
+5. Kijk in XPS onder rapportage, exporteren en instellingen (koppelingen, API, webhooks) wat er al kan. Stuur een geanonimiseerd voorbeeld van een export, dan bouw ik de import erop.
+
+**AFAS en InSite: wat we nu het best kunnen doen**
+1. **Eén plek voor de wervingspijplijn.** Voor de matching per project (voorgesteld → gesprek → geselecteerd) is dat nu het dashboard, omdat het aan school, project en AM hangt. Gebruik daarnaast niet ook de module Werving en selectie van AFAS voor dezelfde stappen.
+2. **Vanaf "geselecteerd" neemt AFAS het over.** AFAS heeft een UpdateConnector `HrOnboarding` die de workflow Onboarden start met de gegevens van de sollicitant. Wordt een kandidaat geselecteerd, dan kan het dashboard die workflow starten: contract en indiensttreding lopen dan in InSite zoals nu, zonder overtypen.
+3. **Status terug naar het dashboard.** Een GetConnector op contracten (getekend), VOG (ontvangen, datum) en het medewerkernummer, 's nachts gelezen, zet de stappen contract en VOG op de kandidaatkaart automatisch door tot "klaar voor start".
+4. **Wat de AFAS-beheerder (of jullie AFAS-partner) moet regelen:**
+   - een app-connector "Athena Dashboard" met een token;
+   - toegang tot `HrOnboarding` en het nummer van het onboardingprofiel;
+   - twee GetConnectors: medewerkers en contracten, en VOG-status.
+
+   Het token komt in een scripteigenschap (nooit in de code). Daarna bouw ik de koppeling (v4.3).
+5. ⚠️ **VOG:** vraag de VOG aan via de werkgeversroute van Justis (aanvraag klaarzetten) en leg de ontvangstdatum vast in AFAS. Dan kan het dashboard die datum uitlezen.
 
 ## 7. Volgorde van bouwen
 
@@ -122,14 +143,17 @@ Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en fact
    - teams en rollen, de rechtentabel, menu per team;
    - projectstatussen zoals monday;
    - het AM-projectenbord met de weergaven Verlenging en Examentraining.
-3. **v4.1 Taskforce en bezetting:**
+3. **v4.1 Taskforce en bezetting (klaar):**
    - tab Taskforce, vacatures, kandidaatkaarten en voordragen;
    - statussen voor academy, contract en VOG;
-   - meldingen en taken.
+   - meldingen en taken;
+   - weergaven Huidig schooljaar en Verlenging volgend schooljaar; het huidige schooljaar is instelbaar.
 4. **v4.2 Rapporten en doelen per team**, plus bedrijfsdoelen.
 5. **v4.3 Koppelingen:** XPS (export of API), AFAS (contract/VOG), monday-import (bestaande borden overzetten), Exact.
 6. Daarna de overstap naar Supabase en Vercel met een eigen domein.
 
 ## 8. Open vragen
 
-Beantwoord (zie Besluiten bovenaan). Nog open: ⚠️ de weergave "Verlenging '27/'28" toont de projecten van schooljaar 26/27 (die verlengd moeten worden naar 27/28). Klopt dat met hoe het monday-bord het bedoelde?
+1. ⚠️ **Schooljaar:** de datum van de server (oktober 2026) geeft schooljaar 2026-2027. Is het huidige schooljaar 2027-2028, zet dat dan in Beheer → Keuzelijsten → Huidig schooljaar.
+2. **XPS:** API of export beschikbaar (zie §6)?
+3. **AFAS:** wie regelt de app-connector en het token?
