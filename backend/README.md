@@ -125,6 +125,41 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
 
+## Taskforce, vacatures en bezetting (v4.1)
+
+- **Proces:**
+  1. Kans gewonnen: de consultant krijgt de taak "Taskforcemeeting plannen" en de AM een melding.
+  2. De taskforce legt de overdracht vast in de tab Taskforce: hulpvraag, inzet, rooster, startdatum, bijzonderheden en contactpersonen. Afspraken worden taken met een melding.
+  3. De AM opent vacatures in de tab Bezetting. Het talentteam krijgt een melding.
+  4. Talent draagt kandidaten voor. De AM krijgt de taak "Matchinggesprek".
+  5. De status loopt: voorgesteld → gesprek → geselecteerd → academy → contract → vog → klaar voor start (of afgewezen).
+  6. Is elke plek gevuld, dan gaat de vacature naar `ingevuld` en het project van `opstart` naar `bezig`. De consultant en de AM krijgen een melding.
+- **Nieuwe tabbladen:**
+  - `Vacatures`: titel, aantal, dagen, uren, start, eind, profiel, status `open|ingevuld|gesloten`;
+  - `Kandidaten`: vacature, naam, contact, bron, `xpsId`, `afasNummer`, status, `statusSinds`, gesprek, notitie;
+  - `Meldingen`: één rij per ontvanger, met `gelezen`.
+
+  Nieuwe kolom: `Trajecten.taskforce` (JSON).
+- **Rechten** (nieuwe onderdelen in `RECHTEN`):
+  - `vacatures`: AM eigen, talent alles, consultant leest mee;
+  - `kandidaten`: AM eigen, talent alles, consultant geen;
+  - talent ziet nu ook projecten met een open vacature (naast opstart).
+- **Dagstart:** kandidaten die langer dan 7 dagen op één status staan, komen bij "blijven liggen". Talent ziet dit voor academy, contract en VOG van de eigen voordrachten, de AM voor voorgesteld en gesprek op de eigen projecten.
+- **Schooljaar:** instelling `schooljaar` (Beheer → Keuzelijsten, `apiSchooljaarOpslaan`). Leeg betekent automatisch op datum: vanaf 1 augustus.
+- **XPS:** `Trajecten.xpsProject` (projectnummer in XPS) en per kandidaat `xpsId`. Op de projectpagina en de kandidaatkaart staat "Kopieer voor XPS". De status `reserve` volgt XPS Plaatsingen. Er is geen XPS-API; een import van exports volgt in v4.3 (zie `docs/teams-en-processen.md` §6).
+- **Keuzelijst** `kandidaatBronnen` (XPS-bestand, LinkedIn, eigen netwerk, sollicitatie, anders).
+
+| Functie | Argumenten | Resultaat |
+|---|---|---|
+| `apiBezetting` | — | `{ vacatures:[vacature+{project, kandidaten?, magWijzigen, magKandidaten}], tellingen:{openVacatures,openPlekken,inProces,klaar}, keuzes, ik }` |
+| `apiVacatureOpslaan` | `{id?, trajectId, titel, aantal, dagen, urenPerWeek, start, eind, profiel, status?, _oud?}` | bezetting van het project (zie onder) |
+| `apiKandidaatOpslaan` | `{id?, vacatureId, naam, email, telefoon, bron, xpsId, afasNummer, status, gesprek, notitie, _oud?}` | bezetting van het project |
+| `apiTaskforceOpslaan` | trajectId, `{datum, deelnemers, hulpvraag, inzet, rooster, startdatum, bijzonderheden, contactpersonen, afspraken:[{tekst, eigenaar, deadline}]}` | bezetting van het project |
+| `apiMeldingen` / `apiMeldingenGelezen` | — | `[{id, tekst, link, datum, gelezen, door}]` / `{ aantal }` |
+| `apiSchooljaarOpslaan` | `'2027-2028'`, `'27/28'` of leeg | `{ schooljaar }` (alleen management) |
+
+*Bezetting van een project:* `{ trajectId, projectStatus, vacatures (null zonder recht), bezetting:{nodig,gevuld,inProces,openVacatures}, taskforce, taskforceVragen, afspraken, keuzesBezetting, rechtenBezetting }`. `apiProject` geeft dezelfde velden mee, `apiTrajecten` per project `bezetting` en het `schooljaar`, `apiCrm` het aantal ongelezen `meldingen`. `apiVerwijder` kent ook `vacature` (alleen zonder kandidaten) en `kandidaat`.
+
 ## Teams, rollen en rechten (v4.0)
 
 - **Gebruikers** hebben een `team` (`management`, `consultancy`, `accountmanagement`, `talent`) en een `rol` (`medewerker`, `teamlead`; het team management heeft altijd rol `management`). De koppelcode uit `setup()` is management. Bij de eerste start na de update zet `migreerV4()` de oude rollen om: `beheerder` → management, `adviseur` → consultancy, `am` → accountmanagement. Daarna zelf instellen in Relaties → Rapport → Beheer → Gebruikers (bijv. Mees: accountmanagement/teamlead, Mariama: consultancy/teamlead, Anne-Maartje: management).

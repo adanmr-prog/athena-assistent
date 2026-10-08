@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.0';
+var VERSIE = '4.1';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -15,7 +15,8 @@ var TABELLEN = {
   Trajecten:    ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'bijgewerkt',
                  'schoolId', 'capsuleId', 'bijgewerktDoor',
                  'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer',  // v3.8: project uit gewonnen kans + facturatie
-                 'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging'],  // v4.0: kolommen van het monday-bord
+                 'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging',  // v4.0: kolommen van het monday-bord
+                 'taskforce', 'xpsProject'],  // v4.1: overdracht van de taskforcemeeting (JSON) en het projectnummer in XPS
   Kansen:       ['id', 'school', 'traject', 'fase', 'waarde', 'volgendeActie', 'deadline', 'laatsteContact', 'eigenaar', 'notities', 'bijgewerkt',
                  'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt', 'bijgewerktDoor', 'am'],  // v3.8: am = accountmanager na winst
   Acties:       ['id', 'tekst', 'bron', 'prio', 'deadline', 'status', 'link', 'aangemaakt', 'afgerond',
@@ -34,9 +35,13 @@ var TABELLEN = {
   Gebruikers:   ['id', 'naam', 'email', 'rol', 'actief', 'bijgewerkt', 'team'],  // v4.0: team + rol (medewerker, teamlead, management)
   Doelen:       ['id', 'eigenaar', 'periode', 'metric', 'doel', 'bijgewerkt'],
   Facturen:     ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden', 'exactId', 'aangemaakt', 'bijgewerkt', 'door'],  // v3.8: factuurtermijnen per project
-  Instellingen: ['sleutel', 'waarde']  // v3.7: keuzelijsten en correcties die de beheerder zelf instelt (JSON)
+  Instellingen: ['sleutel', 'waarde'],  // v3.7: keuzelijsten en correcties die de beheerder zelf instelt (JSON)
+  // v4.1: bezetting van projecten en meldingen in de app
+  Vacatures:    ['id', 'trajectId', 'titel', 'aantal', 'dagen', 'urenPerWeek', 'start', 'eind', 'profiel', 'status', 'aangemaakt', 'door', 'bijgewerkt', 'bijgewerktDoor'],
+  Kandidaten:   ['id', 'vacatureId', 'trajectId', 'naam', 'email', 'telefoon', 'bron', 'xpsId', 'afasNummer', 'status', 'statusSinds', 'gesprek', 'notitie', 'door', 'aangemaakt', 'bijgewerkt', 'bijgewerktDoor'],
+  Meldingen:    ['id', 'voor', 'tekst', 'link', 'datum', 'gelezen', 'door']
 };
-var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1 };
+var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1, statusSinds: 1, gesprek: 1, gelezen: 1 };
 var DOC_TYPES = ['contract', 'werkwijze', 'schooldossier', 'voorstel', 'prijslijst', 'overig'];
 var KANS_FASES = ['lead', 'gesprek', 'voorstel', 'onderhandeling', 'gewonnen', 'verloren'];
 var TRAJECT_STATUSSEN = ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'];  // v4.0: zoals het monday-bord
@@ -137,7 +142,7 @@ function sheet() {
   _SS = SpreadsheetApp.openById(id);
   return _SS;
 }
-function vergeet(naam) { delete _LEES[naam]; delete _LEES[naam + '|licht']; if (naam === 'Trajecten') _TRAJECTNAMEN = null; if (naam === 'Gebruikers') _TEAMNAMEN = null; }
+function vergeet(naam) { delete _LEES[naam]; delete _LEES[naam + '|licht']; if (naam === 'Trajecten') _TRAJECTNAMEN = null; if (naam === 'Gebruikers') _TEAMNAMEN = null; if (naam === 'Vacatures') _OPENVAC = null; }
 var KOP_GECONTROLEERD = {};
 function blad(naam) {
   if (_BLAD[naam] && KOP_GECONTROLEERD[naam]) return _BLAD[naam];
@@ -525,6 +530,7 @@ function nachtelijkeReview() {
     else if (k.deadline && k.deadline < dagStr) blijven.push({ tekst: 'Kans ' + k.school + ': deadline ' + k.deadline + ' verstreken' + (k.volgendeActie ? ' — ' + k.volgendeActie : ''), bron: 'kans', dagen: dagenSinds(k.deadline) });
   });
   mailsOnbeantwoord(10, 3).forEach(function (m) { blijven.push({ tekst: 'Mail van ' + m.van + ' onbeantwoord: ' + m.onderwerp, bron: 'mail', dagen: m.dagen, link: m.link }); });
+  kandidatenBlijvenLiggen(false).forEach(function (x) { blijven.push(x); });  // v4.1: kandidaten die te lang op één status staan
   trajecten.filter(function (t) { return (t.status === 'opstart' || t.status === 'offerte') && dagenSinds(t.bijgewerkt) > 14; }).forEach(function (t) { blijven.push({ tekst: 'Opstart ' + t.school + ' (' + t.traject + ') wacht al ' + dagenSinds(t.bijgewerkt) + ' dagen', bron: 'traject', dagen: dagenSinds(t.bijgewerkt) }); });
 
   agendaVoorDag(dag).forEach(function (a) { vandaag.push({ tekst: (a.tijd === 'dag' ? 'Hele dag' : a.tijd) + ' · ' + a.titel, bron: 'agenda' }); });
@@ -624,9 +630,10 @@ function apiMaakContent(type, onderwerp, extra) {
 function apiTrajecten() {
   var updates = {}; lees('Activiteiten').forEach(function (a) { if (a.trajectId) { var u = updates[a.trajectId] || (updates[a.trajectId] = { n: 0, laatst: '' }); u.n++; if (String(a.datum) > u.laatst) u.laatst = String(a.datum); } });
   var ts = lees('Trajecten').filter(function (t) { return mag('projecten', 'zien', t); }).sort(function (a, b) { return String(b.start || b.schooljaar).localeCompare(String(a.start || a.schooljaar)); });
+  var vacs = lees('Vacatures'), kands = lees('Kandidaten');
   return {
-    trajecten: ts.map(function (t) { var u = trajectUit(t), x = updates[t.id]; u.updates = x ? x.n : 0; u.laatsteUpdate = x ? x.laatst : ''; u.magWijzigen = mag('projecten', 'wijzigen', t); return u; }),  // v4.0: aantal updates zoals in monday
-    gebruikers: gebruikersNamen(), am: teamNamen('accountmanagement'), ik: ikUit(),
+    trajecten: ts.map(function (t) { var u = trajectUit(t), x = updates[t.id]; u.updates = x ? x.n : 0; u.laatsteUpdate = x ? x.laatst : ''; u.magWijzigen = mag('projecten', 'wijzigen', t); u.bezetting = bezettingVan(t.id, vacs, kands); return u; }),  // v4.0: aantal updates zoals in monday; v4.1: bezetting x van y
+    gebruikers: gebruikersNamen(), am: teamNamen('accountmanagement'), ik: ikUit(), schooljaar: huidigSchooljaar(),
     filters: { schooljaren: uniek(ts.map(function (t) { return t.schooljaar; })).sort().reverse(), trajecten: uniek(ts.map(function (t) { return t.traject; })).sort(), statussen: trajectStatussen(), verlenging: keuzelijst('verlenging') }
   };
 }
@@ -649,7 +656,7 @@ function apiTrajectOpslaan(obj) {
   obj = obj || {};
   var velden = ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'schoolId',
     'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer',  // v3.8
-    'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging'], schoon = {};  // v4.0
+    'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging', 'xpsProject'], schoon = {};  // v4.0; v4.1: xpsProject
   velden.forEach(function (k) { if (obj[k] !== undefined) schoon[k] = obj[k]; });
   if (schoon.schoolId) { var sch = vind('Scholen', schoon.schoolId); if (!sch) throw new Error('School niet gevonden.'); schoon.school = sch.naam; if (!schoon.plaats) schoon.plaats = sch.plaats || ''; }  // v3.7: project aan een CRM-school koppelen
   if (!String(schoon.school || '').trim() && !schoon.id) throw new Error('School is verplicht.');
@@ -681,7 +688,7 @@ function trajectUit(t) {
     urenPerWeek: Number(t.urenPerWeek) || 0, tarief: Number(t.tarief) || 0, omzet: Number(t.omzet) || 0, contactpersoon: t.contactpersoon, am: t.am, samenvatting: t.samenvatting, bijgewerkt: t.bijgewerkt,
     kansId: t.kansId || '', adviseur: t.adviseur || '', soortFacturatie: t.soortFacturatie || '', gefactureerd: t.gefactureerd || '', factuurDatum: t.factuurDatum || '', vakanties: t.vakanties || '',
     bijzonderheden: t.bijzonderheden || '', factuurnummer: t.factuurnummer || '',  // v3.8
-    contactgegevens: t.contactgegevens || '', voorstelUrl: t.voorstelUrl || '', documentenUrl: t.documentenUrl || '', verlenging: t.verlenging || '' };  // v4.0
+    contactgegevens: t.contactgegevens || '', voorstelUrl: t.voorstelUrl || '', documentenUrl: t.documentenUrl || '', xpsProject: t.xpsProject || '', verlenging: t.verlenging || '' };  // v4.0
 }
 
 /* ===================== 6. CRM: scholen, personen, kansen, taken, tracks, historie en rapportage (v2.0: vervangt Capsule) ===================== */
@@ -801,6 +808,7 @@ function domeinVan(adres) { var m = klein(adres).match(/@([a-z0-9.-]+\.[a-z]{2,}
 function domeinVanWebsite(w) { var m = klein(w).replace(/^https?:\/\//, '').replace(/^www\./, '').match(/^([a-z0-9.-]+\.[a-z]{2,})/); return m ? m[1] : ''; }
 function adressenUit(s) { return (String(s || '').match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).map(adresZonderPlus); }
 // 'yyyy-MM-dd', 'yyyy-MM-ddTHH:mm' of 'yyyy-MM-dd HH:mm' → 'yyyy-MM-dd HH:mm'; anders ''
+function datumIn(s) { var d = parseDatum(String(s || '')); return d ? datumStr(d) : ''; }  // v4.1
 function datumTijdIn(s) { var d = parseDatum(String(s || '').replace('T', ' ')); return d ? datumTijdStr(d) : ''; }
 function isoIn(s) { if (!s) return ''; var d = new Date(s); return isNaN(d.getTime()) ? '' : datumTijdStr(d); }
 // Ontbrekende school afleiden uit de gekoppelde persoon, kans of het traject.
@@ -918,7 +926,8 @@ function apiCrm() {
     // v3.8: projecten (kort) voor keuzelijsten en links, en de facturatie-keuzelijsten
     projecten: lees('Trajecten').filter(function (t) { return mag('projecten', 'zien', t); }).map(function (t) { return { id: t.id, naam: t.traject + (t.schooljaar ? ' ' + t.schooljaar : ''), schoolId: t.schoolId || '', school: t.school, kansId: t.kansId || '', status: t.status, am: t.am || '' }; }),
     keuzes: { soortFacturatie: keuzelijst('soortFacturatie'), gefactureerd: keuzelijst('gefactureerd'), vakanties: keuzelijst('vakanties'), factuurStatussen: keuzelijst('factuurStatussen'), verlenging: keuzelijst('verlenging') },
-    teams: { consultancy: teamNamen('consultancy'), accountmanagement: teamNamen('accountmanagement'), talent: teamNamen('talent'), management: teamNamen('management') }
+    teams: { consultancy: teamNamen('consultancy'), accountmanagement: teamNamen('accountmanagement'), talent: teamNamen('talent'), management: teamNamen('management') },
+    meldingen: ongelezenMeldingen(), schooljaar: huidigSchooljaar()  // v4.1
   };
 }
 function apiSchool(id) {
@@ -999,15 +1008,16 @@ function apiPersoonOpslaan(obj) {
 }
 // Verwijderen kan alleen voor wat niets meer aan zich heeft hangen; de beheerder of de eigenaar.
 // v3.7: ook projecten, oude notities, gegenereerde teksten en doelen; opties.agenda = true haalt een afspraak ook uit Google Agenda.
-var VERWIJDER_TABBLAD = { school: 'Scholen', persoon: 'Personen', kans: 'Kansen', activiteit: 'Activiteiten', taak: 'Acties', traject: 'Trajecten', notitie: 'Notities', content: 'Content', doel: 'Doelen', factuur: 'Facturen' };
+var VERWIJDER_TABBLAD = { school: 'Scholen', persoon: 'Personen', kans: 'Kansen', activiteit: 'Activiteiten', taak: 'Acties', traject: 'Trajecten', notitie: 'Notities', content: 'Content', doel: 'Doelen', factuur: 'Facturen', vacature: 'Vacatures', kandidaat: 'Kandidaten' };
 function apiVerwijder(soort, id, opties) {
   var tab = VERWIJDER_TABBLAD[soort];
   if (!tab) throw new Error('Onbekend soort.');
   var r = vind(tab, id); if (!r) throw new Error('Niet gevonden.');
   if (soort === 'doel') eisDoelRecht(r.eigenaar);
   // v4.0: kansen, projecten en termijnen volgen de rechtentabel (eigen werk; een teamlead ook dat van zijn team)
-  var pr = soort === 'traject' ? r : soort === 'factuur' ? vind('Trajecten', r.trajectId) || {} : null;
-  var recht = { school: ['relaties'], persoon: ['relaties'], kans: ['pipeline', r], traject: ['projecten', pr], factuur: ['facturatie', pr] }[soort];
+  var pr = soort === 'traject' ? r : ['factuur', 'vacature', 'kandidaat'].indexOf(soort) >= 0 ? vind('Trajecten', r.trajectId) || {} : null;
+  var recht = { school: ['relaties'], persoon: ['relaties'], kans: ['pipeline', r], traject: ['projecten', pr], factuur: ['facturatie', pr], vacature: ['vacatures', pr], kandidaat: ['kandidaten', pr] }[soort];
+  if (soort === 'vacature' && lees('Kandidaten').some(function (k) { return String(k.vacatureId) === String(id) && k.status !== 'afgewezen'; })) throw new Error('Deze vacature heeft nog kandidaten. Zet de vacature op gesloten of verwijder de kandidaten eerst.');
   if (recht) eis(recht[0], 'wijzigen', recht[1]);
   if (soort !== 'doel' && (!recht || !recht[1])) {
     if (!isBeheerder() && [r.eigenaar || r.door || r.am].indexOf(ikNaam()) < 0) throw new Error('Alleen de eigenaar of het management kan dit verwijderen.');
@@ -1687,7 +1697,8 @@ var KEUZELIJSTEN = {
   gefactureerd:     { standaard: ['ja', 'nee', 'n.v.t.'], tab: 'Trajecten', kolom: 'gefactureerd' },
   vakanties:        { standaard: ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], tab: 'Trajecten', kolom: 'vakanties' },
   factuurStatussen: { standaard: ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], tab: 'Facturen', kolom: 'status' },
-  verlenging:       { standaard: ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt'], tab: 'Trajecten', kolom: 'verlenging' }  // v4.0
+  verlenging:       { standaard: ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt'], tab: 'Trajecten', kolom: 'verlenging' },  // v4.0
+  kandidaatBronnen: { standaard: ['XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders'], tab: 'Kandidaten', kolom: 'bron' }  // v4.1
 };
 function instelling(sleutel) {
   var r = lees('Instellingen').filter(function (x) { return x.sleutel === sleutel; })[0];
@@ -1703,7 +1714,21 @@ function keuzelijst(sleutel) { var l = instelling(sleutel); return (l instanceof
 function schoolStatussen() { return keuzelijst('schoolStatussen'); }
 function taakCategorieen() { return keuzelijst('taakCategorieen'); }
 function trajectStatussen() { return keuzelijst('trajectStatussen'); }
-function apiInstellingen() { var uit = {}; Object.keys(KEUZELIJSTEN).forEach(function (k) { uit[k] = keuzelijst(k); }); return uit; }
+function apiInstellingen() {
+  var uit = {}; Object.keys(KEUZELIJSTEN).forEach(function (k) { uit[k] = keuzelijst(k); });
+  uit.schooljaar = huidigSchooljaar(); uit.schooljaarHandmatig = instelling('schooljaar') || ''; uit.schooljaarOpDatum = schooljaarOpDatum();  // v4.1
+  return uit;
+}
+// v4.1: leeg = automatisch op datum; anders yyyy-yyyy (bijv. 2027-2028)
+function apiSchooljaarOpslaan(sj) {
+  alleenBeheerder();
+  sj = String(sj || '').trim();
+  var m = /^'?(\d{2}|\d{4})\s*[-\/]\s*'?(\d{2}|\d{4})$/.exec(sj);  // ook 27/28, '27/'28 en 2027/28
+  if (m) { var a = m[1].length === 2 ? '20' + m[1] : m[1]; sj = a + '-' + (m[2].length === 2 ? a.slice(0, 2) + m[2] : m[2]); }
+  if (sj && (!/^\d{4}-\d{4}$/.test(sj) || Number(sj.slice(5)) !== Number(sj.slice(0, 4)) + 1)) throw new Error('Schrijf het schooljaar als 2027-2028.');
+  metLock(function () { zetInstelling('schooljaar', sj); });
+  return { schooljaar: huidigSchooljaar() };
+}
 // lijst: [{waarde, oud}] in de gewenste volgorde; oud = de waarde zoals geladen (leeg bij een nieuwe).
 function apiKeuzelijstOpslaan(sleutel, lijst) {
   alleenBeheerder();
@@ -1908,7 +1933,10 @@ var RECHTEN = {
   relaties:   { consultancy: ['alles', 'alles'], accountmanagement: ['alles', 'alles'], talent: ['alles', 'geen'] },
   pipeline:   { consultancy: ['eigen', 'eigen'], accountmanagement: ['geen', 'geen'], talent: ['geen', 'geen'] },
   projecten:  { consultancy: ['eigen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['opstart', 'geen'] },
-  facturatie: { consultancy: ['eigen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['geen', 'geen'] }
+  facturatie: { consultancy: ['eigen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['geen', 'geen'] },
+  // v4.1: de AM vult vacatures in voor zijn project; talent werkt alle vacatures en kandidaten; de consultant leest mee (zonder kandidaten)
+  vacatures:  { consultancy: ['eigen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['alles', 'alles'] },
+  kandidaten: { consultancy: ['geen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['alles', 'alles'] }
 };
 function niveau(onderdeel, actie) {
   if (isBeheerder()) return 'alles';
@@ -1935,7 +1963,7 @@ function mag(onderdeel, actie, rij) {
   if (n === 'alles') return true;
   if (n === 'geen') return false;
   if (!rij) return true;
-  if (n === 'opstart') return rij.status === 'opstart';
+  if (n === 'opstart') return rij.status === 'opstart' || !!openVacatures()[rij.id];  // v4.1: ook projecten met een open vacature
   var e = String(eigenaarVan(onderdeel, rij) || '');
   if (e && e === ikNaam()) return true;
   return n === 'team' && !!e && teamNamen(GEBRUIKER.team).indexOf(e) >= 0;
@@ -2004,6 +2032,210 @@ function migreerV4() {
   });
 }
 
+/* ===================== 11. Taskforce, vacatures en bezetting (v4.1) ===================== */
+
+// Proces na een gewonnen kans (docs/teams-en-processen.md): taskforcemeeting → de AM vult vacatures in → talent draagt kandidaten voor →
+// matchinggesprek (AM) → academy, contract en VOG (talent) → klaar voor start. Is elke plek gevuld, dan gaat het project van opstart naar bezig.
+// Vaste statussen: de logica (meldingen, telling, herinneringen) hangt eraan. De bron van een kandidaat is een keuzelijst.
+var KANDIDAAT_STATUSSEN = ['voorgesteld', 'gesprek', 'geselecteerd', 'academy', 'contract', 'vog', 'klaar voor start', 'reserve', 'afgewezen'];  // reserve: zoals in XPS (Plaatsingen)
+var KANDIDAAT_KLAAR = 'klaar voor start';
+var VACATURE_STATUSSEN = ['open', 'ingevuld', 'gesloten'];
+var TASKFORCE_VRAGEN = [['hulpvraag', 'Hulpvraag van de school'], ['inzet', 'Inzet (aantal ondersteuners, rol)'], ['rooster', 'Rooster (dagen en tijden)'],
+  ['startdatum', 'Gewenste startdatum'], ['bijzonderheden', 'Bijzonderheden'], ['contactpersonen', 'Contactpersonen op school']];
+var VACATURE_VELDEN = ['id', 'trajectId', 'titel', 'aantal', 'dagen', 'urenPerWeek', 'start', 'eind', 'profiel', 'status'];
+var KANDIDAAT_VELDEN = ['id', 'vacatureId', 'naam', 'email', 'telefoon', 'bron', 'xpsId', 'afasNummer', 'status', 'gesprek', 'notitie'];
+
+function kandidaatInProces(k) { return ['afgewezen', 'reserve', KANDIDAAT_KLAAR].indexOf(k.status) < 0; }
+function vacatureUit(v, kands, metKandidaten) {
+  var eigen = kands.filter(function (k) { return String(k.vacatureId) === String(v.id); });
+  var u = { id: v.id, trajectId: v.trajectId, titel: v.titel || '', aantal: Number(v.aantal) || 1, dagen: v.dagen || '', urenPerWeek: v.urenPerWeek || '', start: v.start || '', eind: v.eind || '',
+    profiel: v.profiel || '', status: v.status || 'open', door: v.door || '', aangemaakt: v.aangemaakt || '',
+    gevuld: eigen.filter(function (k) { return k.status === KANDIDAAT_KLAAR; }).length, inProces: eigen.filter(kandidaatInProces).length };
+  if (metKandidaten) u.kandidaten = eigen.map(kandidaatUit).sort(function (a, b) { return KANDIDAAT_STATUSSEN.indexOf(a.status) - KANDIDAAT_STATUSSEN.indexOf(b.status) || String(a.naam).localeCompare(String(b.naam)); });
+  return u;
+}
+function kandidaatUit(k) {
+  return { id: k.id, vacatureId: k.vacatureId, trajectId: k.trajectId, naam: k.naam || '', email: k.email || '', telefoon: k.telefoon || '', bron: k.bron || '', xpsId: k.xpsId || '', afasNummer: k.afasNummer || '',
+    status: k.status || 'voorgesteld', statusSinds: k.statusSinds || '', dagenInStatus: k.statusSinds ? dagenSinds(k.statusSinds) : null, gesprek: k.gesprek || '', notitie: k.notitie || '', door: k.door || '' };
+}
+// Bezetting van een project: plekken uit de vacatures die niet gesloten zijn; gevuld = kandidaten die klaar voor start zijn.
+function bezettingVan(trajectId, vacs, kands) {
+  var nodig = 0, gevuld = 0, inProces = 0, open = 0;
+  vacs.filter(function (v) { return String(v.trajectId) === String(trajectId) && v.status !== 'gesloten'; }).forEach(function (v) {
+    var u = vacatureUit(v, kands, false); nodig += u.aantal; gevuld += Math.min(u.gevuld, u.aantal); inProces += u.inProces; if (u.status === 'open') open++;
+  });
+  return { nodig: nodig, gevuld: gevuld, inProces: inProces, openVacatures: open };
+}
+// Projecten met een open vacature (talent ziet die, naast de projecten in opstart)
+var _OPENVAC = null;
+function openVacatures() {
+  if (!_OPENVAC) { _OPENVAC = {}; lees('Vacatures').forEach(function (v) { if ((v.status || 'open') === 'open') _OPENVAC[v.trajectId] = true; }); }
+  return _OPENVAC;
+}
+
+// Meldingen in de app (de bel): één rij per ontvanger, zodat ieder zijn eigen gelezen-stand heeft. Nooit een melding aan jezelf.
+function meld(namen, tekst, link) {
+  var ik = ikNaam(), rijen = uniek([].concat(namen || [])).filter(function (n) { return n && n !== ik; })
+    .map(function (n) { return { voor: n, tekst: String(tekst).slice(0, 300), link: link || '', datum: nu(), gelezen: '', door: ik }; });
+  if (rijen.length) schrijfVeel('Meldingen', rijen);
+}
+function ongelezenMeldingen() { var ik = ikNaam(); return lees('Meldingen').filter(function (m) { return m.voor === ik && !m.gelezen; }).length; }
+function apiMeldingen() {
+  var ik = ikNaam();
+  return lees('Meldingen').filter(function (m) { return m.voor === ik; }).sort(function (a, b) { return String(b.datum).localeCompare(String(a.datum)); }).slice(0, 50)
+    .map(function (m) { return { id: m.id, tekst: m.tekst, link: m.link, datum: m.datum, gelezen: !!m.gelezen, door: m.door }; });
+}
+function apiMeldingenGelezen() {
+  var ik = ikNaam(), ids = lees('Meldingen').filter(function (m) { return m.voor === ik && !m.gelezen; }).map(function (m) { return { id: m.id, gelezen: nu() }; });
+  if (ids.length) metLock(function () { schrijfVeel('Meldingen', ids); });
+  return { aantal: ids.length };
+}
+
+function taskforceUit(t) { try { var x = JSON.parse(t.taskforce || '{}'); return x && typeof x === 'object' ? x : {}; } catch (e) { return {}; } }
+// Bezetting en taskforce van één project, voor de projectpagina (tabs Taskforce en Bezetting)
+function projectBezetting(t) {
+  var vacs = lees('Vacatures').filter(function (v) { return String(v.trajectId) === String(t.id); }), kands = lees('Kandidaten');
+  var zienK = mag('kandidaten', 'zien', t);
+  return {
+    trajectId: t.id, projectStatus: t.status,  // de app werkt hiermee de projectpagina en het bezettingsbord lokaal bij
+    vacatures: mag('vacatures', 'zien', t) ? vacs.map(function (v) { return vacatureUit(v, kands, zienK); }) : null,
+    bezetting: bezettingVan(t.id, vacs, kands),
+    taskforce: taskforceUit(t), taskforceVragen: TASKFORCE_VRAGEN.map(function (v) { return { naam: v[0], label: v[1] }; }),
+    afspraken: lees('Acties').filter(function (a) { return String(a.trajectId) === String(t.id) && a.bron === 'taskforce'; }).sort(sorteerActies)
+      .map(function (a) { return { id: a.id, tekst: a.tekst, eigenaar: a.eigenaar, deadline: a.deadline, status: a.status }; }),
+    keuzesBezetting: { kandidaatStatussen: KANDIDAAT_STATUSSEN, vacatureStatussen: VACATURE_STATUSSEN, bronnen: keuzelijst('kandidaatBronnen') },
+    rechtenBezetting: { vacatures: mag('vacatures', 'wijzigen', t), kandidatenZien: zienK, kandidaten: mag('kandidaten', 'wijzigen', t), taskforce: magTaskforce(t) }
+  };
+}
+// De taskforce (consultant, AM en talentscout) legt de overdracht samen vast: wie het project mag zien, mag hem invullen; talent alleen bij opstart en open vacatures.
+function magTaskforce(t) { return mag('projecten', 'zien', t); }
+
+function apiTaskforceOpslaan(trajectId, obj) {
+  obj = obj || {};
+  var t = vind('Trajecten', trajectId); if (!t) throw new Error('Project niet gevonden.');
+  if (!magTaskforce(t)) throw new Error('Daar heb je geen toegang toe.');
+  var oud = taskforceUit(t), tf = { datum: String(obj.datum || oud.datum || '').slice(0, 10), deelnemers: String(obj.deelnemers !== undefined ? obj.deelnemers : (oud.deelnemers || '')).trim(), door: ikNaam(), bijgewerkt: nu() };
+  TASKFORCE_VRAGEN.forEach(function (v) { tf[v[0]] = String(obj[v[0]] !== undefined ? obj[v[0]] : (oud[v[0]] || '')).trim(); });
+  var afspraken = (obj.afspraken instanceof Array ? obj.afspraken : []).map(function (a) { return { tekst: String(a.tekst || '').trim(), eigenaar: String(a.eigenaar || '').trim(), deadline: datumIn(a.deadline) }; })
+    .filter(function (a) { return a.tekst; });
+  metLock(function () {
+    var wijz = { id: t.id, taskforce: tf };
+    if (!t.start && /^\d{4}-\d{2}-\d{2}$/.test(tf.startdatum)) wijz.start = tf.startdatum;  // gewenste startdatum wordt de start van het project als die nog leeg is
+    schrijf('Trajecten', wijz);
+    var regels = TASKFORCE_VRAGEN.filter(function (v) { return tf[v[0]]; }).map(function (v) { return v[1] + ': ' + tf[v[0]]; });
+    if (tf.deelnemers) regels.unshift('Deelnemers: ' + tf.deelnemers);
+    afspraken.forEach(function (a) { regels.push('Afspraak: ' + a.tekst + (a.eigenaar ? ' (' + a.eigenaar + ')' : '') + (a.deadline ? ', uiterlijk ' + a.deadline : '')); });
+    schrijf('Activiteiten', { type: 'notitie', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', kansId: t.kansId || '', trajectId: t.id, bron: 'app', aangemaakt: nu(),
+      onderwerp: (oud.bijgewerkt ? 'Taskforce bijgewerkt' : 'Taskforce') + (tf.datum ? ' (' + tf.datum + ')' : ''), tekst: regels.join('\n') });
+    // afspraken en deadlines worden taken bij de juiste persoon
+    if (afspraken.length) schrijfVeel('Acties', afspraken.map(function (a) {
+      return { tekst: a.tekst, eigenaar: a.eigenaar || ikNaam(), deadline: a.deadline || '', prio: 'midden', categorie: 'overig', status: 'open', bron: 'taskforce', aangemaakt: nu(), schoolId: t.schoolId || '', kansId: t.kansId || '', trajectId: t.id };
+    }));
+    afspraken.forEach(function (a) { if (a.eigenaar) meld(a.eigenaar, 'Taskforce ' + t.school + ': ' + a.tekst + (a.deadline ? ' (uiterlijk ' + a.deadline + ')' : ''), 'project:' + t.id); });
+  });
+  return projectBezetting(vind('Trajecten', trajectId));
+}
+
+function apiVacatureOpslaan(obj) {
+  obj = obj || {};
+  var o = schoon(obj, VACATURE_VELDEN), oud = o.id ? vind('Vacatures', o.id) : null;
+  if (o.id && !oud) throw new Error('Vacature niet gevonden.');
+  var tid = (oud && oud.trajectId) || o.trajectId, t = tid ? vind('Trajecten', tid) : null; if (!t) throw new Error('Project niet gevonden.');
+  eis('vacatures', 'wijzigen', t);
+  if (oud) delete o.trajectId;
+  if (o.titel !== undefined) o.titel = String(o.titel).trim();
+  if (!oud && !o.titel) o.titel = 'Onderwijsondersteuner';
+  if (o.aantal !== undefined) { o.aantal = Math.max(1, Math.round(Number(o.aantal) || 1)); }
+  if (o.status !== undefined && VACATURE_STATUSSEN.indexOf(o.status) < 0) throw new Error('Onbekende status.');
+  ['start', 'eind'].forEach(function (k) { if (o[k] !== undefined) o[k] = datumIn(o[k]); });
+  if (!oud) { o.status = 'open'; o.aangemaakt = nu(); o.door = ikNaam(); o.aantal = o.aantal || 1; }
+  metLock(function () {
+    controleerConflict('Vacatures', o.id, o, obj._oud);
+    var v = schrijf('Vacatures', o); _OPENVAC = null;
+    if (!oud) {
+      schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', trajectId: t.id, bron: 'app', aangemaakt: nu(),
+        onderwerp: 'Vacature geopend: ' + v.titel + ' (' + v.aantal + '×' + (v.start ? ', start ' + v.start : '') + ')' });
+      meld(teamNamen('talent'), 'Nieuwe vacature: ' + v.titel + ' (' + v.aantal + '×) bij ' + t.school + (v.dagen ? ', ' + v.dagen : '') + (v.start ? ', start ' + v.start : ''), 'project:' + t.id);
+    }
+  });
+  return projectBezetting(vind('Trajecten', t.id));
+}
+
+function apiKandidaatOpslaan(obj) {
+  obj = obj || {};
+  var o = schoon(obj, KANDIDAAT_VELDEN), oud = o.id ? vind('Kandidaten', o.id) : null;
+  if (o.id && !oud) throw new Error('Kandidaat niet gevonden.');
+  var v = vind('Vacatures', o.vacatureId || (oud && oud.vacatureId)); if (!v) throw new Error('Vacature niet gevonden.');
+  var t = vind('Trajecten', v.trajectId); if (!t) throw new Error('Project niet gevonden.');
+  eis('kandidaten', 'wijzigen', t);
+  if (oud && o.vacatureId && String(o.vacatureId) !== String(oud.vacatureId)) { var vOud = vind('Vacatures', oud.vacatureId); if (vOud && String(vOud.trajectId) !== String(v.trajectId)) eis('kandidaten', 'wijzigen', vind('Trajecten', vOud.trajectId) || {}); }
+  ['naam', 'telefoon', 'xpsId', 'afasNummer', 'notitie'].forEach(function (k) { if (o[k] !== undefined) o[k] = String(o[k]).trim(); });
+  if (o.email !== undefined) o.email = klein(o.email);
+  if (!oud && !o.naam) throw new Error('Vul de naam van de kandidaat in.');
+  if (o.status !== undefined && KANDIDAAT_STATUSSEN.indexOf(o.status) < 0) throw new Error('Onbekende status.');
+  if (o.gesprek !== undefined) o.gesprek = datumTijdIn(o.gesprek) || '';
+  o.trajectId = t.id;
+  var nieuwStatus = o.status !== undefined && (!oud || o.status !== oud.status) ? o.status : null;
+  if (!oud) { o.status = o.status || 'voorgesteld'; o.aangemaakt = nu(); o.door = ikNaam(); nieuwStatus = o.status; }
+  if (nieuwStatus) o.statusSinds = nu();
+  metLock(function () {
+    controleerConflict('Kandidaten', o.id, o, obj._oud);
+    var k = schrijf('Kandidaten', o), naam = k.naam, waar = v.titel + ' bij ' + t.school, link = 'project:' + t.id;
+    if (!oud) {
+      schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', trajectId: t.id, bron: 'app', aangemaakt: nu(), onderwerp: 'Kandidaat voorgedragen: ' + naam + ' (' + v.titel + ')' });
+      meld(t.am, 'Nieuwe kandidaat voor ' + waar + ': ' + naam + '. Plan het matchinggesprek.', link);
+      if (t.am) schrijf('Acties', { tekst: 'Matchinggesprek met ' + naam + ' (' + t.school + ', ' + v.titel + ')', eigenaar: t.am, deadline: datumStr(plusDagen(3)), prio: 'hoog', categorie: 'afspraak',
+        status: 'open', bron: 'bezetting', aangemaakt: nu(), schoolId: t.schoolId || '', kansId: t.kansId || '', trajectId: t.id });
+    } else if (nieuwStatus) {
+      schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', trajectId: t.id, bron: 'app', aangemaakt: nu(), onderwerp: 'Kandidaat ' + naam + ': ' + oud.status + ' → ' + nieuwStatus });
+      if (nieuwStatus === 'geselecteerd') meld([k.door].concat(teamNamen('talent').indexOf(k.door) >= 0 ? [] : teamNamen('talent')), naam + ' is geselecteerd voor ' + waar + '. Start academy, contract en VOG.', link);
+      if (nieuwStatus === KANDIDAAT_KLAAR) meld(t.am, naam + ' is klaar voor start bij ' + t.school + '.', link);
+      if (nieuwStatus === 'afgewezen') meld(k.door, naam + ' is afgewezen voor ' + waar + '.', link);
+    }
+    werkBezettingBij(t, v);
+  });
+  return projectBezetting(vind('Trajecten', t.id));
+}
+// Na elke wijziging aan kandidaten: vacature vol → ingevuld; alle plekken gevuld → project van opstart naar bezig (altijd binnen metLock).
+function werkBezettingBij(t, v) {
+  var kands = lees('Kandidaten'), vu = vacatureUit(v, kands, false);
+  if (vu.status === 'open' && vu.gevuld >= vu.aantal) { schrijf('Vacatures', { id: v.id, status: 'ingevuld' }); _OPENVAC = null; }
+  var b = bezettingVan(t.id, lees('Vacatures'), kands);
+  if (t.status === 'opstart' && b.nodig > 0 && b.gevuld >= b.nodig) {
+    schrijf('Trajecten', { id: t.id, status: 'bezig' });
+    schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', trajectId: t.id, bron: 'app', aangemaakt: nu(), onderwerp: 'Bezetting rond (' + b.gevuld + ' van ' + b.nodig + '): project staat op bezig' });
+    meld([t.adviseur, t.am], 'Bezetting rond voor ' + t.school + ' (' + t.traject + '): ' + b.gevuld + ' van ' + b.nodig + '. Het project staat op bezig.', 'project:' + t.id);
+  }
+}
+
+// Het bezettingsbord: alle vacatures die ik mag zien, met project en (als ik ze mag zien) kandidaten.
+function apiBezetting() {
+  eis('vacatures', 'zien');
+  var tMap = perId(lees('Trajecten')), kands = lees('Kandidaten'), tel = { openVacatures: 0, openPlekken: 0, inProces: 0, klaar: 0 };
+  var lijst = lees('Vacatures').filter(function (v) { var t = tMap[v.trajectId]; return t && mag('vacatures', 'zien', t); }).map(function (v) {
+    var t = tMap[v.trajectId], u = vacatureUit(v, kands, mag('kandidaten', 'zien', t));
+    u.project = { id: t.id, school: t.school, traject: t.traject, schooljaar: t.schooljaar, status: t.status, am: t.am || '', adviseur: t.adviseur || '', start: t.start || '' };
+    u.magWijzigen = mag('vacatures', 'wijzigen', t); u.magKandidaten = mag('kandidaten', 'wijzigen', t);
+    if (u.status === 'open') { tel.openVacatures++; tel.openPlekken += Math.max(0, u.aantal - u.gevuld); }
+    if (u.status !== 'gesloten') { tel.inProces += u.inProces; tel.klaar += u.gevuld; }
+    return u;
+  }).sort(function (a, b) { return (a.status === 'open' ? 0 : 1) - (b.status === 'open' ? 0 : 1) || String(a.start || a.project.start || '9999').localeCompare(String(b.start || b.project.start || '9999')); });
+  return { vacatures: lijst, tellingen: tel, keuzes: { kandidaatStatussen: KANDIDAAT_STATUSSEN, vacatureStatussen: VACATURE_STATUSSEN, bronnen: keuzelijst('kandidaatBronnen') }, ik: ikUit() };
+}
+
+// Herinneringen voor de dagstart: kandidaten die te lang op één status staan (talent: eigen voordrachten; AM: gesprekken van eigen projecten)
+function kandidatenBlijvenLiggen(eigenAlles) {
+  var tMap = perId(lees('Trajecten')), ik = ikNaam(), uit = [];
+  lees('Kandidaten').filter(kandidaatInProces).forEach(function (k) {
+    var t = tMap[k.trajectId] || {}, dagen = k.statusSinds ? dagenSinds(k.statusSinds) : null;
+    if (dagen === null || dagen <= 7) return;
+    var vanMijTalent = k.door === ik && ['academy', 'contract', 'vog', 'geselecteerd'].indexOf(k.status) >= 0;
+    var vanMijAm = t.am === ik && ['voorgesteld', 'gesprek'].indexOf(k.status) >= 0;
+    if (eigenAlles || vanMijTalent || vanMijAm) uit.push({ tekst: 'Kandidaat ' + k.naam + ' (' + (t.school || '') + ') staat al ' + dagen + ' dagen op "' + k.status + '"', bron: 'traject', dagen: dagen });
+  });
+  return uit;
+}
+
 /* ===================== 9. Projecten en facturatie (v3.8) ===================== */
 
 // Een gewonnen kans wordt een project voor de accountmanager, met alles wat de adviseur wist (altijd binnen metLock).
@@ -2025,6 +2257,8 @@ function projectUitKans(k, school) {
     onderwerp: 'Overdracht naar ' + (am || 'de accountmanager'), tekst: regels.join('\n') });
   var voor = am || (P.getProperty('NAAM') || 'Menno'), basis = { status: 'open', bron: 'project', aangemaakt: nu(), eigenaar: voor, schoolId: k.schoolId, persoonId: k.persoonId || '', kansId: k.id, trajectId: t.id };
   var taken = am ? [] : [{ tekst: 'Accountmanager toewijzen aan ' + (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + ')', categorie: 'opvolgen', prio: 'hoog', deadline: datumStr(plusDagen(1)) }];
+  taken.push({ tekst: 'Taskforcemeeting plannen met AM en talent: ' + (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + ')', categorie: 'afspraak', prio: 'hoog', deadline: datumStr(plusDagen(2)), eigenaar: adviseur });  // v4.1: de consultant
+  meld(am, 'Nieuw project voor jou: ' + (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + '). ' + adviseur + ' plant de taskforcemeeting.', 'project:' + t.id);
   taken = taken.concat([
     { tekst: 'Startgesprek plannen met ' + (p ? persoonNaam(p) : (k.school || s.naam || 'de school')), categorie: 'afspraak', prio: 'hoog', deadline: datumStr(plusDagen(3)) },
     { tekst: 'Facturatie instellen voor ' + (k.naam || k.traject), categorie: 'overig', prio: 'midden', deadline: datumStr(plusDagen(5)) }]);
@@ -2042,7 +2276,7 @@ function apiProject(id) {
   var personen = s ? lees('Personen').filter(function (p) { return String(p.schoolId) === String(s.id); }) : [], pMap = perId(personen);
   var hoort = function (x) { return String(x.trajectId) === String(id) || (k && String(x.kansId) === String(k.id)); };
   var acts = lees('Activiteiten'), grens = datumStr(plusDagen(-60));
-  return {
+  var uit = {
     project: trajectUit(t), school: s ? { id: s.id, naam: s.naam, plaats: s.plaats, email: s.email, telefoon: s.telefoon } : null,
     kans: k ? kansUit(k, mijlpaalMap()) : null,
     personen: personen.map(function (p) { return persoonUit(p, sMap); }),
@@ -2053,6 +2287,8 @@ function apiProject(id) {
     keuzes: facturatieKeuzes(),
     rechten: { wijzigen: mag('projecten', 'wijzigen', t), facturatie: mag('facturatie', 'zien', t), facturatieWijzigen: mag('facturatie', 'wijzigen', t) }
   };
+  var b = projectBezetting(t); Object.keys(b).forEach(function (x) { uit[x] = b[x]; });  // v4.1: taskforce, vacatures en kandidaten
+  return uit;
 }
 function facturatieKeuzes() { return { soortFacturatie: keuzelijst('soortFacturatie'), gefactureerd: keuzelijst('gefactureerd'), vakanties: keuzelijst('vakanties'), factuurStatussen: keuzelijst('factuurStatussen'), trajectStatussen: trajectStatussen() }; }
 function factuurUit(f) {
@@ -2488,7 +2724,9 @@ var DAGEN = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag',
 var MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
 function datumLang(d) { return DAGEN[d.getDay()] + ' ' + d.getDate() + ' ' + MAANDEN[d.getMonth()]; }
 function groet() { var u = new Date().getHours(), n = P.getProperty('NAAM') || 'Menno'; return (u < 12 ? 'Goedemorgen' : u < 18 ? 'Goedemiddag' : 'Goedenavond') + ' ' + n; }
-function huidigSchooljaar() { var d = new Date(), j = d.getFullYear(); return d.getMonth() >= 7 ? j + '-' + (j + 1) : (j - 1) + '-' + j; }
+// v4.1: het management kan het huidige schooljaar zelf vastzetten (Beheer → Keuzelijsten); anders telt het vanaf 1 augustus
+function schooljaarOpDatum() { var d = new Date(), j = d.getFullYear(); return d.getMonth() >= 7 ? j + '-' + (j + 1) : (j - 1) + '-' + j; }
+function huidigSchooljaar() { var h = instelling('schooljaar'); return typeof h === 'string' && /^\d{4}-\d{4}$/.test(h) ? h : schooljaarOpDatum(); }
 function nieuwId() { return 'k' + Utilities.getUuid().replace(/-/g, '').slice(0, 9); }  // begint met een letter: Sheets maakt van een cijferreeks anders een getal
 function slug(s) { return zonderAccenten(String(s || '').toLowerCase()).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || nieuwId(); }
 function zonderAccenten(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }

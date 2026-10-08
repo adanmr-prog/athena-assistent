@@ -57,11 +57,33 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/07a_projecten_am.png', full_page=True)
     page.click('#projectAms [data-pam=""]'); page.wait_for_selector('[data-crm-open="project:t3"]')
     page.click('.p-groep h3:has-text("Afgelopen")'); page.wait_for_selector('[data-crm-open="project:t5"]')
-    page.click("[data-pweergave='verlenging:2027-2028']"); page.wait_for_selector('.p-groep h3:has-text("Voorstel verstuurd")'); assert page.locator('[data-crm-open="project:t5"]').count() == 0, 'verlenging: alleen 26/27'
+    page.click('[data-pweergave="verlenging"]'); page.wait_for_selector('.p-groep h3:has-text("Voorstel verstuurd")'); assert page.locator('[data-crm-open="project:t5"]').count() == 0, 'verlenging: alleen het huidige schooljaar'  # v4.1
+    assert 'schooljaar 2026-2027' in page.inner_text('#trajectTelling'), 'telling noemt het schooljaar'
     page.screenshot(path=OUT + '/07b_projecten_verlenging.png', full_page=True)
     page.click('[data-pweergave="examen"]'); page.wait_for_selector('[data-crm-open="project:t6"]'); assert page.locator('[data-crm-open="project:t1"]').count() == 0, 'alleen examentraining'
     page.select_option('[data-pveld="status"][data-pid="t6"]', 'bezig'); page.wait_for_selector('select.pill.p-bezig[data-pid="t6"]')
     page.click('[data-pweergave="am"]'); page.click('#projectAms [data-pam="Menno"]'); page.wait_for_selector('[data-crm-open="project:t1"]')
+    # v4.1: bezettingsbord, meldingen, taskforce, vacature en kandidaat
+    page.click('[data-pweergave="bezetting"]'); page.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner")')
+    page.select_option('[data-kstatus="c1"]', 'gesprek'); page.wait_for_selector('select.pill.p-gesprek[data-kstatus="c1"]'); page.wait_for_timeout(300)
+    page.screenshot(path=OUT + '/07c_bezetting.png', full_page=True)
+    assert page.inner_text('#meldTeller') == '1', 'bel telt ongelezen meldingen'
+    page.click('#meldKnop'); page.wait_for_selector('#venster.aan .rij.nieuw[data-crm-open="project:t4"]'); page.screenshot(path=OUT + '/07d_meldingen.png')
+    page.click('#venster .rij[data-crm-open="project:t4"]'); page.wait_for_selector('.d-naam h2:has-text("NT2-ondersteuning")'); assert not page.locator('#venster.aan').count(), 'venster dicht na openen melding'
+    assert page.locator('#meldTeller').is_hidden(), 'bel leeg na lezen'
+    page.click('[data-dtab="taskforce"]'); page.click('[data-taskforce]'); page.wait_for_selector('#venster.aan #vf-hulpvraag')
+    page.fill('#vf-hulpvraag', 'NT2-lessen voor de ISK-klassen'); page.fill('#vf-rooster', 'ma t/m do 9-15'); page.locator('#le-tf [data-le="tekst"]').first.fill('Vacature invullen'); page.locator('#le-tf [data-le="eigenaar"]').first.fill('Joris')
+    page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.tf-vraag:has-text("NT2-lessen voor de ISK-klassen")'); page.wait_for_selector('#dTab .rij:has-text("Vacature invullen")')
+    page.screenshot(path=OUT + '/07e_taskforce.png', full_page=True)
+    page.click('[data-dtab="bezetting"]'); page.click('[data-vacature="nieuw"]'); page.wait_for_selector('#venster.aan #vf-titel'); page.fill('#vf-titel', 'Taalcoach'); page.fill('#vf-aantal', '1'); page.click('#venster [data-cf-opslaan]')
+    page.wait_for_selector('.vac-kaart:has-text("Taalcoach")'); page.locator('.vac-kaart:has-text("Taalcoach") [data-kandidaat="nieuw"]').click(); page.wait_for_selector('#venster.aan #vf-naam')
+    page.fill('#vf-naam', 'Ali Bakker'); page.select_option('#vf-bron', 'LinkedIn'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.vac-kaart:has-text("Ali Bakker")')
+    ali = page.locator('.vac-kaart:has-text("Taalcoach") [data-kstatus]'); ali.select_option('klaar voor start'); page.wait_for_selector('.vac-kaart:has-text("Taalcoach") .vac-teller.vol')
+    assert '1/3' in page.inner_text('[data-dtab="bezetting"]'), 'tab telt de bezetting'
+    page.locator('.vac-kaart:has-text("Taalcoach") [data-kandidaat]:not([data-kandidaat="nieuw"])').first.click(); page.wait_for_selector('#venster.aan [data-kopieerxps]'); page.click('#venster [data-cf-annuleer]')
+    page.screenshot(path=OUT + '/07f_project_bezetting.png', full_page=True)
+    assert page.locator('[data-kopieerxpsproject]').count() == 1, 'knop Kopieer voor XPS op het project'  # v4.1
+    page.click('[data-crm-terug]'); page.wait_for_selector('#view-trajecten.actief .vac-kaart'); page.click('[data-pweergave="am"]'); page.wait_for_selector('[data-crm-open="project:t1"]')
     page.click('[data-crm-open="project:t1"]'); page.wait_for_selector('.d-naam h2:has-text("Onderwijsondersteuning")')
     page.select_option('.d-links [data-pveld="gefactureerd"]', 'nee'); page.wait_for_selector('.d-links select.pill.p-nee')
     page.locator('[data-composer="notitie"]').first.click(); page.fill('#crmComposer #cf-tekst', 'Update van de accountmanager'); page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Update van de accountmanager")')
@@ -134,7 +156,7 @@ with sync_playwright() as p:
     page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.select_option('#cf-team', 'consultancy'); page.select_option('#cf-rol', 'teamlead'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/17_beheer_gebruikers.png', full_page=True)
     page.click('[data-gbewerk="g1"]'); page.wait_for_selector('#venster.aan #vf-naam'); page.fill('#vf-naam', 'Mees de Jong'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#crmBeheer:has-text("Mees de Jong")')  # v3.7
-    page.click('[data-beheer="keuzelijsten"]'); page.wait_for_selector('#le-schoolStatussen .le-rij'); page.locator('#le-schoolStatussen .le-rij input').first.fill('nieuw'); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Keuzelijsten opgeslagen")')
+    page.click('[data-beheer="keuzelijsten"]'); page.wait_for_selector('#le-schoolStatussen .le-rij'); page.locator('#le-schoolStatussen .le-rij input').first.fill('nieuw'); page.fill('#cf-schooljaar', '2027-2028'); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Keuzelijsten opgeslagen")')
     page.click('[data-beheer="mijlpalen"]'); page.wait_for_selector('#leMijlpalen .le-rij'); page.click('[data-le-erbij="leMijlpalen"]'); inp = page.locator('#leMijlpalen .le-rij').last.locator('input')
     inp.nth(0).fill('Scholen'); inp.nth(1).fill('contract'); inp.nth(2).fill('90'); inp.nth(3).fill('5'); page.screenshot(path=OUT + '/17b_beheer_mijlpalen.png', full_page=True); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Mijlpalen opgeslagen")')
     page.click('[data-beheer="tags"]'); page.wait_for_selector('#crmBeheer [data-hernoem]')
@@ -175,6 +197,11 @@ with sync_playwright() as p:
     page.select_option('.ftabel [data-pveld="verlenging"][data-pid="t2"]', 'verlengd'); page.wait_for_selector('.ftabel select.pill.p-verlengd[data-pid="t2"]')
     assert page.locator('.ftabel a.p-link[href^="https://docs.google.com"]').count() >= 1, 'link naar samenwerkingsvoorstel'
     page.screenshot(path=OUT + '/26_desk_projecten.png')
+    page.click('.zb-item[data-desk="bezetting"]'); page.wait_for_selector('.vac-grid .vac-kaart'); page.wait_for_timeout(150)  # v4.1
+    assert page.locator('.zb-item.aan[data-desk="bezetting"]').count() == 1, 'zijbalk: Bezetting actief'
+    page.screenshot(path=OUT + '/26c_desk_bezetting.png')
+    page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]')
+    page.click('[data-pweergave="huidig"]'); page.wait_for_timeout(200); assert 'schooljaar 2027-2028' in page.inner_text('#trajectTelling'), 'ingesteld schooljaar wordt gebruikt'
     page.click('[data-pweergave="bord"]'); page.wait_for_selector('.kaartje[data-crm-open^="project:"]'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/26a_desk_projecten_bord.png')
     page.click('.kaartje[data-crm-open="project:t1"]'); page.wait_for_selector('.d-naam h2:has-text("Onderwijsondersteuning")'); assert page.locator('.zb-item.aan[data-desk="projecten"]').count() == 1
@@ -235,5 +262,17 @@ with sync_playwright() as p:
     assert am.locator('#crmTabs [data-crmtab="pipeline"]').count() == 0, 'geen pipeline-tab op de telefoon'
     am.screenshot(path=OUT + '/42_am_relaties.png', full_page=True)
     ctx2.close()
+    # v4.1: talentscout Lotte (code talent123) begint bij de bezetting, zonder pipeline en facturatie
+    ctx3 = b.new_context(viewport={'width': 1280, 'height': 800}); tl = ctx3.new_page()
+    tl.on('pageerror', lambda e: meldingen.append(('pageerror talent', str(e))))
+    tl.goto('http://127.0.0.1:8765/'); tl.wait_for_timeout(500)
+    tl.fill('#apiInput', 'http://127.0.0.1:8765/api'); tl.fill('#codeInput', 'talent123'); tl.click('#codeOpslaan')
+    tl.wait_for_selector('#zbNaam:has-text("Lotte · talentscout")')
+    assert tl.locator('.zb-item[data-desk="bezetting"]').is_visible() and not tl.locator('.zb-item[data-desk="pipeline"]').is_visible() and not tl.locator('.zb-item[data-desk="facturatie"]').is_visible(), 'menu talent'
+    tl.click('.zb-item[data-desk="projecten"]'); tl.wait_for_selector('.vac-grid .vac-kaart'); assert tl.locator('#projectWeergaven .chip.aan[data-pweergave="bezetting"]').count() == 1, 'talent begint bij bezetting'
+    tl.locator('.vac-kaart a[data-crm-open="project:t4"]').first.click(); tl.wait_for_selector('#dTab .vac-kaart'); assert tl.locator('[data-dtab="bezetting"].aan').count() == 1, 'project opent bij de bezetting'
+    assert tl.locator('.d-links .kop:has-text("Facturatie")').count() == 0, 'talent ziet geen facturatie'
+    tl.screenshot(path=OUT + '/43_talent_project.png')
+    ctx3.close()
     b.close()
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

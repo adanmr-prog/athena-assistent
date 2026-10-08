@@ -1,6 +1,6 @@
 # Voorstel: teams, rechten en het trajectproces (v4)
 
-Status: **v4.0 gebouwd** (teams, rollen, rechtentabel, projectstatussen, projectenbord); v4.1 en verder volgen. ⚠️ = aanname die bevestigd moet worden.
+Status: **v4.1 gebouwd** (teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen); v4.2 en verder volgen. ⚠️ = aanname die bevestigd moet worden.
 
 **Besluiten (oktober 2026):** rechtentabel akkoord. Consultants zien de facturatie van hun eigen projecten (alleen lezen). Een AM ziet de historie van de kans achter zijn project, en alleen die. Teamlead accountmanagers: Mees; teamlead onderwijsconsultants: Mariama; management: Anne-Maartje en Menno. XPS blijft voor diensten en roosters (export/API later). De academy is een eigen platform.
 
@@ -104,16 +104,61 @@ Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en fact
 | Talent | open vacatures, voordrachten, time-to-fill, match → plaatsing, doorlooptijd academy/contract/VOG | time-to-fill < 14 dagen |
 | Bedrijf (iedereen) | omzet schooljaar, scholen, geplaatste ondersteuners, verlengingspercentage | door de directie gezet |
 
-## 6. XPS en AFAS InSite naast het dashboard
+## 6. XPS en AFAS naast het dashboard (advies, oktober 2026)
 
-**Uitgangspunt:** XPS en AFAS blijven de bron voor wat ze nu doen. Het dashboard bewaart alleen een verwijzing (XPS-id, AFAS-medewerkernummer) en de status die nodig is voor het proces. Zo hoeft niemand dubbel in te voeren.
+**Wat XPS is.** Bron: eigen inspectie, alleen lezen, 8 oktober 2026, 54 modules.
 
-| Koppeling | Wat | Hoe (in volgorde van voorkeur) |
+XPS (XPSLogic, app FlexPS) is het operationele systeem voor de flexkrachten. Deze modules worden aantoonbaar gebruikt:
+
+| Module | Gebruik |
+|---|---|
+| Accounts | studentdocenten en medewerkers; 1.646 nieuwe op het dashboard |
+| Sollicitanten en Vacatures | eigen werving, met het aantal sollicitanten per vacature |
+| HRM-Contracten | 5.068 contracten van het type OvO; statussen aangeboden → getekend → controleren → goedgekeurd |
+| Projecten | naam "School \| Dienst", nummer rond 10.900; statussen Website, Lead, Offerte, Optie, Boeking, Controleren, Verwerken, Afgerond, Geannuleerd |
+| Plaatsingen | 3.899, project plus account; Potentieel, Gecheckt, Geplaatst, Momenteel geplaatst, Reserve, Afgewezen, Ontkend |
+| Roosters | ongeveer 1.600 regels per week, met functie en kwalificatie |
+
+Verder staan in het menu onder meer Declaraties, Factureren, Klokuren en Ondertekenverzoeken. Of die gebruikt worden, is niet vastgesteld. **XPS heeft geen API**; alles loopt via de browser.
+
+**Taakverdeling (advies)**
+
+| Wat | Bron | Waarom |
 |---|---|---|
-| XPS → dashboard | kandidaten/flexkrachten, beschikbaarheid ⚠️ | 1. API als XPS die heeft. 2. Dagelijkse export (CSV/Excel) in een vaste Drive-map, die het dashboard 's nachts inleest. 3. Alleen een link per kandidaat ("open in XPS"). |
-| Dashboard → XPS | geselecteerde kandidaat + project | knop "Kopieer naar XPS" (de velden klaar om te plakken) of via de API |
-| AFAS InSite / Profit | contract- en VOG-status | AFAS Profit heeft een REST-API (GetConnectors met een token): het dashboard leest 's nachts de status van contracten en VOG's. De workflows blijven in InSite. |
-| Academy | modules afgerond | ⚠️ afhankelijk van het platform; anders een vinkje door de talentscout |
+| Scholen, kansen, offertes (pipeline) | **dashboard** | de consultants werken hier; één pipeline |
+| Project na winst: taskforce, account management, verlenging, facturatie | **dashboard** | hangt aan school, kans en AM |
+| Vraag (vacature: aantal, dagen, start, profiel) | **dashboard** | komt uit de taskforce, de AM vult hem in |
+| Flexkrachten, plaatsingen, contracten (OvO), roosters, uren, declaraties | **XPS** | daar werkt talent al, met de app voor de flexkrachten |
+| Bezetting en kandidaatstatus in het dashboard | **kopie uit XPS** (later automatisch) | de AM en consultant zien de voortgang zonder XPS te openen |
+
+**XPS: wat we nu het best kunnen doen**
+1. **Geen tweede plaatsingssysteem.** Talent blijft plaatsen in XPS. In het dashboard zet talent per vacature alleen de kandidaten die de AM moet zien, met hun XPS-nummer. Zodra de import er is (v4.3), gaat dat vanzelf.
+2. **Projecten koppelen.** Het projectveld "Projectnummer in XPS" (v4.1) verbindt een dashboardproject met het XPS-project, bijvoorbeeld 10.912. Maak het XPS-project pas aan bij **Boeking**, dus als de kans gewonnen is, met de knop "Kopieer voor XPS" op de projectpagina.
+3. ⚠️ **Besluit nodig:** stop met Lead, Offerte en Optie in XPS. Dan is er één commerciële pipeline, die in het dashboard.
+4. **Statussen vertalen.** Dit is de vertaling voor de import:
+
+   | XPS | Dashboard |
+   |---|---|
+   | Potentieel | voorgesteld |
+   | Gecheckt | geselecteerd |
+   | Geplaatst, Momenteel geplaatst | klaar voor start |
+   | Reserve | reserve (nieuw in v4.1) |
+   | Afgewezen, Ontkend | afgewezen |
+
+   HRM-Contracten op "goedgekeurd" betekent dat de stap contract klaar is.
+5. **Koppeling zonder API, in volgorde van voorkeur:**
+   1. Vraag XPSLogic (info@xps.nl) om een API, webhooks of een geplande export (CSV of Excel) van Plaatsingen, HRM-Contracten en Roosters.
+   2. Anders: talent exporteert wekelijks die lijsten uit XPS en zet ze in een vaste Drive-map; het dashboard leest ze 's nachts in.
+   3. Pas als laatste: automatisch uitlezen van de lijstpagina's (die hebben een vaste URL per module) met een aparte XPS-gebruiker die alleen mag lezen. Dat is kwetsbaar en alleen met toestemming van XPSLogic.
+6. **Uren en facturatie.** De gewerkte uren staan in XPS (Roosters, Klokuren). Met de import kan de facturatie per project uit die uren komen (uren × tarief → Exact), in plaats van met de hand. Zoek uit of de module Factureren in XPS al gebruikt wordt; anders blijft Exact de plek.
+7. **Privacy.** Haal alleen naam, nummer en status op. Geen contract-pdf's, BSN of loongegevens in de Sheet.
+
+**AFAS en InSite: wat we nu het best kunnen doen**
+1. De contracten van de flexkrachten (OvO) staan in **XPS**, niet in AFAS. De contractstatus voor het dashboard komt dus uit XPS (zie hierboven).
+2. ⚠️ Waarschijnlijk is AFAS (Profit, InSite) voor het vaste personeel: salaris, personeelsdossier, verzuim en HR-workflows. Vraag het talentteam precies welke stappen zij in InSite doen.
+   - Zit daar alleen vast personeel in, dan is een koppeling met het dashboard nu niet nodig.
+   - Gaat er ook iets per flexkracht doorheen, bijvoorbeeld de VOG, dan kan het via de REST-API van AFAS. Dat vraagt een app-connector met token en een GetConnector, ingesteld door de AFAS-beheerder.
+3. Gebruik geen derde wervingssysteem. Interne werving (eigen vacatures zoals accountmanager en talentscout) staat in de XPS-modules Sollicitanten en Vacatures. Voor de recruiter-agent zijn dat monday "Werving talent" en de skill `werving-recruiter`. Kies voor interne werving één van die twee.
 
 ## 7. Volgorde van bouwen
 
@@ -122,14 +167,23 @@ Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en fact
    - teams en rollen, de rechtentabel, menu per team;
    - projectstatussen zoals monday;
    - het AM-projectenbord met de weergaven Verlenging en Examentraining.
-3. **v4.1 Taskforce en bezetting:**
+3. **v4.1 Taskforce en bezetting (klaar):**
    - tab Taskforce, vacatures, kandidaatkaarten en voordragen;
    - statussen voor academy, contract en VOG;
-   - meldingen en taken.
+   - meldingen en taken;
+   - weergaven Huidig schooljaar en Verlenging volgend schooljaar; het huidige schooljaar is instelbaar.
 4. **v4.2 Rapporten en doelen per team**, plus bedrijfsdoelen.
-5. **v4.3 Koppelingen:** XPS (export of API), AFAS (contract/VOG), monday-import (bestaande borden overzetten), Exact.
+5. **v4.3 Koppelingen:**
+   - XPS-import (Plaatsingen, Contracten, Roosters/uren) via een export of API;
+   - monday-import (bestaande borden overzetten);
+   - Exact (facturen, liefst op basis van XPS-uren);
+   - AFAS alleen als blijkt dat er flexkrachtgegevens in staan.
 6. Daarna de overstap naar Supabase en Vercel met een eigen domein.
 
 ## 8. Open vragen
 
-Beantwoord (zie Besluiten bovenaan). Nog open: ⚠️ de weergave "Verlenging '27/'28" toont de projecten van schooljaar 26/27 (die verlengd moeten worden naar 27/28). Klopt dat met hoe het monday-bord het bedoelde?
+1. ⚠️ **Schooljaar:** de datum van de server (oktober 2026) geeft schooljaar 2026-2027. Is het huidige schooljaar 2027-2028, zet dat dan in Beheer → Keuzelijsten → Huidig schooljaar.
+2. **XPS:** heeft XPSLogic een export of API voor Plaatsingen, Contracten en Roosters? Wordt de module Factureren gebruikt?
+3. **XPS-projecten:** stoppen met Lead, Offerte en Optie in XPS en een project pas aanmaken bij Boeking?
+4. **AFAS:** wat doet het talentteam precies in InSite (alleen vast personeel of ook flexkrachten, bijvoorbeeld VOG)?
+5. **Interne werving:** XPS Sollicitanten of monday "Werving talent"?
