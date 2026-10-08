@@ -499,7 +499,11 @@
   .tegel.gehaald .t-doel { color: var(--groen); font-weight: 700; }
   .doel-kaart .doel-rij span:first-child { min-width: 0; }
   .doel-rij .getal { white-space: nowrap; }
-  .doel-rij { grid-template-columns: 130px minmax(0, 1fr) minmax(110px, auto); }
+  .doel-rij { grid-template-columns: minmax(90px, 130px) minmax(60px, 1fr) auto; }
+  .doel-rij > span:first-child { overflow-wrap: anywhere; -webkit-hyphens: auto; hyphens: auto; }
+  .rapport-tabel td { white-space: nowrap; }
+  .rapport-tabel td:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  .rteams { flex-basis: 100%; margin-top: 0; }
   body:not(.desk) .doel-rij { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }  /* telefoon: naam en cijfer boven, balk eronder */
   body:not(.desk) .doel-rij .b-spoor { grid-column: 1 / -1; grid-row: 2; }
   .f-balk { display: flex; height: 10px; border-radius: 3px; overflow: hidden; width: 120px; background: var(--vlak); }
@@ -1544,7 +1548,7 @@
   function laadRapport() {
     el('crmBalk').innerHTML = ''; el('crmInhoud').innerHTML = '<div class="spinner">Rapport maken</div>';
     // v4.2: rapport per team (met bedrijfscijfers); de pipeline-onderdelen alleen voor wie de pipeline mag zien
-    Promise.all([run('apiTeamRapport', CRM.preset, CRM.rTeam, CRM.rEigenaar), magApp('pipeline') ? run('apiRapport', CRM.preset, CRM.rEigenaar) : null]).then(function (r) { CRM.rapport = r[0]; CRM.pijp = r[1]; CRM.rTeam = r[0].team; if (CRM.tab === 'rapport') renderRapport(); })
+    Promise.all([run('apiTeamRapport', CRM.preset, CRM.rTeam, CRM.rEigenaar), magApp('pipeline') && (!CRM.rTeam || CRM.rTeam === 'consultancy') ? run('apiRapport', CRM.preset, CRM.rEigenaar) : null]).then(function (r) { CRM.rapport = r[0]; CRM.pijp = r[1]; CRM.rTeam = r[0].team; if (CRM.tab === 'rapport') renderRapport(); })
       .catch(function () { if (CRM.tab === 'rapport') el('crmInhoud').innerHTML = '<div class="leeg">Kon het rapport niet maken.</div>'; });
   }
   function balk(label, waarde, sterk, max, tekst) {
@@ -1571,14 +1575,14 @@
   function renderRapport() {
     var R = CRM.rapport, P = CRM.pijp, beheer = !!R.ik.beheer, rr = R.ik.rechten || {}, defs = R.metrieken || [], kies = R.kiesbaar || [];
     el('crmBalk').innerHTML = ['week', 'maand', 'kwartaal', 'schooljaar'].map(function (p) { return '<button class="chip' + (CRM.preset === p ? ' aan' : '') + '" data-crmpreset="' + p + '">' + PERIODE_LABEL[p] + '</button>'; }).join('') +
-      (R.teams.length > 1 ? R.teams.map(function (t) { return '<button class="chip' + (R.team === t ? ' aan' : '') + '" data-rteam="' + esc(t) + '">' + esc(TEAM_NAAM[t] || t) + '</button>'; }).join('') : '') +
+      (R.teams.length > 1 ? '<div class="chips rteams">' + R.teams.map(function (t) { return '<button class="chip' + (R.team === t ? ' aan' : '') + '" data-rteam="' + esc(t) + '">' + esc(TEAM_NAAM[t] || t) + '</button>'; }).join('') + '</div>' : '') +
       (kies.length > 1 ? '<select id="crmREigenaar"><option value="">Hele team</option>' + opts(kies, CRM.rEigenaar) + '</select>' : '');
     var h = '<div class="hint">' + esc(kortDatum(R.van)) + ' t/m ' + esc(kortDatum(R.tot)) + (R.team ? ' · ' + esc(R.eigenaar || TEAM_NAAM[R.team] || R.team) : '') + '</div>' + bedrijfsBlok(R.bedrijf);
     if (R.team) {
       var T = R.totaal;
       h += '<div class="kop">' + esc(TEAM_NAAM[R.team] || R.team) + ' <small>' + (R.eigenaar ? esc(R.eigenaar) : 'teamtotaal') + '</small></div><div class="tegels">' +
         defs.map(function (d) { var x = R.eigenaar && R.perPersoon[0] ? R.perPersoon[0] : T; return metriekTegel(d, x.cijfers[d.id], x.doelen[d.id]); }).join('') + '</div>';
-      if (!R.eigenaar) h += '<div class="kop">Per persoon <small>/ = doel</small></div><div class="tabel-wrap"><table class="tabel"><tr><th>Naam</th>' + defs.map(function (d) { return '<th title="' + esc(d.label) + '">' + esc(d.kort) + '</th>'; }).join('') + '</tr>' +
+      if (!R.eigenaar) h += '<div class="kop">Per persoon <small>/ = doel</small></div><div class="tabel-wrap"><table class="tabel rapport-tabel"><tr><th>Naam</th>' + defs.map(function (d) { return '<th title="' + esc(d.label) + '">' + esc(d.kort) + '</th>'; }).join('') + '</tr>' +
         R.perPersoon.map(function (p) {
           return '<tr><td>' + esc(p.naam) + '</td>' + defs.map(function (d) { var v = p.cijfers[d.id], doel = p.doelen[d.id]; return '<td' + (doelGehaald(d, v, doel) ? ' class="gehaald"' : '') + '>' + esc(metriekTekst(d, v)) + (doel ? ' <small>/' + esc(metriekTekst(d, doel)) + '</small>' : '') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</table></div>';
