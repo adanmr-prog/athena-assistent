@@ -1,7 +1,7 @@
 {
   "name": "Athena Assistent",
   "short_name": "Athena",
-  "description": "Athena Assistent — het bedrijfsbrein van AthenaSchool.",
+  "description": "Athena Assistent — dashboard en assistent van AthenaSchool.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

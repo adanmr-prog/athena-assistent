@@ -1,16 +1,17 @@
 # Athena Assistent (athena-assistent)
 
-Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder), de onderwijsadviseurs en de accountmanagers (circa 20 gebruikers; mail, agenda en review zijn per gebruiker privé). Zes modules: Vandaag (operations-dashboard), Relaties (het eigen CRM dat Capsule vervangt: scholen, personen, pipeline, taken/tracks, tijdlijn, rapportage), Brein (kennisbank en persoonlijke assistent die offertes, conceptmails, taken en afspraken voorstelt; uitvoeren pas na bevestiging), Review (nachtelijke review), Huisstijl (huisstijl-kit en on-brand teksten), Historie/Projecten (elk project met tijdlijn, taken en facturatie; een gewonnen kans wordt automatisch een project voor de accountmanager) en, op desktop, Facturatie (per accountmanager, met termijnen). UI, code en commentaar zijn Nederlands.
+Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder), de onderwijsadviseurs en de accountmanagers (circa 20 gebruikers; mail, agenda en review zijn per gebruiker privé). Modules (schermnamen sinds v3.9 tussen haakjes; de code gebruikt nog de oude namen): Vandaag (operations-dashboard), Relaties (het eigen CRM dat Capsule vervangt: scholen, personen, pipeline, taken/tracks, tijdlijn, rapportage), Brein ("Assistent": kennisbank en persoonlijke assistent die offertes, conceptmails, taken en afspraken voorstelt; uitvoeren pas na bevestiging), Review ("Dagstart": nachtelijke review), Huisstijl ("Studio": huisstijl-kit en on-brand teksten), Historie/Projecten (elk project met tijdlijn, taken en facturatie; een gewonnen kans wordt automatisch een project voor de accountmanager) en, op desktop, Facturatie (per accountmanager, met termijnen). UI, code en commentaar zijn Nederlands.
 
 ## Structuur
 - `index.html`: de volledige app (CSS + HTML + inline script in één bestand). Geen build-stap, geen bundler, geen npm-dependencies.
-- Desktop (v3.0): vanaf 1024 px zet `zetDesk()` de class `desk` op `body`; dan verschijnt de zijbalk `#zijbalk` (Home, Contacten, Taken, Agenda, Pipeline, Projecten, Rapporten, Doelen + Brein, Review, Huisstijl) en kiezen lijsten en detailschermen hun brede variant via `isDesk()`. Navigatie via `deskNaar(item)`. Desktop-CSS altijd onder `body.desk`, zodat de telefoonweergave ongewijzigd blijft.
+- Desktop (v3.0): vanaf 1024 px zet `zetDesk()` de class `desk` op `body`; dan verschijnt de zijbalk `#zijbalk` (groep Dashboard: Home, Contacten, Taken, Agenda, Pipeline, Projecten, Facturatie, Rapporten, Doelen; groep Athena: Assistent, Dagstart, Studio) en kiezen lijsten en detailschermen hun brede variant via `isDesk()`. Navigatie via `deskNaar(item)`. Desktop-CSS altijd onder `body.desk`, zodat de telefoonweergave ongewijzigd blijft.
 - `sw.js`: service worker met app-shell cache. De cache-naam `CACHE` (`athena-assistent-vX.Y`) moet bij elke release omhoog.
 - `manifest.webmanifest` en de icon-PNG's (AthenaSchool-logo op paars): PWA-metadata.
 - `backend/Code.gs`: de Google Apps Script-backend (Sheet als database, Drive-index, Gmail/Agenda, triggers, Claude API). Wordt in een eigen Apps Script-project geplakt; installatie in `backend/README.md`. Het contract staat in de skill `athena-backend-api`.
 - `test/`: mock-backend en Playwright-script voor browsertests (zie Testen).
 - `.claude/skills/werving-recruiter/`: werkwijze van de recruiter-agent (monday-bord Werving talent, PoliteReach, Lusha); zie de skill `werving-recruiter`.
 - Hosting: GitHub Pages van deze repo (`https://adanmr-prog.github.io/athena-assistent/`).
+- Teams, rechten en het trajectproces (taskforce, vacatures, bezetting): voorstel in `docs/teams-en-processen.md`.
 - Toekomst: overstap naar Supabase + Vercel met eigen domein; bouw nu al volgens `docs/supabase-migratie.md` (stabiele ids, alleen gewijzigde velden + `_oud`, keuzelijsten in `Instellingen`, alle bewerkingen via het bewerkvenster `openVenster`).
 
 ## Conventies
