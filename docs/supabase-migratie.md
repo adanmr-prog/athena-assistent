@@ -59,6 +59,7 @@ create table tracks       (id text primary key, naam text not null, omschrijving
 create table doelen       (id text primary key, eigenaar_id uuid references gebruikers on delete cascade, periode text, metric text, doel numeric, unique (eigenaar_id, periode, metric));
 create table documenten   (id text primary key, drive_id text unique, titel text, type text, school_naam text, url text, gewijzigd timestamptz, woorden int, tekst text, handmatig jsonb);
 create table reviews      (id text primary key, eigenaar_id uuid references gebruikers, datum date, gemaakt_op timestamptz, samenvatting text, gedaan jsonb, blijven_liggen jsonb, vandaag jsonb);
+create table facturen     (id text primary key, traject_id text references trajecten on delete cascade, omschrijving text, bedrag numeric, datum date, status text, factuurnummer text, bijzonderheden text, exact_id text, aangemaakt timestamptz default now(), door_id uuid references gebruikers);
 create table content      (id text primary key, datum timestamptz, type text, onderwerp text, tekst text, door_id uuid references gebruikers);
 create table huisstijl    (sleutel text primary key, waarde text);
 create table instellingen (sleutel text primary key, waarde jsonb);
