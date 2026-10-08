@@ -91,7 +91,7 @@ for _t in TRAJECTEN:
 # v4.0: projectenbord zoals monday, en een project van accountmanager Joris (tweede koppelcode)
 TRAJECTEN.append({'id': 't6', 'school': 'Lyceum Demo', 'plaats': 'Den Haag', 'traject': 'Examentraining', 'schooljaar': '2026-2027', 'start': '2027-03-01', 'eind': '2027-05-15', 'status': 'opstart', 'ondersteuners': 2, 'urenPerWeek': 10, 'tarief': 46, 'omzet': 6400, 'contactpersoon': 'B. Jansen', 'am': 'Joris', 'samenvatting': '', 'bijgewerkt': nu(), 'schoolId': 's2', 'kansId': 'k2', 'adviseur': 'Mees'})
 for _t in TRAJECTEN:
-    for _v in ('contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging'): _t.setdefault(_v, '')
+    for _v in ('contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging', 'xpsProject'): _t.setdefault(_v, '')
 TRAJECTEN[0].update({'contactgegevens': 'Anna de Vries\n06-12345678\na.devries@voorbeeldcollege.nl', 'voorstelUrl': 'https://docs.google.com/document/d/voorbeeld', 'documentenUrl': 'https://drive.google.com/drive/folders/voorbeeld', 'verlenging': 'voorstel verstuurd'})
 TRAJECTEN[1].update({'verlenging': 'nog bespreken'})
 TRAJECTEN[0].update({'soortFacturatie': 'vooraf', 'gefactureerd': 'ja', 'vakanties': 'doorbetaald', 'factuurnummer': '20210009', 'adviseur': 'Menno'})
@@ -118,13 +118,13 @@ VACATURES = [{'id': 'v1', 'trajectId': 't4', 'titel': 'NT2-ondersteuner', 'aanta
 KANDIDATEN = [{'id': 'c1', 'vacatureId': 'v1', 'trajectId': 't4', 'naam': 'Eva de Wit', 'email': 'eva@voorbeeld.nl', 'telefoon': '', 'bron': 'XPS-bestand', 'xpsId': 'X123', 'afasNummer': '', 'status': 'voorgesteld', 'statusSinds': d(-2) + ' 10:00', 'gesprek': '', 'notitie': '', 'door': 'Lotte'}]
 MELDINGEN = [{'id': 'm1', 'voor': 'Menno', 'tekst': 'Nieuwe kandidaat voor NT2-ondersteuner bij ISK Voorbeeld: Eva de Wit. Plan het matchinggesprek.', 'link': 'project:t4', 'datum': nu(), 'gelezen': '', 'door': 'Lotte'},
              {'id': 'm2', 'voor': 'Lotte', 'tekst': 'Nieuwe vacature: NT2-ondersteuner (2×) bij ISK Voorbeeld', 'link': 'project:t4', 'datum': nu(), 'gelezen': '', 'door': 'Menno'}]
-KSTATUS = ['voorgesteld', 'gesprek', 'geselecteerd', 'academy', 'contract', 'vog', 'klaar voor start', 'afgewezen']
+KSTATUS = ['voorgesteld', 'gesprek', 'geselecteerd', 'academy', 'contract', 'vog', 'klaar voor start', 'reserve', 'afgewezen']
 VRAGEN = [{'naam': 'hulpvraag', 'label': 'Hulpvraag van de school'}, {'naam': 'inzet', 'label': 'Inzet (aantal ondersteuners, rol)'}, {'naam': 'rooster', 'label': 'Rooster (dagen en tijden)'},
           {'naam': 'startdatum', 'label': 'Gewenste startdatum'}, {'naam': 'bijzonderheden', 'label': 'Bijzonderheden'}, {'naam': 'contactpersonen', 'label': 'Contactpersonen op school'}]
 def kand_uit(k): return dict(k, dagenInStatus=2)
 def vac_uit(v, met=True):
     ks = [k for k in KANDIDATEN if k['vacatureId'] == v['id']]
-    u = dict(v, gevuld=len([k for k in ks if k['status'] == 'klaar voor start']), inProces=len([k for k in ks if k['status'] not in ('afgewezen', 'klaar voor start')]))
+    u = dict(v, gevuld=len([k for k in ks if k['status'] == 'klaar voor start']), inProces=len([k for k in ks if k['status'] not in ('afgewezen', 'reserve', 'klaar voor start')]))
     if met: u['kandidaten'] = [kand_uit(k) for k in sorted(ks, key=lambda k: KSTATUS.index(k['status']))]
     return u
 def bezetting_van(tid):

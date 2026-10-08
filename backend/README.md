@@ -146,6 +146,7 @@ Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewo
   - talent ziet nu ook projecten met een open vacature (naast opstart).
 - **Dagstart:** kandidaten die langer dan 7 dagen op één status staan, komen bij "blijven liggen". Talent ziet dit voor academy, contract en VOG van de eigen voordrachten, de AM voor voorgesteld en gesprek op de eigen projecten.
 - **Schooljaar:** instelling `schooljaar` (Beheer → Keuzelijsten, `apiSchooljaarOpslaan`). Leeg betekent automatisch op datum: vanaf 1 augustus.
+- **XPS:** `Trajecten.xpsProject` (projectnummer in XPS) en per kandidaat `xpsId`. Op de projectpagina en de kandidaatkaart staat "Kopieer voor XPS". De status `reserve` volgt XPS Plaatsingen. Er is geen XPS-API; een import van exports volgt in v4.3 (zie `docs/teams-en-processen.md` §6).
 - **Keuzelijst** `kandidaatBronnen` (XPS-bestand, LinkedIn, eigen netwerk, sollicitatie, anders).
 
 | Functie | Argumenten | Resultaat |

@@ -33,7 +33,8 @@
   button, input, select, textarea { font-family: var(--sans); font-size: 15px; color: var(--inkt); }
 
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding: 14px 18px 12px; background: var(--paars); color: #fff; border-bottom: 3px solid var(--oranje); }
-  header .datum { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; opacity: .8; white-space: nowrap; }
+  header .datum { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header > div:first-child { min-width: 0; }  /* v4.1: met de bel erbij mag de datum inkorten in plaats van de knoppen uit beeld te duwen */
   header h1 { font-size: 24px; font-weight: 800; letter-spacing: -.01em; margin-top: 1px; line-height: 1.15; }
   header .rechts { display: flex; align-items: flex-end; gap: 12px; flex-shrink: 0; }
   header .hdr-stat { font-size: 12px; opacity: .85; text-align: right; line-height: 1.5; display: none; }
@@ -227,6 +228,9 @@
   .knop.gevaar { color: var(--rood); border-color: var(--rood); background: none; }
   .le-rij { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
   .le-rij input { min-width: 0; border: 1.5px solid var(--lijn); border-radius: 8px; padding: 8px; font-size: 16px; background: var(--wit); }
+  .le-rij input[type=date] { -webkit-appearance: none; appearance: none; min-height: 40px; }  /* v4.1: iOS maakt een leeg datumveld anders lager */
+  #le-tf .le-rij { flex-wrap: wrap; }
+  #le-tf [data-le=tekst] { flex: 1 1 100% !important; }
   .le-k { flex-shrink: 0; width: 44px; height: 44px; border: 1.5px solid var(--lijn); border-radius: 8px; background: var(--wit); color: var(--inkt2); cursor: pointer; }
   .doc-link { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
   [data-taakbewerk] { cursor: pointer; }
@@ -469,7 +473,7 @@
   .p-rij .r-rechts { width: 118px; flex-shrink: 0; }
   /* v4.1: bezetting (vacatures en kandidaten), taskforce en meldingen */
   .pill.p-voorgesteld { background-color: #579BFC; } .pill.p-gesprek { background-color: #FDAB3D; } .pill.p-geselecteerd { background-color: #A25DDC; }
-  .pill.p-academy { background-color: #784BD1; } .pill.p-contract { background-color: #0086C0; } .pill.p-vog { background-color: #037F4C; } .pill.p-klaar-voor-start { background-color: #00C875; } .pill.p-afgewezen { background-color: #DF2F4A; }
+  .pill.p-academy { background-color: #784BD1; } .pill.p-contract { background-color: #0086C0; } .pill.p-vog { background-color: #037F4C; } .pill.p-klaar-voor-start { background-color: #00C875; } .pill.p-reserve { background-color: #9AA0A6; } .pill.p-afgewezen { background-color: #DF2F4A; }
   .tag.open { background: var(--oranje-l); color: #B86E00; } .tag.ingevuld { background: var(--groen-l); color: var(--groen); } .tag.gesloten { background: var(--vlak); color: var(--inkt2); }
   .vac-kaart { margin: 10px 0; }
   .vac-kop { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
@@ -486,6 +490,7 @@
   .bel { position: relative; }
   .bel-teller { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--oranje); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
   .bel-teller[hidden] { display: none; }
+  .zb-voet .bel-teller { min-width: 18px; opacity: 1; flex: none; }
   .rij.nieuw { box-shadow: inset 3px 0 0 var(--oranje); padding-left: 10px; }
   .rij.nieuw .r-titel { font-weight: 800; }
   .f-balk { display: flex; height: 10px; border-radius: 3px; overflow: hidden; width: 120px; background: var(--vlak); }
@@ -993,7 +998,8 @@
     function terugval() {
       var ta = document.createElement('textarea'); ta.value = tekst; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
       document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, tekst.length);
-      try { document.execCommand('copy'); klaar(); } catch (e) { toast('Kopiëren lukt hier niet — selecteer de tekst zelf.'); }
+      var gelukt = false; try { gelukt = document.execCommand('copy'); } catch (e) {}  // v4.1: execCommand geeft false buiten een tik
+      if (gelukt) klaar(); else toast('Kopiëren lukt hier niet — selecteer de tekst zelf.');
       document.body.removeChild(ta);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tekst).then(klaar, terugval); else terugval();
@@ -1152,7 +1158,7 @@
   }
   function vacatureKaart(v, zienK, wijzigK, wijzigV, K, project) {
     var kop = '<div class="vac-kop"><div><b>' + esc(v.titel) + '</b> <span class="tag ' + esc(v.status) + '">' + esc(v.status) + '</span>' +
-      (project ? '<div class="r-meta"><a data-crm-open="project:' + esc(project.id) + '" style="cursor:pointer;font-weight:700">' + esc(project.school) + ' · ' + esc(project.traject) + '</a>' + (project.am ? ' · AM ' + esc(project.am) : '') + '</div>' : '') +
+      (project ? '<div class="r-meta"><a data-crm-open="project:' + esc(project.id) + '" style="cursor:pointer;font-weight:700;display:inline-block;padding:8px 0">' + esc(project.school) + ' · ' + esc(project.traject) + '</a>' + (project.am ? ' · AM ' + esc(project.am) : '') + '</div>' : '') +
       '<div class="r-meta">' + [v.aantal + '×', v.dagen, v.urenPerWeek ? v.urenPerWeek + ' u/wk' : '', v.start ? 'start ' + kortDatum(v.start) : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
       '<div class="vac-teller' + (v.gevuld >= v.aantal ? ' vol' : '') + '" title="gevuld van nodig">' + esc(v.gevuld) + '/' + esc(v.aantal) + '</div></div>';
     var prof = v.profiel ? '<div class="t-tekst" style="white-space:pre-wrap;margin-top:6px">' + esc(v.profiel) + '</div>' : '';
@@ -1219,6 +1225,12 @@
     return ['Naam: ' + k.naam, k.email ? 'E-mail: ' + k.email : '', k.telefoon ? 'Telefoon: ' + k.telefoon : '', 'School: ' + (pr.school || ''), 'Project: ' + (pr.traject || ''), 'Functie: ' + (v.titel || ''),
       v.dagen ? 'Dagen en tijden: ' + v.dagen : '', v.urenPerWeek ? 'Uren per week: ' + v.urenPerWeek : '', v.start ? 'Start: ' + v.start : '', v.eind ? 'Eind: ' + v.eind : ''].filter(Boolean).join('\n');
   }
+  // Project in XPS aanmaken zonder overtypen: naam zoals in XPS (School | Dienst) plus de gegevens van de taskforce
+  function xpsProjectTekst(d) {
+    var t = d.project, tf = d.taskforce || {};
+    return [t.school + ' | ' + t.traject, t.schooljaar ? 'Schooljaar: ' + t.schooljaar : '', t.start ? 'Start: ' + t.start : '', t.eind ? 'Eind: ' + t.eind : '', t.urenPerWeek ? 'Uren per week: ' + t.urenPerWeek : '',
+      t.ondersteuners ? 'Ondersteuners: ' + t.ondersteuners : '', tf.rooster ? 'Rooster: ' + tf.rooster : '', t.contactgegevens || t.contactpersoon ? 'Contact: ' + (t.contactgegevens || t.contactpersoon) : '', t.am ? 'Accountmanager: ' + t.am : ''].filter(Boolean).join('\n');
+  }
   function taskforceTab(d) {
     var tf = d.taskforce || {}, rb = d.rechtenBezetting || {}, vragen = d.taskforceVragen || [], af = d.afspraken || [];
     var ingevuld = vragen.some(function (v) { return tf[v.naam]; });
@@ -1255,9 +1267,9 @@
   /* --- v4.1: meldingen (de bel) --- */
   function zetMeldingen(n) { ['meldTeller', 'zbMeldTeller'].forEach(function (id) { var x = el(id); if (!x) return; x.textContent = n > 9 ? '9+' : String(n || ''); x.hidden = !n; }); }
   function toonMeldingen() {
-    formActie = null; openVenster('<div class="spinner">Laden</div>');
+    formActie = null; openVenster('<div class="spinner" id="meldLaden">Laden</div>');
     run('apiMeldingen').then(function (l) {
-      if (!el('venster').classList.contains('aan')) return;
+      if (!el('meldLaden')) return;  // intussen gesloten of een ander venster geopend
       el('vensterInhoud').innerHTML = '<div class="kop" style="margin-top:14px">Meldingen</div>' + (l.length ? l.map(function (m) {
         return '<div class="rij' + (m.link ? ' klik' : '') + (m.gelezen ? '' : ' nieuw') + '"' + (m.link ? ' data-crm-open="' + esc(m.link) + '"' : '') + '><div class="r-body"><div class="r-titel">' + esc(m.tekst) + '</div><div class="r-meta">' + esc([datumTijdKort(m.datum), m.door].filter(Boolean).join(' · ')) + '</div></div></div>';
       }).join('') : '<div class="leeg">Geen meldingen.</div>') + '<div class="balk"><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>';
@@ -1279,6 +1291,7 @@
     if ((x = ev.target.closest('[data-vacature]'))) { vacatureVenster(x.getAttribute('data-vacature'), x.getAttribute('data-tid')); return; }
     if ((x = ev.target.closest('[data-kandidaat]'))) { kandidaatVenster(x.getAttribute('data-kandidaat'), x.getAttribute('data-vid')); return; }
     if ((x = ev.target.closest('[data-taskforce]'))) { taskforceVenster(); return; }
+    if ((x = ev.target.closest('[data-kopieerxpsproject]')) && CRM.detail && CRM.detail.data) { kopieer(xpsProjectTekst(CRM.detail.data), x); return; }  // v4.1
     if ((x = ev.target.closest('[data-kopieerxps]'))) { var kx = zoekKandidaat(x.getAttribute('data-kopieerxps')); if (kx) kopieer(xpsTekst(kx), x); return; }
     if ((x = ev.target.closest('[data-vacatureweg]'))) {
       if (!window.confirm('Deze vacature verwijderen?')) return;
@@ -1788,7 +1801,8 @@
         tags: '<span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span>', mail: d.school && d.school.email, logSoort: 'notitie',
         velden: veld('Accountmanager', esc(t.am) || '<b style="color:var(--rood)">nog niet toegewezen</b>') + veld('Adviseur', esc(t.adviseur)) + veld('Periode', [t.start ? esc(kortDatum(t.start)) : '', t.eind ? esc(kortDatum(t.eind)) : ''].filter(Boolean).join(' – ')) +
           veld('Inzet', [t.ondersteuners ? esc(t.ondersteuners) + ' ondersteuner' + (Number(t.ondersteuners) === 1 ? '' : 's') : '', t.urenPerWeek ? esc(t.urenPerWeek) + ' u/wk' : ''].filter(Boolean).join(' · ')) + veld('Tarief', t.tarief ? euro(t.tarief) + '/u' : '') + veld('Omzet', t.omzet ? euro(t.omzet) : '') + veld('Bezetting', (d.bezetting || {}).nodig ? esc(d.bezetting.gevuld + ' van ' + d.bezetting.nodig + ' plekken gevuld') : '') + veld('Contactpersoon', esc(t.contactpersoon)) +
-          veld('Contactgegevens', t.contactgegevens ? '<span style="white-space:pre-wrap">' + esc(t.contactgegevens) + '</span>' : '') + veld('Samenwerkingsvoorstel', t.voorstelUrl ? webLink(t.voorstelUrl, 'Openen') : '') + veld('Documenten', t.documentenUrl ? webLink(t.documentenUrl, 'Map openen') : ''),  // v4.0
+          veld('Contactgegevens', t.contactgegevens ? '<span style="white-space:pre-wrap">' + esc(t.contactgegevens) + '</span>' : '') + veld('Samenwerkingsvoorstel', t.voorstelUrl ? webLink(t.voorstelUrl, 'Openen') : '') + veld('Documenten', t.documentenUrl ? webLink(t.documentenUrl, 'Map openen') : '') + veld('XPS-project', esc(t.xpsProject)) +  // v4.0
+          '<div><span></span><button class="knop-mini" data-kopieerxpsproject="1">Kopieer voor XPS</button></div>',  // v4.1
         lijst: '<div class="k-rij"><span>Status</span>' + projectPill(t, 'status', K.trajectStatussen || trajectStatussenApp()) + '</div><div class="k-rij"><span>Verlenging</span>' + projectPill(t, 'verlenging', (CRM.basis && CRM.basis.keuzes && CRM.basis.keuzes.verlenging) || ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']) + '</div>',
         extra: (t.samenvatting ? '<div class="kop">Samenvatting</div><div class="t-tekst" style="white-space:pre-wrap">' + esc(t.samenvatting) + '</div>' : '') + (d.facturen === null ? '' : facturatieBlok(t, d.facturen, K, !pr.facturatieWijzigen)) + (pr.wijzigen ? verwijderKnop('traject', t.id, t.am) : '') });
       var los = d.losseMails || [];
@@ -2193,6 +2207,7 @@
       { naam: 'am', label: 'Accountmanager', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('accountmanagement', t.am)) }, { naam: 'adviseur', label: 'Onderwijsconsultant', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('consultancy', t.adviseur)) },
       { naam: 'contactgegevens', label: 'Contactgegevens (naam, telefoon, e-mail)', type: 'textarea' }, { naam: 'voorstelUrl', label: 'Samenwerkingsvoorstel (link)', type: 'url', breed: true, plaats: 'https://docs.google.com/…' },
       { naam: 'documentenUrl', label: 'Belangrijke documenten (link naar map)', type: 'url', breed: true, plaats: 'https://drive.google.com/…' }, kies('verlenging', 'Verlenging', K.verlenging),  // v4.0
+      { naam: 'xpsProject', label: 'Projectnummer in XPS', plaats: '10.912' },  // v4.1: koppeling met het project in XPS
       kies('soortFacturatie', 'Soort facturatie', K.soortFacturatie), kies('gefactureerd', 'Gefactureerd', K.gefactureerd), kies('vakanties', 'Vakanties', K.vakanties),
       { naam: 'factuurDatum', label: 'Factuurdatum', type: 'date' }, { naam: 'factuurnummer', label: 'Factuurnummer' }, { naam: 'plaats', label: 'Plaats' },
       { naam: 'bijzonderheden', label: 'Bijzonderheden facturatie', type: 'textarea' }, { naam: 'samenvatting', label: 'Samenvatting', type: 'textarea' }];
