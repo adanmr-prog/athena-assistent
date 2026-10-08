@@ -79,7 +79,20 @@ ACTIVITEITEN = [
     {'id': 'e3', 'type': 'fase', 'datum': d(-12) + ' 11:00', 'door': 'Menno', 'schoolId': 's3', 'persoonId': 'p3', 'kansId': 'k1', 'onderwerp': 'Mijlpaal: gesprek → voorstel', 'tekst': '', 'duurMin': 0, 'bron': 'app'},
     {'id': 'e4', 'type': 'afspraak', 'datum': d(2) + ' 10:00', 'door': 'Mees', 'schoolId': 's2', 'persoonId': 'p2', 'kansId': 'k2', 'onderwerp': 'Gesprek teamleider Lyceum Demo', 'tekst': '', 'duurMin': 60, 'bron': 'agenda'},
 ]
-DOELEN = [{'id': 'mees-week-gesprekken', 'eigenaar': 'Mees', 'periode': 'week', 'metric': 'gesprekken', 'doel': 8}]
+DOELEN = [{'id': 'mees-week-gesprekken', 'eigenaar': 'Mees', 'periode': 'week', 'metric': 'gesprekken', 'doel': 8},
+          {'id': 'joris-maand-bezetting', 'eigenaar': 'Joris', 'periode': 'maand', 'metric': 'bezetting', 'doel': 100},
+          {'id': 'bedrijf-schooljaar-omzet', 'eigenaar': 'bedrijf', 'periode': 'schooljaar', 'metric': 'omzet', 'doel': 250000}]
+# v4.2: maatstaven per team (zoals METRIEKEN in Code.gs, ingekort)
+METR = [{'id': 'gesprekken', 'team': 'consultancy', 'label': 'Gesprekken', 'kort': 'Gespr.', 'soort': 'aantal'}, {'id': 'gewonnenWaarde', 'team': 'consultancy', 'label': 'Gewonnen waarde', 'kort': 'Won €', 'soort': 'euro'},
+        {'id': 'conversie', 'team': 'consultancy', 'label': 'Conversie (gewonnen van gesloten)', 'kort': 'Conv.', 'soort': 'procent'},
+        {'id': 'lopendeProjecten', 'team': 'accountmanagement', 'label': 'Lopende projecten', 'kort': 'Lopend', 'soort': 'aantal'}, {'id': 'bezetting', 'team': 'accountmanagement', 'label': 'Bezetting (gevuld van nodig)', 'kort': 'Bezet', 'soort': 'procent'},
+        {'id': 'dagenTotBezetting', 'team': 'accountmanagement', 'label': 'Dagen tot bezetting', 'kort': 'Dagen', 'soort': 'dagen', 'laagIsGoed': True},
+        {'id': 'voordrachten', 'team': 'talent', 'label': 'Voordrachten', 'kort': 'Voordr.', 'soort': 'aantal'}, {'id': 'timeToFill', 'team': 'talent', 'label': 'Time-to-fill', 'kort': 'TTF', 'soort': 'dagen', 'laagIsGoed': True},
+        {'id': 'omzet', 'team': 'bedrijf', 'label': 'Omzet schooljaar', 'kort': 'Omzet', 'soort': 'euro'}, {'id': 'verlengingspercentage', 'team': 'bedrijf', 'label': 'Verlengingspercentage', 'kort': 'Verl.', 'soort': 'procent'}]
+TEAMLEDEN = {'consultancy': ['Menno'], 'accountmanagement': ['Joris', 'Mees'], 'talent': ['Lotte']}
+CIJFERS = {'gesprekken': 4, 'gewonnenWaarde': 12000, 'conversie': 50, 'lopendeProjecten': 3, 'bezetting': 75, 'dagenTotBezetting': 12, 'voordrachten': 5, 'timeToFill': 9}
+def doelen_van(periode, eig): return {x['metric']: x['doel'] for x in DOELEN if x['periode'] == periode and x['eigenaar'] == eig}
+def bedrijf(): return {'schooljaar': '2026-2027', 'metrieken': [m for m in METR if m['team'] == 'bedrijf'], 'cijfers': {'omzet': 87580, 'verlengingspercentage': 50}, 'doelen': doelen_van('schooljaar', 'bedrijf')}
 GEBRUIKERS = [{'id': 'g1', 'naam': 'Mees', 'email': 'mees@voorbeeld.nl', 'rol': 'am', 'actief': True, 'heeftCode': True}]
 
 def per_id(lijst): return {x['id']: x for x in lijst}
@@ -354,7 +367,18 @@ def handle_crm(fn, args):
                 'forecast': [{'maand': d(30)[:7], 'waarde': 15040, 'gewogen': 7520, 'aantal': 1}, {'maand': d(60)[:7], 'waarde': 9000, 'gewogen': 2250, 'aantal': 1}, {'maand': 'zonder datum', 'waarde': 6000, 'gewogen': 600, 'aantal': 1}],
                 'trechter': [{'mijlpaal': m['mijlpaal'], 'pipeline': 'Scholen', 'aantal': len([k for k in CRMKANSEN if k['fase'] == m['mijlpaal']]), 'waarde': sum(k['waarde'] for k in CRMKANSEN if k['fase'] == m['mijlpaal']), 'gewogen': sum(kans_uit(k)['gewogen'] for k in CRMKANSEN if k['fase'] == m['mijlpaal'])} for m in MIJLPALEN],
                 'winst': {'gewonnen': 1, 'gewonnenWaarde': 12000, 'verloren': 1, 'verlorenWaarde': 4000, 'ratio': 50}, 'redenen': [{'reden': 'Te duur', 'aantal': 1}], 'stil': [kans_uit(k) for k in CRMKANSEN if kans_uit(k)['stil']]}
-    if fn == 'apiDoelen': return {'doelen': DOELEN, 'metrics': ['gesprekken', 'mails', 'afspraken', 'nieuweKansen', 'voorstellen', 'gewonnen', 'gewonnenWaarde'], 'periodes': ['week', 'maand', 'kwartaal'], 'gebruikers': GEBRUIKERS_NAMEN}
+    if fn == 'apiDoelen':  # v4.2: ook team- en bedrijfsdoelen
+        eig = ([{'waarde': 'bedrijf', 'label': 'Bedrijf (iedereen)', 'team': 'bedrijf'}] if beheer() else []) + [y for t in TEAMLEDEN for y in [{'waarde': 'team:' + t, 'label': 'Team ' + t, 'team': t}] + [{'waarde': n, 'label': n, 'team': t} for n in TEAMLEDEN[t]]] if beheer() else []
+        return {'doelen': DOELEN, 'metrics': [m['id'] for m in METR], 'metrieken': METR, 'periodes': ['week', 'maand', 'kwartaal', 'schooljaar'], 'gebruikers': GEBRUIKERS_NAMEN, 'eigenaren': eig,
+                'teamNamen': {'consultancy': 'Team onderwijsconsultants', 'accountmanagement': 'Team accountmanagers', 'talent': 'Team talent'}, 'magZetten': beheer()}
+    if fn == 'apiTeamRapport':
+        teams = ['consultancy', 'accountmanagement', 'talent'] if beheer() else [ik()['team']] if ik()['team'] in TEAMLEDEN else []
+        team = args[1] if len(args) > 1 and args[1] in teams else (teams[0] if teams else ''); preset = args[0] or 'maand'; defs = [m for m in METR if m['team'] == team]
+        leden = TEAMLEDEN.get(team, []) if beheer() else [ik()['naam']]
+        if len(args) > 2 and args[2] in leden: leden = [args[2]]
+        cij = {m['id']: CIJFERS.get(m['id']) for m in defs}
+        return {'preset': preset, 'van': d(-20), 'tot': d(0), 'team': team, 'teams': teams, 'metrieken': defs, 'perPersoon': [{'naam': n, 'cijfers': cij, 'doelen': doelen_van(preset, n)} for n in leden],
+                'totaal': {'cijfers': cij, 'doelen': doelen_van(preset, 'team:' + team)}, 'bedrijf': bedrijf(), 'ik': ik(), 'eigenaar': args[2] if len(args) > 2 and args[2] in leden else '', 'kiesbaar': TEAMLEDEN.get(team, []) if beheer() else []}
     if fn == 'apiDoelOpslaan':
         o = args[0]; DOELEN[:] = [x for x in DOELEN if x['id'] != o['eigenaar'] + o['periode'] + o['metric'] and x['id'] != o.get('id')] + [dict(o, id=o['eigenaar'] + o['periode'] + o['metric'], doel=float(o.get('doel') or 0))]; return handle_crm('apiDoelen', [])
     if fn == 'apiMijlpalenOpslaan':
@@ -366,7 +390,7 @@ def handle_crm(fn, args):
         return {'gebruiker': g, 'code': 'am' + uuid.uuid4().hex[:12] if (not o.get('id') or (len(args) > 1 and args[1])) else ''}
     if fn == 'apiHome':  # v3.0
         open_ = [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')]
-        return {'groet': 'Goedemorgen Menno', 'datum': 'dinsdag 22 september', 'ik': ik(), 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af'],
+        return {'groet': 'Goedemorgen Menno', 'datum': 'dinsdag 22 september', 'ik': ik(), 'bedrijf': bedrijf(), 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af'],
                 'agenda': [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': ''}, {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}], 'gekoppeld': True,
                 'pipeline': {'open': len(open_), 'waarde': sum(k['waarde'] for k in open_), 'gewogen': sum(k['gewogen'] for k in open_), 'stil': [k for k in open_ if k['stil']]},
                 'recent': [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if a['datum'] <= nu()], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}]}

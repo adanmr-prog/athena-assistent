@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.1';
+var VERSIE = '4.2';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -37,11 +37,11 @@ var TABELLEN = {
   Facturen:     ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden', 'exactId', 'aangemaakt', 'bijgewerkt', 'door'],  // v3.8: factuurtermijnen per project
   Instellingen: ['sleutel', 'waarde'],  // v3.7: keuzelijsten en correcties die de beheerder zelf instelt (JSON)
   // v4.1: bezetting van projecten en meldingen in de app
-  Vacatures:    ['id', 'trajectId', 'titel', 'aantal', 'dagen', 'urenPerWeek', 'start', 'eind', 'profiel', 'status', 'aangemaakt', 'door', 'bijgewerkt', 'bijgewerktDoor'],
-  Kandidaten:   ['id', 'vacatureId', 'trajectId', 'naam', 'email', 'telefoon', 'bron', 'xpsId', 'afasNummer', 'status', 'statusSinds', 'gesprek', 'notitie', 'door', 'aangemaakt', 'bijgewerkt', 'bijgewerktDoor'],
+  Vacatures:    ['id', 'trajectId', 'titel', 'aantal', 'dagen', 'urenPerWeek', 'start', 'eind', 'profiel', 'status', 'aangemaakt', 'door', 'bijgewerkt', 'bijgewerktDoor', 'ingevuld'],  // v4.2: ingevuld = datum (time-to-fill)
+  Kandidaten:   ['id', 'vacatureId', 'trajectId', 'naam', 'email', 'telefoon', 'bron', 'xpsId', 'afasNummer', 'status', 'statusSinds', 'gesprek', 'notitie', 'door', 'aangemaakt', 'bijgewerkt', 'bijgewerktDoor', 'statusHistorie'],  // v4.2: JSON {status: datum}
   Meldingen:    ['id', 'voor', 'tekst', 'link', 'datum', 'gelezen', 'door']
 };
-var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1, statusSinds: 1, gesprek: 1, gelezen: 1 };
+var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1, statusSinds: 1, gesprek: 1, gelezen: 1, ingevuld: 1 };
 var DOC_TYPES = ['contract', 'werkwijze', 'schooldossier', 'voorstel', 'prijslijst', 'overig'];
 var KANS_FASES = ['lead', 'gesprek', 'voorstel', 'onderhandeling', 'gewonnen', 'verloren'];
 var TRAJECT_STATUSSEN = ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'];  // v4.0: zoals het monday-bord
@@ -257,7 +257,7 @@ function apiOverzicht() {
   if (!isBeheerder()) kansen = kansen.filter(function (k) { return mag('pipeline', 'zien', k) && (k.eigenaar || k.am) === ikNaam(); });  // v4.0
   var actief = trajecten.filter(function (t) { return t.status === 'bezig' || t.status === 'actief'; });  // v4.0: monday-statussen
   var sj = huidigSchooljaar();
-  var omzet = trajecten.filter(function (t) { return t.schooljaar === sj && ['gestopt', 'offerte', 'opstart', 'onduidelijk'].indexOf(t.status) < 0; })
+  var omzet = trajecten.filter(function (t) { return t.schooljaar === sj && ['gestopt', 'offerte', 'onduidelijk'].indexOf(t.status) < 0; })  // v4.2: opstart is gewonnen omzet
     .reduce(function (s, t) { return s + (Number(t.omzet) || 0); }, 0);
   var open = kansen.filter(kansOpen).sort(function (a, b) { return String(a.deadline || '9999').localeCompare(String(b.deadline || '9999')); });
   return {
@@ -696,8 +696,7 @@ function trajectUit(t) {
 var SCHOOL_STATUSSEN = ['lead', 'prospect', 'klant', 'oud-klant'];
 var ACTIVITEIT_TYPES = ['notitie', 'gesprek', 'mail', 'afspraak'];   // handmatig te loggen; 'fase' en 'taak' schrijft de backend zelf
 var TAAK_CATEGORIEEN = ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'];
-var DOEL_METRICS = ['gesprekken', 'mails', 'afspraken', 'nieuweKansen', 'voorstellen', 'gewonnen', 'gewonnenWaarde'];
-var DOEL_PERIODES = ['week', 'maand', 'kwartaal'];
+var DOEL_PERIODES = ['week', 'maand', 'kwartaal', 'schooljaar'];  // v4.2: schooljaar (bedrijfsdoelen)
 var STANDAARD_MIJLPALEN = [
   { mijlpaal: 'lead', kans: 10, dagenNorm: 14 }, { mijlpaal: 'gesprek', kans: 25, dagenNorm: 10 },
   { mijlpaal: 'voorstel', kans: 50, dagenNorm: 7 }, { mijlpaal: 'onderhandeling', kans: 75, dagenNorm: 7 }
@@ -1285,7 +1284,7 @@ function apiHome() {
   var recent = lees('Activiteiten').filter(function (a) { return String(a.datum) <= nu() && zicht(a); }).sort(function (a, b) { return String(b.datum).localeCompare(String(a.datum)); }).slice(0, 25);
   var begin = new Date(); begin.setHours(0, 0, 0, 0);
   return {
-    groet: groet(), datum: datumLang(new Date()), ik: ikUit(),
+    groet: groet(), datum: datumLang(new Date()), ik: ikUit(), bedrijf: bedrijfCijfers(),  // v4.2: bedrijfsdoelen voor iedereen
     taken: taken.slice(0, 40).map(function (a) { return taakUit(a, sMap, pMap, kMap); }),
     agenda: agendaItems(begin, new Date(begin.getTime() + 7 * 86400000)), gekoppeld: mijnMailbox(),
     pipeline: { open: open.length, waarde: som('waarde'), gewogen: som('gewogen'), stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 8) },
@@ -1322,6 +1321,7 @@ function periodeStart(preset) {
   var d = new Date();
   if (preset === 'maand') return new Date(d.getFullYear(), d.getMonth(), 1);
   if (preset === 'kwartaal') return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+  if (preset === 'schooljaar') return schooljaarStart(huidigSchooljaar());  // v4.2
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);  // maandag van deze week
 }
 function apiRapport(preset, eigenaar) {
@@ -1414,14 +1414,30 @@ function archiveer() {
 }
 
 // v4.0: management zet doelen voor iedereen, een teamlead voor zijn eigen team; een medewerker ziet alleen zijn eigen doelen
+// v4.2: ook teamdoelen (eigenaar 'team:<team>') en bedrijfsdoelen ('bedrijf', iedereen ziet ze, alleen het management zet ze)
+var TEAM_DOELNAAM = { consultancy: 'Team onderwijsconsultants', accountmanagement: 'Team accountmanagers', talent: 'Team talent' };
+function doelZichtbaar(eigenaar, mensen) {
+  eigenaar = String(eigenaar);
+  if (eigenaar === 'bedrijf' || isBeheerder()) return true;
+  if (eigenaar.indexOf('team:') === 0) return !!GEBRUIKER && eigenaar === 'team:' + GEBRUIKER.team;
+  return mensen.indexOf(eigenaar) >= 0;
+}
 function apiDoelen() {
-  var mensen = zichtbareMensen();
-  return { doelen: lees('Doelen').filter(function (d) { return isBeheerder() || mensen.indexOf(String(d.eigenaar)) >= 0; }).map(function (d) { return { id: d.id, eigenaar: d.eigenaar, periode: d.periode, metric: d.metric, doel: Number(d.doel) || 0 }; }),
-    metrics: DOEL_METRICS, periodes: DOEL_PERIODES, gebruikers: mensen, magZetten: isBeheerder() || isTeamlead() };
+  var mensen = zichtbareMensen(), eigenaren = [];
+  if (isBeheerder()) eigenaren.push({ waarde: 'bedrijf', label: 'Bedrijf (iedereen)', team: 'bedrijf' });
+  (isBeheerder() ? RAPPORT_TEAMS : RAPPORT_TEAMS.filter(function (t) { return isTeamlead() && GEBRUIKER.team === t; })).forEach(function (t) {
+    eigenaren.push({ waarde: 'team:' + t, label: TEAM_DOELNAAM[t], team: t });
+    teamNamen(t).forEach(function (n) { eigenaren.push({ waarde: n, label: n, team: t }); });
+  });
+  return { doelen: lees('Doelen').filter(function (d) { return doelZichtbaar(d.eigenaar, mensen); }).map(function (d) { return { id: d.id, eigenaar: d.eigenaar, periode: d.periode, metric: d.metric, doel: Number(d.doel) || 0 }; }),
+    metrics: Object.keys(METRIEKEN), metrieken: metriekDefs(), periodes: DOEL_PERIODES, gebruikers: mensen, eigenaren: eigenaren, teamNamen: TEAM_DOELNAAM, magZetten: isBeheerder() || isTeamlead() };
 }
 function eisDoelRecht(eigenaar) {
   if (isBeheerder()) return;
-  if (!isTeamlead() || teamNamen(GEBRUIKER.team).indexOf(String(eigenaar)) < 0) throw new Error('Alleen het management of de teamlead zet doelen voor dit team.');
+  eigenaar = String(eigenaar);
+  if (eigenaar === 'bedrijf') throw new Error('Alleen het management zet bedrijfsdoelen.');
+  if (eigenaar.indexOf('team:') === 0) { if (isTeamlead() && eigenaar === 'team:' + GEBRUIKER.team) return; throw new Error('Alleen het management of de teamlead zet doelen voor dit team.'); }
+  if (!isTeamlead() || teamNamen(GEBRUIKER.team).indexOf(eigenaar) < 0) throw new Error('Alleen het management of de teamlead zet doelen voor dit team.');
 }
 function apiDoelOpslaan(obj) {
   obj = obj || {};
@@ -1429,8 +1445,9 @@ function apiDoelOpslaan(obj) {
   if (!eigenaar) throw new Error('Kies een persoon.');
   eisDoelRecht(eigenaar);
   if (obj.id) { var oudDoel = vind('Doelen', obj.id); if (oudDoel) eisDoelRecht(oudDoel.eigenaar); }
-  if (DOEL_PERIODES.indexOf(obj.periode) < 0) throw new Error('Kies week, maand of kwartaal.');
-  if (DOEL_METRICS.indexOf(obj.metric) < 0) throw new Error('Onbekende maatstaf.');
+  if (DOEL_PERIODES.indexOf(obj.periode) < 0) throw new Error('Kies week, maand, kwartaal of schooljaar.');
+  if (!METRIEKEN[obj.metric]) throw new Error('Onbekende maatstaf.');
+  if (eigenaar === 'bedrijf' && METRIEKEN[obj.metric].team !== 'bedrijf') throw new Error('Kies een bedrijfscijfer voor een bedrijfsdoel.');  // v4.2
   var id = slug(eigenaar + '-' + obj.periode + '-' + obj.metric);
   metLock(function () {
     if (obj.id && obj.id !== id) verwijderRijen('Doelen', function (d) { return String(d.id) === String(obj.id); });  // v3.7: bewerkt doel met andere persoon, periode of maatstaf
@@ -2149,6 +2166,8 @@ function apiVacatureOpslaan(obj) {
   if (o.status !== undefined && VACATURE_STATUSSEN.indexOf(o.status) < 0) throw new Error('Onbekende status.');
   ['start', 'eind'].forEach(function (k) { if (o[k] !== undefined) o[k] = datumIn(o[k]); });
   if (!oud) { o.status = 'open'; o.aangemaakt = nu(); o.door = ikNaam(); o.aantal = o.aantal || 1; }
+  if (oud && o.status === 'ingevuld' && oud.status !== 'ingevuld' && !oud.ingevuld) o.ingevuld = nu();  // v4.2: met de hand op ingevuld gezet
+  if (oud && o.status === 'open' && oud.status !== 'open') o.ingevuld = '';
   metLock(function () {
     controleerConflict('Vacatures', o.id, o, obj._oud);
     var v = schrijf('Vacatures', o); _OPENVAC = null;
@@ -2177,7 +2196,7 @@ function apiKandidaatOpslaan(obj) {
   o.trajectId = t.id;
   var nieuwStatus = o.status !== undefined && (!oud || o.status !== oud.status) ? o.status : null;
   if (!oud) { o.status = o.status || 'voorgesteld'; o.aangemaakt = nu(); o.door = ikNaam(); nieuwStatus = o.status; }
-  if (nieuwStatus) o.statusSinds = nu();
+  if (nieuwStatus) { o.statusSinds = nu(); var hist = oud ? kandidaatHistorie(oud) : {}; if (!hist[nieuwStatus]) hist[nieuwStatus] = o.statusSinds; o.statusHistorie = hist; }  // v4.2: voor doorlooptijd en time-to-fill
   metLock(function () {
     controleerConflict('Kandidaten', o.id, o, obj._oud);
     var k = schrijf('Kandidaten', o), naam = k.naam, waar = v.titel + ' bij ' + t.school, link = 'project:' + t.id;
@@ -2199,7 +2218,7 @@ function apiKandidaatOpslaan(obj) {
 // Na elke wijziging aan kandidaten: vacature vol → ingevuld; alle plekken gevuld → project van opstart naar bezig (altijd binnen metLock).
 function werkBezettingBij(t, v) {
   var kands = lees('Kandidaten'), vu = vacatureUit(v, kands, false);
-  if (vu.status === 'open' && vu.gevuld >= vu.aantal) { schrijf('Vacatures', { id: v.id, status: 'ingevuld' }); _OPENVAC = null; }
+  if (vu.status === 'open' && vu.gevuld >= vu.aantal) { schrijf('Vacatures', { id: v.id, status: 'ingevuld', ingevuld: nu() }); _OPENVAC = null; }
   var b = bezettingVan(t.id, lees('Vacatures'), kands);
   if (t.status === 'opstart' && b.nodig > 0 && b.gevuld >= b.nodig) {
     schrijf('Trajecten', { id: t.id, status: 'bezig' });
@@ -2233,6 +2252,139 @@ function kandidatenBlijvenLiggen(eigenAlles) {
     var vanMijAm = t.am === ik && ['voorgesteld', 'gesprek'].indexOf(k.status) >= 0;
     if (eigenAlles || vanMijTalent || vanMijAm) uit.push({ tekst: 'Kandidaat ' + k.naam + ' (' + (t.school || '') + ') staat al ' + dagen + ' dagen op "' + k.status + '"', bron: 'traject', dagen: dagen });
   });
+  return uit;
+}
+
+/* ===================== 12. Rapporten en doelen per team (v4.2) ===================== */
+
+// Maatstaven per team (docs/teams-en-processen.md §5). soort: aantal | euro | procent | dagen. stand = telt de huidige stand, niet de periode.
+// laagIsGoed: een doel is gehaald als de waarde er onder blijft (dagen). Bedrijfscijfers gaan altijd over het huidige schooljaar.
+var METRIEKEN = {
+  gesprekken:            { team: 'consultancy', label: 'Gesprekken', kort: 'Gespr.', soort: 'aantal' },
+  afspraken:             { team: 'consultancy', label: 'Afspraken', kort: 'Afspr.', soort: 'aantal' },
+  mails:                 { team: 'consultancy', label: 'Mails', kort: 'Mails', soort: 'aantal' },
+  nieuweKansen:          { team: 'consultancy', label: 'Nieuwe kansen', kort: 'Kansen', soort: 'aantal' },
+  nieuweScholen:         { team: 'consultancy', label: 'Nieuwe scholen', kort: 'Scholen', soort: 'aantal' },
+  voorstellen:           { team: 'consultancy', label: 'Voorstellen', kort: 'Voorst.', soort: 'aantal' },
+  gewonnen:              { team: 'consultancy', label: 'Gewonnen', kort: 'Won', soort: 'aantal' },
+  gewonnenWaarde:        { team: 'consultancy', label: 'Gewonnen waarde', kort: 'Won €', soort: 'euro' },
+  conversie:             { team: 'consultancy', label: 'Conversie (gewonnen van gesloten)', kort: 'Conv.', soort: 'procent' },
+  lopendeProjecten:      { team: 'accountmanagement', label: 'Lopende projecten', kort: 'Lopend', soort: 'aantal', stand: true },
+  bezetting:             { team: 'accountmanagement', label: 'Bezetting (gevuld van nodig)', kort: 'Bezet', soort: 'procent', stand: true },
+  dagenTotBezetting:     { team: 'accountmanagement', label: 'Dagen tot bezetting', kort: 'Dagen', soort: 'dagen', laagIsGoed: true },
+  evaluaties:            { team: 'accountmanagement', label: 'Gesprekken en afspraken in projecten', kort: 'Gespr.', soort: 'aantal' },
+  verlengd:              { team: 'accountmanagement', label: 'Verlengd (dit schooljaar)', kort: 'Verl.', soort: 'aantal', stand: true },
+  facturatieOpTijd:      { team: 'accountmanagement', label: 'Facturatie op tijd', kort: 'Fact.', soort: 'procent' },
+  voordrachten:          { team: 'talent', label: 'Voordrachten', kort: 'Voordr.', soort: 'aantal' },
+  geplaatst:             { team: 'talent', label: 'Klaar voor start', kort: 'Klaar', soort: 'aantal' },
+  matchRatio:            { team: 'talent', label: 'Match → plaatsing', kort: 'Match', soort: 'procent' },
+  timeToFill:            { team: 'talent', label: 'Time-to-fill', kort: 'TTF', soort: 'dagen', laagIsGoed: true },
+  doorlooptijd:          { team: 'talent', label: 'Doorlooptijd geselecteerd → klaar', kort: 'Doorl.', soort: 'dagen', laagIsGoed: true },
+  omzet:                 { team: 'bedrijf', label: 'Omzet schooljaar', kort: 'Omzet', soort: 'euro' },
+  scholen:               { team: 'bedrijf', label: 'Scholen met een project', kort: 'Scholen', soort: 'aantal' },
+  ondersteuners:         { team: 'bedrijf', label: 'Ondersteuners ingezet', kort: 'Ond.', soort: 'aantal' },
+  verlengingspercentage: { team: 'bedrijf', label: 'Verlengingspercentage', kort: 'Verl.', soort: 'procent' }
+};
+var RAPPORT_TEAMS = ['consultancy', 'accountmanagement', 'talent'];
+function metriekDefs(team) {
+  return Object.keys(METRIEKEN).filter(function (m) { return !team || METRIEKEN[m].team === team; }).map(function (m) {
+    var d = METRIEKEN[m]; return { id: m, team: d.team, label: d.label, kort: d.kort, soort: d.soort, laagIsGoed: !!d.laagIsGoed, stand: !!d.stand };
+  });
+}
+// Elke maatstaf telt als teller/noemer, zodat een teamtotaal van percentages en gemiddelden klopt.
+function telWaarde(m, x) {
+  if (!x) return METRIEKEN[m].soort === 'procent' || METRIEKEN[m].soort === 'dagen' ? null : 0;
+  var s = METRIEKEN[m].soort;
+  if (s === 'procent') return x.n ? Math.round(100 * x.t / x.n) : null;
+  if (s === 'dagen') return x.n ? Math.round(x.t / x.n) : null;
+  return Math.round(x.t * 100) / 100;
+}
+function dagenTussen(a, b) { var x = parseDatum(a), y = parseDatum(b); return x && y ? Math.max(0, Math.round((y - x) / 86400000)) : null; }
+function kandidaatHistorie(k) { var h = {}; try { h = JSON.parse(k.statusHistorie || '{}') || {}; } catch (e) { h = {}; } if (k.status && !h[k.status] && k.statusSinds) h[k.status] = k.statusSinds; return h; }
+function schooljaarStart(sj) { return new Date(Number(String(sj).slice(0, 4)), 7, 1); }
+
+// Cijfers van één team in een periode: per persoon en het teamtotaal ({ per: {naam: {maatstaf: {t, n}}}, totaal: {...} }).
+function teamCijfers(team, van, tot) {
+  var per = {}, totaal = {}, inP = function (s) { var d = String(s || '').slice(0, 10); return !!d && d >= van && d <= tot; };
+  var tel = function (naam, m, t, n) {
+    if (!naam) return;
+    var p = per[naam] || (per[naam] = {}), x = p[m] || (p[m] = { t: 0, n: 0 }), y = totaal[m] || (totaal[m] = { t: 0, n: 0 });
+    x.t += t; x.n += (n || 0); y.t += t; y.n += (n || 0);
+  };
+  var sj = huidigSchooljaar(), vandaag = datumStr(new Date());
+  if (team === 'consultancy') {
+    lees('Activiteiten').forEach(function (a) {
+      if (!a.door || !inP(a.datum) || String(a.datum) > nu()) return;
+      if (a.type === 'gesprek') tel(a.door, 'gesprekken', 1); else if (a.type === 'mail') tel(a.door, 'mails', 1); else if (a.type === 'afspraak') tel(a.door, 'afspraken', 1);
+      else if (a.type === 'fase' && /→ voorstel$/.test(String(a.onderwerp))) tel(a.door, 'voorstellen', 1);
+    });
+    lees('Kansen').forEach(function (k) {
+      if (inP(k.aangemaakt)) tel(k.eigenaar, 'nieuweKansen', 1);
+      if ((k.fase === 'gewonnen' || k.fase === 'verloren') && inP(k.gesloten)) {
+        tel(k.eigenaar, 'conversie', k.fase === 'gewonnen' ? 1 : 0, 1);
+        if (k.fase === 'gewonnen') { tel(k.eigenaar, 'gewonnen', 1); tel(k.eigenaar, 'gewonnenWaarde', Number(k.waarde) || 0); }
+      }
+    });
+    lees('Scholen').forEach(function (s) { if (inP(s.aangemaakt)) tel(s.eigenaar, 'nieuweScholen', 1); });
+  } else if (team === 'accountmanagement') {
+    var ts = lees('Trajecten'), tMap = perId(ts), vacs = lees('Vacatures'), kands = lees('Kandidaten');
+    ts.forEach(function (t) {
+      if (!t.am) return;
+      if (projectLopend(t)) { tel(t.am, 'lopendeProjecten', 1); var b = bezettingVan(t.id, vacs, kands); if (b.nodig) tel(t.am, 'bezetting', b.gevuld, b.nodig); }
+      if (t.schooljaar === sj && t.verlenging === 'verlengd') tel(t.am, 'verlengd', 1);
+    });
+    vacs.forEach(function (v) { var t = tMap[v.trajectId]; if (t && t.am && v.ingevuld && inP(v.ingevuld)) { var d = dagenTussen(v.aangemaakt, v.ingevuld); if (d !== null) tel(t.am, 'dagenTotBezetting', d, 1); } });
+    lees('Activiteiten').forEach(function (a) { var t = a.trajectId ? tMap[a.trajectId] : null; if (t && t.am && a.door === t.am && (a.type === 'gesprek' || a.type === 'afspraak') && inP(a.datum) && String(a.datum) <= nu()) tel(t.am, 'evaluaties', 1); });
+    lees('Facturen').forEach(function (f) {
+      var t = tMap[f.trajectId]; if (!t || !t.am || !f.datum || !inP(f.datum) || String(f.datum).slice(0, 10) > vandaag) return;  // alleen termijnen die al verstuurd hadden moeten zijn
+      tel(t.am, 'facturatieOpTijd', ['verzonden', 'betaald'].indexOf(f.status) >= 0 ? 1 : 0, 1);
+    });
+  } else if (team === 'talent') {
+    var kandidaten = lees('Kandidaten'), vMap = perId(lees('Vacatures'));
+    kandidaten.forEach(function (k) {
+      var h = kandidaatHistorie(k), klaar = h[KANDIDAAT_KLAAR], af = h.afgewezen;
+      if (inP(k.aangemaakt)) tel(k.door, 'voordrachten', 1);
+      if (klaar && inP(klaar)) { tel(k.door, 'geplaatst', 1); if (h.geselecteerd) { var d = dagenTussen(h.geselecteerd, klaar); if (d !== null) tel(k.door, 'doorlooptijd', d, 1); } }
+      if ((klaar && inP(klaar)) || (af && inP(af))) tel(k.door, 'matchRatio', klaar && inP(klaar) ? 1 : 0, 1);
+    });
+    Object.keys(vMap).forEach(function (id) {
+      var v = vMap[id]; if (!v.ingevuld || !inP(v.ingevuld)) return;
+      var d = dagenTussen(v.aangemaakt, v.ingevuld); if (d === null) return;
+      uniek(kandidaten.filter(function (k) { return String(k.vacatureId) === String(id) && k.status === KANDIDAAT_KLAAR; }).map(function (k) { return k.door; })).forEach(function (n) { tel(n, 'timeToFill', d, 1); });
+    });
+  }
+  return { per: per, totaal: totaal };
+}
+function waardenVan(team, tellers) { var u = {}; metriekDefs(team).forEach(function (d) { u[d.id] = telWaarde(d.id, tellers && tellers[d.id]); }); return u; }
+// Doelen van een periode: { eigenaar: { maatstaf: doel } } (eigenaar = naam, 'team:<team>' of 'bedrijf')
+function doelenVan(periode) { var u = {}; lees('Doelen').filter(function (d) { return d.periode === periode && Number(d.doel); }).forEach(function (d) { (u[d.eigenaar] = u[d.eigenaar] || {})[d.metric] = Number(d.doel); }); return u; }
+
+// De bedrijfscijfers van het huidige schooljaar; iedereen ziet ze (geen bedragen per persoon).
+function bedrijfCijfers() {
+  var sj = huidigSchooljaar(), vacs = lees('Vacatures'), kands = lees('Kandidaten'), x = { omzet: { t: 0, n: 0 }, scholen: { t: 0, n: 0 }, ondersteuners: { t: 0, n: 0 }, verlengingspercentage: { t: 0, n: 0 } }, scholen = {};
+  lees('Trajecten').filter(function (t) { return t.schooljaar === sj && ['gestopt', 'offerte', 'onduidelijk'].indexOf(t.status) < 0; }).forEach(function (t) {
+    x.omzet.t += Number(t.omzet) || 0; scholen[t.schoolId || klein(t.school)] = true;
+    x.ondersteuners.t += Math.max(Number(t.ondersteuners) || 0, bezettingVan(t.id, vacs, kands).gevuld);
+    if (t.verlenging === 'verlengd' || t.verlenging === 'stopt') { x.verlengingspercentage.n++; if (t.verlenging === 'verlengd') x.verlengingspercentage.t++; }
+  });
+  x.scholen.t = Object.keys(scholen).length;
+  return { schooljaar: sj, metrieken: metriekDefs('bedrijf'), cijfers: waardenVan('bedrijf', x), doelen: doelenVan('schooljaar').bedrijf || {} };
+}
+
+// Rapport van één team: management kiest een team, een teamlead ziet zijn team per persoon, een medewerker zichzelf plus het teamtotaal.
+function apiTeamRapport(preset, team, eigenaar) {
+  preset = DOEL_PERIODES.indexOf(preset) >= 0 ? preset : 'maand';
+  var teams = isBeheerder() ? RAPPORT_TEAMS.slice() : RAPPORT_TEAMS.filter(function (t) { return GEBRUIKER && GEBRUIKER.team === t; });
+  if (teams.indexOf(team) < 0) team = teams[0] || '';
+  var van = datumStr(periodeStart(preset)), tot = datumStr(new Date()), doelen = doelenVan(preset);
+  var uit = { preset: preset, van: van, tot: tot, team: team, teams: teams, metrieken: metriekDefs(team), perPersoon: [], totaal: { cijfers: {}, doelen: {} }, bedrijf: bedrijfCijfers(), ik: ikUit(), eigenaar: '' };
+  if (!team) return uit;
+  var leden = teamNamen(team), zicht = zichtbareMensen(), mensen = isBeheerder() ? leden : leden.filter(function (n) { return zicht.indexOf(n) >= 0; });
+  uit.kiesbaar = isBeheerder() || isTeamlead() ? mensen.slice() : [];  // wie management of een teamlead kan kiezen
+  if (eigenaar && mensen.indexOf(eigenaar) >= 0) { uit.eigenaar = eigenaar; mensen = [eigenaar]; }
+  var c = teamCijfers(team, van, tot);
+  uit.perPersoon = mensen.map(function (n) { return { naam: n, cijfers: waardenVan(team, c.per[n]), doelen: doelen[n] || {} }; });
+  uit.totaal = { cijfers: waardenVan(team, c.totaal), doelen: doelen['team:' + team] || {} };
   return uit;
 }
 
