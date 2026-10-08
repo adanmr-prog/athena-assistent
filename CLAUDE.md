@@ -12,6 +12,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder)
 - `.claude/skills/werving-recruiter/`: werkwijze van de recruiter-agent (monday-bord Werving talent, PoliteReach, Lusha); zie de skill `werving-recruiter`.
 - Hosting: GitHub Pages van deze repo (`https://adanmr-prog.github.io/athena-assistent/`).
 - Teams, rechten en het trajectproces (taskforce, vacatures, bezetting): voorstel in `docs/teams-en-processen.md`.
+- Rechten (v4.0): teams `management|consultancy|accountmanagement|talent` en rollen `medewerker|teamlead|management`; de backend filtert en controleert via `RECHTEN`/`mag()`/`eis()` (zie `docs/teams-en-processen.md`), de app verbergt menu's en knoppen met `magApp()` en `[data-recht]`. Nieuwe schermen en api's doen allebei mee.
 - Toekomst: overstap naar Supabase + Vercel met eigen domein; bouw nu al volgens `docs/supabase-migratie.md` (stabiele ids, alleen gewijzigde velden + `_oud`, keuzelijsten in `Instellingen`, alle bewerkingen via het bewerkvenster `openVenster`).
 
 ## Conventies
@@ -32,7 +33,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder)
 
 ## Testen
 - Geen testsuite voor de backend; `node --check` op een `.js`-kopie van `backend/Code.gs` is het vangnet.
-- Browsertest: `python3 test/mock_backend.py` serveert de repo op http://127.0.0.1:8765 met een mock-API op `/api` (koppelcode `test123`); `python3 test/test_app.py` doorloopt alle zes schermen met Playwright (Chromium uit `/opt/pw-browsers`) en zet screenshots in `test/shots/`. De mock houdt state vast: herstart hem voor een tweede run.
+- Browsertest: `python3 test/mock_backend.py` serveert de repo op http://127.0.0.1:8765 met een mock-API op `/api` (koppelcode `test123` = management, `am123` = accountmanager Joris); `python3 test/test_app.py` doorloopt alle zes schermen met Playwright (Chromium uit `/opt/pw-browsers`) en zet screenshots in `test/shots/`. De mock houdt state vast: herstart hem voor een tweede run.
 - Laat wijzigingen aan layout, caching of navigatie reviewen door de subagent `ios-pwa-reviewer`.
 
 ## Git

@@ -16,7 +16,7 @@ Status: **gepland**. Het prototype draait op Google Apps Script met een Google S
 | Inloggen | Koppelcode per gebruiker (`CODES`) | Supabase Auth met Google, alleen `@athenaschool.nl` en `@athenastudies.nl` |
 | Database | Google Sheet (tabbladen = tabellen) | Supabase Postgres (EU-regio) |
 | API | `doPost` → `api*`-functies | Supabase Edge Functions met dezelfde namen (`apiSchool`, `apiTaakOpslaan`, …) en eenvoudige lees-queries rechtstreeks via PostgREST met RLS |
-| Rechten | `isBeheerder()`, `vanMij()` in code | Row Level Security-policies plus een `rol`-kolom in `gebruikers` |
+| Rechten | `RECHTEN`, `mag()`, `eis()` in code (v4.0: team en rol per gebruiker) | Row Level Security-policies op basis van `team` en `rol` in `gebruikers` (dezelfde tabel als `RECHTEN`) |
 | Live bijwerken | Opnieuw ophalen | Supabase Realtime op `taken`, `activiteiten` en `kansen` |
 | Gmail/Agenda | `GmailApp`/`CalendarApp` als Menno | Google API met het OAuth-token van de ingelogde gebruiker (opgeslagen in Supabase Vault) |
 | Claude (Brein, review, content) | `UrlFetchApp` | Edge Function met de Anthropic SDK (TypeScript), sleutel als secret |
@@ -47,11 +47,11 @@ Elke `api*`-functie in `backend/Code.gs` wordt een Edge Function met dezelfde na
 ## Tabellen (concept-schema)
 
 ```sql
-create table gebruikers   (id uuid primary key default gen_random_uuid(), naam text not null unique, email text unique, rol text not null check (rol in ('beheerder','adviseur','am')), actief boolean default true, auth_id uuid unique);
+create table gebruikers   (id uuid primary key default gen_random_uuid(), naam text not null unique, email text unique, team text not null check (team in ('management','consultancy','accountmanagement','talent')), rol text not null check (rol in ('medewerker','teamlead','management')), actief boolean default true, auth_id uuid unique);
 create table scholen      (id text primary key, naam text not null, plaats text, type text, bestuur text, adres text, website text, leerlingen int, telefoon text, email text, status text, eigenaar_id uuid references gebruikers, tags text[] default '{}', velden jsonb default '{}', notities text, laatste_contact date, capsule_id text, aangemaakt timestamptz default now(), bijgewerkt timestamptz, bijgewerkt_door uuid references gebruikers);
 create table personen     (id text primary key, voornaam text, achternaam text, functie text, school_id text references scholen on delete set null, email text, telefoon text, linkedin text, eigenaar_id uuid references gebruikers, tags text[] default '{}', velden jsonb default '{}', laatste_contact date, capsule_id text, aangemaakt timestamptz default now(), bijgewerkt timestamptz, bijgewerkt_door uuid);
 create table kansen       (id text primary key, naam text not null, school_id text not null references scholen, persoon_id text references personen on delete set null, pipeline text, fase text not null, kans int, waarde numeric, verwachte_sluiting date, volgende_actie text, deadline date, gesloten date, verlies_reden text, eigenaar_id uuid references gebruikers, tags text[] default '{}', velden jsonb default '{}', notities text, laatste_contact date, capsule_id text, aangemaakt timestamptz default now(), bijgewerkt timestamptz, bijgewerkt_door uuid);
-create table trajecten    (id text primary key, school_id text references scholen, school_naam text, traject text not null, schooljaar text, start date, eind date, status text, ondersteuners int, uren_per_week numeric, tarief numeric, omzet numeric, contactpersoon text, am_id uuid references gebruikers, samenvatting text, capsule_id text, bijgewerkt timestamptz, bijgewerkt_door uuid);
+create table trajecten    (id text primary key, school_id text references scholen, school_naam text, traject text not null, schooljaar text, start date, eind date, status text, ondersteuners int, uren_per_week numeric, tarief numeric, omzet numeric, contactpersoon text, am_id uuid references gebruikers, adviseur_id uuid references gebruikers, kans_id text references kansen, contactgegevens text, voorstel_url text, documenten_url text, verlenging text, samenvatting text, capsule_id text, bijgewerkt timestamptz, bijgewerkt_door uuid);
 create table taken        (id text primary key, tekst text not null, bron text, prio text, deadline date, status text default 'open', categorie text, eigenaar_id uuid references gebruikers, school_id text references scholen on delete cascade, persoon_id text references personen on delete set null, kans_id text references kansen on delete set null, track_run_id text, notitie text, link text, aangemaakt timestamptz default now(), afgerond timestamptz, capsule_id text);
 create table activiteiten (id text primary key, type text not null, datum timestamptz not null, door_id uuid references gebruikers, school_id text references scholen on delete cascade, persoon_id text references personen on delete set null, kans_id text references kansen on delete set null, traject_id text references trajecten on delete set null, onderwerp text, tekst text, duur_min int, gmail_id text unique, agenda_id text, bron text, aangemaakt timestamptz default now());
 create table mijlpalen    (id text primary key, pipeline text not null, mijlpaal text not null, volgorde int, kans int, dagen_norm int, unique (pipeline, mijlpaal));
@@ -67,7 +67,7 @@ create table instellingen (sleutel text primary key, waarde jsonb);
 ```
 
 **RLS-hoofdlijnen:**
-- Iedereen die is ingelogd en actief is, mag `scholen`, `personen`, `kansen`, `trajecten`, `taken` en `activiteiten` lezen.
+- Volgens de rechtentabel in `docs/teams-en-processen.md` (v4.0): `scholen` en `personen` leest iedereen; `kansen` alleen de eigenaar, zijn teamlead en management; `trajecten` de am, de adviseur, hun teamleads, talent (status opstart) en management; `activiteiten` en `taken` volgen de kans of het project waaraan ze hangen.
 - Schrijven mag iedereen; wijzigen of verwijderen alleen de eigenaar of de beheerder.
 - `reviews` en mailgegevens leest alleen de eigenaar.
 - `gebruikers`, `doelen`, `mijlpalen`, `tracks`, `huisstijl` en `instellingen` mag alleen de beheerder schrijven.

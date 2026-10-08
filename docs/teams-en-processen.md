@@ -1,6 +1,8 @@
 # Voorstel: teams, rechten en het trajectproces (v4)
 
-Status: **voorstel**, nog niet gebouwd. ⚠️ = aanname die bevestigd moet worden.
+Status: **v4.0 gebouwd** (teams, rollen, rechtentabel, projectstatussen, projectenbord); v4.1 en verder volgen. ⚠️ = aanname die bevestigd moet worden.
+
+**Besluiten (oktober 2026):** rechtentabel akkoord. Consultants zien de facturatie van hun eigen projecten (alleen lezen). Een AM ziet de historie van de kans achter zijn project, en alleen die. Teamlead accountmanagers: Mees; teamlead onderwijsconsultants: Mariama; management: Anne-Maartje en Menno. XPS blijft voor diensten en roosters (export/API later). De academy is een eigen platform.
 
 ## 1. Teams en rollen
 
@@ -15,15 +17,15 @@ Status: **voorstel**, nog niet gebouwd. ⚠️ = aanname die bevestigd moet word
 **Rollen per persoon:**
 - `medewerker` ziet en wijzigt zijn eigen werk.
 - `teamlead` ziet zijn hele team, zet teamdoelen en verdeelt werk.
-- `directie` ziet alles.
+- `management` ziet alles (in de code: team en rol `management`).
 
 In de Sheet krijgt `Gebruikers` de kolommen `team` en `rol`. Zo gaan de huidige rollen over:
 
 | Huidige rol | Wordt team | Wordt rol |
 |---|---|---|
-| beheerder | directie | directie |
-| adviseur | consultants | medewerker |
-| am | accountmanagers | medewerker |
+| beheerder | management | management |
+| adviseur | consultancy | medewerker |
+| am | accountmanagement | medewerker |
 
 ## 2. Wie ziet wat (rechtentabel)
 
@@ -36,7 +38,7 @@ In de Sheet krijgt `Gebruikers` de kolommen `team` en `rol`. Zo gaan de huidige 
 | Vacatures | lezen (eigen projecten) | **eigen** (invullen) | **alles** (werken) | team | alles |
 | Kandidaten / talentbestand | — | alleen voorgedragen voor eigen project | **alles** | team | alles |
 | Academy, contract, VOG | — | status van eigen kandidaten | **alles** | team | alles |
-| Facturatie | — | **eigen projecten** | — | team (AM-lead) | alles |
+| Facturatie | eigen projecten (lezen) | **eigen projecten** | — | team (AM-lead) | alles |
 | Mail, agenda, dagstart | eigen | eigen | eigen | eigen | eigen |
 | Rapporten en doelen | eigen + teamtotaal | eigen + teamtotaal | eigen + teamtotaal | hele team | alles |
 | Bedrijfsdoelen | **iedereen ziet ze** | iedereen | iedereen | iedereen | zet ze |
@@ -115,8 +117,8 @@ Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en fact
 
 ## 7. Volgorde van bouwen
 
-1. **v3.9 (nu):** nieuwe namen in de app: Dashboard, Assistent, Dagstart, Studio.
-2. **v4.0 Teams en rechten:**
+1. **v3.9 (klaar):** nieuwe namen in de app: Dashboard, Assistent, Dagstart, Studio.
+2. **v4.0 Teams en rechten (klaar):**
    - teams en rollen, de rechtentabel, menu per team;
    - projectstatussen zoals monday;
    - het AM-projectenbord met de weergaven Verlenging en Examentraining.
@@ -130,8 +132,4 @@ Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en fact
 
 ## 8. Open vragen
 
-1. **XPS:** waarvoor gebruikt talent het precies? Is het "bestand" waarin gezocht wordt XPS? Kan XPS exporteren of heeft het een API?
-2. **Academy:** op welk platform draait die (voor de voortgang)?
-3. Wie zijn de **teamleads**, en is directie alleen Menno?
-4. Mogen consultants de **facturatie** van hun eigen projecten zien? (Voorstel: nee.)
-5. Mag een AM de **historie van de kans** zien zodra het project van hem is? (Voorstel: ja, alleen van die kans.)
+Beantwoord (zie Besluiten bovenaan). Nog open: ⚠️ de weergave "Verlenging '27/'28" toont de projecten van schooljaar 26/27 (die verlengd moeten worden naar 27/28). Klopt dat met hoe het monday-bord het bedoelde?

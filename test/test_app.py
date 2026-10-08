@@ -8,7 +8,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(executable_path=exe, headless=True)
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
     page = ctx.new_page()
-    page.on('console', lambda m: meldingen.append((m.type, m.text)) if m.type in ('error', 'warning') else None)
+    page.on('console', lambda m: meldingen.append((m.type, m.text, m.location.get('url', ''))) if m.type in ('error', 'warning') else None)
     page.on('pageerror', lambda e: meldingen.append(('pageerror', str(e))))
     page.on('response', lambda r: meldingen.append(('http', str(r.status) + ' ' + r.url)) if r.status >= 400 else None)
     page.goto('http://127.0.0.1:8765/'); page.wait_for_timeout(800)
@@ -51,6 +51,17 @@ with sync_playwright() as p:
     page.click('#huisBewerk'); page.fill('#hToon', 'Nieuwe toonregel\nTweede regel'); page.fill('#hBedrijf', 'AthenaSchool BV'); page.click('#huisOpslaan'); page.wait_for_selector('#toast.aan:has-text("Huisstijl opgeslagen")')
     page.screenshot(path=OUT + '/05b_huisstijl_na_bewerken.png', full_page=True)
     page.click('nav button[data-view="trajecten"]'); page.wait_for_selector('[data-crm-open="project:t1"]'); page.wait_for_timeout(200)  # v3.8: projectpagina
+    # v4.0: projectenbord zoals monday — eigen bord, iedereen, verlenging, examentraining
+    assert page.locator('#projectAms .chip.aan[data-pam="Menno"]').count() == 1, 'begint bij het eigen bord'
+    assert page.locator('.p-groep h3:has-text("Lopende trajecten")').count() == 1 and page.locator('[data-crm-open="project:t3"]').count() == 0, 'alleen eigen projecten'
+    page.screenshot(path=OUT + '/07a_projecten_am.png', full_page=True)
+    page.click('#projectAms [data-pam=""]'); page.wait_for_selector('[data-crm-open="project:t3"]')
+    page.click('.p-groep h3:has-text("Afgelopen")'); page.wait_for_selector('[data-crm-open="project:t5"]')
+    page.click("[data-pweergave='verlenging:2027-2028']"); page.wait_for_selector('.p-groep h3:has-text("Voorstel verstuurd")'); assert page.locator('[data-crm-open="project:t5"]').count() == 0, 'verlenging: alleen 26/27'
+    page.screenshot(path=OUT + '/07b_projecten_verlenging.png', full_page=True)
+    page.click('[data-pweergave="examen"]'); page.wait_for_selector('[data-crm-open="project:t6"]'); assert page.locator('[data-crm-open="project:t1"]').count() == 0, 'alleen examentraining'
+    page.select_option('[data-pveld="status"][data-pid="t6"]', 'bezig'); page.wait_for_selector('select.pill.p-bezig[data-pid="t6"]')
+    page.click('[data-pweergave="am"]'); page.click('#projectAms [data-pam="Menno"]'); page.wait_for_selector('[data-crm-open="project:t1"]')
     page.click('[data-crm-open="project:t1"]'); page.wait_for_selector('.d-naam h2:has-text("Onderwijsondersteuning")')
     page.select_option('.d-links [data-pveld="gefactureerd"]', 'nee'); page.wait_for_selector('.d-links select.pill.p-nee')
     page.locator('[data-composer="notitie"]').first.click(); page.fill('#crmComposer #cf-tekst', 'Update van de accountmanager'); page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Update van de accountmanager")')
@@ -59,9 +70,9 @@ with sync_playwright() as p:
     page.wait_for_selector('.d-links .rij:has-text("Extra workshop")'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/06_project_detail.png', full_page=True)
     page.click('[data-crm-terug]'); page.wait_for_selector('#view-trajecten.actief [data-crm-open="project:t1"]')
-    page.fill('#trajectZoek', 'demo'); page.wait_for_timeout(200); page.select_option('#fStatus', 'actief'); page.wait_for_timeout(200)
+    page.click('[data-pweergave="lijst"]'); page.fill('#trajectZoek', 'demo'); page.wait_for_timeout(200); page.select_option('#fStatus', 'bezig'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/07_trajecten_filter.png', full_page=True)
-    page.fill('#trajectZoek', ''); page.select_option('#fStatus', ''); page.wait_for_timeout(100)
+    page.fill('#trajectZoek', ''); page.select_option('#fStatus', ''); page.wait_for_timeout(100); page.click('[data-pweergave="am"]')
     page.locator('[data-nieuwproject]').first.click(); page.wait_for_selector('#venster.aan #vf-schoolId'); page.select_option('#vf-schoolId', 's2'); page.fill('#vf-traject', 'Surveillance'); page.click('#venster [data-cf-opslaan]')
     page.wait_for_selector('.d-naam h2:has-text("Surveillance")'); page.click('[data-crm-terug]'); page.wait_for_selector('#view-trajecten.actief')
     page.screenshot(path=OUT + '/08_trajecten_nieuw.png', full_page=True)
@@ -120,7 +131,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/16_rapport.png', full_page=True)
     print('horizontale scroll (rapport):', page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
     page.wait_for_selector('#rapportActiviteit .t-item')  # v3.3: activiteit per gebruiker
-    page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.select_option('#cf-rol', 'adviseur'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
+    page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.select_option('#cf-team', 'consultancy'); page.select_option('#cf-rol', 'teamlead'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/17_beheer_gebruikers.png', full_page=True)
     page.click('[data-gbewerk="g1"]'); page.wait_for_selector('#venster.aan #vf-naam'); page.fill('#vf-naam', 'Mees de Jong'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#crmBeheer:has-text("Mees de Jong")')  # v3.7
     page.click('[data-beheer="keuzelijsten"]'); page.wait_for_selector('#le-schoolStatussen .le-rij'); page.locator('#le-schoolStatussen .le-rij input').first.fill('nieuw'); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Keuzelijsten opgeslagen")')
@@ -160,8 +171,12 @@ with sync_playwright() as p:
     page.click('[data-agendaplan]'); page.wait_for_selector('#agendaForm #cf-schoolId'); page.select_option('#cf-schoolId', 's1'); page.fill('#cf-titel', 'Evaluatie'); page.click('#agendaForm [data-cf-opslaan]'); page.wait_for_timeout(500)
     page.click('.zb-item[data-desk="pipeline"]'); page.wait_for_selector('.kolom'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/25_desk_pipeline.png')
-    page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.kaartje[data-crm-open^="project:"]'); page.wait_for_timeout(150)
+    page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]'); page.wait_for_timeout(150)  # v4.0: bord per accountmanager
+    page.select_option('.ftabel [data-pveld="verlenging"][data-pid="t2"]', 'verlengd'); page.wait_for_selector('.ftabel select.pill.p-verlengd[data-pid="t2"]')
+    assert page.locator('.ftabel a.p-link[href^="https://docs.google.com"]').count() >= 1, 'link naar samenwerkingsvoorstel'
     page.screenshot(path=OUT + '/26_desk_projecten.png')
+    page.click('[data-pweergave="bord"]'); page.wait_for_selector('.kaartje[data-crm-open^="project:"]'); page.wait_for_timeout(150)
+    page.screenshot(path=OUT + '/26a_desk_projecten_bord.png')
     page.click('.kaartje[data-crm-open="project:t1"]'); page.wait_for_selector('.d-naam h2:has-text("Onderwijsondersteuning")'); assert page.locator('.zb-item.aan[data-desk="projecten"]').count() == 1
     page.screenshot(path=OUT + '/26b_desk_project.png')
     page.click('.zb-item[data-desk="facturatie"]'); page.wait_for_selector('.ftabel [data-pveld="gefactureerd"]')  # v3.8: facturatiebord
@@ -201,5 +216,24 @@ with sync_playwright() as p:
     print('--paars:', page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--paars')"))
     print('localStorage:', page.evaluate("() => Object.keys(localStorage)"))
     print('horizontale scroll:', page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
+    # v4.0: accountmanager Joris (code am123) ziet geen pipeline, alleen zijn eigen projecten en facturatie
+    ctx2 = b.new_context(viewport={'width': 1280, 'height': 800}); am = ctx2.new_page()
+    am.on('pageerror', lambda e: meldingen.append(('pageerror am', str(e))))
+    am.goto('http://127.0.0.1:8765/'); am.wait_for_timeout(500)
+    am.fill('#apiInput', 'http://127.0.0.1:8765/api'); am.fill('#codeInput', 'am123'); am.click('#codeOpslaan')
+    am.wait_for_selector('#zbNaam:has-text("Joris · accountmanager")')
+    assert not am.locator('.zb-item[data-desk="pipeline"]').is_visible() and am.locator('.zb-item[data-desk="facturatie"]').is_visible(), 'menu per rechten'
+    am.click('#zbNieuwKnop'); assert not am.locator('[data-desknieuw="kans"]').is_visible() and am.locator('[data-desknieuw="taak"]').is_visible(), 'geen nieuwe kans'; am.click('#zbNieuwKnop')
+    am.goto('http://127.0.0.1:8765/#pipeline'); am.wait_for_selector('#homeInhoud .hkaart'); assert am.locator('.zb-item.aan[data-desk="home"]').count() == 1, 'pipeline via de adresbalk gaat naar Home'
+    am.click('.zb-item[data-desk="projecten"]'); am.wait_for_selector('.ftabel [data-crm-open="project:t6"]')
+    assert am.locator('#trajectLijst [data-crm-open="project:t1"]').count() == 0, 'alleen eigen projecten'
+    am.screenshot(path=OUT + '/40_am_projecten.png')
+    am.click('.ftabel a[data-crm-open="project:t6"]'); am.wait_for_selector('.d-naam h2:has-text("Examentraining")'); am.locator('.d-links [data-crm-open^="kans:"]').first.click()
+    am.wait_for_selector('.d-naam h2'); assert am.locator('.d-naam [data-composer="bewerk"]').count() == 0 and am.locator('[data-kansfase]').count() == 0, 'kans van eigen project alleen lezen'
+    am.screenshot(path=OUT + '/41_am_kans_lezen.png')
+    am.set_viewport_size({'width': 390, 'height': 844}); am.wait_for_timeout(300); am.click('nav button[data-view="relaties"]'); am.wait_for_selector('#crmTabs [data-crmtab="scholen"]')
+    assert am.locator('#crmTabs [data-crmtab="pipeline"]').count() == 0, 'geen pipeline-tab op de telefoon'
+    am.screenshot(path=OUT + '/42_am_relaties.png', full_page=True)
+    ctx2.close()
     b.close()
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

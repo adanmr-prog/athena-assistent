@@ -68,7 +68,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiHuisstijl` | — | `{ velden, kleuren, toon, zinnen, types, recent }` |
 | `apiZetHuisstijl` | sleutel, waarde | null |
 | `apiMaakContent` | type, onderwerp, extra | `{ id, datum, type, typeNaam, onderwerp, tekst }` |
-| `apiTrajecten` | — | `{ trajecten:[traject], filters:{schooljaren,trajecten,statussen} }` |
+| `apiTrajecten` | — | `{ trajecten:[traject+{updates, laatsteUpdate, magWijzigen}], gebruikers, am, ik, filters:{schooljaren,trajecten,statussen,verlenging} }` (v4.0: alleen projecten die je mag zien) |
 | `apiTraject` | id | `{ traject, documenten, notities, kansen, school }` |
 | `apiTrajectOpslaan` | object (met of zonder id) | traject |
 | `apiNotitieToevoegen` | trajectId, tekst | `{ id, datum, tekst }` |
@@ -79,7 +79,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 
 | fn | args | result |
 |---|---|---|
-| `apiCrm` | — | `{ ik:{naam,rol}, gebruikers, statussen, mijlpalen, categorieen, activiteitTypes, tracks, tags, scholen:[school+{personen,openKansen,openWaarde}], personen:[persoon] }` |
+| `apiCrm` | — | `{ ik:{naam,team,rol,beheer,gekoppeld,rechten}, teams:{consultancy,accountmanagement,talent,management}, gebruikers, statussen, mijlpalen, categorieen, activiteitTypes, tracks, tags, scholen:[school+{personen,openKansen,openWaarde}], personen:[persoon] }` |
 | `apiSchool` | id | `{ school, personen, kansen, trajecten, taken, tijdlijn:[activiteit], documenten }` |
 | `apiSchoolOpslaan` | object (met of zonder id) | school |
 | `apiPersoon` | id | `{ persoon, school, kansen, taken, tijdlijn }` |
@@ -108,7 +108,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiAgenda` | van, tot (`yyyy-MM-dd`, max. 62 dagen) | `{ van, tot, events:[google-afspraak (+schoolId/school als hij aan het CRM hangt)], afspraken:[activiteit], taken:[taak] }` (v3.0) |
 | `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
 | `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak\|traject\|notitie\|content\|doel`, id, opties? `{agenda: true}` | null (school alleen zonder personen en kansen; eigenaar of beheerder; `agenda` haalt een afspraak ook uit Google Agenda) |
-| `apiProject` (v3.8) | id | `{ project, school, kans, personen, taken, tijdlijn (incl. historie van de kans), losseMails, facturen, keuzes }` |
+| `apiProject` (v3.8) | id | `{ project, school, kans, personen, taken, tijdlijn (incl. historie van de kans), losseMails, facturen (null zonder facturatierecht), keuzes, rechten:{wijzigen,facturatie,facturatieWijzigen} }` |
 | `apiFacturatie` | — | `{ projecten (+facturen), keuzes, gebruikers, ik }` |
 | `apiFactuurOpslaan` / `apiFacturenMaken` | `{id?, trajectId, omschrijving, bedrag, datum, status, factuurnummer, bijzonderheden, _oud?}` / trajectId, `{per: 'maand'\|'eenmalig', van, tot, bedrag, zomer}` | termijn / termijnen van het project |
 | `apiFacturenExport` | status (standaard `aangemaakt`) | `{ bestandsnaam, csv, aantal }` (puntkomma-CSV voor import in Exact) |
@@ -124,6 +124,24 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
+
+## Teams, rollen en rechten (v4.0)
+
+- **Gebruikers** hebben een `team` (`management`, `consultancy`, `accountmanagement`, `talent`) en een `rol` (`medewerker`, `teamlead`; het team management heeft altijd rol `management`). De koppelcode uit `setup()` is management. Bij de eerste start na de update zet `migreerV4()` de oude rollen om: `beheerder` → management, `adviseur` → consultancy, `am` → accountmanagement. Daarna zelf instellen in Relaties → Rapport → Beheer → Gebruikers (bijv. Mees: accountmanagement/teamlead, Mariama: consultancy/teamlead, Anne-Maartje: management).
+- **Rechtentabel** `RECHTEN` in `Code.gs` (sectie 10), per onderdeel `[zien, wijzigen]`:
+
+  | Onderdeel | Consultant | Accountmanager | Talent |
+  |---|---|---|---|
+  | Relaties (scholen, personen) | alles / alles | alles / alles | alles / geen |
+  | Pipeline (kansen) | eigen / eigen | geen | geen |
+  | Projecten | eigen (adviseur) / geen | eigen (am) / eigen | alleen status opstart / geen |
+  | Facturatie | eigen / geen | eigen / eigen | geen |
+
+  Een teamlead krijgt `team` waar `eigen` staat (het werk van zijn hele team); management mag alles. Een accountmanager leest de kans achter zijn eigen project (alleen die historie).
+- **Controle:** `mag(onderdeel, actie, rij)` en `eis(...)` in elke `api*`-functie; lijsten filteren met `mag(...)` en `zichtbaarFilter()` (activiteit en taken aan onzichtbare kansen of projecten vallen weg). Ook de Assistent (`zoek_crm`, `feitenSamenvatting`) ziet alleen wat de gebruiker mag zien. De app krijgt `ik.rechten` en verbergt menu's en knoppen; de backend weigert met "Daar heb je geen toegang toe.".
+- **Rapporten en doelen:** management ziet iedereen, een teamlead zijn team, een medewerker zichzelf. Doelen zetten kan management (iedereen) en een teamlead (eigen team).
+- **Projectstatussen** zijn nu `opstart`, `bezig`, `afgelopen`, `onduidelijk`, `gestopt` (de migratie zet `offerte`/`actief`/`afgerond` om, tenzij je eigen statussen had ingesteld). Een gewonnen kans wordt een project met status `opstart`.
+- **Projectenbord zoals monday:** nieuwe projectvelden `contactgegevens`, `voorstelUrl` (samenwerkingsvoorstel), `documentenUrl` (map met belangrijke documenten) en `verlenging` (keuzelijst `verlenging`: nog bespreken, voorstel verstuurd, verlengd, stopt). Weergaven in de app: per accountmanager (Lopende trajecten / Afgelopen), Verlenging per schooljaar (projecten van het schooljaar ervoor), Examentraining, Lijst en (desktop) Bord.
 
 ## Projecten en facturatie (v3.8)
 
@@ -147,7 +165,7 @@ Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewo
 
 ## Rollen, privacy en tegelijk werken (v3.3)
 
-- **Rollen** (`Gebruikers.rol`): `beheerder` (management), `adviseur` (onderwijsadviseur: haalt opdrachten binnen, eigenaar van kansen) en `am` (accountmanager: voert projecten uit, `Trajecten.am`). Iedereen ziet alle scholen, kansen en projecten; beheren (gebruikers, doelen, mijlpalen, tracks, export, migratie) kan alleen de beheerder.
+- **Rollen** (`Gebruikers.rol`): `beheerder` (management), `adviseur` (onderwijsadviseur: haalt opdrachten binnen, eigenaar van kansen) en `am` (accountmanager: voert projecten uit, `Trajecten.am`). Sinds v4.0 vervangen door teams en rollen met een rechtentabel (zie hierboven); beheren (gebruikers, mijlpalen, tracks, export, migratie) kan alleen het management.
 - **Privé per gebruiker:** mail, agenda, nachtelijke review en Home. De backend leest alleen de Gmail en Agenda van het account waaronder hij draait (`mijnMailbox()`); andere gebruikers krijgen lege lijsten met de melding dat hun Gmail nog gekoppeld wordt. De nachtelijke review draait per actieve gebruiker (kolom `Reviews.eigenaar`) en wordt naar ieders eigen e-mailadres gestuurd.
 - **Tegelijk opslaan:** bij bewerken stuurt de app alleen de gewijzigde velden plus `_oud` (de waarden zoals geladen). `controleerConflict()` vergelijkt die binnen het lock met de Sheet; heeft iemand anders hetzelfde veld intussen gewijzigd, dan volgt de fout "Intussen gewijzigd: …" en ververst de app het scherm. Andere velden worden gewoon samengevoegd. Kolom `bijgewerktDoor` houdt bij wie het laatst wijzigde.
 - **Archief:** elke 1e van de maand (trigger `archiveerTrigger`) gaat activiteit ouder dan 12 maanden naar `Activiteiten_archief`. In een detailscherm haalt de knop "Oudere activiteit (archief)" die terug.
