@@ -62,7 +62,7 @@
   .tegel.oranje .t-cijfer { color: var(--oranje); }
 
   .rij { display: flex; gap: 12px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--lijn); }
-  .rij.klik { cursor: pointer; }
+  .rij.klik, .r-body.klik { cursor: pointer; }  /* v4.0: iOS geeft tikken op een div alleen door met cursor: pointer */
   .rij .r-body { flex: 1; min-width: 0; }
   .rij .r-titel { font-size: 15.5px; font-weight: 600; line-height: 1.35; }
   .rij .r-titel .zacht { font-weight: 400; color: var(--inkt2); }
@@ -456,7 +456,10 @@
   /* v4.0: projectstatussen en verlenging in de kleuren van het monday-bord */
   .pill.p-opstart { background-color: #FDAB3D; } .pill.p-bezig { background-color: #00C875; } .pill.p-afgelopen { background-color: #DF2F4A; } .pill.p-onduidelijk { background-color: #C4C4C4; } .pill.p-gestopt { background-color: #4B4B4B; }
   .pill.p-nog-bespreken { background-color: #FDAB3D; } .pill.p-voorstel-verstuurd { background-color: #0086C0; } .pill.p-verlengd { background-color: #00C875; } .pill.p-stopt { background-color: #DF2F4A; }
-  .pill:disabled { cursor: default; opacity: 1; }
+  .pill:disabled { cursor: default; opacity: 1; -webkit-text-fill-color: #fff; background-image: none; padding-right: 8px; }  /* geen pijltje: niet te wijzigen */
+  .pill.p-leeg:disabled { -webkit-text-fill-color: var(--gedempt); }
+  .ftabel input:disabled { -webkit-text-fill-color: var(--inkt); opacity: 1; background: none; border-color: transparent; }
+  body:not(.desk) .pill { min-height: 36px; }
   .p-groep h3 { cursor: pointer; } .p-groep h3 .pijl { font-size: 11px; width: 12px; display: inline-block; }
   .p-datum { white-space: nowrap; }
   .p-contact { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -602,7 +605,7 @@
   <div class="view" id="view-trajecten">
     <div class="hero"><h2>Elk project, per accountmanager.</h2><p>Lopende en afgelopen projecten, verlengingen en examentrainingen. Tik op een project voor de tijdlijn, taken en facturatie.</p></div>
     <div class="chips" id="projectWeergaven"></div>  <!-- v4.0: weergaven zoals in monday -->
-    <div class="chips" id="projectAms"></div>
+    <div class="subtabs" id="projectAms"></div>
     <div class="invoer"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="trajectZoek" placeholder="Zoek school, traject, contactpersoon" autocomplete="off"></div>
     <div class="filters" id="projectFilters"><select id="fSchooljaar"><option value="">Alle schooljaren</option></select><select id="fTraject"><option value="">Alle trajecten</option></select><select id="fStatus"><option value="">Alle statussen</option></select></div>
     <div class="kop">Projecten <small id="trajectTelling"></small></div>
@@ -1024,7 +1027,7 @@
   }
   var UPDATES_SVG = '<svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
   function projectPill(t, veld, lijst) { return pillSelect('data-pveld="' + veld + '" data-pid="' + esc(t.id) + '"' + (t.magWijzigen === false ? ' disabled' : '') + ' aria-label="' + esc(veld) + '"', lijst, t[veld]); }
-  function webLink(u, label) { return /^https?:\/\//i.test(u || '') ? '<a class="p-link" href="' + esc(u) + '" rel="noopener">' + esc(label) + '</a>' : '<span class="zacht">—</span>'; }
+  function webLink(u, label) { return /^https?:\/\//i.test(u || '') ? '<a class="p-link" href="' + esc(u) + '"' + (isDesk() ? ' target="_blank"' : '') + ' rel="noopener">' + esc(label) + '</a>' : '<span class="zacht">—</span>'; }
   function projectBordRij(t, T) {
     return '<tr><td class="f-naam"><a data-crm-open="project:' + esc(t.id) + '">' + esc(t.school) + ' | ' + esc(t.traject) + '</a><div class="r-meta">' + esc(t.schooljaar || '') + '</div></td>' +
       '<td>' + (t.am ? esc(t.am) : '<span class="zacht">—</span>') + '</td><td>' + projectPill(t, 'status', T.filters.statussen) + '</td>' +
@@ -2356,9 +2359,9 @@
     return DESK.basisBezig;
   }
   function startApp() {
-    if (!isDesk()) { laadVandaag(); return; }
+    if (!CRM.basis) { var bw = uitBewaard('aa_cache_crm'); if (bw && bw.scholen && bw.ik) { CRM.basis = bw; zetRechten(); } }  // v4.0: rechten kennen voordat een scherm opent
+    if (!isDesk()) { laadVandaag(); basisKlaar().catch(function () {}); return; }
     var h = (location.hash || '').replace('#', '');
-    if (!CRM.basis) { var bw = uitBewaard('aa_cache_crm'); if (bw && bw.scholen && bw.ik) { CRM.basis = bw; zetRechten(); } }  // v4.0: rechten kennen voordat het menu-item opent
     deskNaar(DESK_ITEMS[h] ? h : 'home');
     basisKlaar().catch(function () {});
   }
