@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.2';
+var VERSIE = '4.3';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -2875,7 +2875,7 @@ function dagenTot(s) { var d = parseDatum(s); return d ? Math.ceil((d.getTime() 
 var DAGEN = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
 var MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
 function datumLang(d) { return DAGEN[d.getDay()] + ' ' + d.getDate() + ' ' + MAANDEN[d.getMonth()]; }
-function groet() { var u = new Date().getHours(), n = P.getProperty('NAAM') || 'Menno'; return (u < 12 ? 'Goedemorgen' : u < 18 ? 'Goedemiddag' : 'Goedenavond') + ' ' + n; }
+function groet() { var u = new Date().getHours(), n = String(ikNaam() || '').split(' ')[0]; return (u < 12 ? 'Goedemorgen' : u < 18 ? 'Goedemiddag' : 'Goedenavond') + ' ' + n; }  // v4.3: groet met de voornaam van wie vraagt, niet altijd die van de eigenaar
 // v4.1: het management kan het huidige schooljaar zelf vastzetten (Beheer → Keuzelijsten); anders telt het vanaf 1 augustus
 function schooljaarOpDatum() { var d = new Date(), j = d.getFullYear(); return d.getMonth() >= 7 ? j + '-' + (j + 1) : (j - 1) + '-' + j; }
 function huidigSchooljaar() { var h = instelling('schooljaar'); return typeof h === 'string' && /^\d{4}-\d{4}$/.test(h) ? h : schooljaarOpDatum(); }
