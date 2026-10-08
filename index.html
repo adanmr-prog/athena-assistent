@@ -437,15 +437,22 @@
   .ftabel input:hover, .ftabel input:focus { border-color: var(--lijn); background: var(--wit); outline: none; }
   .ftabel tr.f-sub td { background: var(--bg); }
   .ftabel .f-open { background: none; border: none; cursor: pointer; color: var(--inkt2); width: 26px; height: 26px; font-size: 13px; }
-  .pill { appearance: none; -webkit-appearance: none; border: none; border-radius: 4px; padding: 5px 8px; font-weight: 700; font-size: 12px; text-align: center; text-align-last: center; color: #fff; background: #B8B0BC; cursor: pointer; width: 100%; min-width: 108px; }
-  .pill.p-leeg { background: var(--vlak); color: var(--gedempt); }
-  .pill.p-vooraf { background: #9D50DD; } .pill.p-achteraf { background: #00C875; }
-  .pill.p-ja, .pill.p-doorbetaald, .pill.p-betaald, .pill.p-gedaan { background: #00C875; }
-  .pill.p-nee, .pill.p-niet-doorbetaald { background: #DF2F4A; }
-  .pill.p-n-v-t { background: #C4C4C4; }
-  .pill.p-aangemaakt { background: #FDAB3D; } .pill.p-verzonden { background: #0086C0; } .pill.p-nog-te-doen { background: #C4C4C4; }
+  .pill { appearance: none; -webkit-appearance: none; border: none; border-radius: 4px; padding: 5px 8px; font-weight: 700; font-size: 12px; text-align: center; text-align-last: center; color: #fff; background-color: #B8B0BC; cursor: pointer; width: 100%; min-width: 108px; }
+  .pill.p-leeg { background-color: var(--vlak); color: var(--gedempt); }
+  .pill.p-vooraf { background-color: #9D50DD; } .pill.p-achteraf { background-color: #00C875; }
+  .pill.p-ja, .pill.p-doorbetaald, .pill.p-betaald, .pill.p-gedaan { background-color: #00C875; }
+  .pill.p-nee, .pill.p-niet-doorbetaald { background-color: #DF2F4A; }
+  .pill.p-n-v-t { background-color: #C4C4C4; }
+  .pill.p-aangemaakt { background-color: #FDAB3D; } .pill.p-verzonden { background-color: #0086C0; } .pill.p-nog-te-doen { background-color: #C4C4C4; }
+  body:not(.desk) .ftabel input { border-color: var(--lijn); background: var(--wit); min-height: 36px; }  /* telefoon: geen hover, dus altijd een rand */
+  .ftabel input[type=date] { -webkit-appearance: none; appearance: none; min-height: 30px; }
+  body:not(.desk) .knop-mini { min-height: 38px; padding: 7px 12px; font-size: 13px; }
+  body:not(.desk) .t-chips a { padding: 5px 10px; font-size: 12px; }
+  body:not(.desk) .f-open { width: 40px; height: 40px; }
+  body:not(.desk) .tabs button { min-height: 44px; }
+  .pill { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 7px center; padding-right: 20px; }
   .f-balk { display: flex; height: 10px; border-radius: 3px; overflow: hidden; width: 120px; background: var(--vlak); }
-  .f-balk i { display: block; height: 100%; }
+  .f-balk i { display: block; height: 100%; background-image: none !important; padding: 0 !important; }
 
   #toast { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(16px); background: var(--inkt); color: #fff; font-size: 13px; line-height: 1.4; padding: 10px 16px; border-radius: 10px; max-width: 86%; text-align: center; opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; z-index: 200; }
   #toast.aan { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -1439,12 +1446,12 @@
   }
   function veld(label, waarde) { return waarde === '' || waarde === undefined || waarde === null ? '' : '<div><span>' + esc(label) + '</span>' + waarde + '</div>'; }
   function mailLink(e) { return '<div><a href="mailto:' + esc(e) + '">' + esc(e) + '</a></div>'; }
-  function plaatsLink(adres) { return adres ? '<div>' + esc(adres) + ' <a href="https://maps.google.com/?q=' + encodeURIComponent(adres) + '" target="_blank" rel="noopener">kaart</a></div>' : ''; }
+  function plaatsLink(adres) { return adres ? '<div>' + esc(adres) + ' <a href="https://maps.google.com/?q=' + encodeURIComponent(adres) + '">kaart</a></div>' : ''; }
   function projectRij(t) {
     return '<div class="rij klik" data-crm-open="project:' + esc(t.id) + '"><div class="r-body"><div class="r-titel">' + esc(t.traject) + ' <span class="zacht">· ' + esc(t.schooljaar) + '</span></div><div class="r-meta">' + [t.am ? 'AM ' + t.am : '', t.adviseur ? 'adviseur ' + t.adviseur : '', t.gefactureerd ? 'gefactureerd: ' + t.gefactureerd : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
       '<div class="r-rechts"><span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span>' + (t.omzet ? '<div class="r-bedrag">' + euro(t.omzet) + '</div>' : '') + '</div></div>';
   }
-  function documentRij(x) { return '<a class="rij doc" href="' + esc(x.url) + '" target="_blank" rel="noopener"><span class="d-type ' + esc(x.type) + '">' + (TYPE_KORT[x.type] || 'DOC') + '</span><div class="r-body"><div class="r-titel">' + esc(x.titel) + '</div></div>' + LINK_SVG + '</a>'; }
+  function documentRij(x) { return '<a class="rij doc" href="' + esc(x.url) + '"><span class="d-type ' + esc(x.type) + '">' + (TYPE_KORT[x.type] || 'DOC') + '</span><div class="r-body"><div class="r-titel">' + esc(x.titel) + '</div></div>' + LINK_SVG + '</a>'; }
   function samenvattingBlok() {
     var D = CRM.detail;
     return '<div class="blok"><div class="blok-kop">AI-samenvatting <button class="knop-mini" data-samenvatting="1">' + (D.samenvatting ? 'Opnieuw' : 'Vat de historie samen') + '</button></div>' +
@@ -2081,12 +2088,19 @@
     }).join('') + '</div>';
   }
   function renderFacturatie() {
+    renderFactBalk(); renderFactInhoud();
+  }
+  // De balk (met het zoekveld) alleen opnieuw opbouwen als het moet: anders sluit iOS het toetsenbord tijdens het typen
+  function renderFactBalk() {
     var F = FACT.data; if (!F) return;
-    var K = F.keuzes, ik = F.ik || {}, q = FACT.zoek.toLowerCase();
     var ams = []; F.projecten.forEach(function (t) { var a = t.am || ''; if (ams.indexOf(a) < 0) ams.push(a); });
     el('factBalk').innerHTML = '<input id="factZoek" placeholder="Zoek school of project" value="' + esc(FACT.zoek) + '" autocomplete="off">' +
       '<select id="factAm"><option value="">Alle accountmanagers</option>' + ams.filter(Boolean).sort().map(function (a) { return '<option' + (FACT.am === a ? ' selected' : '') + '>' + esc(a) + '</option>'; }).join('') + '</select>' +
       '<button class="chip' + (FACT.mijn ? ' aan' : '') + '" data-factmijn="1">Alleen mijn</button>' + (isDesk() ? '' : '<button class="knop-mini" data-factexport="aangemaakt">CSV voor Exact</button>');
+  }
+  function renderFactInhoud() {
+    var F = FACT.data; if (!F) return;
+    var K = F.keuzes, ik = F.ik || {}, q = FACT.zoek.toLowerCase();
     var lijst = F.projecten.filter(function (t) {
       if (FACT.mijn && t.am !== ik.naam && t.adviseur !== ik.naam) return false;
       if (FACT.am && t.am !== FACT.am) return false;
@@ -2151,7 +2165,6 @@
     var alle = []; if (FACT.data) FACT.data.projecten.forEach(function (t) { (t.facturen || []).forEach(function (x) { if (x.id === fid) alle.push(x); }); });
     if (CRM.detail && CRM.detail.data && CRM.detail.data.facturen) CRM.detail.data.facturen.forEach(function (x) { if (x.id === fid) alle.push(x); });
     alle.forEach(function (x) { x[veld] = veld === 'bedrag' ? (Number(String(waarde).replace(',', '.')) || 0) : waarde; });
-    if (veld === 'status') factHerteken();
     run('apiFactuurOpslaan', obj).catch(factFout);
   }
   function termijnVenster(tid, fid) {
@@ -2184,7 +2197,14 @@
     if ((x = t.closest('[data-koppelmail]'))) { x.disabled = true; run('apiActiviteitOpslaan', { id: x.getAttribute('data-koppelmail'), trajectId: CRM.detail.id }).then(function () { toast('Mail gekoppeld aan het project.'); herlaadDetail(); }).catch(function () { x.disabled = false; }); return; }
     if ((x = t.closest('[data-factopen]'))) { var fo = x.getAttribute('data-factopen'); if (FACT.open[fo]) delete FACT.open[fo]; else FACT.open[fo] = true; renderFacturatie(); return; }
     if (t.closest('[data-factmijn]')) { FACT.mijn = !FACT.mijn; renderFacturatie(); return; }
-    if ((x = t.closest('[data-factexport]'))) { run('apiFacturenExport', x.getAttribute('data-factexport')).then(function (r) { if (!r.aantal) { toast('Geen termijnen met status "aangemaakt".'); return; } download(r.bestandsnaam, r.csv); }); return; }
+    if ((x = t.closest('[data-factexport]'))) {  // iOS: delen moet direct uit een tik komen; na het ophalen is die tik verlopen, dus de tweede tik deelt
+      if (FACT.csv && Date.now() - FACT.csv.tijd < 120000) { download(FACT.csv.bestandsnaam, FACT.csv.csv); FACT.csv = null; return; }
+      run('apiFacturenExport', x.getAttribute('data-factexport')).then(function (r) {
+        if (!r.aantal) { toast('Geen termijnen met status "aangemaakt".'); return; }
+        FACT.csv = { bestandsnaam: r.bestandsnaam, csv: r.csv, tijd: Date.now() };
+        if (isDesk()) { download(r.bestandsnaam, r.csv); FACT.csv = null; } else toast(r.aantal + ' termijnen klaar. Tik nog een keer op "CSV voor Exact" om te bewaren of te delen.');
+      }); return;
+    }
     if ((x = t.closest('[data-termijnen]'))) { termijnenMaken(x.getAttribute('data-termijnen')); return; }
     if ((x = t.closest('[data-termijn]'))) { termijnVenster(x.getAttribute('data-tid'), x.getAttribute('data-termijn')); return; }
     if ((x = t.closest('[data-factuurweg]'))) {
@@ -2195,15 +2215,16 @@
   document.addEventListener('change', function (ev) {
     var t = ev.target;
     if (t.matches('[data-tl]')) { TL[t.getAttribute('data-tl')] = t.value; herteken_tijdlijn(); return; }
-    if (t.matches('[data-pveld]')) { zetProjectVeld(t.getAttribute('data-pid'), t.getAttribute('data-pveld'), t.value.trim(), t.tagName === 'SELECT'); return; }
-    if (t.matches('[data-fstatus]')) { zetFactuurVeld(t.getAttribute('data-fstatus'), 'status', t.value); return; }
+    if (t.matches('[data-pveld]')) { if (t.tagName === 'SELECT') t.className = 'pill ' + pillKlasse(t.value);  // alleen de kleur: scrollpositie en een open formulier blijven staan
+      zetProjectVeld(t.getAttribute('data-pid'), t.getAttribute('data-pveld'), t.value.trim(), false); return; }
+    if (t.matches('[data-fstatus]')) { t.className = 'pill ' + pillKlasse(t.value); zetFactuurVeld(t.getAttribute('data-fstatus'), 'status', t.value); return; }
     if (t.matches('[data-fveld]')) { zetFactuurVeld(t.getAttribute('data-fid'), t.getAttribute('data-fveld'), t.value.trim()); return; }
     if (t.id === 'factAm') { FACT.am = t.value; renderFacturatie(); }
   });
   document.addEventListener('input', function (ev) {
     var t = ev.target;
     if (t.matches('[data-tl="zoek"]')) { TL.zoek = t.value.trim(); herteken_tijdlijn(); return; }
-    if (t.id === 'factZoek') { FACT.zoek = t.value.trim(); var pos = t.selectionStart; renderFacturatie(); var n = el('factZoek'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
+    if (t.id === 'factZoek') { FACT.zoek = t.value.trim(); renderFactInhoud(); }
   });
 
   /* ===== v3.0: desktopweergave in Capsule-opbouw — zijbalk, brede tabellen, Home, Agenda, Doelen. Alleen actief met body.desk (vanaf 1024 px). ===== */
