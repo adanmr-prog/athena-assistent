@@ -19,7 +19,7 @@ var DEMO_MENSEN = [
 ];
 
 /* ----- Apps Script nagebootst ----- */
-var _demoProps = { SHEET_ID: 'demo', SECRET: 'demo-sophie', NAAM: 'Sophie de Graaf', ANTHROPIC_API_KEY: 'demo', MIGRATIE_V4: '1', LAATSTE_INDEX: '', LAATSTE_CRM_SYNC: '' };
+var _demoProps = { SHEET_ID: 'demo', DRIVE_MAP_ID: 'demo', SECRET: 'demo-sophie', NAAM: 'Sophie de Graaf', ANTHROPIC_API_KEY: 'demo', MIGRATIE_V4: '1', LAATSTE_INDEX: '', LAATSTE_CRM_SYNC: '' };
 function _demoCodes() { var c = {}; DEMO_MENSEN.forEach(function (m) { if (m.id !== 'beheer') c[m.code] = m.id; }); return JSON.stringify(c); }
 _demoProps.CODES = _demoCodes();
 var PropertiesService = { getScriptProperties: function () { return {
@@ -45,7 +45,7 @@ function _demoBlad(naam) {
       clearContent: function () { for (var i = 0; i < nr; i++) { var rij = rijen[r - 1 + i]; if (rij) for (var j = 0; j < nc; j++) rij[c - 1 + j] = ''; } return this; } }; } };
   return b;
 }
-var _demoSS = { getSheetByName: function (n) { return _demoBladen[n] || null; }, insertSheet: function (n) { return (_demoBladen[n] = _demoBlad(n)); },
+var _demoSS = { getName: function () { return 'Athena Assistent — data (demo)'; }, getSheetByName: function (n) { return _demoBladen[n] || null; }, insertSheet: function (n) { return (_demoBladen[n] = _demoBlad(n)); },
   getSheets: function () { return Object.keys(_demoBladen).map(function (n) { return _demoBladen[n]; }); }, deleteSheet: function () {}, getUrl: function () { return '#demo'; }, getId: function () { return 'demo'; } };
 var SpreadsheetApp = { openById: function () { return _demoSS; }, create: function () { return _demoSS; } };
 

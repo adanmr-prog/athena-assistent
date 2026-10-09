@@ -9,6 +9,7 @@ disable-model-invocation: true
 Voer de stappen in volgorde uit. Stop bij een fout en meld wat er misging.
 
 1. **Versie bepalen.** Zoek de hoogste `vX.Y` in `git log --oneline`. Bugfix of kleine wijziging: Y + 1. Nieuwe feature of gedragswijziging: X + 1 en Y = 0. Vraag bevestiging van het nummer voordat je verdergaat.
+   Alleen `backend/Code.gs` (en docs) gewijzigd, `index.html` niet: dan een patchnummer `vX.Y.Z` op de laatste `vX.Y`, `VERSIE` in `Code.gs` gelijk, en stap 2 overslaan (de app verandert niet, dus de cache hoeft niet te verversen). De hoogste `vX.Y` blijft het uitgangspunt voor de volgende app-release.
 2. **Cache bumpen.** Zet in `sw.js`: `var CACHE = 'athena-assistent-v<X.Y>';` met hetzelfde nummer als de release. Zonder deze stap krijgen geïnstalleerde PWAs de nieuwe `index.html` niet.
 3. **Versiecommentaar.** Controleer dat elke inhoudelijke wijziging in `index.html` een `// vX.Y: reden`-commentaar heeft, in de stijl van de bestaande code.
 4. **Syntaxcheck.** Draai:
