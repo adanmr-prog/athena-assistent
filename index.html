@@ -399,6 +399,9 @@
   body.desk .d-naam .avatar { width: 40px; height: 40px; font-size: 15px; }
   .d-naam h2 { font-size: 18px; font-weight: 800; line-height: 1.2; flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .d-naam .knop-mini { flex-shrink: 0; align-self: flex-start; }
+  body.desk .d-naam { flex-wrap: wrap; row-gap: 4px; }  /* v4.3: in de smalle linkerkolom krijgt de titel de volle breedte; Bewerken staat eronder */
+  body.desk .d-naam h2 { flex: 1 1 calc(100% - 50px); overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }
+  body.desk .d-naam .knop-mini { margin-left: 50px; }
   .d-acties .knop { display: flex; align-items: center; justify-content: center; }
   .d-sub { color: var(--inkt2); font-size: 13px; margin-top: 4px; }
   .d-acties { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
@@ -500,7 +503,8 @@
   .doel-kaart .doel-rij span:first-child { min-width: 0; }
   .doel-rij .getal { white-space: nowrap; }
   .doel-rij { grid-template-columns: minmax(90px, 130px) minmax(60px, 1fr) auto; }
-  .doel-rij > span:first-child { overflow-wrap: anywhere; -webkit-hyphens: auto; hyphens: auto; }
+  .doel-rij > span:first-child { overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }
+  body.desk .doel-rij { grid-template-columns: minmax(110px, 175px) minmax(60px, 1fr) auto; }  /* v4.3: lange labels (Verlengingspercentage) niet midden in het woord afbreken */
   .rapport-tabel td { white-space: nowrap; }
   .rapport-tabel td:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
   .rteams { flex-basis: 100%; margin-top: 0; }
@@ -722,8 +726,10 @@
   function euro(n) { n = Math.round(Number(n) || 0); return '€ ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
   var MAANDEN_KORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
   function kortDatum(s) { var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? Number(m[3]) + ' ' + MAANDEN_KORT[Number(m[2]) - 1] + (m[1] !== String(new Date().getFullYear()) ? ' ' + m[1] : '') : String(s || ''); }
-  function leesOpslag(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
-  function zetOpslag(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  // v4.3: demomodus (?demo=1): de echte app met fictieve gegevens en zonder backend (demo/demo.js); de echte koppeling en caches in localStorage blijven onaangeroerd
+  var DEMO = /[?&]demo=1(&|$)/.test(location.search), DEMO_OPSLAG = {}, _demoLaden = null;
+  function leesOpslag(k) { if (DEMO) return DEMO_OPSLAG[k] || ''; try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function zetOpslag(k, v) { if (DEMO) { DEMO_OPSLAG[k] = String(v); return; } try { localStorage.setItem(k, v); } catch (e) {} }
   function leesChat() {
     try { var h = JSON.parse(leesOpslag('aa_chat') || 'x'); if (h && h.length) { h.forEach(function (m) { (m.acties || []).forEach(function (a) { if (a.status === 'bezig' || a.status === 'bewerken') a.status = ''; }); }); return h; } } catch (e) {}  // v3.5: een afgebroken actie weer als voorstel tonen
     return [{ rol: 'bot', tekst: 'Vraag me naar contracten, werkwijzen, tarieven of een school, of geef me een opdracht: "schrijf een offerte voor …", "schrijf een conceptreactie op de mail van …", "maak een taak …". Ik zet het klaar; jij bevestigt.' }];
@@ -736,8 +742,17 @@
   }
 
   /* ===== Backend: run()-RPC naar de Apps Script-web-app. URL en koppelcode staan in localStorage (koppelscherm). ===== */
-  function apiUrl() { return leesOpslag('aa_api'); }
-  function secret() { return leesOpslag('aa_secret'); }
+  function apiUrl() { return DEMO ? 'demo' : leesOpslag('aa_api'); }
+  function secret() { return DEMO ? 'demo' : leesOpslag('aa_secret'); }
+  function laadDemo() {  // v4.3
+    if (!_demoLaden) _demoLaden = new Promise(function (klaar, fout) {
+      var s = document.createElement('script'); s.src = 'demo/demo.js';
+      s.onload = function () { klaar(window.AthenaDemo); };
+      s.onerror = function () { _demoLaden = null; fout(new Error('demo niet geladen')); };
+      document.head.appendChild(s);
+    });
+    return _demoLaden;
+  }
   function checkKoppeling() {
     var ok = !!apiUrl() && !!secret();
     el('koppel').classList.toggle('aan', !ok);
@@ -746,10 +761,12 @@
   }
   function run(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
-    return fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }) })   // geen headers: geen CORS-preflight op Apps Script
-      .then(function (r) { return r.json(); })
+    var verzoek = DEMO ? laadDemo().then(function (D) { return D.run(fn, args); })  // v4.3
+      : fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }) }).then(function (r) { return r.json(); });   // geen headers: geen CORS-preflight op Apps Script
+    return verzoek
       .then(function (d) {
         if (d && d.ok) return d.result;
+        if (d && d.fout === 'secret' && DEMO) { toast('Deze demorol kan niet meer inloggen. Kies Opnieuw in de demobalk.'); throw new Error('secret'); }  // v4.3: de demo raakt de echte koppelcode nooit aan
         if (d && d.fout === 'secret') { try { localStorage.removeItem('aa_secret'); } catch (e) {} checkKoppeling(); toast('Koppelcode klopt niet — koppel opnieuw.'); throw new Error('secret'); }
         throw new Error((d && d.fout) || 'serverfout');
       })
@@ -876,7 +893,7 @@
     var bron = (m.bronnen && m.bronnen.length) ? '<div class="bronnen">' + m.bronnen.map(function (b) { return '<a class="bron" href="' + esc(b.url) + '">' + LINK_SVG + esc(b.titel) + '</a>'; }).join('') + '</div>' : '';
     var acties = (m.acties || []).map(function (a, ai) { return actieKaartHtml(a, mi, ai); }).join('');
     if (mi >= 0) div.setAttribute('data-mi', mi);  // herrenderBericht zoekt hierop: foutmeldingen staan wel in de DOM, niet in S.chat
-    div.innerHTML = '<div class="avatar">' + (rol === 'ik' ? 'M' : 'A') + '</div><div class="m-tekst">' + md(m.tekst) + bron + acties + '</div>';
+    div.innerHTML = '<div class="avatar">' + (rol === 'ik' ? esc(ikNaam() ? ikNaam().charAt(0).toUpperCase() : 'M') : 'A') + '</div><div class="m-tekst">' + md(m.tekst) + bron + acties + '</div>';  // v4.3: eerste letter van wie vraagt, niet altijd M
     el('breinBerichten').appendChild(div);
     return div;
   }
@@ -2926,6 +2943,7 @@
     var u = el('apiInput').value.trim().replace(/\?.*$/, ''), c = el('codeInput').value.trim();
     if (!/^https:\/\/.+\/exec$/.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1)/.test(u)) { toast('De backend-URL moet eindigen op /exec.'); return; }
     if (!c) { toast('Vul de koppelcode in.'); return; }
+    if (DEMO) { toast('In de demo is koppelen uit. Open de app zonder ?demo=1.'); return; }  // v4.3
     var oudeCode = secret();
     zetOpslag('aa_api', u); zetOpslag('aa_secret', c);
     zetOpslag('aa_cache_home', ''); zetOpslag('aa_cache_crm', ''); CRM.basis = null; DESK.mails = null;  // v3.2: andere code = mogelijk andere gebruiker
@@ -2937,6 +2955,7 @@
   try { pasKleurenToe(JSON.parse(leesOpslag('aa_kleuren') || 'null')); } catch (e) {}
   el('datum').textContent = (function () { var d = new Date(), D = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'], M = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december']; return D[d.getDay()] + ' ' + d.getDate() + ' ' + M[d.getMonth()]; })();
   zetDesk();  // v3.0
+  if (DEMO) laadDemo().catch(function () { toast('De demo kon niet laden.'); });  // v4.3: demobalk meteen tonen
   if (checkKoppeling()) startApp();
   if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }
 </script>

@@ -9,6 +9,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder)
 - `manifest.webmanifest` en de icon-PNG's (AthenaSchool-logo op paars): PWA-metadata.
 - `backend/Code.gs`: de Google Apps Script-backend (Sheet als database, Drive-index, Gmail/Agenda, triggers, Claude API). Wordt in een eigen Apps Script-project geplakt; installatie in `backend/README.md`. Het contract staat in de skill `athena-backend-api`.
 - `test/`: mock-backend en Playwright-script voor browsertests (zie Testen).
+- `demo/` (v4.3): demomodus `?demo=1`, de echte app met fictieve gegevens en zonder backend. `demo.js` draait `backend/Code.gs` ongewijzigd in een verborgen iframe, met `demo-backend.js` (nagebootste Apps Script-diensten: Sheet in het geheugen, Gmail, Agenda, Claude, en de seed). `&rol=sophie|thomas|yara|lars|noor|bas|femke|ruben|iris|sem` kiest de gebruiker, `&kaal=1` verbergt de demobalk. De demo raakt localStorage niet aan (wijzigingen in sessionStorage). Nieuwe backendfuncties moeten ook in de demo draaien: voeg ontbrekende Apps Script-stubs toe aan `demo-backend.js`.
 - `.claude/skills/werving-recruiter/`: werkwijze van de recruiter-agent (monday-bord Werving talent, PoliteReach, Lusha); zie de skill `werving-recruiter`.
 - Hosting: GitHub Pages van deze repo (`https://adanmr-prog.github.io/athena-assistent/`).
 - Teams, rechten en het trajectproces (taskforce, vacatures, bezetting): `docs/teams-en-processen.md`. Sinds v4.1 heeft een project de tabs Historie, Taskforce en Bezetting; de weergave Bezetting (zijbalk en Projecten) is het bord van het talentteam; meldingen via de bel.
@@ -34,6 +35,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder)
 ## Testen
 - Geen testsuite voor de backend; `node --check` op een `.js`-kopie van `backend/Code.gs` is het vangnet.
 - Browsertest: `python3 test/mock_backend.py` serveert de repo op http://127.0.0.1:8765 met een mock-API op `/api` (koppelcode `test123` = management, `am123` = accountmanager Joris, `talent123` = talentscout Lotte); `python3 test/test_app.py` doorloopt alle zes schermen met Playwright (Chromium uit `/opt/pw-browsers`) en zet screenshots in `test/shots/`. De mock houdt state vast: herstart hem voor een tweede run.
+- Demo: `python3 test/demo_shots.py` start zelf een server op poort 8766 en maakt screenshots van alle schermen per rol in `test/shots/demo/` (voor presentaties); met `rooktest` alleen de rooktest.
 - Laat wijzigingen aan layout, caching of navigatie reviewen door de subagent `ios-pwa-reviewer`.
 
 ## Git
