@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.4';
+var VERSIE = '4.4.1';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -45,7 +45,22 @@ var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp:
 var DOC_TYPES = ['contract', 'werkwijze', 'schooldossier', 'voorstel', 'prijslijst', 'overig'];
 var KANS_FASES = ['lead', 'gesprek', 'voorstel', 'onderhandeling', 'gewonnen', 'verloren'];
 var TRAJECT_STATUSSEN = ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'];  // v4.0: zoals het monday-bord
-function projectLopend(t) { return ['afgelopen', 'afgerond', 'gestopt'].indexOf(t.status) < 0; }
+// v4.4.1: de eerste functie in dit bestand is wat de Apps Script-editor kiest bij "Uitvoeren". Alleen lezen: versie, Sheet, rijen per tabblad, triggers.
+function controleer() {
+  var regels = ['Athena Assistent, backend ' + VERSIE], id = P.getProperty('SHEET_ID');
+  if (!id) regels.push('Nog niet ingericht: kies setup() en klik Uitvoeren.');
+  else {
+    var ss = SpreadsheetApp.openById(id);
+    regels.push('Sheet: ' + ss.getName());
+    Object.keys(TABELLEN).forEach(function (naam) { var b = ss.getSheetByName(naam); regels.push('- ' + naam + ': ' + (b ? Math.max(0, b.getLastRow() - 1) + ' rijen' : 'nog niet aangemaakt (gebeurt vanzelf)')); });
+    regels.push('Triggers: ' + (ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }).join(', ') || 'geen (draai setup())'));
+    regels.push('Gebruikerscodes: ' + Object.keys(codes()).length + ' · Claude-sleutel: ' + (P.getProperty('ANTHROPIC_API_KEY') ? 'ingesteld' : 'ontbreekt'));
+  }
+  regels.push('Nieuwe Code.gs live zetten: Implementeren → Implementaties beheren → potlood → Versie: Nieuwe versie → Implementeren. De /exec-URL blijft gelijk.');
+  Logger.log(regels.join('\n'));
+  return regels.join('\n');
+}
+function projectLopend(t) { return !!t && ['afgelopen', 'afgerond', 'gestopt'].indexOf(t.status) < 0; }
 var PRIOS = ['hoog', 'midden', 'laag'];
 
 /* ===================== Eenmalige inrichting (draai vanuit de editor) ===================== */

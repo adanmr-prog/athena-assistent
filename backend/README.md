@@ -36,6 +36,7 @@ Draai hem onder het werkaccount (`menno.adan@athenastudies.nl`), dan ziet hij de
 8. Optioneel: draai `vulVoorbeelddata` één keer om de app gevuld te zien met fictieve scholen. Verwijder de rijen daarna in de Sheet.
 
 Bij elke wijziging in `Code.gs`: Implementeren → Implementaties beheren → potlood → Versie: *Nieuwe versie* → Implementeren. De URL blijft gelijk.
+Klik je in de editor op **Uitvoeren** zonder een functie te kiezen, dan draait `controleer()` (v4.4.1): die past niets aan en logt de versie, het aantal rijen per tabblad en de triggers. Een nieuwe `Code.gs` hoeft je niet te draaien; alleen implementeren als nieuwe versie.
 
 ## Wat er waar staat
 
