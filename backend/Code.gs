@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.4.1';
+var VERSIE = '4.4.2';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -45,25 +45,32 @@ var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp:
 var DOC_TYPES = ['contract', 'werkwijze', 'schooldossier', 'voorstel', 'prijslijst', 'overig'];
 var KANS_FASES = ['lead', 'gesprek', 'voorstel', 'onderhandeling', 'gewonnen', 'verloren'];
 var TRAJECT_STATUSSEN = ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'];  // v4.0: zoals het monday-bord
-// v4.4.1: de eerste functie in dit bestand is wat de Apps Script-editor kiest bij "Uitvoeren". Alleen lezen: versie, Sheet, rijen per tabblad, triggers.
-function controleer() {
-  var regels = ['Athena Assistent, backend ' + VERSIE], id = P.getProperty('SHEET_ID');
-  if (!id) regels.push('Nog niet ingericht: kies setup() en klik Uitvoeren.');
-  else {
-    var ss = SpreadsheetApp.openById(id);
-    regels.push('Sheet: ' + ss.getName());
-    Object.keys(TABELLEN).forEach(function (naam) { var b = ss.getSheetByName(naam); regels.push('- ' + naam + ': ' + (b ? Math.max(0, b.getLastRow() - 1) + ' rijen' : 'nog niet aangemaakt (gebeurt vanzelf)')); });
-    regels.push('Triggers: ' + (ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }).join(', ') || 'geen (draai setup())'));
-    regels.push('Gebruikerscodes: ' + Object.keys(codes()).length + ' · Claude-sleutel: ' + (P.getProperty('ANTHROPIC_API_KEY') ? 'ingesteld' : 'ontbreekt'));
-  }
-  regels.push('Nieuwe Code.gs live zetten: Implementeren → Implementaties beheren → potlood → Versie: Nieuwe versie → Implementeren. De /exec-URL blijft gelijk.');
-  Logger.log(regels.join('\n'));
-  return regels.join('\n');
-}
-function projectLopend(t) { return !!t && ['afgelopen', 'afgerond', 'gestopt'].indexOf(t.status) < 0; }
 var PRIOS = ['hoog', 'midden', 'laag'];
 
 /* ===================== Eenmalige inrichting (draai vanuit de editor) ===================== */
+
+// v4.4.1: de eerste functie in dit bestand is wat de editor kiest bij "Uitvoeren"; alleen lezen. v4.4.2: ook sleutels en ontbrekende triggers, en bestand tegen een onbereikbare Sheet.
+var TRIGGERS = ['nachtelijkeReviewTrigger', 'indexeerTrigger', 'crmSyncTrigger', 'archiveerTrigger'];
+function triggerNamen() { return ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }); }
+function controleer() {
+  var regels = ['Athena Assistent, backend ' + VERSIE];
+  ['SHEET_ID', 'SECRET', 'DRIVE_MAP_ID'].forEach(function (k) { if (!P.getProperty(k)) regels.push(k + ' ontbreekt: kies setup() en klik Uitvoeren.'); });
+  if (P.getProperty('SHEET_ID')) {
+    try {
+      var ss = sheet(), perNaam = {};
+      ss.getSheets().forEach(function (b) { perNaam[b.getName()] = b; });
+      regels.push('Sheet: ' + ss.getName());
+      Object.keys(TABELLEN).forEach(function (naam) { var b = perNaam[naam]; regels.push('- ' + naam + ': ' + (b ? Math.max(0, b.getLastRow() - 1) + ' rijen' : 'nog niet aangemaakt (gebeurt vanzelf)')); });
+    } catch (e) { regels.push('Sheet ' + P.getProperty('SHEET_ID') + ' niet bereikbaar (verwijderd, in de prullenbak of niet gedeeld met dit account): ' + ((e && e.message) || e)); }
+  }
+  var aanwezig = triggerNamen(), mist = TRIGGERS.filter(function (n) { return aanwezig.indexOf(n) < 0; });
+  // triggers horen bij het account dat setup() draaide; onder een ander account lijken ze te ontbreken
+  regels.push('Triggers onder dit account: ' + (aanwezig.join(', ') || 'geen') + (mist.length ? ' · ontbreekt: ' + mist.join(', ') + ' (draai setup() onder het account van de eigenaar; niet onder een tweede account, anders draait alles dubbel)' : ''));
+  regels.push('Gebruikerscodes: ' + Object.keys(codes()).length + ' · Claude-sleutel: ' + (P.getProperty('ANTHROPIC_API_KEY') ? 'ingesteld' : 'ontbreekt'));
+  regels.push('Nieuwe Code.gs live zetten: implementeren als nieuwe versie, zie backend/README.md.');
+  Logger.log(regels.join('\n'));
+  return regels.join('\n');
+}
 
 function setup() {
   var id = P.getProperty('SHEET_ID'), ss;
@@ -89,7 +96,7 @@ function setup() {
 
 function installeerTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['nachtelijkeReviewTrigger', 'indexeerTrigger', 'crmSyncTrigger', 'archiveerTrigger'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+    if (TRIGGERS.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('indexeerTrigger').timeBased().everyDays(1).atHour(4).create();          // documenten opnieuw inlezen
   ScriptApp.newTrigger('nachtelijkeReviewTrigger').timeBased().everyDays(1).atHour(5).create(); // review klaar vóór de ochtend
@@ -1750,7 +1757,7 @@ function apiImporteer(tabel, rijen) {
 }
 
 function apiStatus() {
-  var triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+  var triggers = triggerNamen();  // v4.4.2
   var laatste = lees('Reviews').sort(function (a, b) { return String(b.gemaaktOp).localeCompare(String(a.gemaaktOp)); })[0];
   var beheer = isBeheerder();
   return { versie: VERSIE, sheetUrl: beheer ? sheet().getUrl() : '', mapUrl: mapUrl(), gebruiker: ikUit(),  // v2.0: Sheet-link alleen voor de beheerder
@@ -2946,6 +2953,7 @@ function tekstUit(data) { return (data.content || []).filter(function (b) { retu
 /* ===================== Hulpfuncties ===================== */
 
 function tz() { return Session.getScriptTimeZone(); }
+function projectLopend(t) { return ['afgelopen', 'afgerond', 'gestopt'].indexOf(t.status) < 0; }  // v4.4.2: hier, zodat controleer() de eerste functie is
 function datumStr(d) { return (d instanceof Date) ? Utilities.formatDate(d, tz(), 'yyyy-MM-dd') : String(d || ''); }
 function datumTijdStr(d) { return Utilities.formatDate(d, tz(), 'yyyy-MM-dd HH:mm'); }
 function nu() { return datumTijdStr(new Date()); }
