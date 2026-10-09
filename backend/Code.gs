@@ -1355,7 +1355,7 @@ function periodeNaam(preset, b) {
   if (preset === 'halfjaar') return (b.getMonth() < 6 ? 'eerste' : 'tweede') + ' helft ' + j;
   if (preset === 'jaar') return String(j);
   if (preset === 'schooljaar') return 'schooljaar ' + j + '-' + (j + 1);
-  return 'week ' + isoWeek(b) + ', vanaf ' + b.getDate() + ' ' + MAANDEN_KORT[b.getMonth()];
+  return 'week ' + isoWeek(b) + ' van ' + b.getFullYear();  // de data staan er in de app al naast
 }
 function periodeKort(preset, b) {
   var j = b.getFullYear(), jj = "'" + String(j).slice(2);

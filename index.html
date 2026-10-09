@@ -509,10 +509,10 @@
   .rapport-tabel td:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
   .rteams { flex-basis: 100%; margin-top: 0; }
   /* v4.4: periode bladeren, verschil met de periode ervoor en het verloop per periode */
-  .periode-nav { flex-basis: 100%; display: flex; align-items: center; gap: 8px; }
-  .periode-nav .p-label { font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .periode-nav .p-label small { font-weight: 600; color: var(--gedempt); }
-  .periode-nav button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 40px; padding: 0 10px; border: 1.5px solid var(--lijn); border-radius: 10px; background: var(--wit); color: var(--paars); font-size: 13px; font-weight: 800; cursor: pointer; }
+  .periode-nav { flex-basis: 100%; min-width: 0; display: flex; align-items: center; gap: 8px; }  /* min-width: anders kan de rij niet smaller dan het label en scrolt de pagina op de iPhone */
+  .periode-nav .p-label { flex: 1 1 auto; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+  .periode-nav .p-label small { display: block; font-weight: 600; color: var(--gedempt); overflow: hidden; text-overflow: ellipsis; }
+  .periode-nav button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 10px; border: 1.5px solid var(--lijn); border-radius: 10px; background: var(--wit); color: var(--paars); font-size: 13px; font-weight: 800; cursor: pointer; }
   .periode-nav button svg.ic { width: 20px; height: 20px; stroke-width: 2.4; }
   .periode-nav button[disabled] { opacity: .35; cursor: default; }
   .tegel .t-verschil { font-size: 11.5px; font-weight: 700; margin-top: 3px; color: var(--gedempt); }
@@ -526,7 +526,7 @@
   .r-cel { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 52px; }
   .r-balk { display: block; width: 100%; height: 5px; border-radius: 3px; background: var(--vlak); overflow: hidden; }
   .r-balk i { display: block; height: 100%; background: var(--paars); border-radius: 3px; }
-  .alle-team .kop button { font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--lijn); text-underline-offset: 3px; }
+  .alle-team .kop button { display: inline-flex; align-items: center; min-height: 44px; margin: -13px 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--lijn); text-underline-offset: 3px; }
   body:not(.desk) .doel-rij { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }  /* telefoon: naam en cijfer boven, balk eronder */
   body:not(.desk) .doel-rij .b-spoor { grid-column: 1 / -1; grid-row: 2; }
   .f-balk { display: flex; height: 10px; border-radius: 3px; overflow: hidden; width: 120px; background: var(--vlak); }
@@ -1582,11 +1582,18 @@
 
   /* --- rapport en beheer --- */
   function laadRapport() {
-    el('crmBalk').innerHTML = ''; el('crmInhoud').innerHTML = '<div class="spinner">Rapport maken</div>';
+    // v4.4: bij bladeren of een andere periode blijft de balk staan (geen sprong); de knoppen gaan uit tot het nieuwe rapport er is
+    CRM.act = null;  // nieuw rapport: de activiteit ook opnieuw ophalen
+    var nav = el('crmBalk').querySelector('.periode-nav');
+    if (nav && CRM.rapport) {
+      Array.prototype.forEach.call(el('crmBalk').querySelectorAll('button'), function (b) { b.disabled = true; });
+      el('crmInhoud').style.opacity = '.45';
+    } else { el('crmBalk').innerHTML = ''; el('crmInhoud').innerHTML = '<div class="spinner">Rapport maken</div>'; }
     // v4.2: rapport per team (met bedrijfscijfers); de pipeline-onderdelen alleen voor wie de pipeline mag zien
     if (!CRM.rTeam && CRM.basis && CRM.basis.ik && CRM.basis.ik.beheer) CRM.rTeam = 'alle';  // v4.4: het management begint bij alle teams naast elkaar
     Promise.all([run('apiTeamRapport', CRM.preset, CRM.rTeam, CRM.rEigenaar, CRM.rStap), magApp('pipeline') && (!CRM.rTeam || CRM.rTeam === 'consultancy') ? run('apiRapport', CRM.preset, CRM.rEigenaar, CRM.rStap) : null]).then(function (r) { CRM.rapport = r[0]; CRM.pijp = r[1]; CRM.rTeam = r[0].team; if (CRM.tab === 'rapport') renderRapport(); })
-      .catch(function () { if (CRM.tab === 'rapport') el('crmInhoud').innerHTML = '<div class="leeg">Kon het rapport niet maken.</div>'; });
+      .catch(function () { if (CRM.tab === 'rapport') el('crmInhoud').innerHTML = '<div class="leeg">Kon het rapport niet maken.</div>'; })
+      .then(function () { el('crmInhoud').style.opacity = ''; Array.prototype.forEach.call(el('crmBalk').querySelectorAll('button[disabled]:not([data-rstap="1"])'), function (b) { b.disabled = false; }); });
   }
   function balk(label, waarde, sterk, max, tekst) {
     var pct = function (v) { return Math.max(0, Math.min(100, Math.round(100 * (Number(v) || 0) / (max || 1)))); };
@@ -1651,7 +1658,7 @@
       (R.stap < 0 ? '<button type="button" class="p-nu" data-rstap="nu">Nu</button>' : '') + '</div>' +
       (R.teams.length > 1 ? '<div class="chips rteams">' + R.teams.map(function (t) { return '<button class="chip' + (R.team === t ? ' aan' : '') + '" data-rteam="' + esc(t) + '">' + esc(TEAM_KNOP[t] || TEAM_NAAM[t] || t) + '</button>'; }).join('') + '</div>' : '') +
       (kies.length > 1 && R.team !== 'alle' ? '<select id="crmREigenaar"><option value="">Hele team</option>' + opts(kies, CRM.rEigenaar) + '</select>' : '');
-    var h = '<div class="hint">' + esc(kortDatum(R.van)) + ' t/m ' + esc(kortDatum(R.tot)) + (R.vergelijk ? ' · vergeleken met ' + esc(kortDatum(R.vergelijk.van)) + ' t/m ' + esc(kortDatum(R.vergelijk.tot)) : '') + '</div>' + bedrijfsBlok(R.bedrijf);
+    var h = '<div class="hint">' + esc(kortDatum(R.van)) + ' t/m ' + esc(kortDatum(R.tot)) + (R.vergelijk ? ' · vergeleken met ' + esc(kortDatum(R.vergelijk.van)) + ' t/m ' + esc(kortDatum(R.vergelijk.tot)) : '') + '</div>' + (R.stap < 0 ? '' : bedrijfsBlok(R.bedrijf));  // v4.4: de bedrijfsdoelen gelden voor het huidige schooljaar
     var kolommen = R.reeksLabels || [];
     if (R.team === 'alle') {  // v4.4: elk team met zijn cijfers, het verschil en het verloop per maatstaf
       h += (R.alle || []).map(function (A) {
@@ -1697,7 +1704,8 @@
       '<div class="composer" id="crmBeheer"></div>';
     el('crmInhoud').innerHTML = h;
     // v3.3: activiteit per gebruiker (de beheerder kiest iemand bij "Hele team"; anderen zien hun eigen activiteit)
-    run('apiActiviteiten', R.eigenaar, R.van, R.tot, R.team === 'alle' ? '' : R.team).then(function (a) {  // v4.4: alleen het gekozen team
+    var actSleutel = [R.eigenaar, R.van, R.tot, R.team].join('|');  // v4.4: een andere maatstaf in het verloop laadt de activiteit niet opnieuw
+    (CRM.act && CRM.act.sleutel === actSleutel ? Promise.resolve(CRM.act.data) : run('apiActiviteiten', R.eigenaar, R.van, R.tot, R.team === 'alle' ? '' : R.team).then(function (a) { CRM.act = { sleutel: actSleutel, data: a }; return a; })).then(function (a) {  // alleen het gekozen team
       if (!el('rapportActiviteit')) return;
       el('rapportActTelling').textContent = a.totaal + ' in deze periode';
       el('rapportActiviteit').innerHTML = (Object.keys(a.perType).length ? '<div class="chips">' + Object.keys(a.perType).map(function (k) { return '<span class="chip">' + esc(ACT_LABEL[k] || k) + ' ' + esc(a.perType[k]) + '</span>'; }).join('') + '</div>' : '') +
@@ -2102,10 +2110,10 @@
     if ((x = t.closest('[data-crmtab]'))) { CRM.tab = x.dataset.crmtab; if (isDesk()) DESK.contacten = CRM.tab; el('crmNieuw').innerHTML = ''; formActie = null; renderCrm(); return; }
     if (t.closest('[data-crmmijn]')) { CRM.mijn = !CRM.mijn; renderCrm(); return; }
     if ((x = t.closest('[data-crmnieuw]'))) { if (CRM.basis) nieuwVanuitLijst(x.dataset.crmnieuw); return; }
-    if ((x = t.closest('[data-crmpreset]'))) { CRM.preset = x.dataset.crmpreset; CRM.rStap = 0; laadRapport(); return; }  // v4.4: andere periode begint bij nu
+    if ((x = t.closest('[data-crmpreset]'))) { if (x.disabled) return; CRM.preset = x.dataset.crmpreset; CRM.rStap = 0; laadRapport(); return; }  // v4.4: andere periode begint bij nu
     if ((x = t.closest('[data-rstap]'))) { if (x.disabled) return; var st = x.getAttribute('data-rstap'); CRM.rStap = st === 'nu' ? 0 : Math.min(0, (CRM.rStap || 0) + Number(st)); laadRapport(); return; }  // v4.4
     if ((x = t.closest('[data-rmetric]'))) { CRM.rMetric = x.getAttribute('data-rmetric'); if (CRM.rapport) renderRapport(); return; }  // v4.4
-    if ((x = t.closest('[data-rteam]'))) { CRM.rTeam = x.getAttribute('data-rteam'); CRM.rEigenaar = ''; laadRapport(); return; }  // v4.2
+    if ((x = t.closest('[data-rteam]'))) { if (x.disabled) return; CRM.rTeam = x.getAttribute('data-rteam'); CRM.rEigenaar = ''; laadRapport(); return; }  // v4.2
     if ((x = t.closest('[data-composer]'))) { if (CRM.detail && CRM.detail.data) openComposer(x.dataset.composer); return; }
     if ((x = t.closest('[data-archief]'))) {  // v3.3
       var av = x.dataset.archief, ai = av.indexOf(':'), knopA = x; knopA.disabled = true;
