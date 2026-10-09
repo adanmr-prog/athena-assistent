@@ -98,7 +98,7 @@ Een rij aanklikken opent de projectpagina met tijdlijn, taken, bezetting en fact
 ## 5. Rapporten en doelen per team (v4.2)
 
 Het rapport (Relaties → Rapport) en het scherm Doelen werken per team.
-- Management kiest het team.
+- Management kiest het team, of **Alle teams** naast elkaar (v4.4, de startweergave voor het management).
 - Een teamlead ziet zijn team per persoon.
 - Een medewerker ziet zichzelf plus het teamtotaal.
 
@@ -111,7 +111,13 @@ Bovenaan staan altijd de **bedrijfsdoelen** van het schooljaar. Iedereen ziet ze
 | Talent | voordrachten, klaar voor start, match → plaatsing (klaar van klaar plus afgewezen), time-to-fill (vacature geopend → ingevuld), doorlooptijd (geselecteerd → klaar voor start) |
 | Bedrijf (schooljaar) | omzet (projecten behalve gestopt, offerte en onduidelijk), scholen met een project, ondersteuners ingezet, verlengingspercentage (verlengd van verlengd plus stopt) |
 
-**Doelen** worden gezet per persoon, per team (`team:<team>`) of voor het bedrijf (`bedrijf`), steeds per week, maand, kwartaal of schooljaar. Bij "dagen" is een doel gehaald als je er onder blijft.
+**Periodes (v4.4).** Week, maand, kwartaal, half jaar, jaar en schooljaar, met ‹ › om naar eerdere periodes te bladeren.
+- Elke tegel toont het verschil met de periode ervoor. Bij een lopende periode vergelijkt het rapport even lange stukken (1 t/m 9 oktober tegen 1 t/m 9 september).
+- **Verloop:** per maatstaf de laatste periodes naast elkaar (8 weken, 6 maanden, 4 kwartalen, 4 halve jaren, 3 jaren), per teamlid en voor het team.
+- Een stand (zoals bezetting nu) heeft geen verloop.
+- Het teamtotaal is de som van de teamleden.
+
+**Doelen** worden gezet per persoon, per team (`team:<team>`) of voor het bedrijf (`bedrijf`), steeds per week, maand, kwartaal, half jaar, jaar of schooljaar. Bij "dagen" is een doel gehaald als je er onder blijft.
 - Management zet alle doelen.
 - Een teamlead zet doelen voor zijn team en de teamleden.
 

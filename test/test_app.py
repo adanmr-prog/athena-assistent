@@ -152,12 +152,27 @@ with sync_playwright() as p:
     page.click('[data-crmtab="rapport"]'); page.wait_for_selector('.tabel'); page.wait_for_timeout(200)
     assert page.locator('#crmInhoud .kop:has-text("Bedrijfsdoelen")').count() == 1, 'bedrijfsdoelen in het rapport'  # v4.2
     page.click('[data-rteam="accountmanagement"]'); page.wait_for_selector('#crmInhoud .tegel:has-text("Bezetting (gevuld van nodig)")')
-    assert page.locator('#crmInhoud .tabel td:has-text("Joris")').count() == 1, 'per persoon in het AM-team'
+    assert page.locator('#crmInhoud .rapport-tabel td:has-text("Joris")').count() == 1, 'per persoon in het AM-team'  # v4.4: Joris staat ook in het verloop
     page.screenshot(path=OUT + '/16a_rapport_am.png', full_page=True)
     page.click('[data-rteam="consultancy"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Forecast")')
     page.screenshot(path=OUT + '/16_rapport.png', full_page=True)
     print('horizontale scroll (rapport):', page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
     page.wait_for_selector('#rapportActiviteit .t-item')  # v3.3: activiteit per gebruiker
+    # v4.4: periodes met stap, verschil met de periode ervoor, verloop per periode en alle teams
+    assert page.locator('#crmBalk [data-crmpreset]').count() == 6, 'zes periodes'
+    assert page.locator('#crmInhoud .tegel .t-verschil').count() > 0, 'verschil met de vorige periode op de tegels'
+    page.wait_for_selector('#crmInhoud .reeks-tabel tr.r-team'); n_rijen = page.locator('#crmInhoud .reeks-tabel tr').count()
+    page.click('#crmInhoud [data-rmetric="gewonnenWaarde"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Verloop per maand") small:has-text("Gewonnen waarde")')
+    page.click('[data-crmpreset="halfjaar"]'); page.wait_for_selector('.periode-nav .p-label:has-text("helft")')
+    assert page.locator('.periode-nav [data-rstap="1"]').is_disabled(), 'niet verder dan nu'
+    page.click('.periode-nav [data-rstap="-1"]'); page.wait_for_selector('.periode-nav [data-rstap="nu"]')
+    assert '(-1)' in page.locator('.periode-nav .p-label').inner_text(), 'vorige periode'
+    page.click('.periode-nav [data-rstap="nu"]'); page.wait_for_selector('.periode-nav [data-rstap="nu"]', state='detached')
+    page.click('#crmBalk [data-rteam="alle"]'); page.wait_for_selector('#crmInhoud .alle-team')
+    assert page.locator('#crmInhoud .alle-team').count() == 3 and page.locator('#crmREigenaar').count() == 0, 'alle teams naast elkaar, zonder persoonkeuze'
+    page.screenshot(path=OUT + '/16b_rapport_alle_teams.png', full_page=True)
+    page.click('#crmBalk [data-rteam="consultancy"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Forecast")')
+    page.click('[data-crmpreset="maand"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Verloop per maand")')
     page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.select_option('#cf-team', 'consultancy'); page.select_option('#cf-rol', 'teamlead'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/17_beheer_gebruikers.png', full_page=True)
     page.click('[data-gbewerk="g1"]'); page.wait_for_selector('#venster.aan #vf-naam'); page.fill('#vf-naam', 'Mees de Jong'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#crmBeheer:has-text("Mees de Jong")')  # v3.7

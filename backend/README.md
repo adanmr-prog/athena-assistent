@@ -94,14 +94,14 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiTaakOpslaan` | object | taak (afvinken gaat via `apiActieKlaar`) |
 | `apiTrackOpslaan` | `{id?, naam, omschrijving, stappen:[{tekst,categorie,dagenNaStart,prio}]}` | tracks (alleen beheerder) |
 | `apiTrackStart` | trackId, `{schoolId?,persoonId?,kansId?}`, startdatum, eigenaar | `{ aantal, track }` |
-| `apiRapport` | `week\|maand\|kwartaal`, eigenaar? | `{ team, perPersoon:[{naam,cijfers,doelen}], totaal, forecast, trechter, winst, redenen, stil, ... }` |
+| `apiRapport` | preset (zie `apiTeamRapport`), eigenaar?, stap? (v4.4) | `{ team, perPersoon:[{naam,cijfers,doelen}], totaal, forecast, trechter, winst, redenen, stil, ... }` |
 | `apiDoelen` / `apiDoelOpslaan` | — / `{eigenaar, periode, metric, doel}` | `{ doelen, metrics, periodes, gebruikers }` |
 | `apiGebruikers` / `apiGebruikerOpslaan` | — / object, nieuweCode | gebruikers / `{ gebruiker, code }` (code alleen bij nieuw of nieuweCode; alleen beheerder) |
 | `apiCrmSync` | — | `{ mails, afspraken, bijgewerkt }` |
 | `apiCrmInrichten` | — | `{ personen, kansen, trajecten, notities, eigenaren }` (oude velden overzetten; idempotent) |
 | `apiCapsuleMigratie` | stap, pagina | `{ stap, aantal, volgende:{stap,pagina}\|null }` (de app roept herhaald aan tot `volgende` null is) |
 | `apiHome` | — | `{ groet, datum, ik, taken:[taak], agenda:[{id,sleutel,titel,start,eind,heleDag,locatie}], pipeline:{open,waarde,gewogen,stil}, recent:[activiteit], mails }` (v3.0, desktop-Home) |
-| `apiActiviteiten` | door, van, tot | `{ door, totaal, perType, tijdlijn }` (v3.3; niet-beheerders krijgen altijd hun eigen activiteit) |
+| `apiActiviteiten` | door, van, tot, team? | `{ door, totaal, perType, tijdlijn }` (v3.3; niet-beheerders krijgen altijd hun eigen activiteit; v4.4: met `team` zonder `door` alleen de activiteit van dat team) |
 | `apiArchiefTijdlijn` | `school\|persoon\|kans`, id | `[activiteit]` uit `Activiteiten_archief` (v3.3) |
 | `apiArchiveer` | — | `{ gearchiveerd, over }` (v3.3, alleen beheerder; draait ook elke 1e van de maand) |
 | `apiHomeMails` | — | `[{onderwerp,van,dagen,link}]` (v3.2: los van `apiHome`, omdat Gmail traag is; `apiHome` geeft `mails: []`) |
@@ -131,7 +131,7 @@ Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewo
 - **Teamtotalen** kloppen ook voor percentages en gemiddelden: elke maatstaf telt als teller/noemer.
 - **Doelen:**
   - per persoon, per team (`eigenaar: 'team:<team>'`) of voor het bedrijf (`'bedrijf'`, alleen met een bedrijfscijfer);
-  - periodes week, maand, kwartaal en schooljaar;
+  - periodes week, maand, kwartaal, half jaar, jaar en schooljaar (v4.4: half jaar en jaar);
   - management zet alles, een teamlead zijn team; iedereen ziet de bedrijfsdoelen.
 - **Nieuwe kolommen:**
   - `Kandidaten.statusHistorie` (JSON, de datum van elke status);
@@ -140,10 +140,16 @@ Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewo
 
 | Functie | Argumenten | Resultaat |
 |---|---|---|
-| `apiTeamRapport` | preset (`week\|maand\|kwartaal\|schooljaar`), team?, eigenaar? | `{ preset, van, tot, team, teams, metrieken:[{id,team,label,kort,soort,laagIsGoed,stand}], perPersoon:[{naam,cijfers,doelen}], totaal:{cijfers,doelen}, bedrijf:{schooljaar,metrieken,cijfers,doelen}, kiesbaar, eigenaar, ik }` |
+| `apiTeamRapport` | preset (`week\|maand\|kwartaal\|halfjaar\|jaar\|schooljaar`), team? (`alle` = management), eigenaar?, stap? (0 = nu, -1 = de periode ervoor) | `{ preset, stap, van, tot, eind, lopend, label, vergelijk:{van,tot,label,kort}, reeksLabels, team, teams, metrieken:[{id,team,label,kort,soort,laagIsGoed,stand}], perPersoon:[{naam,cijfers,vorige,reeks,doelen}], totaal:{cijfers,vorige,reeks,doelen}, alle?:[{team,metrieken,leden,totaal}], bedrijf:{schooljaar,metrieken,cijfers,doelen}, kiesbaar, eigenaar, ik }` |
 | `apiDoelen` | — | `{ doelen, metrieken, periodes, eigenaren:[{waarde,label,team}], teamNamen, magZetten }` |
 
 `apiHome` geeft `bedrijf` mee (de bedrijfscijfers en -doelen).
+
+**v4.4 (rapporten door de tijd):**
+- `periodeBereik(preset, stap)` geeft van, tot (t/m vandaag bij de lopende periode), eind en een label; bladeren gaat alleen terug (`stap` ≤ 0).
+- `vorige` is de periode ervoor, bij een lopende periode even lang (1 t/m 9 oktober tegen 1 t/m 9 september).
+- `reeks` per maatstaf: de laatste periodes (8 weken, 6 maanden, 4 kwartalen, 4 halve jaren, 3 jaren of 3 schooljaren), de laatste is de gekozen periode. Een stand (`stand: true`) heeft geen `vorige` en geen `reeks`.
+- Het teamtotaal is de som van de teamleden; activiteit van iemand uit een ander team telt niet mee.
 
 ## Taskforce, vacatures en bezetting (v4.1)
 

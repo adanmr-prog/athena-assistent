@@ -369,16 +369,32 @@ def handle_crm(fn, args):
                 'winst': {'gewonnen': 1, 'gewonnenWaarde': 12000, 'verloren': 1, 'verlorenWaarde': 4000, 'ratio': 50}, 'redenen': [{'reden': 'Te duur', 'aantal': 1}], 'stil': [kans_uit(k) for k in CRMKANSEN if kans_uit(k)['stil']]}
     if fn == 'apiDoelen':  # v4.2: ook team- en bedrijfsdoelen
         eig = ([{'waarde': 'bedrijf', 'label': 'Bedrijf (iedereen)', 'team': 'bedrijf'}] if beheer() else []) + [y for t in TEAMLEDEN for y in [{'waarde': 'team:' + t, 'label': 'Team ' + t, 'team': t}] + [{'waarde': n, 'label': n, 'team': t} for n in TEAMLEDEN[t]]] if beheer() else []
-        return {'doelen': DOELEN, 'metrics': [m['id'] for m in METR], 'metrieken': METR, 'periodes': ['week', 'maand', 'kwartaal', 'schooljaar'], 'gebruikers': GEBRUIKERS_NAMEN, 'eigenaren': eig,
+        return {'doelen': DOELEN, 'metrics': [m['id'] for m in METR], 'metrieken': METR, 'periodes': ['week', 'maand', 'kwartaal', 'halfjaar', 'jaar', 'schooljaar'], 'gebruikers': GEBRUIKERS_NAMEN, 'eigenaren': eig,
                 'teamNamen': {'consultancy': 'Team onderwijsconsultants', 'accountmanagement': 'Team accountmanagers', 'talent': 'Team talent'}, 'magZetten': beheer()}
-    if fn == 'apiTeamRapport':
-        teams = ['consultancy', 'accountmanagement', 'talent'] if beheer() else [ik()['team']] if ik()['team'] in TEAMLEDEN else []
-        team = args[1] if len(args) > 1 and args[1] in teams else (teams[0] if teams else ''); preset = args[0] or 'maand'; defs = [m for m in METR if m['team'] == team]
+    if fn == 'apiTeamRapport':  # v4.4: periode met stap, vergelijking, reeks en 'alle' teams voor het management
+        echt = ['consultancy', 'accountmanagement', 'talent'] if beheer() else [ik()['team']] if ik()['team'] in TEAMLEDEN else []
+        teams = (['alle'] + echt) if beheer() else echt
+        team = args[1] if len(args) > 1 and args[1] in teams else (echt[0] if echt else ''); preset = args[0] or 'maand'
+        stap = min(0, int(args[3] or 0)) if len(args) > 3 and args[3] not in (None, '') else 0
+        labels = {'week': 'week 41', 'maand': 'oktober 2026', 'kwartaal': 'Q4 2026', 'halfjaar': 'tweede helft 2026', 'jaar': '2026', 'schooljaar': 'schooljaar 2026-2027'}
+        n_reeks = {'week': 8, 'maand': 6, 'kwartaal': 4, 'halfjaar': 4, 'jaar': 3, 'schooljaar': 3}.get(preset, 6)
+        def bundel(defs, schaal=1.0):
+            cij = {m['id']: CIJFERS.get(m['id']) for m in defs}
+            vor = {m['id']: (None if m.get('stand') or CIJFERS.get(m['id']) is None else round(CIJFERS[m['id']] * 0.8)) for m in defs}
+            reeks = {m['id']: [None if CIJFERS.get(m['id']) is None else round(CIJFERS[m['id']] * schaal * (0.6 + 0.1 * i)) for i in range(n_reeks - 1)] + [cij[m['id']]] for m in defs if not m.get('stand')}
+            return {'cijfers': cij, 'vorige': vor, 'reeks': reeks}
+        uit = {'preset': preset, 'stap': stap, 'van': d(-20 + 30 * stap), 'tot': d(0 + 30 * stap), 'eind': d(10), 'lopend': stap == 0, 'label': labels.get(preset, '') + ('' if stap == 0 else ' (' + str(stap) + ')'),
+               'vergelijk': {'van': d(-50 + 30 * stap), 'tot': d(-30 + 30 * stap), 'label': 'vorige periode', 'kort': 'vorige'}, 'reeksLabels': ['p' + str(i + 1) for i in range(n_reeks)],
+               'team': team, 'teams': teams, 'metrieken': [], 'perPersoon': [], 'totaal': {'cijfers': {}, 'doelen': {}, 'vorige': {}, 'reeks': {}}, 'bedrijf': bedrijf(), 'ik': ik(), 'eigenaar': '', 'kiesbaar': []}
+        if team == 'alle':
+            uit['alle'] = [dict(team=t, metrieken=[m for m in METR if m['team'] == t], leden=len(TEAMLEDEN.get(t, [])), totaal=dict(bundel([m for m in METR if m['team'] == t]), doelen=doelen_van(preset, 'team:' + t))) for t in echt]
+            return uit
+        defs = [m for m in METR if m['team'] == team]
         leden = TEAMLEDEN.get(team, []) if beheer() else [ik()['naam']]
-        if len(args) > 2 and args[2] in leden: leden = [args[2]]
-        cij = {m['id']: CIJFERS.get(m['id']) for m in defs}
-        return {'preset': preset, 'van': d(-20), 'tot': d(0), 'team': team, 'teams': teams, 'metrieken': defs, 'perPersoon': [{'naam': n, 'cijfers': cij, 'doelen': doelen_van(preset, n)} for n in leden],
-                'totaal': {'cijfers': cij, 'doelen': doelen_van(preset, 'team:' + team)}, 'bedrijf': bedrijf(), 'ik': ik(), 'eigenaar': args[2] if len(args) > 2 and args[2] in leden else '', 'kiesbaar': TEAMLEDEN.get(team, []) if beheer() else []}
+        if len(args) > 2 and args[2] in leden: leden = [args[2]]; uit['eigenaar'] = args[2]
+        uit.update({'metrieken': defs, 'perPersoon': [dict(bundel(defs, 0.5), naam=n, doelen=doelen_van(preset, n)) for n in leden],
+                    'totaal': dict(bundel(defs), doelen=doelen_van(preset, 'team:' + team)), 'kiesbaar': TEAMLEDEN.get(team, []) if beheer() else []})
+        return uit
     if fn == 'apiDoelOpslaan':
         o = args[0]; DOELEN[:] = [x for x in DOELEN if x['id'] != o['eigenaar'] + o['periode'] + o['metric'] and x['id'] != o.get('id')] + [dict(o, id=o['eigenaar'] + o['periode'] + o['metric'], doel=float(o.get('doel') or 0))]; return handle_crm('apiDoelen', [])
     if fn == 'apiMijlpalenOpslaan':
