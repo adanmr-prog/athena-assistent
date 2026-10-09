@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.3';
+var VERSIE = '4.4';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -696,7 +696,7 @@ function trajectUit(t) {
 var SCHOOL_STATUSSEN = ['lead', 'prospect', 'klant', 'oud-klant'];
 var ACTIVITEIT_TYPES = ['notitie', 'gesprek', 'mail', 'afspraak'];   // handmatig te loggen; 'fase' en 'taak' schrijft de backend zelf
 var TAAK_CATEGORIEEN = ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'];
-var DOEL_PERIODES = ['week', 'maand', 'kwartaal', 'schooljaar'];  // v4.2: schooljaar (bedrijfsdoelen)
+var DOEL_PERIODES = ['week', 'maand', 'kwartaal', 'halfjaar', 'jaar', 'schooljaar'];  // v4.2: schooljaar (bedrijfsdoelen); v4.4: half jaar en jaar
 var STANDAARD_MIJLPALEN = [
   { mijlpaal: 'lead', kans: 10, dagenNorm: 14 }, { mijlpaal: 'gesprek', kans: 25, dagenNorm: 10 },
   { mijlpaal: 'voorstel', kans: 50, dagenNorm: 7 }, { mijlpaal: 'onderhandeling', kans: 75, dagenNorm: 7 }
@@ -1317,19 +1317,61 @@ function apiAgenda(van, tot) {
 
 /* ----- Rapportage en activity tracking ----- */
 
-function periodeStart(preset) {
-  var d = new Date();
-  if (preset === 'maand') return new Date(d.getFullYear(), d.getMonth(), 1);
-  if (preset === 'kwartaal') return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
-  if (preset === 'schooljaar') return schooljaarStart(huidigSchooljaar());  // v4.2
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);  // maandag van deze week
+// v4.4: begin en eind van een periode. stap 0 = de lopende periode (t/m vandaag), -1 = de vorige hele periode, enzovoort.
+function periodeGrenzen(preset, stap) {
+  var d = new Date(), j = d.getFullYear(), m = d.getMonth(), begin, eind;
+  if (preset === 'maand') { begin = new Date(j, m + stap, 1); eind = new Date(j, m + stap + 1, 0); }
+  else if (preset === 'kwartaal') { var q = Math.floor(m / 3) * 3 + 3 * stap; begin = new Date(j, q, 1); eind = new Date(j, q + 3, 0); }
+  else if (preset === 'halfjaar') { var h = (m < 6 ? 0 : 6) + 6 * stap; begin = new Date(j, h, 1); eind = new Date(j, h + 6, 0); }
+  else if (preset === 'jaar') { begin = new Date(j + stap, 0, 1); eind = new Date(j + stap, 11, 31); }
+  else if (preset === 'schooljaar') { var sj = schooljaarStart(huidigSchooljaar()).getFullYear() + stap; begin = new Date(sj, 7, 1); eind = new Date(sj + 1, 6, 31); }  // v4.2
+  else { begin = new Date(j, m, d.getDate() - (d.getDay() + 6) % 7 + 7 * stap); eind = new Date(begin.getFullYear(), begin.getMonth(), begin.getDate() + 6); }  // week vanaf maandag
+  return { begin: begin, eind: eind };
 }
-function apiRapport(preset, eigenaar) {
+function periodeBereik(preset, stap) {
+  stap = Math.min(0, Math.round(Number(stap) || 0));
+  var g = periodeGrenzen(preset, stap), d = new Date(), vandaag = new Date(d.getFullYear(), d.getMonth(), d.getDate()), lopend = g.eind >= vandaag;
+  return { van: datumStr(g.begin), tot: datumStr(lopend ? vandaag : g.eind), eind: datumStr(g.eind), lopend: lopend, stap: stap, label: periodeNaam(preset, g.begin), kort: periodeKort(preset, g.begin) };
+}
+// De vergelijkingsperiode: de periode ervoor, en bij een lopende periode even lang (1 t/m 9 oktober tegen 1 t/m 9 september)
+function vergelijkBereik(preset, B) {
+  var V = periodeBereik(preset, B.stap - 1);
+  if (B.lopend) {
+    var dagen = Math.round((parseDatum(B.tot) - parseDatum(B.van)) / 86400000), b = parseDatum(V.van);
+    var t = datumStr(new Date(b.getFullYear(), b.getMonth(), b.getDate() + dagen));
+    if (t < V.tot) V.tot = t;
+  }
+  return V;
+}
+var MAANDEN_KORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+function isoWeek(d) {
+  var t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 3 - (d.getDay() + 6) % 7), w1 = new Date(t.getFullYear(), 0, 4);  // de donderdag van de week bepaalt het jaar
+  return 1 + Math.round(((t - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+}
+function periodeNaam(preset, b) {
+  var j = b.getFullYear();
+  if (preset === 'maand') return MAANDEN[b.getMonth()] + ' ' + j;
+  if (preset === 'kwartaal') return 'Q' + (Math.floor(b.getMonth() / 3) + 1) + ' ' + j;
+  if (preset === 'halfjaar') return (b.getMonth() < 6 ? 'eerste' : 'tweede') + ' helft ' + j;
+  if (preset === 'jaar') return String(j);
+  if (preset === 'schooljaar') return 'schooljaar ' + j + '-' + (j + 1);
+  return 'week ' + isoWeek(b) + ' van ' + b.getFullYear();  // de data staan er in de app al naast
+}
+function periodeKort(preset, b) {
+  var j = b.getFullYear(), jj = "'" + String(j).slice(2);
+  if (preset === 'maand') return MAANDEN_KORT[b.getMonth()] + ' ' + jj;
+  if (preset === 'kwartaal') return 'Q' + (Math.floor(b.getMonth() / 3) + 1) + ' ' + jj;
+  if (preset === 'halfjaar') return 'H' + (b.getMonth() < 6 ? 1 : 2) + ' ' + jj;
+  if (preset === 'jaar') return String(j);
+  if (preset === 'schooljaar') return String(j).slice(2) + '-' + String(j + 1).slice(2);
+  return 'wk ' + isoWeek(b);
+}
+function apiRapport(preset, eigenaar, stap) {
   preset = DOEL_PERIODES.indexOf(preset) >= 0 ? preset : 'week';
   // v4.0: management ziet iedereen, een teamlead zijn team (leeg = teamtotaal), een medewerker zijn eigen cijfers
   var mensen = zichtbareMensen(), magPersoon = function (n) { return isBeheerder() || mensen.indexOf(n) >= 0; };
   if (!isBeheerder() && (!eigenaar || mensen.indexOf(eigenaar) < 0)) eigenaar = isTeamlead() ? '' : ikNaam();
-  var van = datumStr(periodeStart(preset)), tot = datumStr(new Date());
+  var B = periodeBereik(preset, stap), van = B.van, tot = B.tot;  // v4.4: ook eerdere periodes
   var inPeriode = function (s) { var d = String(s || '').slice(0, 10); return d >= van && d <= tot; };
   var leeg = function () { return { gesprekken: 0, mails: 0, afspraken: 0, notities: 0, nieuweKansen: 0, voorstellen: 0, gewonnen: 0, gewonnenWaarde: 0, verloren: 0, takenAf: 0 }; };
   var per = {}, p = function (n) { n = n || 'Onbekend'; return per[n] || (per[n] = leeg()); };
@@ -1377,14 +1419,15 @@ function apiRapport(preset, eigenaar) {
   };
 }
 // v3.3: activiteit per gebruiker. De beheerder kiest iemand; anderen zien alleen hun eigen activiteit.
-function apiActiviteiten(door, van, tot) {
+function apiActiviteiten(door, van, tot, team) {
   // v4.0: management kiest iedereen, een teamlead iemand uit zijn team (leeg = het hele team), een medewerker alleen zichzelf
   var mensen = zichtbareMensen();
   if (!isBeheerder() && mensen.indexOf(door) < 0) door = isTeamlead() ? '' : ikNaam();
+  if (!door && RAPPORT_TEAMS.indexOf(team) >= 0) { var leden = teamNamen(team); mensen = isBeheerder() ? leden : mensen.filter(function (n) { return leden.indexOf(n) >= 0; }); }  // v4.4: alleen de activiteit van dat team
   var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kMap = perId(lees('Kansen')), perType = {}, zicht = zichtbaarFilter();
   var lijst = lees('Activiteiten').filter(function (a) {
     var d = String(a.datum).slice(0, 10);
-    return (door ? a.door === door : isBeheerder() || mensen.indexOf(a.door) >= 0) && (!van || d >= van) && (!tot || d <= tot) && String(a.datum) <= nu() && zicht(a);
+    return (door ? a.door === door : (isBeheerder() && RAPPORT_TEAMS.indexOf(team) < 0) || mensen.indexOf(a.door) >= 0) && (!van || d >= van) && (!tot || d <= tot) && String(a.datum) <= nu() && zicht(a);
   });
   lijst.forEach(function (a) { perType[a.type] = (perType[a.type] || 0) + 1; });
   return { door: door, totaal: lijst.length, perType: perType, tijdlijn: tijdlijn(lijst, sMap, pMap, kMap), gebruikers: mensen };
@@ -1445,7 +1488,7 @@ function apiDoelOpslaan(obj) {
   if (!eigenaar) throw new Error('Kies een persoon.');
   eisDoelRecht(eigenaar);
   if (obj.id) { var oudDoel = vind('Doelen', obj.id); if (oudDoel) eisDoelRecht(oudDoel.eigenaar); }
-  if (DOEL_PERIODES.indexOf(obj.periode) < 0) throw new Error('Kies week, maand, kwartaal of schooljaar.');
+  if (DOEL_PERIODES.indexOf(obj.periode) < 0) throw new Error('Kies week, maand, kwartaal, half jaar, jaar of schooljaar.');
   if (!METRIEKEN[obj.metric]) throw new Error('Onbekende maatstaf.');
   if (eigenaar === 'bedrijf' && METRIEKEN[obj.metric].team !== 'bedrijf') throw new Error('Kies een bedrijfscijfer voor een bedrijfsdoel.');  // v4.2
   var id = slug(eigenaar + '-' + obj.periode + '-' + obj.metric);
@@ -2303,8 +2346,11 @@ function dagenTussen(a, b) { var x = parseDatum(a), y = parseDatum(b); return x 
 function kandidaatHistorie(k) { var h = {}; try { h = JSON.parse(k.statusHistorie || '{}') || {}; } catch (e) { h = {}; } if (k.status && !h[k.status] && k.statusSinds) h[k.status] = k.statusSinds; return h; }
 function schooljaarStart(sj) { return new Date(Number(String(sj).slice(0, 4)), 7, 1); }
 
+// v4.4: één keer lezen per rapport; een rapport telt tot zo'n dertig periodes
+function rapportData() { return { acts: lees('Activiteiten'), kansen: lees('Kansen'), scholen: lees('Scholen'), ts: lees('Trajecten'), vacs: lees('Vacatures'), kands: lees('Kandidaten'), facturen: lees('Facturen'), nu: nu() }; }
 // Cijfers van één team in een periode: per persoon en het teamtotaal ({ per: {naam: {maatstaf: {t, n}}}, totaal: {...} }).
-function teamCijfers(team, van, tot) {
+function teamCijfers(team, van, tot, D) {
+  D = D || rapportData();
   var per = {}, totaal = {}, inP = function (s) { var d = String(s || '').slice(0, 10); return !!d && d >= van && d <= tot; };
   var tel = function (naam, m, t, n) {
     if (!naam) return;
@@ -2313,34 +2359,34 @@ function teamCijfers(team, van, tot) {
   };
   var sj = huidigSchooljaar(), vandaag = datumStr(new Date());
   if (team === 'consultancy') {
-    lees('Activiteiten').forEach(function (a) {
-      if (!a.door || !inP(a.datum) || String(a.datum) > nu()) return;
+    D.acts.forEach(function (a) {
+      if (!a.door || !inP(a.datum) || String(a.datum) > D.nu) return;
       if (a.type === 'gesprek') tel(a.door, 'gesprekken', 1); else if (a.type === 'mail') tel(a.door, 'mails', 1); else if (a.type === 'afspraak') tel(a.door, 'afspraken', 1);
       else if (a.type === 'fase' && /→ voorstel$/.test(String(a.onderwerp))) tel(a.door, 'voorstellen', 1);
     });
-    lees('Kansen').forEach(function (k) {
+    D.kansen.forEach(function (k) {
       if (inP(k.aangemaakt)) tel(k.eigenaar, 'nieuweKansen', 1);
       if ((k.fase === 'gewonnen' || k.fase === 'verloren') && inP(k.gesloten)) {
         tel(k.eigenaar, 'conversie', k.fase === 'gewonnen' ? 1 : 0, 1);
         if (k.fase === 'gewonnen') { tel(k.eigenaar, 'gewonnen', 1); tel(k.eigenaar, 'gewonnenWaarde', Number(k.waarde) || 0); }
       }
     });
-    lees('Scholen').forEach(function (s) { if (inP(s.aangemaakt)) tel(s.eigenaar, 'nieuweScholen', 1); });
+    D.scholen.forEach(function (s) { if (inP(s.aangemaakt)) tel(s.eigenaar, 'nieuweScholen', 1); });
   } else if (team === 'accountmanagement') {
-    var ts = lees('Trajecten'), tMap = perId(ts), vacs = lees('Vacatures'), kands = lees('Kandidaten');
+    var ts = D.ts, tMap = perId(ts), vacs = D.vacs, kands = D.kands;
     ts.forEach(function (t) {
       if (!t.am) return;
       if (projectLopend(t)) { tel(t.am, 'lopendeProjecten', 1); var b = bezettingVan(t.id, vacs, kands); if (b.nodig) tel(t.am, 'bezetting', b.gevuld, b.nodig); }
       if (t.schooljaar === sj && t.verlenging === 'verlengd') tel(t.am, 'verlengd', 1);
     });
     vacs.forEach(function (v) { var t = tMap[v.trajectId]; if (t && t.am && v.ingevuld && inP(v.ingevuld)) { var d = dagenTussen(v.aangemaakt, v.ingevuld); if (d !== null) tel(t.am, 'dagenTotBezetting', d, 1); } });
-    lees('Activiteiten').forEach(function (a) { var t = a.trajectId ? tMap[a.trajectId] : null; if (t && t.am && a.door === t.am && (a.type === 'gesprek' || a.type === 'afspraak') && inP(a.datum) && String(a.datum) <= nu()) tel(t.am, 'evaluaties', 1); });
-    lees('Facturen').forEach(function (f) {
+    D.acts.forEach(function (a) { var t = a.trajectId ? tMap[a.trajectId] : null; if (t && t.am && a.door === t.am && (a.type === 'gesprek' || a.type === 'afspraak') && inP(a.datum) && String(a.datum) <= D.nu) tel(t.am, 'evaluaties', 1); });
+    D.facturen.forEach(function (f) {
       var t = tMap[f.trajectId]; if (!t || !t.am || !f.datum || !inP(f.datum) || String(f.datum).slice(0, 10) > vandaag) return;  // alleen termijnen die al verstuurd hadden moeten zijn
       tel(t.am, 'facturatieOpTijd', ['verzonden', 'betaald'].indexOf(f.status) >= 0 ? 1 : 0, 1);
     });
   } else if (team === 'talent') {
-    var kandidaten = lees('Kandidaten'), vMap = perId(lees('Vacatures'));
+    var kandidaten = D.kands, vMap = perId(D.vacs);
     kandidaten.forEach(function (k) {
       var h = kandidaatHistorie(k), klaar = h[KANDIDAAT_KLAAR], af = h.afgewezen;
       if (inP(k.aangemaakt)) tel(k.door, 'voordrachten', 1);
@@ -2372,19 +2418,44 @@ function bedrijfCijfers() {
 }
 
 // Rapport van één team: management kiest een team, een teamlead ziet zijn team per persoon, een medewerker zichzelf plus het teamtotaal.
-function apiTeamRapport(preset, team, eigenaar) {
+// v4.4: elke periode met stap (‹ ›), een vergelijking met de periode ervoor, een reeks van de laatste periodes en voor het management 'alle' teams.
+var RAPPORT_REEKS = { week: 8, maand: 6, kwartaal: 4, halfjaar: 4, jaar: 3, schooljaar: 3 };
+function apiTeamRapport(preset, team, eigenaar, stap) {
   preset = DOEL_PERIODES.indexOf(preset) >= 0 ? preset : 'maand';
-  var teams = isBeheerder() ? RAPPORT_TEAMS.slice() : RAPPORT_TEAMS.filter(function (t) { return GEBRUIKER && GEBRUIKER.team === t; });
-  if (teams.indexOf(team) < 0) team = teams[0] || '';
-  var van = datumStr(periodeStart(preset)), tot = datumStr(new Date()), doelen = doelenVan(preset);
-  var uit = { preset: preset, van: van, tot: tot, team: team, teams: teams, metrieken: metriekDefs(team), perPersoon: [], totaal: { cijfers: {}, doelen: {} }, bedrijf: bedrijfCijfers(), ik: ikUit(), eigenaar: '' };
+  var echt = isBeheerder() ? RAPPORT_TEAMS.slice() : RAPPORT_TEAMS.filter(function (t) { return GEBRUIKER && GEBRUIKER.team === t; });
+  var teams = isBeheerder() ? ['alle'].concat(echt) : echt;
+  if (teams.indexOf(team) < 0) team = echt[0] || '';
+  var B = periodeBereik(preset, stap), V = vergelijkBereik(preset, B), doelen = doelenVan(preset), D = rapportData(), reeks = [];
+  for (var i = (RAPPORT_REEKS[preset] || 6) - 1; i > 0; i--) reeks.push(periodeBereik(preset, B.stap - i));
+  reeks.push(B);
+  var uit = { preset: preset, stap: B.stap, van: B.van, tot: B.tot, eind: B.eind, lopend: B.lopend, label: B.label,
+    vergelijk: { van: V.van, tot: V.tot, label: V.label, kort: V.kort }, reeksLabels: reeks.map(function (r) { return r.kort; }),
+    team: team, teams: teams, metrieken: metriekDefs(team === 'alle' ? 'geen' : team), perPersoon: [], totaal: { cijfers: {}, doelen: {}, vorige: {}, reeks: {} },
+    bedrijf: bedrijfCijfers(), ik: ikUit(), eigenaar: '', kiesbaar: [] };
   if (!team) return uit;
+  // Cijfers, vorige periode en reeks van één team; bundel(naam) geeft ze voor één persoon, bundel('') voor het teamtotaal
+  var meet = function (t) {
+    var nuC = teamCijfers(t, B.van, B.tot, D), vorC = teamCijfers(t, V.van, V.tot, D), defs = metriekDefs(t), leden = teamNamen(t);
+    var rs = reeks.map(function (r) { return r === B ? nuC : teamCijfers(t, r.van, r.tot, D); });
+    // het teamtotaal is de som van de teamleden (een mail of gesprek van iemand uit een ander team telt hier niet mee)
+    var vanTeam = function (c) { var u = {}; leden.forEach(function (n) { var x = c.per[n] || {}; Object.keys(x).forEach(function (m) { var y = u[m] || (u[m] = { t: 0, n: 0 }); y.t += x[m].t; y.n += x[m].n; }); }); return u; };
+    return function (naam) {
+      var w = function (c) { return waardenVan(t, naam ? c.per[naam] : vanTeam(c)); };
+      var cijfers = w(nuC), vorige = w(vorC), rw = rs.map(w), r = {};
+      defs.forEach(function (d) { if (d.stand) vorige[d.id] = null; else r[d.id] = rw.map(function (x) { return x[d.id]; }); });  // een stand (bezetting nu) heeft geen verloop
+      return { cijfers: cijfers, vorige: vorige, reeks: r };
+    };
+  };
+  if (team === 'alle') {
+    uit.alle = echt.map(function (t) { var b = meet(t)(''); b.doelen = doelen['team:' + t] || {}; return { team: t, metrieken: metriekDefs(t), totaal: b, leden: teamNamen(t).length }; });
+    return uit;
+  }
   var leden = teamNamen(team), zicht = zichtbareMensen(), mensen = isBeheerder() ? leden : leden.filter(function (n) { return zicht.indexOf(n) >= 0; });
   uit.kiesbaar = isBeheerder() || isTeamlead() ? mensen.slice() : [];  // wie management of een teamlead kan kiezen
   if (eigenaar && mensen.indexOf(eigenaar) >= 0) { uit.eigenaar = eigenaar; mensen = [eigenaar]; }
-  var c = teamCijfers(team, van, tot);
-  uit.perPersoon = mensen.map(function (n) { return { naam: n, cijfers: waardenVan(team, c.per[n]), doelen: doelen[n] || {} }; });
-  uit.totaal = { cijfers: waardenVan(team, c.totaal), doelen: doelen['team:' + team] || {} };
+  var bundel = meet(team);
+  uit.perPersoon = mensen.map(function (n) { var b = bundel(n); b.naam = n; b.doelen = doelen[n] || {}; return b; });
+  uit.totaal = bundel(''); uit.totaal.doelen = doelen['team:' + team] || {};
   return uit;
 }
 

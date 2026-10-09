@@ -301,19 +301,61 @@ function demoVul() {
   act('taak', -2, '11:00', M.sem, 's4', { trajectId: 't4' }, 'Kandidaat Fatima Aydin: vog → klaar voor start');
   act('taak', -3, '12:00', M.sem, 's3', { trajectId: 't3' }, 'Kandidaat Daan Kuipers: voorgesteld → gesprek');
   act('taak', -5, '09:00', M.ruben, 's2', { trajectId: 't9' }, 'Vacature geopend: Rekenondersteuner (2×)');
-  // aanvullende activiteit, zodat de rapporten per persoon gevuld zijn
-  var consultants = [[M.lars, ['s1', 's7', 's10', 's4']], [M.noor, ['s2', 's5', 's8', 's11']], [M.yara, ['s3', 's6', 's9', 's12']]];
-  var ams = [[M.femke, [['s1', 't1'], ['s3', 't3']]], [M.ruben, [['s2', 't2'], ['s6', 't5'], ['s2', 't9']]], [M.bas, [['s4', 't4'], ['s10', 't6']]]];
-  for (var dag = -40; dag <= -1; dag++) {
+  // aanvullende activiteit, zodat de rapporten per persoon gevuld zijn. v4.4: een heel jaar, op werkdagen, rustig in de zomer- en kerstvakantie
+  var toeval = function (n) { var x = Math.sin(n * 9301 + 49297) * 233280; return x - Math.floor(x); };
+  var vakantie = function (dt0) { var mm = dt0.getMonth(), dd = dt0.getDate(); return (mm === 6 && dd >= 18) || (mm === 7 && dd < 25) || (mm === 11 && dd >= 21) || (mm === 0 && dd < 4); };
+  var consultants = [[M.lars, ['s1', 's7', 's10', 's4'], 1.1], [M.noor, ['s2', 's5', 's8', 's11'], 1.0], [M.yara, ['s3', 's6', 's9', 's12'], 0.8]];
+  var ams = [[M.femke, [['s1', 't1'], ['s3', 't3']], [['s1', 't7']]], [M.ruben, [['s2', 't2'], ['s6', 't5'], ['s2', 't9']], [['s12', 't8'], ['s6', 't5']]], [M.bas, [['s4', 't4'], ['s10', 't6']], [['s4', 't11'], ['s10', 't6']]]];
+  for (var dag = -365; dag <= -1; dag++) {
+    var dd0 = plusDagen(dag), wd = dd0.getDay();
+    if (wd === 0 || wd === 6) continue;
+    var rust = vakantie(dd0) ? 0.15 : (0.75 + 0.35 * Math.sin((dag + 365) / 58));  // golfjes per seizoen
+    var nieuwJaar = d(dag) >= sjStart;
     consultants.forEach(function (c, ci) {
-      if ((dag + ci * 3) % 3 === 0) act('gesprek', dag, (9 + ci) + ':30', c[0], c[1][(-dag + ci) % c[1].length], {}, 'Belafspraak');
-      if ((dag + ci) % 2 === 0) act('mail', dag, (13 + ci) + ':10', c[0], c[1][(-dag) % c[1].length], {}, 'Opvolging per mail');
-      if ((dag + ci * 5) % 7 === 0) act('afspraak', dag, '11:00', c[0], c[1][(-dag + 1) % c[1].length], {}, 'Gesprek op school');
+      var k = rust * c[2], sch = c[1];
+      if (toeval(dag * 7 + ci) < 0.55 * k) act('gesprek', dag, (9 + ci) + ':30', c[0], sch[(-dag + ci) % sch.length], {}, 'Belafspraak');
+      if (toeval(dag * 11 + ci) < 0.6 * k) act('mail', dag, (13 + ci) + ':10', c[0], sch[(-dag) % sch.length], {}, 'Opvolging per mail');
+      if (toeval(dag * 13 + ci) < 0.22 * k) act('afspraak', dag, '11:00', c[0], sch[(-dag + 1) % sch.length], {}, 'Gesprek op school');
     });
     ams.forEach(function (a, ai) {
-      if ((dag + ai * 2) % 5 === 0) { var p = a[1][(-dag) % a[1].length]; act('gesprek', dag, '10:' + _p2(ai * 10), a[0], p[0], { trajectId: p[1] }, 'Contact met de school over de inzet'); }
+      var lijst = nieuwJaar ? a[1] : a[2];
+      if (toeval(dag * 17 + ai) < 0.35 * rust) { var pr = lijst[(-dag) % lijst.length]; act('gesprek', dag, '10:' + _p2(ai * 10), a[0], pr[0], { trajectId: pr[1] }, 'Contact met de school over de inzet'); }
     });
   }
+
+  // v4.4: geschiedenis voor de trends: gesloten kansen, vervangingen met kandidaten en termijnen van vorig schooljaar
+  var oudeKansen = [], oudeVac = [], oudeKand = [], oudeFact = [];
+  var kansNamen = ['Onderwijsondersteuning', 'Huiswerkbegeleiding', 'Examentraining', 'Studentdocent wiskunde', 'NT2-ondersteuning', 'Surveillance examens', 'Basisvaardigheden rekenen', 'Onderwijsassistentie'];
+  for (var h = 0; h < 22; h++) {
+    var eig = consultants[h % 3], dicht = -340 + h * 13 + Math.round(toeval(h) * 6), wint = toeval(h * 3 + 1) < 0.62, sid = eig[1][h % eig[1].length];
+    var ko = { id: 'kh' + h, schoolId: sid, school: sn[sid], naam: kansNamen[h % kansNamen.length], traject: kansNamen[h % kansNamen.length], fase: wint ? 'gewonnen' : 'verloren', pipeline: 'Scholen',
+      waarde: 1000 * (6 + Math.round(toeval(h * 5) * 26)), eigenaar: eig[0], aangemaakt: dt(dicht - 35 - Math.round(toeval(h * 7) * 30), '09:30'), gesloten: d(dicht), laatsteContact: d(dicht),
+      verliesReden: wint ? '' : ['Te duur', 'Eigen oplossing gevonden', 'Geen budget', 'Andere aanbieder'][h % 4] };
+    oudeKansen.push(ko);
+    act('fase', dicht - 14, '15:00', eig[0], sid, { kansId: ko.id }, 'Mijlpaal: gesprek → voorstel');
+    act('fase', dicht, '16:00', eig[0], sid, { kansId: ko.id }, 'Mijlpaal: onderhandeling → ' + ko.fase);
+  }
+  for (var mnd = -11; mnd <= -2; mnd++) {
+    var nu0 = new Date(), b0 = new Date(nu0.getFullYear(), nu0.getMonth() + mnd, 1), dag0 = Math.round((b0 - new Date(nu0.getFullYear(), nu0.getMonth(), nu0.getDate())) / 86400000);
+    if (vakantie(new Date(b0.getFullYear(), b0.getMonth(), 5))) continue;
+    var tr = mnd % 2 ? 't8' : 't11', vid = 'vh' + (-mnd), amN = tr === 't8' ? M.ruben : M.bas, scout = mnd % 2 ? M.sem : M.iris, ttf = 9 + Math.round(toeval(mnd) * 12);
+    oudeVac.push({ id: vid, trajectId: tr, titel: 'Vervanging ondersteuner', aantal: 1, dagen: 'Volgens rooster', urenPerWeek: 16, start: d(dag0 + ttf + 3), eind: (j1) + '-06-30', profiel: 'Vervanger voor een ondersteuner die stopt', status: 'ingevuld', aangemaakt: dt(dag0 + 2), ingevuld: dt(dag0 + 2 + ttf), door: amN });
+    oudeKand.push(kand('ch' + (-mnd) + 'a', vid, tr, ['Lieke', 'Omar', 'Sanne', 'Milan', 'Esra', 'Bram', 'Yasmin', 'Joris', 'Femke', 'Stijn'][-mnd - 2] + ' ' + ['Bosman', 'Haddou', 'Willems', 'de Jong', 'Kaya', 'Smits', 'Benali', 'Peters', 'Prins', 'Maas'][-mnd - 2], scout, 'klaar voor start',
+      { voorgesteld: dag0 + 3, gesprek: dag0 + 5, geselecteerd: dag0 + 7, contract: dag0 + ttf - 2, 'klaar voor start': dag0 + 2 + ttf }));
+    oudeKand.push(kand('ch' + (-mnd) + 'b', vid, tr, ['Noah', 'Iris', 'Daan', 'Zoë', 'Luuk', 'Mila', 'Thijs', 'Anna', 'Rayan', 'Eva'][-mnd - 2] + ' ' + ['Vermeer', 'Koster', 'Hendriks', 'Mulder', 'Brouwer', 'Dekker', 'Visser', 'Jansen', 'Amrani', 'Bakker'][-mnd - 2], scout === M.sem ? M.iris : M.sem,
+      toeval(mnd * 3) < 0.5 ? 'afgewezen' : 'reserve', toeval(mnd * 3) < 0.5 ? { voorgesteld: dag0 + 4, gesprek: dag0 + 6, afgewezen: dag0 + 8 } : { voorgesteld: dag0 + 4, gesprek: dag0 + 6, reserve: dag0 + 9 }));
+  }
+  [['t8', M.ruben, 2167], ['t11', M.bas, 2417]].forEach(function (x) {
+    for (var mm = 9; mm <= 18; mm++) {
+      var jr = j1 - 1 + Math.floor((mm - 1) / 12), mo = ((mm - 1) % 12) + 1, eind0 = maand(mo, jr), laat = x[0] === 't8' && mo === 3;
+      oudeFact.push({ id: 'fh-' + x[0] + '-' + mm, trajectId: x[0], omschrijving: MAANDEN[mo - 1].charAt(0).toUpperCase() + MAANDEN[mo - 1].slice(1) + ' ' + jr, bedrag: x[2], datum: eind0, status: laat ? 'aangemaakt' : 'betaald', factuurnummer: laat ? '' : String(jr) + (900 + mm), bijzonderheden: laat ? 'Uren nog niet akkoord van de school' : '', door: x[1] });
+    }
+  });
+  oudeFact.push({ id: 'fh-t7', trajectId: 't7', omschrijving: 'Factuur vooraf examentraining', bedrag: 8800, datum: j1 + '-03-01', status: 'betaald', factuurnummer: j1 + '0311', door: M.femke });
+  schrijfVeel('Kansen', oudeKansen);
+  schrijfVeel('Vacatures', oudeVac);
+  schrijfVeel('Kandidaten', oudeKand);
+  schrijfVeel('Facturen', oudeFact.map(function (f) { f.aangemaakt = dt(-300); return f; }));
   schrijfVeel('Activiteiten', acts);
 
   // Open taken per persoon
@@ -345,6 +387,8 @@ function demoVul() {
     doel('team:accountmanagement', 'maand', 'bezetting', 90), doel('team:accountmanagement', 'maand', 'facturatieOpTijd', 95), doel('team:accountmanagement', 'maand', 'dagenTotBezetting', 21),
     doel('team:talent', 'maand', 'voordrachten', 10), doel('team:talent', 'maand', 'timeToFill', 14), doel('team:talent', 'maand', 'doorlooptijd', 10),
     doel(M.lars, 'maand', 'gesprekken', 12), doel(M.noor, 'maand', 'gesprekken', 12), doel(M.lars, 'maand', 'gewonnenWaarde', 20000),
+    doel('team:consultancy', 'kwartaal', 'gesprekken', 90), doel('team:consultancy', 'kwartaal', 'gewonnenWaarde', 100000), doel('team:accountmanagement', 'kwartaal', 'evaluaties', 45),
+    doel('team:talent', 'kwartaal', 'voordrachten', 24), doel('team:talent', 'halfjaar', 'voordrachten', 45),
     doel(M.femke, 'maand', 'evaluaties', 6), doel(M.ruben, 'maand', 'evaluaties', 6), doel(M.sem, 'maand', 'voordrachten', 6), doel(M.iris, 'maand', 'voordrachten', 4)
   ]);
 

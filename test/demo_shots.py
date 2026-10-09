@@ -78,10 +78,13 @@ with sync_playwright() as p:
     klik(page, '[data-crm-open="project:t4"]', 1200); shot(page, 'm04_project_historie')
     klik(page, '[data-dtab="taskforce"]', 700); shot(page, 'm04b_project_taskforce')
     klik(page, '[data-dtab="bezetting"]', 700); shot(page, 'm04c_project_bezetting')
-    # rapporten per team, schooljaar
-    desk(page, 'rapporten'); klik(page, '[data-crmpreset="schooljaar"]', 1000); shot(page, 'm05_rapport_consultancy')
-    klik(page, '[data-rteam="accountmanagement"]', 1000); shot(page, 'm05b_rapport_am')
-    klik(page, '[data-rteam="talent"]', 1000); shot(page, 'm05c_rapport_talent')
+    # rapporten: alle teams (v4.4), per team met verloop, een eerdere periode
+    desk(page, 'rapporten'); shot(page, 'm05a_rapport_alle_teams')
+    klik(page, '#crmBalk [data-rteam="consultancy"]', 1000); shot(page, 'm05d_rapport_verloop', True)
+    klik(page, '.periode-nav [data-rstap="-1"]', 1000); shot(page, 'm05e_rapport_vorige_maand')
+    klik(page, '[data-crmpreset="schooljaar"]', 1000); shot(page, 'm05_rapport_consultancy')
+    klik(page, '#crmBalk [data-rteam="accountmanagement"]', 1000); shot(page, 'm05b_rapport_am')
+    klik(page, '#crmBalk [data-rteam="talent"]', 1000); shot(page, 'm05c_rapport_talent')
     # meldingen (de bel)
     desk(page, 'home'); klik(page, '#zbMeld', 900); shot(page, 'm06_meldingen')
     page.keyboard.press('Escape'); rust(page, 300)
