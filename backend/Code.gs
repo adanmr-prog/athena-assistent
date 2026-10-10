@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.4.2';
+var VERSIE = '4.4.3';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -2953,7 +2953,10 @@ function tekstUit(data) { return (data.content || []).filter(function (b) { retu
 /* ===================== Hulpfuncties ===================== */
 
 function tz() { return Session.getScriptTimeZone(); }
-function projectLopend(t) { return ['afgelopen', 'afgerond', 'gestopt'].indexOf(t.status) < 0; }  // v4.4.2: hier, zodat controleer() de eerste functie is
+function projectLopend(t) {
+  if (!t) { controleer(); return false; }  // v4.4.3: Uitvoeren in de editor met deze functie nog geselecteerd: dan de controle draaien in plaats van een TypeError
+  return ['afgelopen', 'afgerond', 'gestopt'].indexOf(t.status) < 0;
+}
 function datumStr(d) { return (d instanceof Date) ? Utilities.formatDate(d, tz(), 'yyyy-MM-dd') : String(d || ''); }
 function datumTijdStr(d) { return Utilities.formatDate(d, tz(), 'yyyy-MM-dd HH:mm'); }
 function nu() { return datumTijdStr(new Date()); }
