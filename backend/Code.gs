@@ -49,7 +49,7 @@ var PRIOS = ['hoog', 'midden', 'laag'];
 
 /* ===================== Eenmalige inrichting (draai vanuit de editor) ===================== */
 
-// v4.4.1: de eerste functie in dit bestand is wat de editor kiest bij "Uitvoeren"; alleen lezen. v4.4.2: ook sleutels en ontbrekende triggers, en bestand tegen een onbereikbare Sheet.
+// v4.4.1: kies deze functie in de keuzelijst naast "Uitvoeren" (de editor onthoudt de laatste keuze); alleen lezen. v4.4.2: ook sleutels en ontbrekende triggers, en bestand tegen een onbereikbare Sheet.
 var TRIGGERS = ['nachtelijkeReviewTrigger', 'indexeerTrigger', 'crmSyncTrigger', 'archiveerTrigger'];
 function triggerNamen() { return ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }); }
 function controleer() {
