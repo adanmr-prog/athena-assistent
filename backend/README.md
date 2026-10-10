@@ -36,7 +36,7 @@ Draai hem onder het werkaccount (`menno.adan@athenastudies.nl`), dan ziet hij de
 8. Optioneel: draai `vulVoorbeelddata` één keer om de app gevuld te zien met fictieve scholen. Verwijder de rijen daarna in de Sheet.
 
 Bij elke wijziging in `Code.gs`: Implementeren → Implementaties beheren → potlood → Versie: *Nieuwe versie* → Implementeren. De URL blijft gelijk.
-Klik je in de editor op **Uitvoeren** zonder een functie te kiezen, dan draait `controleer()` (v4.4.1): die past niets aan en logt de versie, de sleutels, het aantal rijen per tabblad en de triggers, en meldt welke trigger ontbreekt. Een nieuwe `Code.gs` hoef je meestal niet te draaien: nieuwe tabbladen en kolommen komen vanzelf. Alleen als een release een nieuwe trigger of migratie noemt, draai je `setup()` één keer, onder het account van de eigenaar (triggers horen bij dat account; `setup()` onder een tweede account laat alles dubbel draaien).
+Kies in de editor `controleer` in de keuzelijst naast **Uitvoeren** (de editor onthoudt de laatst gekozen functie; een andere functie zonder argumenten geeft een foutmelding). `controleer()` (v4.4.1) past niets aan en logt de versie, de sleutels, het aantal rijen per tabblad en de triggers, en meldt welke trigger ontbreekt. Een nieuwe `Code.gs` hoef je meestal niet te draaien: nieuwe tabbladen en kolommen komen vanzelf. Alleen als een release een nieuwe trigger of migratie noemt, draai je `setup()` één keer, onder het account van de eigenaar (triggers horen bij dat account; `setup()` onder een tweede account laat alles dubbel draaien).
 
 ## Wat er waar staat
 
