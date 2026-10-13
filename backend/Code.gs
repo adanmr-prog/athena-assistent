@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.4.3';
+var VERSIE = '4.4.4';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -372,11 +372,21 @@ function apiKennisbank() {
 function apiIndexeer() { return metLock(indexeerDocumenten); }
 function indexeerTrigger() { try { metLock(indexeerDocumenten); } catch (e) { Logger.log('Indexeren mislukt: ' + e); } }  // v1.1: ook de trigger onder de lock
 
+// v4.4.4: pdf en Word; zonder Drive API alleen op titel geïndexeerd.
+var CONVERSIE_MIMES = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+
 function indexeerDocumenten() {
   var mapId = P.getProperty('DRIVE_MAP_ID'); if (!mapId) throw new Error('Geen documentenmap — draai setup().');
   var bestaand = {}, gezien = {}, scholen = lees('Scholen').map(function (s) { return s.naam; });
   lees('Documenten', true).forEach(function (d) { bestaand[d.driveId] = d; });
   var stats = { aantal: 0, nieuw: 0, bijgewerkt: 0, verwijderd: 0 }, teSchrijven = [], correcties = instelling('documentCorrecties') || {};  // v3.7
+  // v4.4.4: staat de Drive API (later) aan, dan pdf's en Word-bestanden zonder tekst één keer opnieuw lezen, ook als ze niet gewijzigd zijn.
+  // Hooguit 4 minuten per run (limiet 6), de rest volgt de volgende run; wat ook nu niets oplevert, wordt onthouden en niet nog eens geprobeerd.
+  var start = Date.now(), herlees = null;
+  if (typeof Drive !== 'undefined' && !P.getProperty('DRIVE_HERLEZEN')) {
+    herlees = { leeg: {}, rest: false };
+    try { herlees.leeg = JSON.parse(P.getProperty('DRIVE_HERLEZEN_LEEG') || '{}'); } catch (e) {}
+  }
   function loop(folder, typeHint, diepte) {
     if (diepte > 4) return;
     var it = folder.getFiles();
@@ -384,8 +394,11 @@ function indexeerDocumenten() {
       var f = it.next(), id = f.getId();
       gezien[id] = true; stats.aantal++;
       var gewijzigd = datumTijdStr(f.getLastUpdated()), oud = bestaand[id];
-      if (oud && oud.gewijzigd === gewijzigd) continue;
+      var opnieuw = !!(herlees && oud && !(Number(oud.woorden) > 0) && !herlees.leeg[id] && CONVERSIE_MIMES.indexOf(f.getMimeType()) >= 0);  // v4.4.4
+      if (opnieuw && Date.now() - start > 4 * 60000) { herlees.rest = true; opnieuw = false; }
+      if (oud && oud.gewijzigd === gewijzigd && !opnieuw) continue;
       var tekst = tekstVanBestand(f) || '';
+      if (opnieuw && !tekst) herlees.leeg[id] = 1;
       teSchrijven.push({ id: oud ? oud.id : undefined, titel: f.getName(), type: typeHint || raadType(f.getName()) || 'overig', school: raadSchool(f.getName() + ' ' + tekst.slice(0, 3000), scholen),
         url: f.getUrl(), driveId: id, gewijzigd: gewijzigd, woorden: tekst ? tekst.split(/\s+/).length : 0, tekst: tekst.slice(0, 45000) });
       var corr = correcties[id]; if (corr) { var laatst = teSchrijven[teSchrijven.length - 1]; if (corr.type) laatst.type = corr.type; if (corr.school !== undefined) laatst.school = corr.school; }
@@ -396,6 +409,9 @@ function indexeerDocumenten() {
   }
   loop(DriveApp.getFolderById(mapId), '', 0);
   schrijfVeel('Documenten', teSchrijven);
+  var leeg = herlees ? JSON.stringify(herlees.leeg) : '';  // v4.4.4: pas na het wegschrijven; boven ~8 kB (limiet 9 kB per eigenschap) stoppen
+  if (herlees && herlees.rest && leeg.length < 8000) P.setProperty('DRIVE_HERLEZEN_LEEG', leeg);
+  else if (herlees) { P.setProperty('DRIVE_HERLEZEN', nu()); P.deleteProperty('DRIVE_HERLEZEN_LEEG'); }
   stats.verwijderd = verwijderRijen('Documenten', function (d) { return !gezien[d.driveId]; });
   P.setProperty('LAATSTE_INDEX', nu());
   return stats;
@@ -424,7 +440,7 @@ function tekstVanBestand(f) {
       }).join('\n\n');
     }
     if (mime === MimeType.PLAIN_TEXT || mime === MimeType.CSV || mime === 'text/markdown') return f.getBlob().getDataAsString('UTF-8');
-    if (mime === MimeType.PDF || mime === MimeType.MICROSOFT_WORD || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return tekstViaConversie(f);
+    if (CONVERSIE_MIMES.indexOf(mime) >= 0) return tekstViaConversie(f);  // v4.4.4: dezelfde lijst als het herlezen
   } catch (e) { Logger.log('Geen tekst uit ' + f.getName() + ': ' + e); }
   return '';
 }
