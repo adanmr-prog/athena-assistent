@@ -30,7 +30,9 @@ Draai hem onder het werkaccount (`menno.adan@athenastudies.nl`), dan ziet hij de
    Bestaande installatie bijwerken naar v2.0: plak de nieuwe `Code.gs`, draai `setup()` één keer opnieuw (maakt de nieuwe tabbladen en kolommen,
    zet contactpersonen en notities over, installeert de uurlijkse trigger) en implementeer een nieuwe versie.
 5. Optioneel: **Services → + → Drive API** toevoegen. Dan leest de index ook de tekst uit PDF's en Word-bestanden (met OCR).
-   Zonder deze service worden die bestanden alleen op titel geïndexeerd.
+   Zonder deze service worden die bestanden alleen op titel geïndexeerd. Zet je hem later aan (v4.4.4), implementeer dan een nieuwe versie:
+   de volgende index (elke nacht om 4 uur, of direct via Assistent → Documenten inlezen) leest de PDF's en Word-bestanden zonder tekst één keer opnieuw.
+   Dat gaat in delen van hooguit 4 minuten per run; bij veel bestanden duurt het een paar runs.
 6. **Implementeren → Nieuwe implementatie → Web-app**: uitvoeren als *Ik*, toegang *Iedereen*. Kopieer de `/exec`-URL.
 7. Open de app (https://adanmr-prog.github.io/athena-assistent/ zodra GitHub Pages aanstaat), vul de `/exec`-URL en de koppelcode in. Klaar.
 8. Optioneel: draai `vulVoorbeelddata` één keer om de app gevuld te zien met fictieve scholen. Verwijder de rijen daarna in de Sheet.
