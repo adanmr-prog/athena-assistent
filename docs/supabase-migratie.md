@@ -83,3 +83,6 @@ create table instellingen (sleutel text primary key, waarde jsonb);
 5. `run()` omzetten, Realtime voor taken en activiteit.
 6. Een week parallel draaien (Sheet als back-up, alleen lezen), daarna overstappen.
 7. Fase B (eigen Gmail en Agenda) komt hier vanzelf mee: elke gebruiker geeft zelf toestemming bij het inloggen.
+
+## Planning (bijgewerkt 14-10-2026)
+De overstap is release v6.0 en staat direct na v5.0 (Talentnetwerk fase 1). Hij is voorwaarde voor fase 2 van het talentnetwerk (diensten, uren, werkers-app, communicatie), die niet op een Sheet past. De tabellen en kolommen die v4.5–v5.0 toevoegen (`taken.tijd/herhaling/tags/ouder_id/herinnerd`, `talenten`, `talent_documenten`, `beoordelingen`, `talent_school`, `talent_uren`, `kandidaten.talent_id`, `activiteiten.talent_id`, team `extern` met RLS op eigen rijen, Storage voor documenten) staan in `docs/plan-taken-en-talentnetwerk.md` onder v6.0.

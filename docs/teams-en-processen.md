@@ -190,14 +190,23 @@ Verder staan in het menu onder meer Declaraties, Factureren, Klokuren en Onderte
    - meldingen en taken;
    - weergaven Huidig schooljaar en Verlenging volgend schooljaar; het huidige schooljaar is instelbaar.
 4. **v4.2 Rapporten en doelen per team, plus bedrijfsdoelen (klaar).**
-5. **v4.3 Koppelingen:**
-   - XPS-import (Plaatsingen, Contracten, Roosters/uren) via een export of API;
-   - monday-import (bestaande borden overzetten);
-   - Exact (facturen, liefst op basis van XPS-uren);
-   - AFAS alleen als blijkt dat er flexkrachtgegevens in staan.
-6. Daarna de overstap naar Supabase en Vercel met een eigen domein.
+5. **v4.3 Demomodus (klaar)** en **v4.4 Rapporten per periode (klaar).**
+6. **v4.5 en v4.6 Taken zoals Todoist** (besluit 14-10-2026: geen Todoist-koppeling, Athena neemt de functies over): snelinvoer in het Nederlands, herhalingen, tijd, Vandaag/Komende, ongedaan maken, sneltoetsen, meldingen en rechten; daarna tags, subtaken, opgeslagen weergaven, weekweergave en herinneringsmail.
+7. **v5.0 Talentnetwerk fase 1** (naast XPS): één profiel per flexkracht, beschikbaarheid, documenten en VOG per schooljaar, relaties met scholen, beoordelingen door accountmanager en talentteam, matching met uitleg, uren als weekexport uit XPS, rapport, aanmeldformulier en bevestigen van beschikbaarheid via een mail-link.
+8. **v6.0 Supabase en Vercel** met een eigen domein; voorwaarde voor fase 2. monday-import en de Exact-API komen hier mee.
+9. **v6.1+ Talentnetwerk fase 2** (besluit 14-10-2026: XPS op termijn vervangen): diensten en roosters, toewijzing in golven, uren bevestigen, werkers-app, schoolfeedback, WhatsApp/sms, push, payroll-export; XPS uitfaseren. AFAS alleen als blijkt dat er flexkrachtgegevens in staan.
+
+Onderzoek en uitvoeringsplan: `docs/onderzoek-todoist-en-talentnetwerk.md` en `docs/plan-taken-en-talentnetwerk.md`.
 
 ## 8. Open vragen
+
+Besloten op 14-10-2026: geen Todoist-koppeling (functies in Athena); XPS wordt op termijn vervangen (fase 1 ernaast, fase 2 op Supabase); zelfservice in fase 1 licht (aanmelden en beschikbaarheid bevestigen via mail-link); beoordelen in fase 1 door accountmanager en talentteam, schoolfeedback via link in fase 2.
+
+Nog open:
+6. **XPS-export:** voor v5.0 is één voorbeeldexport nodig (Roosters/Klokuren en Plaatsingen, CSV of Excel) in een vaste Drive-map; de kolommapping wordt daarop ingesteld.
+7. **Juridische toets:** de VOG-regel per schooljaar (art. 34b WPO; WVO 2020 en WEC nalezen) en of de inzet van ondersteuners onder leiding van de leraar als uitlenen geldt (Wtta, handhaving 2028).
+8. **Privacyverklaring** voor het aanmeldformulier en de bewaartermijn voor poolleden (voorstel: 24 maanden na het laatste contact of de laatste plaatsing).
+9. **E-mailadressen:** hebben alle gebruikers in Beheer → Gebruikers een e-mailadres? Nodig voor de herinneringsmail (v4.6).
 
 1. ⚠️ **Schooljaar:** de datum van de server (oktober 2026) geeft schooljaar 2026-2027. Is het huidige schooljaar 2027-2028, zet dat dan in Beheer → Keuzelijsten → Huidig schooljaar.
 2. **XPS:** heeft XPSLogic een export of API voor Plaatsingen, Contracten en Roosters? Wordt de module Factureren gebruikt?

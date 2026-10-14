@@ -15,6 +15,7 @@ Werk-PWA voor AthenaSchool: het bedrijfsbrein en dashboard van Menno (beheerder)
 - Teams, rechten en het trajectproces (taskforce, vacatures, bezetting): `docs/teams-en-processen.md`. Sinds v4.1 heeft een project de tabs Historie, Taskforce en Bezetting; de weergave Bezetting (zijbalk en Projecten) is het bord van het talentteam; meldingen via de bel.
 - Rechten (v4.0): teams `management|consultancy|accountmanagement|talent` en rollen `medewerker|teamlead|management`; de backend filtert en controleert via `RECHTEN`/`mag()`/`eis()` (zie `docs/teams-en-processen.md`), de app verbergt menu's en knoppen met `magApp()` en `[data-recht]`. Nieuwe schermen en api's doen allebei mee.
 - Toekomst: overstap naar Supabase + Vercel met eigen domein; bouw nu al volgens `docs/supabase-migratie.md` (stabiele ids, alleen gewijzigde velden + `_oud`, keuzelijsten in `Instellingen`, alle bewerkingen via het bewerkvenster `openVenster`).
+- Onderzoek en releaseplan voor taken (Todoist-functies in Athena, v4.5–v4.6) en het talentnetwerk (v5.0 naast XPS, v6.1+ op Supabase als vervanging van XPS): `docs/onderzoek-todoist-en-talentnetwerk.md` en `docs/plan-taken-en-talentnetwerk.md`.
 
 ## Conventies
 - Vanilla JS in ES5-stijl: `var`, `function`, geen arrow functions, `let/const`, template strings, classes of modules. Doel: iOS Safari als standalone PWA.
