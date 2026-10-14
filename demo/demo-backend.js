@@ -33,7 +33,7 @@ function _demoBlad(naam) {
   var b = { rijen: rijen, getName: function () { return naam; },
     getLastRow: function () { return rijen.length; },
     getLastColumn: function () { return rijen.reduce(function (m, r) { return Math.max(m, r.length); }, 0); },
-    getMaxColumns: function () { return Math.max(26, b.getLastColumn()); },
+    getMaxColumns: function () { return Math.max(26, b.getLastColumn()); }, getMaxRows: function () { return Math.max(1000, rijen.length); },  // v4.5: getMaxRows voor de tekstopmaak van kolommen
     insertColumnsAfter: function () {}, setFrozenRows: function () {},
     appendRow: function (r) { rijen.push(r.slice()); return b; },
     deleteRow: function (i) { rijen.splice(i - 1, 1); },
@@ -41,7 +41,7 @@ function _demoBlad(naam) {
     getRange: function (r, c, nr, nc) { nr = nr || 1; nc = nc || 1; return {
       getValues: function () { var o = []; for (var i = 0; i < nr; i++) { var rij = rijen[r - 1 + i] || [], x = []; for (var j = 0; j < nc; j++) x.push(rij[c - 1 + j] === undefined ? '' : rij[c - 1 + j]); o.push(x); } return o; },
       setValues: function (v) { v.forEach(function (vr, i) { rijen[r - 1 + i] = rijen[r - 1 + i] || []; vr.forEach(function (x, j) { rijen[r - 1 + i][c - 1 + j] = x; }); }); return this; },
-      setValue: function (x) { rijen[r - 1] = rijen[r - 1] || []; rijen[r - 1][c - 1] = x; return this; },
+      setValue: function (x) { rijen[r - 1] = rijen[r - 1] || []; rijen[r - 1][c - 1] = x; return this; }, setNumberFormat: function () { return this; },  // v4.5
       clearContent: function () { for (var i = 0; i < nr; i++) { var rij = rijen[r - 1 + i]; if (rij) for (var j = 0; j < nc; j++) rij[c - 1 + j] = ''; } return this; } }; } };
   return b;
 }
@@ -366,7 +366,7 @@ function demoVul() {
     taak('tk3', 'Tweede gesprek Vakcollege Rijnzicht plannen', M.noor, -3, 'midden', 'afspraak', { schoolId: 's8', kansId: 'k8' }),
     taak('tk4', 'Tarief Waterpoort College bevestigen', M.lars, 1, 'hoog', 'mailen', { schoolId: 's7', kansId: 'k7' }),
     taak('tk5', 'Kennismaking De Zonnewijzer plannen', M.yara, 4, 'midden', 'afspraak', { schoolId: 's9', kansId: 'k9' }),
-    taak('tk6', 'Rooster periode 2 afstemmen met Marieke', M.femke, 1, 'hoog', 'afspraak', { schoolId: 's1', trajectId: 't1', persoonId: 'p1' }),
+    taak('tk6', 'Rooster periode 2 afstemmen met Marieke', M.femke, 1, 'hoog', 'afspraak', { schoolId: 's1', trajectId: 't1', persoonId: 'p1', tijd: '10:30' }),  // v4.5: met tijd
     taak('tk7', 'Factuur Lyceum Valkenoord versturen', M.ruben, -2, 'hoog', 'overig', { schoolId: 's6', trajectId: 't5' }),
     taak('tk8', 'Matchinggesprek Thijs Brouwer (Kompas College, Rekenondersteuner)', M.ruben, 3, 'hoog', 'afspraak', { schoolId: 's2', trajectId: 't9' }),
     taak('tk9', 'Kennismaking ondersteuners ISK Havenstad plannen', M.bas, 5, 'midden', 'afspraak', { schoolId: 's4', trajectId: 't4' }),
@@ -376,7 +376,10 @@ function demoVul() {
     taak('tk13', 'Kwartaalcijfers voorbereiden voor het MT', M.sophie, 3, 'midden', 'overig', {}),
     taak('tk14', 'Verlengingsgesprekken inplannen met de accountmanagers', M.sophie, 7, 'midden', 'afspraak', {}),
     { id: 'tk15', tekst: 'Contract Jesse Vos afronden', eigenaar: M.sem, deadline: d(4), prio: 'hoog', categorie: 'overig', status: 'open', bron: 'taskforce', aangemaakt: dt(-15), schoolId: 's4', trajectId: 't4' },
-    { id: 'tk16', tekst: 'Kennismaking met het team vooraf plannen', eigenaar: M.bas, deadline: d(10), prio: 'midden', categorie: 'overig', status: 'open', bron: 'taskforce', aangemaakt: dt(-15), schoolId: 's4', trajectId: 't4' }
+    { id: 'tk16', tekst: 'Kennismaking met het team vooraf plannen', eigenaar: M.bas, deadline: d(10), prio: 'midden', categorie: 'overig', status: 'open', bron: 'taskforce', aangemaakt: dt(-15), schoolId: 's4', trajectId: 't4' },
+    // v4.5: herhalende taken met een tijd
+    taak('tk17', 'Weekstart met het team', M.sophie, (8 - new Date().getDay()) % 7 || 7, 'midden', 'afspraak', { tijd: '09:00', herhaling: { eenheid: 'week', interval: 1, dagen: [1] } }),
+    taak('tk18', 'Factuurronde: termijnen van deze maand versturen', M.ruben, 1, 'hoog', 'overig', { herhaling: { eenheid: 'maand', interval: 1, dagVanMaand: 1 } })
   ]);
 
   // Doelen: bedrijf (schooljaar), per team en per persoon (maand)

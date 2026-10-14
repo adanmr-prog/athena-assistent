@@ -59,8 +59,8 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | fn | args | result |
 |---|---|---|
 | `apiOverzicht` | — | `{ datum, groet, kpi:{trajecten,kansen,scholen,omzet,schooljaar,pijplijn}, focus:[actie], aandacht:[actie], mails:[{onderwerp,van,dagen,link}], agenda:[{tijd,titel,duurMin}], kansen:[kans] }` |
-| `apiActieKlaar` | id | null |
-| `apiActieToevoegen` | tekst, prio, deadline | actie |
+| `apiActieKlaar` | id | `{ id, status: 'af', afgerond, volgende: taak\|null }` (v4.5: `volgende` is de nieuwe instantie van een herhalende taak; alleen eigen taken of die van je team) |
+| `apiActieToevoegen` | tekst, prio, deadline, extra? `{tijd, herhaling, categorie, eigenaar, schoolId, persoonId, kansId, trajectId, notitie}` | taak (v4.5: intern `apiTaakOpslaan` met `bron: 'handmatig'`; de oude aanroep met drie argumenten blijft werken) |
 | `apiKennisbank` | — | `{ tellingen, documenten:[{id,titel,type,school,url,gewijzigd,woorden}], laatsteIndex, mapUrl }` |
 | `apiIndexeer` | — | `{ aantal, nieuw, bijgewerkt, verwijderd }` |
 | `apiVraag` | vraag | `{ antwoord, bronnen:[{titel,url,type}] }` (oud; de app gebruikt sinds v3.5 `apiBrein`) |
@@ -82,7 +82,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 
 | fn | args | result |
 |---|---|---|
-| `apiCrm` | — | `{ ik:{naam,team,rol,beheer,gekoppeld,rechten}, teams:{consultancy,accountmanagement,talent,management}, gebruikers, statussen, mijlpalen, categorieen, activiteitTypes, tracks, tags, scholen:[school+{personen,openKansen,openWaarde}], personen:[persoon] }` |
+| `apiCrm` | — | `{ ik:{naam,team,rol,beheer,gekoppeld,rechten}, teams:{consultancy,accountmanagement,talent,management}, gebruikers, statussen, mijlpalen, categorieen, activiteitTypes, tracks, tags, scholen:[school+{personen,openKansen,openWaarde}], personen:[persoon], kansenKort:[{id,naam,school,schoolId}] (v4.5, voor het kansveld in het taakvenster) }` |
 | `apiSchool` | id | `{ school, personen, kansen, trajecten, taken, tijdlijn:[activiteit], documenten }` |
 | `apiSchoolOpslaan` | object (met of zonder id) | school |
 | `apiPersoon` | id | `{ persoon, school, kansen, taken, tijdlijn }` |
@@ -94,7 +94,8 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiActiviteitToevoegen` | `{type:notitie\|gesprek\|mail\|afspraak, schoolId?, persoonId?, kansId?, onderwerp, tekst, datum?, duurMin?}` | activiteit |
 | `apiAfspraakPlannen` | `{titel, start:'yyyy-MM-ddTHH:mm', duurMin, locatie, notitie, uitnodigen, schoolId?, persoonId?, kansId?}` | activiteit (zet ook een afspraak in Google Agenda) |
 | `apiTaken` | — | `{ taken:[taak], categorieen, gebruikers, tracks }` (open + afgerond in de laatste 14 dagen) |
-| `apiTaakOpslaan` | object | taak (afvinken gaat via `apiActieKlaar`) |
+| `apiTaakOpslaan` | object (`TAAK_VELDEN`; v4.5 ook `tijd` `HH:mm`, `herhaling` als object, `bron` alleen bij nieuw) | taak (afvinken gaat via `apiActieKlaar`; een bestaande taak alleen als hij van jou of je team is; toewijzen aan een ander geeft die persoon een melding) |
+| `apiTaak` (v4.5) | id | taak (van jou of je team, of gekoppeld aan een zichtbaar project of een zichtbare kans) |
 | `apiTrackOpslaan` | `{id?, naam, omschrijving, stappen:[{tekst,categorie,dagenNaStart,prio}]}` | tracks (alleen beheerder) |
 | `apiTrackStart` | trackId, `{schoolId?,persoonId?,kansId?}`, startdatum, eigenaar | `{ aantal, track }` |
 | `apiRapport` | preset (zie `apiTeamRapport`), eigenaar?, stap? (v4.4) | `{ team, perPersoon:[{naam,cijfers,doelen}], totaal, forecast, trechter, winst, redenen, stil, ... }` |
@@ -117,7 +118,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiFacturenExport` | status (standaard `aangemaakt`) | `{ bestandsnaam, csv, aantal }` (puntkomma-CSV voor import in Exact) |
 | `apiSchoolSamenvatting` | schoolId | `{ tekst }` (AI-samenvatting met `BREIN_MODEL`) |
 | `apiActiviteitOpslaan` (v3.7) | `{id, type?, datum?, onderwerp?, tekst?, duurMin?, schoolId?, persoonId?, kansId?, trajectId?, _oud}` | activiteit + `agendaBijgewerkt` (afspraak ook in Google Agenda verzet/hernoemd) |
-| `apiTaakHeropen` | id | taak |
+| `apiTaakHeropen` | id | taak (v4.5: alleen eigen taken of die van je team; de heropende instantie verliest haar `herhaling`, anders ontstaan twee open instanties) |
 | `apiTrackStoppen` / `apiTrackVerwijderen` | trackRunId / trackId | `{aantal}` / tracks |
 | `apiInstellingen` / `apiKeuzelijstOpslaan` | — / sleutel (`schoolStatussen\|taakCategorieen\|trajectStatussen`), `[{waarde, oud}]` | `{schoolStatussen, taakCategorieen, trajectStatussen}`; hernoemde waarden gaan mee in bestaande rijen |
 | `apiVelden` / `apiTagHernoem` / `apiVeldHernoem` | — / oud, nieuw (leeg = weg) | `{tags, velden}` / `{aantal}` |
@@ -126,7 +127,16 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiDocumentOpslaan` | id, `{type?, school?}` | document; de correctie blijft bij het volgende inlezen (Instellingen `documentCorrecties`) |
 
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
-(`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans`.
+(`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans` en sinds v4.5 `tijd, herhaling, bijgewerkt`.
+
+## Taken zoals Todoist, deel 1 (v4.5)
+
+- **Nieuwe kolommen** op `Acties` (achteraan): `tijd` (`HH:mm` of leeg), `herhaling` (JSON of leeg), `bijgewerkt`, `bijgewerktDoor`. De kolom `tijd` staat in `TEKST_KOLOMMEN`: `blad()` zet er het getalformaat tekst op, zodat Sheets `14:00` niet in een tijdwaarde omzet; een Date die er toch staat leest `celWaarde` terug als `HH:mm`.
+- **Herhaling:** `{ eenheid: 'dag'|'week'|'maand'|'jaar', interval: 1..52, dagen: [1..7] (ISO, ma = 1; alleen bij week), dagVanMaand: 1..31 (alleen bij maand), vanafAfvinken: false, tot: 'yyyy-MM-dd'|'', aantal: null|2..365 }`, gecontroleerd door `herhalingIn()`. Afvinken maakt in dezelfde lock de volgende instantie (`actieAfronden` → `volgendeInstantie`): basis is de afvinkdatum bij `vanafAfvinken`, anders de deadline; de volgende datum ligt nooit vóór vandaag (één open instantie per reeks); is `tot` voorbij of `aantal` op, dan komt er geen rij en een Activiteit "Reeks afgerond". De nieuwe rij kopieert tekst, prio, categorie, eigenaar, koppelingen, notitie, tijd, herhaling en bron. Heropenen wist de herhaling van die instantie.
+- **Rechten:** afvinken, heropenen en het bewerken van een bestaande taak eisen `taakVanMijOfTeam`; `apiTaak` gebruikt `taakZichtbaar` (eigen of team, of gekoppeld aan een zichtbaar project of een zichtbare kans). Een taak toewijzen aan een ander geeft die persoon een melding (`meld`) met link `taak:<id>`.
+- **Snelinvoer:** de app ontleedt een Nederlandse zin (`ontleedTaak` in `index.html`: datum, tijd, `elke …`, `p1`–`p3` of `!`, `#school`/`#project`, `@categorie`, `+naam`) en stuurt losse velden; de backend ontleedt geen tekst en valideert alleen (`tijd` `^([01]\d|2[0-3]):[0-5]\d$`, `deadline` via `datumIn`, `herhaling` via `herhalingIn`). Test: `node test/parser_test.js`.
+- **Sorteren en dagstart:** `sorteerActies` sorteert bij gelijke deadline op tijd (leeg laatst), dan prio; de dagstartmail toont de tijd vóór de taak. Brein `maak_taak` kent `tijd`.
+- **Deeplinks:** `#taak:<id>`, `#school:<id>`, `#persoon:<id>`, `#kans:<id>` en `#project:<id>` openen het betreffende scherm, ook als de app al open is (`hashchange`); meldingen gebruiken `taak:<id>`.
 
 ## Rapporten en doelen per team (v4.2)
 

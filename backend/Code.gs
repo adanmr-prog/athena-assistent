@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '4.4.4';
+var VERSIE = '4.5';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -20,7 +20,8 @@ var TABELLEN = {
   Kansen:       ['id', 'school', 'traject', 'fase', 'waarde', 'volgendeActie', 'deadline', 'laatsteContact', 'eigenaar', 'notities', 'bijgewerkt',
                  'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt', 'bijgewerktDoor', 'am'],  // v3.8: am = accountmanager na winst
   Acties:       ['id', 'tekst', 'bron', 'prio', 'deadline', 'status', 'link', 'aangemaakt', 'afgerond',
-                 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'trackRunId', 'notitie', 'capsuleId', 'trajectId'],  // v3.8: taak in een project
+                 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'trackRunId', 'notitie', 'capsuleId', 'trajectId',  // v3.8: taak in een project
+                 'tijd', 'herhaling', 'bijgewerkt', 'bijgewerktDoor'],  // v4.5: tijd (uu:mm), herhaling (JSON) en wie de taak het laatst wijzigde
   Documenten:   ['id', 'titel', 'type', 'school', 'url', 'driveId', 'gewijzigd', 'woorden', 'tekst', 'bijgewerkt'],
   Reviews:      ['id', 'datum', 'gemaaktOp', 'samenvatting', 'gedaan', 'blijvenLiggen', 'vandaag', 'eigenaar'],  // v3.3: review per gebruiker
   Huisstijl:    ['sleutel', 'waarde'],
@@ -42,6 +43,7 @@ var TABELLEN = {
   Meldingen:    ['id', 'voor', 'tekst', 'link', 'datum', 'gelezen', 'door']
 };
 var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1, statusSinds: 1, gesprek: 1, gelezen: 1, ingevuld: 1 };
+var TEKST_KOLOMMEN = { tijd: 1 };  // v4.5: als tekst opgemaakt ('@'), anders leest Sheets van '14:00' een tijdwaarde uit 1899
 var DOC_TYPES = ['contract', 'werkwijze', 'schooldossier', 'voorstel', 'prijslijst', 'overig'];
 var KANS_FASES = ['lead', 'gesprek', 'voorstel', 'onderhandeling', 'gewonnen', 'verloren'];
 var TRAJECT_STATUSSEN = ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'];  // v4.0: zoals het monday-bord
@@ -169,20 +171,24 @@ var KOP_GECONTROLEERD = {};
 function blad(naam) {
   if (_BLAD[naam] && KOP_GECONTROLEERD[naam]) return _BLAD[naam];
   var ss = sheet(), b = ss.getSheetByName(naam), kop = TABELLEN[naam];
-  if (!b) { b = ss.insertSheet(naam); b.appendRow(kop); b.setFrozenRows(1); KOP_GECONTROLEERD[naam] = true; }
+  if (!b) { b = ss.insertSheet(naam); b.appendRow(kop); b.setFrozenRows(1); tekstKolommen(b, kop, 0); KOP_GECONTROLEERD[naam] = true; }
   else if (!KOP_GECONTROLEERD[naam]) {
     // v2.0: kolommen die in een nieuwe versie zijn bijgekomen achteraan in de kop aanvullen; bestaande data blijft staan
     if (b.getMaxColumns() < kop.length) b.insertColumnsAfter(b.getMaxColumns(), kop.length - b.getMaxColumns());
     var breed = b.getLastColumn();
-    if (b.getLastRow() === 0) { b.getRange(1, 1, 1, kop.length).setValues([kop]); b.setFrozenRows(1); }
-    else if (breed < kop.length) b.getRange(1, breed + 1, 1, kop.length - breed).setValues([kop.slice(breed)]);
+    if (b.getLastRow() === 0) { b.getRange(1, 1, 1, kop.length).setValues([kop]); b.setFrozenRows(1); tekstKolommen(b, kop, 0); }
+    else if (breed < kop.length) { b.getRange(1, breed + 1, 1, kop.length - breed).setValues([kop.slice(breed)]); tekstKolommen(b, kop, breed); }
     KOP_GECONTROLEERD[naam] = true;
   }
   _BLAD[naam] = b;
   return b;
 }
+// v4.5: nieuwe kolommen uit TEKST_KOLOMMEN krijgen de opmaak '@' (tekst), zodat Sheets een ingevoerde tijd niet omzet
+function tekstKolommen(b, kop, vanaf) {
+  for (var i = vanaf; i < kop.length; i++) if (TEKST_KOLOMMEN[kop[i]]) { try { b.getRange(1, i + 1, b.getMaxRows(), 1).setNumberFormat('@'); } catch (e) {} }
+}
 function celWaarde(v, kolom) {
-  if (v instanceof Date) return DATUMTIJD_KOLOMMEN[kolom] ? datumTijdStr(v) : datumStr(v);
+  if (v instanceof Date) return TEKST_KOLOMMEN[kolom] ? Utilities.formatDate(v, tz(), 'HH:mm') : DATUMTIJD_KOLOMMEN[kolom] ? datumTijdStr(v) : datumStr(v);  // v4.5: een tijd die Sheets toch omzette
   return v;
 }
 // Alle rijen van een tabblad als objecten; _rij = rijnummer in de Sheet (voor updates).
@@ -294,17 +300,28 @@ function apiOverzicht() {
 }
 function apiActieKlaar(id) {
   var a = vind('Acties', id); if (!a) throw new Error('Actie niet gevonden.');
-  metLock(function () {
-    schrijf('Acties', { id: id, status: 'af', afgerond: nu() });
-    // v2.0: een CRM-taak die aan een school, persoon of kans hangt komt in de tijdlijn
-    if (a.schoolId || a.persoonId || a.kansId) schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: a.schoolId, persoonId: a.persoonId, kansId: a.kansId, onderwerp: 'Taak afgerond: ' + a.tekst, bron: 'app', aangemaakt: nu() });
-  });
-  return { id: id, status: 'af', afgerond: nu() };  // v3.7
+  if (!taakVanMijOfTeam(a)) throw new Error('Daar heb je geen toegang toe.');  // v4.5: alleen eigen taken (teamlead: zijn team, management alles)
+  var volgende = metLock(function () { return actieAfronden(a); });
+  return { id: id, status: 'af', afgerond: nu(), volgende: volgende ? taakUit(volgende, perId(lees('Scholen')), perId(lees('Personen')), perId(lees('Kansen'))) : null };  // v3.7; v4.5: de volgende instantie van een reeks
 }
-function apiActieToevoegen(tekst, prio, deadline) {
+// v4.5: de kern van het afvinken, altijd binnen metLock. Een herhalende taak krijgt meteen haar volgende instantie; die komt terug (anders null).
+function actieAfronden(a) {
+  if (a.status === 'af') return null;  // twee keer afvinken maakt geen tweede instantie
+  schrijf('Acties', { id: a.id, status: 'af', afgerond: nu() });
+  // v2.0: een CRM-taak die aan een school, persoon of kans hangt komt in de tijdlijn
+  var gekoppeld = a.schoolId || a.persoonId || a.kansId;
+  if (gekoppeld) schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: a.schoolId, persoonId: a.persoonId, kansId: a.kansId, onderwerp: 'Taak afgerond: ' + a.tekst, bron: 'app', aangemaakt: nu() });
+  var h = herhalingUit(a.herhaling); if (!h) return null;
+  var volgende = volgendeInstantie(a, h, new Date());
+  if (!volgende) { if (gekoppeld) schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: a.schoolId, persoonId: a.persoonId, kansId: a.kansId, onderwerp: 'Reeks afgerond: ' + a.tekst, bron: 'app', aangemaakt: nu() }); return null; }
+  return schrijf('Acties', volgende);
+}
+// v4.5: extra = {tijd, herhaling, categorie, eigenaar, schoolId, persoonId, kansId, trajectId, notitie} uit de snelinvoer; de oude aanroep met drie argumenten blijft werken
+function apiActieToevoegen(tekst, prio, deadline, extra) {
   tekst = String(tekst || '').trim(); if (!tekst) throw new Error('Geen tekst.');
-  var a = metLock(function () { return schrijf('Acties', { tekst: tekst, bron: 'handmatig', prio: PRIOS.indexOf(prio) >= 0 ? prio : 'midden', deadline: deadline || '', status: 'open', aangemaakt: nu(), eigenaar: ikNaam() }); });
-  return actieUit(a);
+  var o = schoon(extra || {}, ['tijd', 'herhaling', 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'notitie']);
+  o.tekst = tekst; o.prio = PRIOS.indexOf(prio) >= 0 ? prio : 'midden'; o.deadline = deadline || ''; o.bron = 'handmatig';
+  return apiTaakOpslaan(o);
 }
 function actieUit(a) { var tot = a.deadline ? dagenTot(a.deadline) : null; return { id: a.id, tekst: a.tekst, bron: a.bron, prio: a.prio, deadline: a.deadline, link: a.link || '', over: tot === null ? null : -tot || 0 }; }
 // v2.0: met mijlpalenkaart (mp) erbij komen kans-%, gewogen waarde en 'stil' (langer geen contact dan de norm van de mijlpaal)
@@ -322,6 +339,8 @@ function sorteerActies(a, b) {
   var pa = PRIOS.indexOf(a.prio), pb = PRIOS.indexOf(b.prio);
   var da = a.deadline || '9999', db = b.deadline || '9999';
   if (da !== db) return da < db ? -1 : 1;
+  var ta = a.tijd || '99:99', tb = b.tijd || '99:99';  // v4.5: op dezelfde dag eerst de taken met een tijd
+  if (ta !== tb) return ta < tb ? -1 : 1;
   return (pa < 0 ? 9 : pa) - (pb < 0 ? 9 : pb);
 }
 
@@ -572,7 +591,7 @@ function nachtelijkeReview() {
   trajecten.filter(function (t) { return (t.status === 'opstart' || t.status === 'offerte') && dagenSinds(t.bijgewerkt) > 14; }).forEach(function (t) { blijven.push({ tekst: 'Opstart ' + t.school + ' (' + t.traject + ') wacht al ' + dagenSinds(t.bijgewerkt) + ' dagen', bron: 'traject', dagen: dagenSinds(t.bijgewerkt) }); });
 
   agendaVoorDag(dag).forEach(function (a) { vandaag.push({ tekst: (a.tijd === 'dag' ? 'Hele dag' : a.tijd) + ' · ' + a.titel, bron: 'agenda' }); });
-  acties.filter(function (a) { return a.status !== 'af' && a.deadline === dagStr; }).forEach(function (a) { vandaag.push({ tekst: 'Deadline: ' + a.tekst, bron: 'actie' }); });
+  acties.filter(function (a) { return a.status !== 'af' && a.deadline === dagStr; }).sort(sorteerActies).forEach(function (a) { vandaag.push({ tekst: (a.tijd ? a.tijd + ' · ' : '') + 'Deadline: ' + a.tekst, bron: 'actie' }); });  // v4.5: met tijd
   kansen.filter(function (k) { return kansOpen(k) && k.deadline && k.deadline >= dagStr && dagenTot(k.deadline) <= 3; }).forEach(function (k) { vandaag.push({ tekst: 'Kans ' + k.school + ': ' + (k.volgendeActie || 'opvolgen') + ' (uiterlijk ' + k.deadline + ')', bron: 'kans' }); });
   trajecten.filter(function (t) { return t.start && t.start >= dagStr && dagenTot(t.start) <= 7; }).forEach(function (t) { vandaag.push({ tekst: 'Start ' + t.school + ' (' + t.traject + ') op ' + t.start, bron: 'traject' }); });
 
@@ -895,6 +914,7 @@ function taakUit(a, sMap, pMap, kMap) {
   u.schoolId = a.schoolId || ''; u.persoonId = a.persoonId || ''; u.kansId = a.kansId || ''; u.trackRunId = a.trackRunId || '';
   u.school = s ? s.naam : ''; u.persoon = p ? persoonNaam(p) : ''; u.kans = k ? (k.naam || k.traject) : '';
   u.trajectId = a.trajectId || ''; var t = a.trajectId ? trajectNamen()[a.trajectId] : ''; u.project = t || '';  // v3.8
+  u.tijd = a.tijd || ''; u.herhaling = herhalingUit(a.herhaling); u.bijgewerkt = a.bijgewerkt || '';  // v4.5
   return u;
 }
 var _TRAJECTNAMEN = null;
@@ -962,6 +982,7 @@ function apiCrm() {
     personen: personen.map(function (p) { var u = persoonUit(p, sMap); delete u.velden; return u; }),
     // v3.8: projecten (kort) voor keuzelijsten en links, en de facturatie-keuzelijsten
     projecten: lees('Trajecten').filter(function (t) { return mag('projecten', 'zien', t); }).map(function (t) { return { id: t.id, naam: t.traject + (t.schooljaar ? ' ' + t.schooljaar : ''), schoolId: t.schoolId || '', school: t.school, kansId: t.kansId || '', status: t.status, am: t.am || '' }; }),
+    kansenKort: kansen.filter(kansOpen).map(function (k) { return { id: k.id, naam: k.naam || k.traject, school: k.school, schoolId: k.schoolId || '' }; }),  // v4.5: het kansveld in het taakvenster
     keuzes: { soortFacturatie: keuzelijst('soortFacturatie'), gefactureerd: keuzelijst('gefactureerd'), vakanties: keuzelijst('vakanties'), factuurStatussen: keuzelijst('factuurStatussen'), verlenging: keuzelijst('verlenging') },
     teams: { consultancy: teamNamen('consultancy'), accountmanagement: teamNamen('accountmanagement'), talent: teamNamen('talent'), management: teamNamen('management') },
     meldingen: ongelezenMeldingen(), schooljaar: huidigSchooljaar()  // v4.1
@@ -1170,18 +1191,92 @@ function apiTaken() {
   var acties = lees('Acties').filter(function (a) { return (a.status !== 'af' || (dagenSinds(a.afgerond) || 0) <= 14) && taakVanMijOfTeam(a); }).sort(sorteerActies);  // v4.0: eigen taken, teamlead ook zijn team
   return { taken: acties.map(function (a) { return taakUit(a, sMap, pMap, kMap); }), categorieen: taakCategorieen(), gebruikers: gebruikersNamen(), tracks: tracks() };
 }
-var TAAK_VELDEN = ['id', 'tekst', 'prio', 'deadline', 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'notitie', 'trajectId'];
+var TAAK_VELDEN = ['id', 'tekst', 'prio', 'deadline', 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'notitie', 'trajectId', 'tijd', 'herhaling', 'bron'];  // v4.5: tijd en herhaling; bron telt alleen bij een nieuwe taak
 function apiTaakOpslaan(obj) {
   var o = schoon(obj || {}, TAAK_VELDEN), oud = o.id ? vind('Acties', o.id) : null;
   if (o.id && !oud) throw new Error('Taak niet gevonden.');
+  if (oud && !taakVanMijOfTeam(oud)) throw new Error('Daar heb je geen toegang toe.');  // v4.5: alleen eigen taken (teamlead: zijn team, management alles)
   if (o.tekst !== undefined) o.tekst = String(o.tekst).trim();
   if (!oud && !o.tekst) throw new Error('Geen tekst.');
   if (o.prio && PRIOS.indexOf(o.prio) < 0) o.prio = 'midden';
   if (o.categorie && taakCategorieen().indexOf(o.categorie) < 0) o.categorie = 'overig';
-  if (!oud) { o.bron = 'crm'; o.status = 'open'; o.aangemaakt = nu(); o.prio = o.prio || 'midden'; o.eigenaar = o.eigenaar || ikNaam(); }
+  if (o.deadline) { o.deadline = datumIn(o.deadline); if (!o.deadline) throw new Error('Ongeldige datum.'); }  // v4.5
+  if (o.tijd) { o.tijd = String(o.tijd).trim(); if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(o.tijd)) throw new Error('Ongeldige tijd (uu:mm).'); }
+  if (o.herhaling !== undefined) o.herhaling = herhalingIn(o.herhaling);
+  if (oud) delete o.bron; else o.bron = o.bron === 'handmatig' ? 'handmatig' : 'crm';
+  if (!oud) { o.status = 'open'; o.aangemaakt = nu(); o.prio = o.prio || 'midden'; o.eigenaar = o.eigenaar || ikNaam(); }
   vulKoppeling(o); eisKoppeling(o);  // v4.0
-  var a = metLock(function () { controleerConflict('Acties', o.id, o, obj && obj._oud); return schrijf('Acties', o); });  // v3.3
+  var a = metLock(function () {
+    controleerConflict('Acties', o.id, o, obj && obj._oud);  // v3.3
+    var r = schrijf('Acties', o);
+    // v4.5: wie een taak voor een ander maakt of overdraagt, laat dat via de bel weten
+    if (r.eigenaar && r.eigenaar !== ikNaam() && (!oud || oud.eigenaar !== r.eigenaar)) meld(r.eigenaar, 'Taak van ' + ikNaam() + ': ' + r.tekst + (r.deadline ? ' (uiterlijk ' + r.deadline + (r.tijd ? ' ' + r.tijd : '') + ')' : ''), 'taak:' + r.id);
+    return r;
+  });
   return taakUit(a, perId(lees('Scholen')), perId(lees('Personen')), perId(lees('Kansen')));
+}
+// v4.5: één taak, voor een deeplink (#taak:<id>) of een melding
+function apiTaak(id) {
+  var a = vind('Acties', id); if (!a) throw new Error('Taak niet gevonden.');
+  if (!taakZichtbaar(a)) throw new Error('Daar heb je geen toegang toe.');
+  return taakUit(a, perId(lees('Scholen')), perId(lees('Personen')), perId(lees('Kansen')));
+}
+// Eigen taak (of van mijn team), of een taak aan een project of kans die ik mag zien
+function taakZichtbaar(a) {
+  if (taakVanMijOfTeam(a)) return true;
+  if (a.trajectId) { var t = vind('Trajecten', a.trajectId); if (t && mag('projecten', 'zien', t)) return true; }
+  if (a.kansId) { var k = vind('Kansen', a.kansId); if (k && kansZichtbaar(k, kansenViaProject())) return true; }
+  return false;
+}
+// v4.5: herhaling = {eenheid: dag|week|maand|jaar, interval, dagen (ISO 1-7, alleen bij week), dagVanMaand (alleen bij maand), vanafAfvinken, tot, aantal}. Leeg = geen herhaling.
+var HERHAAL_EENHEDEN = ['dag', 'week', 'maand', 'jaar'];
+function herhalingIn(v) {
+  if (typeof v === 'string') { v = v.trim(); if (!v) return ''; try { v = JSON.parse(v); } catch (e) { throw new Error('Ongeldige herhaling.'); } }
+  if (!v || typeof v !== 'object' || !v.eenheid) return '';
+  if (HERHAAL_EENHEDEN.indexOf(v.eenheid) < 0) throw new Error('Ongeldige herhaling.');
+  var h = { eenheid: v.eenheid, interval: Math.min(52, Math.max(1, Math.round(Number(v.interval) || 1))) };
+  if (h.eenheid === 'week' && Array.isArray(v.dagen)) {
+    var dg = uniek(v.dagen.map(function (d) { return Math.round(Number(d)); }).filter(function (d) { return d >= 1 && d <= 7; })).sort(function (a, b) { return a - b; });
+    if (dg.length) h.dagen = dg;
+  }
+  if (h.eenheid === 'maand' && v.dagVanMaand) h.dagVanMaand = Math.min(31, Math.max(1, Math.round(Number(v.dagVanMaand) || 1)));
+  if (v.vanafAfvinken === true || v.vanafAfvinken === 'true') h.vanafAfvinken = true;
+  if (v.tot) { h.tot = datumIn(v.tot); if (!h.tot) throw new Error('Ongeldige einddatum van de herhaling.'); }
+  if (v.aantal) { var n = Math.round(Number(v.aantal)); if (n >= 1 && n <= 365) h.aantal = n; }
+  return h;
+}
+function herhalingUit(s) {
+  if (!s) return null;
+  var h = s; if (typeof s === 'string') { try { h = JSON.parse(s); } catch (e) { return null; } }
+  return h && typeof h === 'object' && HERHAAL_EENHEDEN.indexOf(h.eenheid) >= 0 ? h : null;
+}
+function isoDag(d) { var j = d.getDay(); return j === 0 ? 7 : j; }
+function middag(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); }  // rekenen op 12:00, zodat de zomertijd geen dag verschuift
+function plusMaanden(d, n, dag) { var y = d.getFullYear(), m = d.getMonth() + n, laatste = new Date(y, m + 1, 0).getDate(); return new Date(y, m, Math.min(dag, laatste), 12); }
+// De eerstvolgende datum ná basis volgens de herhaling
+function volgendeDatum(basis, h) {
+  var b = middag(basis), n = h.interval || 1;
+  if (h.eenheid === 'dag') return new Date(b.getTime() + n * 86400000);
+  if (h.eenheid === 'week') {
+    if (!h.dagen || !h.dagen.length) return new Date(b.getTime() + n * 7 * 86400000);
+    var iso = isoDag(b), maandag = new Date(b.getTime() - (iso - 1) * 86400000);
+    for (var i = 0; i < h.dagen.length; i++) if (h.dagen[i] > iso) return new Date(maandag.getTime() + (h.dagen[i] - 1) * 86400000);
+    return new Date(maandag.getTime() + (n * 7 + h.dagen[0] - 1) * 86400000);
+  }
+  if (h.eenheid === 'maand') return plusMaanden(b, n, h.dagVanMaand || b.getDate());
+  return plusMaanden(b, 12 * n, b.getDate());
+}
+// De volgende instantie van een herhalende taak: vanaf de deadline (of, met vanafAfvinken, vanaf het afvinken); nooit in het verleden; null als de reeks klaar is
+function volgendeInstantie(a, h, afvinkD) {
+  if (h.aantal && h.aantal <= 1) return null;
+  var basis = h.vanafAfvinken ? afvinkD : (parseDatum(a.deadline) || afvinkD);
+  var d = volgendeDatum(basis, h), vandaag = datumStr(new Date()), teller = 0;
+  while (datumStr(d) < vandaag && teller++ < 500) d = volgendeDatum(d, h);  // een achterstallige reeks stapelt niet op
+  if (h.tot && datumStr(d) > h.tot) return null;
+  var nh = {}; Object.keys(h).forEach(function (k) { nh[k] = h[k]; });
+  if (h.aantal) nh.aantal = h.aantal - 1;
+  return { tekst: a.tekst, bron: a.bron, prio: a.prio, deadline: datumStr(d), status: 'open', link: a.link || '', aangemaakt: nu(), categorie: a.categorie, eigenaar: a.eigenaar,
+    schoolId: a.schoolId, persoonId: a.persoonId, kansId: a.kansId, trajectId: a.trajectId, notitie: a.notitie, tijd: a.tijd || '', herhaling: nh };
 }
 function tracks() {
   var eigen = lees('Tracks').filter(function (t) { return t.naam; }).map(function (t) { return { id: t.id, naam: t.naam, omschrijving: t.omschrijving, stappen: lijstUit(t.stappen) }; });
@@ -1909,7 +2004,8 @@ function agendaEvent(sleutel, fn) {
 
 function apiTaakHeropen(id) {
   var a = vind('Acties', id); if (!a) throw new Error('Taak niet gevonden.');
-  var x = metLock(function () { return schrijf('Acties', { id: id, status: 'open', afgerond: '' }); });
+  if (!taakVanMijOfTeam(a)) throw new Error('Daar heb je geen toegang toe.');  // v4.5
+  var x = metLock(function () { return schrijf('Acties', { id: id, status: 'open', afgerond: '', herhaling: '' }); });  // v4.5: de reeks loopt al door in de volgende instantie
   return taakUit(x, perId(lees('Scholen')), perId(lees('Personen')), perId(lees('Kansen')));
 }
 // De rest van een gestarte track: de open taken van die run weghalen.
@@ -2668,7 +2764,7 @@ var BREIN_ACTIES = {
     properties: { threadId: { type: 'string' }, aan: { type: 'string', description: 'E-mailadres; alleen nodig zonder threadId.' }, onderwerp: { type: 'string' }, tekst: { type: 'string', description: 'De volledige mailtekst met aanhef en afsluiting.' } },
     required: ['tekst'] },
   maak_taak: { titel: 'Taak aanmaken', description: 'Maak een taak in het CRM.',
-    properties: metKoppeling({ tekst: { type: 'string' }, deadline: { type: 'string', description: 'yyyy-MM-dd' }, prio: { type: 'string', enum: ['hoog', 'midden', 'laag'] }, eigenaar: { type: 'string', description: 'Naam van een collega; standaard de gebruiker zelf.' }, notitie: { type: 'string' } }),
+    properties: metKoppeling({ tekst: { type: 'string' }, deadline: { type: 'string', description: 'yyyy-MM-dd' }, tijd: { type: 'string', description: 'uu:mm, alleen als er een tijdstip bij hoort.' }, prio: { type: 'string', enum: ['hoog', 'midden', 'laag'] }, eigenaar: { type: 'string', description: 'Naam van een collega; standaard de gebruiker zelf.' }, notitie: { type: 'string' } }),  // v4.5: tijd
     required: ['tekst'] },
   log_activiteit: { titel: 'Activiteit vastleggen', description: 'Leg een notitie, gesprek, mail of afspraak vast op de tijdlijn van een school, persoon of kans.',
     properties: metKoppeling({ type: { type: 'string', enum: ['notitie', 'gesprek', 'mail', 'afspraak'] }, onderwerp: { type: 'string' }, tekst: { type: 'string' }, datum: { type: 'string', description: 'yyyy-MM-dd HH:mm, standaard nu' } }),
@@ -2765,7 +2861,7 @@ function breinLees(naam, inv, bronnen) {
   if (naam === 'mijn_taken') {
     var sMap = perId(lees('Scholen'));
     return lees('Acties').filter(function (a) { return a.status !== 'af' && vanMij(a.eigenaar); }).sort(sorteerActies).slice(0, 30)
-      .map(function (a) { return { tekst: a.tekst, deadline: a.deadline, prio: a.prio, school: sMap[a.schoolId] ? sMap[a.schoolId].naam : '' }; });
+      .map(function (a) { return { tekst: a.tekst, deadline: a.deadline, tijd: a.tijd || '', prio: a.prio, school: sMap[a.schoolId] ? sMap[a.schoolId].naam : '' }; });  // v4.5: tijd
   }
   if (!mijnMailbox()) return 'De Gmail en agenda van ' + ikNaam() + ' zijn nog niet gekoppeld.';
   if (naam === 'zoek_mail') {
@@ -2840,7 +2936,7 @@ function apiBreinUitvoeren(actie) {
   actie = actie || {};
   var soort = String(actie.soort || ''), o = breinActieCheck(soort, actie.invoer);
   if (soort === 'maak_taak') {
-    var t = apiTaakOpslaan({ tekst: o.tekst, deadline: o.deadline || '', prio: o.prio || 'midden', eigenaar: o.eigenaar || '', notitie: o.notitie || '', schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '' });
+    var t = apiTaakOpslaan({ tekst: o.tekst, deadline: o.deadline || '', tijd: o.tijd || '', prio: o.prio || 'midden', eigenaar: o.eigenaar || '', notitie: o.notitie || '', schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '' });  // v4.5: tijd
     return { melding: 'Taak aangemaakt: ' + t.tekst };
   }
   if (soort === 'log_activiteit') {
