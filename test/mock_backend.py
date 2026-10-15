@@ -72,7 +72,10 @@ TAKEN = [
     {'id': 'tk1', 'tekst': 'Voorstel NT2 nabellen', 'bron': 'crm', 'prio': 'hoog', 'deadline': d(-1), 'link': '', 'over': 1, 'categorie': 'bellen', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's3', 'persoonId': 'p3', 'kansId': 'k1'},
     {'id': 'tk2', 'tekst': 'Kennismakingsmail Montessori Demo', 'bron': 'track', 'prio': 'midden', 'deadline': d(0), 'link': '', 'over': 0, 'categorie': 'mailen', 'eigenaar': 'Mees', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's4', 'persoonId': '', 'kansId': 'k3'},
     {'id': 'tk3', 'tekst': 'Evaluatie periode 1 inplannen', 'bron': 'crm', 'prio': 'laag', 'deadline': d(6), 'link': '', 'over': -6, 'categorie': 'afspraak', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's1', 'persoonId': 'p1', 'kansId': ''},
+    # v4.5: herhalende taak met tijd
+    {'id': 'tk4', 'tekst': 'Weekstart team', 'bron': 'crm', 'prio': 'midden', 'deadline': d(5), 'link': '', 'over': -5, 'categorie': 'afspraak', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': '', 'persoonId': '', 'kansId': '', 'tijd': '09:00', 'herhaling': {'eenheid': 'week', 'interval': 1, 'dagen': [1]}},
 ]
+for _t in TAKEN: _t.setdefault('tijd', ''); _t.setdefault('herhaling', None); _t.setdefault('trajectId', '')
 ACTIVITEITEN = [
     {'id': 'e1', 'type': 'mail', 'datum': d(-3) + ' 09:12', 'door': 'Menno', 'schoolId': 's1', 'persoonId': 'p1', 'kansId': '', 'onderwerp': 'Mail verstuurd: Rooster periode 2', 'tekst': 'Hoi Anna,\n\nHierbij het rooster voor periode 2.', 'duurMin': 0, 'bron': 'gmail-uit'},
     {'id': 'e2', 'type': 'gesprek', 'datum': d(-9) + ' 14:00', 'door': 'Menno', 'schoolId': 's3', 'persoonId': 'p3', 'kansId': 'k1', 'onderwerp': 'Toelichting voorstel', 'tekst': 'Positief over de aanpak, wacht op budget van het bestuur.', 'duurMin': 20, 'bron': 'app'},
@@ -165,7 +168,10 @@ def kans_uit(k):
     return k
 def taak_uit(t):
     s, p, k = per_id(SCHOLEN).get(t.get('schoolId')), per_id(PERSONEN).get(t.get('persoonId')), per_id(CRMKANSEN).get(t.get('kansId'))
-    return dict(t, school=s['naam'] if s else '', persoon=persoon_uit(p)['naam'] if p else '', kans=k['naam'] if k else '', trajectId=t.get('trajectId', ''), project=projectnaam(t.get('trajectId')))
+    return dict(t, school=s['naam'] if s else '', persoon=persoon_uit(p)['naam'] if p else '', kans=k['naam'] if k else '', trajectId=t.get('trajectId', ''), project=projectnaam(t.get('trajectId')),
+                tijd=t.get('tijd', ''), herhaling=t.get('herhaling') or None, bijgewerkt=nu())  # v4.5
+def volgende_instantie(t):  # v4.5: zoals volgendeInstantie in Code.gs, versimpeld: een week later
+    n = dict(t, id='tk' + uuid.uuid4().hex[:5], status='open', afgerond='', deadline=(datetime.date.fromisoformat(t['deadline'] or d(0)) + datetime.timedelta(days=7)).isoformat()); TAKEN.append(n); return n
 def basis():
     scholen = []
     for s in SCHOLEN:
@@ -175,7 +181,8 @@ def basis():
             'meldingen': len([m for m in MELDINGEN if m['voor'] == ik()['naam'] and not m['gelezen']]), 'schooljaar': INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027', 'statussen': INSTELLINGEN['schoolStatussen'], 'mijlpalen': MIJLPALEN,
             'categorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'activiteitTypes': ['notitie', 'gesprek', 'mail', 'afspraak'], 'tracks': TRACKS,
             'tags': sorted({t for s in SCHOLEN for t in s['tags']}), 'trajectStatussen': INSTELLINGEN['trajectStatussen'], 'keuzes': KEUZES,
-            'projecten': [{'id': t['id'], 'naam': t['traject'] + ' ' + t['schooljaar'], 'schoolId': t['schoolId'], 'school': t['school'], 'kansId': t['kansId'], 'status': t['status'], 'am': t['am']} for t in TRAJECTEN if eigen_project(t)], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN]}
+            'projecten': [{'id': t['id'], 'naam': t['traject'] + ' ' + t['schooljaar'], 'schoolId': t['schoolId'], 'school': t['school'], 'kansId': t['kansId'], 'status': t['status'], 'am': t['am']} for t in TRAJECTEN if eigen_project(t)], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN],
+            'kansenKort': [{'id': k['id'], 'naam': k['naam'], 'school': k['school'], 'schoolId': k['schoolId']} for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')]}  # v4.5
 def tijdlijn(f): return [act_uit(a) for a in sorted([a for a in ACTIVITEITEN if f(a)], key=lambda a: a['datum'], reverse=True)]
 def opslaan(lijst, o, prefix):
     o = dict(o)
@@ -276,11 +283,13 @@ def handle_crm(fn, args):
     if fn == 'apiPipeline': return {'mijlpalen': MIJLPALEN, 'pipelines': ['Scholen'], 'kansen': [kans_uit(k) for k in CRMKANSEN], 'verliesRedenen': ['Te duur']}
     if fn == 'apiTaken': return {'taken': [taak_uit(t) for t in TAKEN], 'categorieen': basis()['categorieen'], 'gebruikers': GEBRUIKERS_NAMEN, 'tracks': TRACKS}
     if fn == 'apiTaakOpslaan':
-        o = dict(args[0]); o.pop('_oud', None)
-        if not o.get('id'): o.update({'bron': 'crm', 'status': 'open', 'link': '', 'over': None, 'afgerond': ''}); [o.setdefault(k, '') for k in ['schoolId', 'persoonId', 'kansId', 'deadline', 'categorie', 'notitie', 'eigenaar']]
+        o = dict(args[0]); o.pop('_oud', None); o.pop('snel', None)
+        if o.get('herhaling') == '': o['herhaling'] = None  # v4.5
+        if not o.get('id'): o.update({'bron': o.get('bron') or 'crm', 'status': 'open', 'link': '', 'over': None, 'afgerond': ''}); [o.setdefault(k, '') for k in ['schoolId', 'persoonId', 'kansId', 'trajectId', 'deadline', 'tijd', 'categorie', 'notitie', 'eigenaar']]; o.setdefault('herhaling', None)
         return taak_uit(opslaan(TAKEN, o, 'tk'))
+    if fn == 'apiTaak': return taak_uit(per_id(TAKEN)[args[0]])  # v4.5
     if fn == 'apiTaakHeropen':  # v3.7
-        t = per_id(TAKEN)[args[0]]; t.update({'status': 'open', 'afgerond': ''}); return taak_uit(t)
+        t = per_id(TAKEN)[args[0]]; t.update({'status': 'open', 'afgerond': '', 'herhaling': None}); return taak_uit(t)
     if fn == 'apiTrackStoppen':
         n = len([t for t in TAKEN if t.get('trackRunId') == args[0] and t['status'] != 'af']); TAKEN[:] = [t for t in TAKEN if not (t.get('trackRunId') == args[0] and t['status'] != 'af')]; return {'aantal': n}
     if fn == 'apiTrackVerwijderen':
@@ -450,11 +459,18 @@ def handle(fn, args):
                 'focus': open_[:3], 'aandacht': open_[3:], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}, {'onderwerp': 'Factuur september', 'van': 'Administratie Lyceum Demo', 'dagen': 2, 'link': 'https://mail.google.com/'}],
                 'agenda': [{'tijd': '10:00', 'titel': 'Gesprek teamleider Lyceum Demo', 'duurMin': 60}, {'tijd': '14:30', 'titel': 'Intake ondersteuner', 'duurMin': 45}], 'kansen': [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')], 'tellingScholen': 4}
     if fn == 'apiActieKlaar':
+        volgende = None
         for t in TAKEN:
-            if t['id'] == args[0]: t['status'] = 'af'; t['afgerond'] = nu()
-        ACTIES[:] = [a for a in ACTIES if a['id'] != args[0]]; return {'id': args[0], 'status': 'af', 'afgerond': nu()}
-    if fn == 'apiActieToevoegen':
-        a = {'id': uuid.uuid4().hex[:6], 'tekst': args[0], 'bron': 'handmatig', 'prio': args[1] or 'midden', 'deadline': args[2] if len(args) > 2 else '', 'link': '', 'over': None}; ACTIES.append(a); return a
+            if t['id'] == args[0] and t['status'] != 'af':
+                t['status'] = 'af'; t['afgerond'] = nu()
+                if t.get('herhaling'): volgende = taak_uit(volgende_instantie(t))  # v4.5: de volgende instantie van een reeks
+        ACTIES[:] = [a for a in ACTIES if a['id'] != args[0]]; return {'id': args[0], 'status': 'af', 'afgerond': nu(), 'volgende': volgende}
+    if fn == 'apiActieToevoegen':  # v4.5: extra velden uit de snelinvoer; de taak komt ook in de takenlijst
+        extra = args[3] if len(args) > 3 and isinstance(args[3], dict) else {}
+        o = {'tekst': args[0], 'bron': 'handmatig', 'prio': args[1] or 'midden', 'deadline': args[2] if len(args) > 2 else ''}
+        for k in ('tijd', 'herhaling', 'categorie', 'eigenaar', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'notitie'): o[k] = extra.get(k) or ('' if k != 'herhaling' else None)
+        o['eigenaar'] = o['eigenaar'] or ik()['naam']
+        t = handle_crm('apiTaakOpslaan', [o]); ACTIES.append(dict(t, over=None)); return t
     if fn == 'apiKennisbank':
         t = {k: 0 for k in ['contract', 'werkwijze', 'schooldossier', 'voorstel', 'prijslijst', 'overig']}
         for x in DOCS: t[x['type']] += 1

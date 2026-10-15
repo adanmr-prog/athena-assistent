@@ -534,6 +534,21 @@
 
   #toast { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(16px); background: var(--inkt); color: #fff; font-size: 13px; line-height: 1.4; padding: 10px 16px; border-radius: 10px; max-width: 86%; text-align: center; opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; z-index: 200; }
   #toast.aan { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.knop { pointer-events: auto; padding: 12px 16px; }  /* v4.5: toast met knop (Ongedaan maken); iets hoger zodat de knop een tikdoel van ±44 px krijgt */
+  .toast-knop { background: none; border: none; color: var(--oranje); font: inherit; font-weight: 800; margin: -12px -10px -12px 6px; padding: 12px 12px; cursor: pointer; }
+  /* v4.5: wat de snelinvoer begrepen heeft */
+  .p-chip { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 2px 0; min-height: 0; font-size: 12.5px; }
+  .p-chip:empty { display: none; }
+  .p-chip span { background: var(--paars-l); color: var(--paars); border-radius: 999px; padding: 2px 9px; font-weight: 700; }
+  .p-chip span.twijfel { background: var(--oranje-l); color: #8a4b00; cursor: pointer; padding: 8px 12px; }  /* tikken is hier verplicht, dus een groter tikdoel */
+  .p-chip span.leeg { background: none; color: var(--gedempt); font-weight: 400; padding-left: 0; }
+  .snel-hint { font-size: 12px; color: var(--gedempt); margin: 4px 2px 0; }
+  .rij .r-meta .herhaal, .dtabel .herhaal { font-weight: 700; color: var(--paars); }
+  .kop.dagkop { font-size: 12.5px; font-weight: 800; color: var(--inkt2); text-transform: none; letter-spacing: 0; margin-top: 12px; }
+  body.desk .rij:focus-visible, body.desk .dtabel tr:focus-visible { outline: 2px solid var(--paars-l); outline-offset: -2px; }  /* alleen toetsenbordfocus op desktop; een tik op de telefoon laat geen omlijning achter */
+  body:not(.desk) .alleen-desk { display: none; }
+  .sneltoetsen { font-size: 12px; color: var(--gedempt); margin-top: 10px; }
+  .sneltoetsen kbd { font: inherit; font-weight: 800; color: var(--inkt2); background: var(--wit); border: 1px solid var(--lijn); border-radius: 5px; padding: 0 5px; }
 </style>
 </head>
 <body class="v-vandaag">
@@ -591,8 +606,9 @@
     <div id="agendaLijst"><div class="leeg">—</div></div>
     <div class="kop">Alles wat aandacht vraagt</div>
     <div id="aandachtLijst"><div class="leeg">—</div></div>
-    <div class="invoer"><input id="actieInput" placeholder="Nieuwe actie…" autocomplete="off"><button id="actieToevoegen" aria-label="Toevoegen"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
-    <div class="hint">○ = afvinken · acties komen uit kansen, mails, contracten en de dagstart</div>
+    <div class="invoer"><input id="actieInput" data-snel="actieChip" placeholder="Nieuwe taak… bijv. bel Marieke morgen om 14:00 p1" autocomplete="off"><button id="actieToevoegen" aria-label="Toevoegen"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    <div class="p-chip" id="actieChip"></div>
+    <div class="hint">○ = afvinken · typ datum, tijd, p1-p3, #school, @categorie en "elke maandag" gewoon in de zin<span class="alleen-desk"> · Shift+Enter voor alle velden</span></div>
   </div>
 
   <!-- 2. Bedrijfsbrein: elk contract, elke werkwijze en elk schooldossier op één plek — en je kunt het vragen stellen -->
@@ -684,6 +700,8 @@
       <div class="subtabs" id="crmTabs"></div>
       <div class="invoer" id="crmZoekVak"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="crmZoek" placeholder="Zoek school, persoon, plaats of tag" autocomplete="off"></div>
       <div class="balk" id="crmBalk"></div>
+      <!-- v4.5: snelinvoer van Taken staat buiten #crmInhoud, zodat een hertekening de getypte zin en het toetsenbord niet weghaalt -->
+      <div id="crmSnel" style="display:none"><div class="invoer"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><input id="taakSnel" data-snel="taakSnelChip" placeholder="Nieuwe taak… bijv. bel school morgen om 10:00 p1 #Esdoorn @bellen" autocomplete="off"></div><div class="p-chip" id="taakSnelChip"></div></div>
       <div class="composer" id="crmNieuw"></div>
       <div id="crmInhoud"><div class="spinner">Laden</div></div>
     </div>
@@ -728,7 +746,7 @@
   var ROL_NAAM = { medewerker: 'Medewerker', teamlead: 'Teamlead', management: 'Management' };
   function functieApp(g) { return (TEAM_LABEL[g.team] || g.team || '') + (g.rol === 'teamlead' ? ' · teamlead' : ''); }
   var GMAIL_HINT = 'Je eigen Gmail en Agenda worden binnenkort gekoppeld.';
-  var BRON_LABEL = { kans: 'kans', mail: 'mail', contract: 'contract', handmatig: 'zelf', review: 'review', traject: 'traject', actie: 'actie', document: 'document', agenda: 'agenda', crm: 'crm', track: 'track', capsule: 'capsule' };  // v2.0: crm, track, capsule
+  var BRON_LABEL = { kans: 'kans', mail: 'mail', contract: 'contract', handmatig: 'zelf', review: 'review', traject: 'traject', actie: 'actie', document: 'document', agenda: 'agenda', crm: 'crm', track: 'track', capsule: 'capsule', project: 'project', taskforce: 'taskforce', bezetting: 'bezetting', todoist: 'todoist' };  // v2.0: crm, track, capsule; v4.5: project, taskforce, bezetting
   var LINK_SVG = '<svg class="ic" viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>';
 
   function el(id) { return document.getElementById(id); }
@@ -754,11 +772,168 @@
     return [{ rol: 'bot', tekst: 'Vraag me naar contracten, werkwijzen, tarieven of een school, of geef me een opdracht: "schrijf een offerte voor …", "schrijf een conceptreactie op de mail van …", "maak een taak …". Ik zet het klaar; jij bevestigt.' }];
   }
   function saveChat() { zetOpslag('aa_chat', JSON.stringify(S.chat.slice(-24))); }  // v3.5: acties met volledige offerteteksten zijn groot
-  var _toastTimer;
+  var _toastTimer, _toastActie = null;
   function toast(msg) {
-    var t = el('toast'); t.textContent = msg; t.classList.add('aan');
+    var t = el('toast'); t.textContent = msg; t.classList.add('aan'); t.classList.remove('knop'); _toastActie = null;
     clearTimeout(_toastTimer); _toastTimer = setTimeout(function () { t.classList.remove('aan'); }, 3400);
   }
+  // v4.5: toast met één knop (bijv. "Ongedaan maken"); blijft 6 s staan
+  function toastMetActie(msg, knop, fn) {
+    var t = el('toast'); t.innerHTML = esc(msg) + ' <button class="toast-knop" data-toastactie="1">' + esc(knop) + '</button>'; t.classList.add('aan'); t.classList.add('knop'); _toastActie = fn;
+    clearTimeout(_toastTimer); _toastTimer = setTimeout(function () { t.classList.remove('aan'); t.classList.remove('knop'); _toastActie = null; }, 6000);
+  }
+  document.addEventListener('click', function (ev) {
+    if (!ev.target.closest('[data-toastactie]')) return;
+    var fn = _toastActie; el('toast').classList.remove('aan'); el('toast').classList.remove('knop'); _toastActie = null; clearTimeout(_toastTimer);
+    if (fn) fn();
+  });
+
+  /* parser begin */
+  // v4.5: snelinvoer in het Nederlands, zoals Todoist. ontleedTaak(zin, ctx) haalt datum, tijd, prioriteit, herhaling, #school of #project, @categorie en +naam uit één zin;
+  // wat overblijft is de taaktekst. ctx = {vandaag, scholen:[{id,naam,plaats}], projecten:[{id,naam,school,schoolId,status}], categorieen:[..], gebruikers:[..]}.
+  // Dit blok staat tussen "parser begin" en "parser einde" en gebruikt niets van buiten, zodat test/parser_test.js het los kan draaien.
+  var P_WEEKDAGEN = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'], P_WEEKKORT = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+  var P_MAANDEN = [['jan', 'januari'], ['feb', 'februari'], ['mrt', 'maart'], ['apr', 'april'], ['mei'], ['jun', 'juni'], ['jul', 'juli'], ['aug', 'augustus'], ['sep', 'sept', 'september'], ['okt', 'oktober'], ['nov', 'november'], ['dec', 'december']];
+  var P_MAAND_RE = 'jan(?:uari)?|feb(?:ruari)?|mrt|maart|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|aug(?:ustus)?|sep(?:t|tember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+  var P_DAG_RE = 'maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|ma|di|wo|do|vr|za|zo';
+  var P_TELWOORD = { een: 1, één: 1, twee: 2, drie: 3, vier: 4, vijf: 5, zes: 6, zeven: 7, acht: 8, negen: 9, tien: 10 };
+  function pNul(n) { return (n < 10 ? '0' : '') + n; }
+  function pYmd(d) { return d.getFullYear() + '-' + pNul(d.getMonth() + 1) + '-' + pNul(d.getDate()); }
+  function pDatum(j, m, d) { return new Date(j, m, d, 12); }  // altijd 12:00, zodat de zomertijd geen dag verschuift
+  function pPlus(d, n) { return pDatum(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+  function pIso(d) { var j = d.getDay(); return j === 0 ? 7 : j; }
+  function pPlat(s) { s = String(s || '').toLowerCase(); try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {} return s; }
+  function pDagIndex(w) { w = pPlat(w); var i = P_WEEKDAGEN.indexOf(w); if (i < 0) i = P_WEEKKORT.indexOf(w); return i < 0 ? 0 : i + 1; }  // ISO 1..7
+  function pMaandIndex(w) { w = pPlat(w); for (var i = 0; i < P_MAANDEN.length; i++) if (P_MAANDEN[i].indexOf(w) >= 0) return i; return -1; }
+  function pLaatsteDag(j, m) { return new Date(j, m + 1, 0).getDate(); }
+  function pKortDatum(ymd, vandaag) {
+    var p = ymd.split('-'), d = pDatum(Number(p[0]), Number(p[1]) - 1, Number(p[2])), s = P_WEEKKORT[pIso(d) - 1] + ' ' + d.getDate() + ' ' + P_MAANDEN[d.getMonth()][0];
+    return vandaag && d.getFullYear() !== vandaag.getFullYear() ? s + ' ' + d.getFullYear() : s;
+  }
+  // Datumwoorden → yyyy-MM-dd; null als het geen datum is. Wordt ook gebruikt voor "tot <datum>" in een herhaling.
+  function pDatumUit(woord, vandaag) {
+    var w = pPlat(woord).trim(), m, d;
+    if (w === 'vandaag') return pYmd(vandaag);
+    if (w === 'morgen') return pYmd(pPlus(vandaag, 1));
+    if (w === 'overmorgen') return pYmd(pPlus(vandaag, 2));
+    if ((m = w.match(/^(\d{1,2})[-\/](\d{1,2})(?:[-\/](\d{2,4}))?$/))) {
+      var dag = Number(m[1]), mnd = Number(m[2]) - 1, jr = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : vandaag.getFullYear();
+      if (mnd < 0 || mnd > 11 || dag < 1 || dag > pLaatsteDag(jr, mnd)) return null;
+      d = pDatum(jr, mnd, dag); if (!m[3] && d < pDatum(vandaag.getFullYear(), vandaag.getMonth(), vandaag.getDate())) d = pDatum(jr + 1, mnd, dag);
+      return pYmd(d);
+    }
+    if ((m = w.match(new RegExp('^(\\d{1,2})\\s+(' + P_MAAND_RE + ')(?:\\s+(\\d{4}))?$')))) {
+      var mi = pMaandIndex(m[2]), dg = Number(m[1]), jaar = m[3] ? Number(m[3]) : vandaag.getFullYear();
+      if (mi < 0 || dg < 1 || dg > pLaatsteDag(jaar, mi)) return null;
+      d = pDatum(jaar, mi, dg); if (!m[3] && d < pDatum(vandaag.getFullYear(), vandaag.getMonth(), vandaag.getDate())) d = pDatum(jaar + 1, mi, dg);
+      return pYmd(d);
+    }
+    if ((m = w.match(new RegExp('^(?:op\\s+|komende\\s+|volgende\\s+|aanstaande\\s+)?(' + P_DAG_RE + ')$')))) {
+      var iso = pDagIndex(m[1]), verschil = (iso - pIso(vandaag) + 7) % 7 || 7;  // eerstvolgende, niet vandaag
+      return pYmd(pPlus(vandaag, verschil));
+    }
+    return null;
+  }
+  function pEersteDag(dagen, vandaag) {  // eerste dag uit de lijst vanaf vandaag (vandaag telt mee)
+    for (var n = 0; n < 7; n++) { var d = pPlus(vandaag, n); if (dagen.indexOf(pIso(d)) >= 0) return pYmd(d); }
+    return pYmd(vandaag);
+  }
+  function herhalingTekst(h) {
+    if (!h || !h.eenheid) return '';
+    var n = h.interval || 1, s;
+    if (h.eenheid === 'week' && h.dagen && h.dagen.length === 5 && h.dagen.join() === '1,2,3,4,5') s = 'elke werkdag';
+    else if (h.eenheid === 'week' && h.dagen && h.dagen.length) s = (n === 1 ? 'elke ' : 'elke ' + n + ' weken op ') + h.dagen.map(function (d) { return P_WEEKKORT[d - 1]; }).join(', ');
+    else if (h.eenheid === 'maand' && n === 3) s = 'elk kwartaal';
+    else s = n === 1 ? { dag: 'elke dag', week: 'elke week', maand: 'elke maand', jaar: 'elk jaar' }[h.eenheid] : 'elke ' + n + ' ' + { dag: 'dagen', week: 'weken', maand: 'maanden', jaar: 'jaar' }[h.eenheid];
+    if (h.eenheid === 'maand' && h.dagVanMaand) s += ' op de ' + h.dagVanMaand + 'e';
+    if (h.vanafAfvinken) s += ' na afvinken';
+    if (h.tot) s += ' tot ' + pKortDatum(h.tot);
+    if (h.aantal) s += ' (' + h.aantal + 'x)';
+    return s;
+  }
+  function pZoek(term, lijst, naam) {  // woord-begin telt zwaarder dan 'bevat'
+    var t = pPlat(term), best = 0, uit = [];
+    lijst.forEach(function (x) {
+      var n = pPlat(naam(x)), score = n === t ? 3 : new RegExp('(^|\\s)' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n) ? 2 : n.indexOf(t) >= 0 ? 1 : 0;
+      if (!score) return;
+      if (score > best) { best = score; uit = [x]; } else if (score === best) uit.push(x);
+    });
+    return uit;
+  }
+  function ontleedTaak(zin, ctx) {
+    ctx = ctx || {};
+    var vandaag = ctx.vandaag ? pDatum(ctx.vandaag.getFullYear(), ctx.vandaag.getMonth(), ctx.vandaag.getDate()) : pDatum(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    var r = { tekst: '', deadline: '', tijd: '', prio: '', herhaling: null, categorie: '', eigenaar: '', schoolId: '', trajectId: '', kansId: '', chips: [], twijfel: [] };
+    var s = ' ' + String(zin || '').replace(/\s+/g, ' ') + ' ', m;
+    var weg = function (match) { s = ' ' + s.replace(match, ' ').replace(/\s+/g, ' ').trim() + ' '; };  // weghalen en de spaties weer normaal maken
+    // 1. #school of #project (ook #"meer woorden")
+    var koppelRe = /#"([^"]+)"|#([^\s#@+]+)/;
+    while ((m = s.match(koppelRe))) {
+      var term = m[1] || m[2], projecten = pZoek(term, (ctx.projecten || []).filter(function (p) { return ['afgelopen', 'afgerond', 'gestopt'].indexOf(p.status) < 0; }), function (p) { return (p.school || '') + ' ' + (p.naam || ''); });
+      var scholen = pZoek(term, ctx.scholen || [], function (x) { return (x.naam || '') + ' ' + (x.plaats || ''); });
+      if (projecten.length === 1) { r.trajectId = projecten[0].id; r.schoolId = projecten[0].schoolId || ''; r.chips.push({ soort: 'project', tekst: '#' + (projecten[0].school ? projecten[0].school + ' · ' : '') + projecten[0].naam }); }
+      else if (!projecten.length && scholen.length === 1) { r.schoolId = scholen[0].id; r.chips.push({ soort: 'school', tekst: '#' + scholen[0].naam }); }
+      else if (projecten.length || scholen.length) r.twijfel.push({ term: term, kandidaten: projecten.map(function (p) { return { soort: 'project', id: p.id, naam: (p.school ? p.school + ' · ' : '') + p.naam, schoolId: p.schoolId || '' }; }).concat(scholen.map(function (x) { return { soort: 'school', id: x.id, naam: x.naam }; })).slice(0, 6) });
+      else r.twijfel.push({ term: term, kandidaten: [] });
+      weg(m[0]);
+    }
+    // 2. @categorie
+    if ((m = s.match(/(^|\s)@([^\s]+)/))) { var cat = pZoek(m[2], ctx.categorieen || [], function (c) { return c; })[0]; if (cat) { r.categorie = cat; r.chips.push({ soort: 'categorie', tekst: '@' + cat }); } weg(m[0].trim()); }
+    // 3. +naam
+    if ((m = s.match(/(^|\s)\+([^\s]+)/))) { var wie = pZoek(m[2], ctx.gebruikers || [], function (g) { return g; })[0]; if (wie) { r.eigenaar = wie; r.chips.push({ soort: 'eigenaar', tekst: 'voor ' + wie.split(' ')[0] }); } weg(m[0].trim()); }
+    // 4. prioriteit: p1-p4 of ! achter een woord
+    if ((m = s.match(/\sp([1-4])(?=\s)/i))) { r.prio = { 1: 'hoog', 2: 'midden', 3: 'laag', 4: 'laag' }[m[1]]; weg(m[0]); }
+    if ((m = s.match(/(!{1,3})(?=\s)/))) { r.prio = 'hoog'; weg(m[0]); }
+    // 5. herhaling (vóór de datum, anders wordt "elke maandag" een losse datum)
+    var h = null, dagenRe = '(?:' + P_DAG_RE + ')(?:(?:\\s*,\\s*|\\s+en\\s+)(?:' + P_DAG_RE + '))*', EENHEID = { dag: 'dag', dagen: 'dag', week: 'week', weken: 'week', maand: 'maand', maanden: 'maand', jaar: 'jaar', jaren: 'jaar', dagelijks: 'dag', wekelijks: 'week', maandelijks: 'maand', jaarlijks: 'jaar' };
+    if ((m = s.match(new RegExp('\\s(?:elke|iedere|elk)\\s+(' + dagenRe + ')(?=\\s)', 'i')))) { h = { eenheid: 'week', interval: 1, dagen: m[1].split(/\s*,\s*|\s+en\s+/i).map(pDagIndex).filter(Boolean).sort(function (a, b) { return a - b; }) }; weg(m[0]); }
+    else if ((m = s.match(/\s(?:elke|iedere|elk)\s+(\d{1,2}|een|twee|drie|vier|vijf|zes)\s+(dagen|weken|maanden|jaar|jaren)(?=\s)/i))) { h = { eenheid: EENHEID[pPlat(m[2])], interval: P_TELWOORD[pPlat(m[1])] || Number(m[1]) }; weg(m[0]); }
+    else if ((m = s.match(/\s(?:elke|iedere|elk)\s+(dag|werkdag|week|maand|kwartaal|jaar)(?=\s)/i))) { var e1 = pPlat(m[1]); h = e1 === 'werkdag' ? { eenheid: 'week', interval: 1, dagen: [1, 2, 3, 4, 5] } : e1 === 'kwartaal' ? { eenheid: 'maand', interval: 3 } : { eenheid: e1, interval: 1 }; weg(m[0]); }
+    else if ((m = s.match(/\s(dagelijks|wekelijks|maandelijks|jaarlijks)(?=\s)/i))) { h = { eenheid: EENHEID[pPlat(m[1])], interval: 1 }; weg(m[0]); }
+    else if ((m = s.match(/\som de (dag|week|maand)(?=\s)/i))) { h = { eenheid: pPlat(m[1]), interval: 2 }; weg(m[0]); }
+    if (h) {
+      if (h.eenheid === 'maand' && (m = s.match(/\sop de (\d{1,2})e(?=\s)/i))) { h.dagVanMaand = Math.min(31, Math.max(1, Number(m[1]))); weg(m[0]); }
+      if ((m = s.match(/\sna (?:het )?afvinken(?=\s)/i))) { h.vanafAfvinken = true; weg(m[0]); }
+      if ((m = s.match(/\s(\d{1,3})x(?=\s)/i))) { h.aantal = Number(m[1]); weg(m[0]); }
+      if ((m = s.match(new RegExp('\\s(?:tot|t/m|tot en met)\\s+((?:\\d{1,2}[-/]\\d{1,2}(?:[-/]\\d{2,4})?)|(?:\\d{1,2}\\s+(?:' + P_MAAND_RE + ')(?:\\s+\\d{4})?)|(?:' + P_DAG_RE + ')|vandaag|morgen|overmorgen)(?=\\s)', 'i')))) { var tot = pDatumUit(m[1], vandaag); if (tot) { h.tot = tot; weg(m[0]); } }
+      r.herhaling = h;
+    }
+    // 6. tijd: "om 14:00", "om 9 uur", "om half 10", los "9:30"
+    if ((m = s.match(/\som\s+half\s+(\d{1,2})(?=\s)/i))) { r.tijd = pNul((Number(m[1]) + 23) % 24) + ':30'; weg(m[0]); }
+    else if ((m = s.match(/\som\s+(\d{1,2})(?:[:.](\d{2}))?(?:\s*uur)?(?=\s)/i))) { if (Number(m[1]) < 24 && (!m[2] || Number(m[2]) < 60)) { r.tijd = pNul(Number(m[1])) + ':' + (m[2] || '00'); weg(m[0]); } }
+    else if ((m = s.match(/\s([01]?\d|2[0-3]):([0-5]\d)(?:\s*uur)?(?=\s)/i))) { r.tijd = pNul(Number(m[1])) + ':' + m[2]; weg(m[0]); }
+    // 7. datum (de laatste treffer wint)
+    var datumPatronen = [
+      /\s(vandaag|morgen|overmorgen)(?=\s)/i,
+      /\sover\s+(\d{1,2}|een|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)\s+(dag|dagen|week|weken|maand|maanden)(?=\s)/i,
+      /\s(?:begin\s+)?volgende\s+week(?=\s)/i, /\svolgende\s+maand(?=\s)/i, /\s(?:eind|einde)\s+(?:van\s+)?(?:de|deze)\s+week(?=\s)/i, /\s(?:eind|einde)\s+(?:van\s+)?(?:de|deze)\s+maand(?=\s)/i,
+      /\s(\d{1,2}[-\/]\d{1,2}(?:[-\/]\d{2,4})?)(?=\s)/, new RegExp('\\s(\\d{1,2}\\s+(?:' + P_MAAND_RE + ')(?:\\s+\\d{4})?)(?=\\s)', 'i'),
+      /\s(?:op|komende|volgende|aanstaande)\s+(maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|ma|di|wo|do|vr|za|zo)(?=\s)/i, /\s(maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(?=\s)/i,
+      /\s(ma|di|wo|do|vr|za)\s$/i  // afkorting alleen als laatste woord ("zo" nooit: dat is een gewoon woord)
+    ];
+    datumPatronen.forEach(function (re) {
+      var x = s.match(re); if (!x) return;
+      var tekst = pPlat(x[0]).trim(), dat = null, mm;
+      if ((mm = tekst.match(/^over\s+(\S+)\s+(\S+)$/))) { var n = P_TELWOORD[mm[1]] || Number(mm[1]), e = mm[2]; dat = pYmd(/dag/.test(e) ? pPlus(vandaag, n) : /week/.test(e) ? pPlus(vandaag, 7 * n) : pDatum(vandaag.getFullYear(), vandaag.getMonth() + n, Math.min(vandaag.getDate(), pLaatsteDag(vandaag.getFullYear(), vandaag.getMonth() + n)))); }
+      else if (/volgende\s+week$/.test(tekst)) dat = pYmd(pPlus(vandaag, 8 - pIso(vandaag)));
+      else if (/volgende\s+maand$/.test(tekst)) dat = pYmd(pDatum(vandaag.getFullYear(), vandaag.getMonth() + 1, 1));
+      else if (/week$/.test(tekst)) { var vr = pPlus(vandaag, 5 - pIso(vandaag)); if (vr < vandaag) vr = pPlus(vr, 7); dat = pYmd(vr); }
+      else if (/maand$/.test(tekst)) dat = pYmd(pDatum(vandaag.getFullYear(), vandaag.getMonth(), pLaatsteDag(vandaag.getFullYear(), vandaag.getMonth())));
+      else dat = pDatumUit(tekst.replace(/^(op|komende|volgende|aanstaande)\s+/, ''), vandaag);
+      if (dat) { r.deadline = dat; weg(x[0]); }
+    });
+    if (!r.deadline && h) r.deadline = h.eenheid === 'week' && h.dagen ? pEersteDag(h.dagen, vandaag) : h.eenheid === 'maand' && h.dagVanMaand ? pYmd(h.dagVanMaand >= vandaag.getDate() ? pDatum(vandaag.getFullYear(), vandaag.getMonth(), Math.min(h.dagVanMaand, pLaatsteDag(vandaag.getFullYear(), vandaag.getMonth()))) : pDatum(vandaag.getFullYear(), vandaag.getMonth() + 1, Math.min(h.dagVanMaand, pLaatsteDag(vandaag.getFullYear(), vandaag.getMonth() + 1)))) : pYmd(vandaag);
+    if (r.tijd && !r.deadline) r.deadline = pYmd(vandaag);
+    // 8. de rest is de taaktekst
+    r.tekst = s.replace(/\s+/g, ' ').trim().replace(/[\s,]+(op|om|en|,)$/i, '').replace(/^[,\s]+|[,\s]+$/g, '');
+    if (r.tekst) r.tekst = r.tekst.charAt(0).toUpperCase() + r.tekst.slice(1);
+    if (r.deadline) r.chips.unshift({ soort: 'datum', tekst: pKortDatum(r.deadline, vandaag) });
+    if (r.tijd) r.chips.splice(r.deadline ? 1 : 0, 0, { soort: 'tijd', tekst: r.tijd });
+    if (r.prio) r.chips.push({ soort: 'prio', tekst: r.prio });
+    if (r.herhaling) r.chips.push({ soort: 'herhaling', tekst: herhalingTekst(r.herhaling) });
+    return r;
+  }
+  /* parser einde */
 
   /* ===== Backend: run()-RPC naar de Apps Script-web-app. URL en koppelcode staan in localStorage (koppelscherm). ===== */
   function apiUrl() { return DEMO ? 'demo' : leesOpslag('aa_api'); }
@@ -804,10 +979,11 @@
     if (a.over === 0) return '<b>vandaag</b>';
     return 'over ' + (-a.over) + (a.over === -1 ? ' dag' : ' dagen');
   }
+  function tijdMeta(t) { return [t.tijd ? esc(t.tijd) : '', t.herhaling ? '<span class="herhaal" title="herhaalt">↻ ' + esc(herhalingTekst(t.herhaling)) + '</span>' : ''].filter(Boolean).join(' · '); }  // v4.5
   function actieRij(a) {
-    var meta = [esc(BRON_LABEL[a.bron] || a.bron), deadlineTekst(a)].filter(Boolean).join(' · ');
+    var meta = [esc(BRON_LABEL[a.bron] || a.bron), deadlineTekst(a), tijdMeta(a)].filter(Boolean).join(' · ');
     REG.taak[a.id] = a;  // v3.7: tik = bewerken
-    return '<div class="rij" data-aid="' + esc(a.id) + '"><button class="vink" data-klaar="' + esc(a.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
+    return '<div class="rij" tabindex="0" data-aid="' + esc(a.id) + '"><button class="vink" data-klaar="' + esc(a.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
       '<div class="r-body" data-taakbewerk="' + esc(a.id) + '"><div class="r-titel">' + esc(a.tekst) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
       (a.prio ? '<span class="tag ' + esc(a.prio) + '">' + esc(a.prio) + '</span>' : '') + '</div>';
   }
@@ -835,12 +1011,57 @@
   function laadVandaag() {
     run('apiOverzicht').then(renderVandaag).catch(function () { el('focusLijst').innerHTML = '<div class="leeg">Kon niet laden — controleer de koppeling (tandwiel rechtsboven).</div>'; });
   }
-  el('actieToevoegen').addEventListener('click', function () {
-    var v = el('actieInput').value.trim(); if (!v) return;
-    el('actieInput').value = '';
-    run('apiActieToevoegen', v, 'midden', '').then(function () { laadVandaag(); });
+  // v4.5: snelinvoer met de parser (zie "parser begin"). Enter maakt de taak, Shift+Enter opent het venster met alle velden voorgevuld.
+  // Een invoerveld met data-snel="<chip-id>" krijgt een chip met wat begrepen is; data-snel="form" vult de velden van het formulier eromheen.
+  function parserCtx() { var B = CRM.basis || {}; return { vandaag: new Date(), scholen: B.scholen || [], projecten: B.projecten || [], categorieen: B.categorieen || [], gebruikers: B.gebruikers || [] }; }
+  function chipVoor(inp) { return inp.dataset.snel === 'form' ? inp.parentNode.querySelector('.p-chip') : el(inp.dataset.snel); }
+  function chipHtml(r) {
+    var h = r.chips.map(function (c) { return '<span class="' + esc(c.soort) + '">' + esc(c.tekst) + '</span>'; }).join('');
+    r.twijfel.forEach(function (t) { h += t.kandidaten.length ? t.kandidaten.slice(0, 3).map(function (k) { return '<span class="twijfel" data-kies="' + esc(k.soort + ':' + k.id) + '">#' + esc(k.naam) + '?</span>'; }).join('') : '<span class="twijfel">#' + esc(t.term) + ': onbekend</span>'; });
+    return h || (r.tekst ? '<span class="leeg">' + esc(r.tekst) + '</span>' : '');
+  }
+  // Bij twee gelijkwaardige treffers voor #term kiest de gebruiker via de chip; de keuze staat in data-kies op het invoerveld
+  function ontleedMetKeuze(inp) {
+    var r = ontleedTaak(inp.value, parserCtx()), keuze = (inp.dataset.kies || '').split(':'), B = CRM.basis || {};
+    if (keuze[1] && r.twijfel.length) {
+      r.twijfel = [];
+      if (keuze[0] === 'project') { var p = (B.projecten || []).filter(function (x) { return x.id === keuze[1]; })[0]; if (p) { r.trajectId = p.id; r.schoolId = p.schoolId || ''; r.chips.push({ soort: 'project', tekst: '#' + (p.school ? p.school + ' · ' : '') + p.naam }); } }
+      else { var sch = (B.scholen || []).filter(function (x) { return x.id === keuze[1]; })[0]; if (sch) { r.schoolId = sch.id; r.chips.push({ soort: 'school', tekst: '#' + sch.naam }); } }
+    }
+    return r;
+  }
+  function extraVan(r) { return { tijd: r.tijd, herhaling: r.herhaling || '', categorie: r.categorie, eigenaar: r.eigenaar, schoolId: r.schoolId, trajectId: r.trajectId, kansId: r.kansId }; }
+  function zetVeld(root, naam, waarde) { var x = root.querySelector('[data-cf="' + naam + '"]'); if (!x) return; if (x.tagName === 'SELECT' && ![].some.call(x.options, function (o) { return o.value === String(waarde); })) return; x.value = waarde; }
+  function snelBijwerken(inp) {
+    var chip = chipVoor(inp), r = ontleedMetKeuze(inp);
+    if (chip) chip.innerHTML = inp.value.trim() ? chipHtml(r) : '';
+    if (inp.dataset.snel !== 'form') return r;
+    var root = inp.closest('.velden-2') || inp.closest('.composer') || document;  // het formulier eromheen meteen vullen
+    zetVeld(root, 'tekst', r.tekst); zetVeld(root, 'deadline', r.deadline); zetVeld(root, 'tijd', r.tijd); zetVeld(root, 'herhaling', herhalingTekst(r.herhaling));
+    if (r.prio) zetVeld(root, 'prio', r.prio); if (r.categorie) zetVeld(root, 'categorie', r.categorie); if (r.eigenaar) zetVeld(root, 'eigenaar', r.eigenaar);
+    if (r.schoolId) zetVeld(root, 'schoolId', r.schoolId); if (r.trajectId) zetVeld(root, 'trajectId', r.trajectId);
+    return r;
+  }
+  function snelToevoegen(inp) {
+    var r = ontleedMetKeuze(inp); if (!r.tekst) { toast('Wat moet er gebeuren?'); return; }
+    if (r.twijfel.some(function (t) { return t.kandidaten.length; })) { toast('Tik eerst op de school of het project dat je bedoelt.'); return; }
+    inp.value = ''; inp.dataset.kies = ''; snelBijwerken(inp);
+    run('apiActieToevoegen', r.tekst, r.prio || 'midden', r.deadline, extraVan(r)).then(function (t) { taakLokaal(t.id, t); toast('Taak toegevoegd' + (t.deadline ? ' · ' + pKortDatum(t.deadline, new Date()) : '') + (t.tijd ? ' ' + t.tijd : '') + '.'); });
+  }
+  document.addEventListener('input', function (e) { var inp = e.target.closest ? e.target.closest('[data-snel]') : null; if (!inp) return; inp.dataset.kies = ''; snelBijwerken(inp); });
+  document.addEventListener('keydown', function (e) {
+    var inp = e.target.closest ? e.target.closest('[data-snel]') : null; if (!inp || e.key !== 'Enter') return;
+    if (inp.dataset.snel === 'form') { e.preventDefault(); return; }  // in een formulier: Enter doet niets, Opslaan wel
+    e.preventDefault();
+    if (e.shiftKey) { var r = ontleedMetKeuze(inp); inp.value = ''; inp.dataset.kies = ''; snelBijwerken(inp); nieuweTaakVenster(r); return; }
+    snelToevoegen(inp);
   });
-  el('actieInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') el('actieToevoegen').click(); });
+  document.addEventListener('click', function (e) {
+    var k = e.target.closest('[data-kies]'); if (!k) return;
+    var chip = k.closest('.p-chip'), inp = chip && (chip.id ? document.querySelector('[data-snel="' + chip.id + '"]') : chip.parentNode.querySelector('[data-snel]'));
+    if (!inp) return; inp.dataset.kies = k.dataset.kies; snelBijwerken(inp);
+  });
+  el('actieToevoegen').addEventListener('click', function () { snelToevoegen(el('actieInput')); });
 
   /* ===== 2. Bedrijfsbrein ===== */
   function renderBrein(k) {
@@ -1396,6 +1617,7 @@
         return '<option value="' + esc(val) + '"' + (String(val) === String(w) ? ' selected' : '') + '>' + esc(lab) + '</option>';
       }).join('') + '</select>';
     } else if (v.type === 'textarea') binnen = '<textarea' + attr + (v.plaats ? ' placeholder="' + esc(v.plaats) + '"' : '') + '>' + esc(w) + '</textarea>';
+    else if (v.type === 'snel') return '<div class="veld breed"><label for="' + id + '">' + esc(v.label) + '</label><input type="text"' + attr + ' data-snel="form" value=""' + (v.plaats ? ' placeholder="' + esc(v.plaats) + '"' : '') + ' autocomplete="off"><div class="p-chip"></div></div>';  // v4.5: snelinvoer die de velden eronder vult
     else binnen = '<input type="' + (v.type || 'text') + '"' + attr + ' value="' + esc(w) + '"' + (v.type === 'number' ? ' inputmode="decimal"' : '') + (v.plaats ? ' placeholder="' + esc(v.plaats) + '"' : '') + ' autocomplete="off">';
     return '<div class="veld' + (v.breed || v.type === 'textarea' ? ' breed' : '') + '"><label for="' + id + '">' + esc(v.label) + '</label>' + binnen + '</div>';
   }
@@ -1460,12 +1682,23 @@
   }
   function taakVelden(metSchool, personen, t) {
     t = t || {};
-    var v = [{ naam: 'tekst', label: 'Taak', breed: true }, { naam: 'deadline', label: 'Deadline', type: 'date' }, { naam: 'prio', label: 'Prioriteit', type: 'select', opties: ['hoog', 'midden', 'laag'], standaard: 'midden' },
-      { naam: 'categorie', label: 'Categorie', type: 'select', opties: metHuidig(CRM.basis.categorieen.slice(), t.categorie), standaard: 'opvolgen' }, { naam: 'eigenaar', label: 'Voor', type: 'select', opties: optiesGebruikers(t.eigenaar) }];
+    var B = CRM.basis, v = t.id ? [] : [{ naam: 'snel', type: 'snel', label: 'Snel invoeren', plaats: 'bijv. bel Marieke morgen om 14:00 p1 #Esdoorn @bellen' }];  // v4.5: één zin vult de velden hieronder; alleen bij een nieuwe taak, anders wist elke toetsaanslag de bestaande deadline en tijd
+    v = v.concat([{ naam: 'tekst', label: 'Taak', breed: true }, { naam: 'deadline', label: 'Deadline', type: 'date' }, { naam: 'tijd', label: 'Tijd', type: 'time' },  // v4.5: tijd
+      { naam: 'prio', label: 'Prioriteit', type: 'select', opties: ['hoog', 'midden', 'laag'], standaard: 'midden' },
+      { naam: 'categorie', label: 'Categorie', type: 'select', opties: metHuidig(B.categorieen.slice(), t.categorie), standaard: 'opvolgen' }, { naam: 'eigenaar', label: 'Voor', type: 'select', opties: optiesGebruikers(t.eigenaar) }]);
     if (metSchool) v.push({ naam: 'schoolId', label: 'School (optioneel)', type: 'select', opties: optiesScholen(), breed: true });
     if (personen && personen.length) v.push({ naam: 'persoonId', label: 'Persoon', type: 'select', opties: optiesLijst(personen), breed: true });
-    return v.concat([{ naam: 'notitie', label: 'Toelichting', type: 'textarea' }]);
+    // v4.5: kans en project (ontbraken in het venster)
+    var kansen = (B.kansenKort || []).map(function (k) { return { id: k.id, naam: (k.school ? k.school + ' · ' : '') + k.naam }; });
+    if (t.kansId && !kansen.some(function (k) { return k.id === t.kansId; })) kansen.push({ id: t.kansId, naam: t.kans || t.kansId });
+    var projecten = (B.projecten || []).filter(function (p) { return ['afgelopen', 'afgerond', 'gestopt'].indexOf(p.status) < 0 || p.id === t.trajectId; }).map(function (p) { return { id: p.id, naam: (p.school ? p.school + ' · ' : '') + p.naam }; });
+    if (kansen.length) v.push({ naam: 'kansId', label: 'Kans', type: 'select', opties: optiesLijst(kansen, 'Geen kans'), breed: true });
+    if (projecten.length) v.push({ naam: 'trajectId', label: 'Project', type: 'select', opties: optiesLijst(projecten, 'Geen project'), breed: true });
+    return v.concat([{ naam: 'herhaling', label: 'Herhaling (bijv. elke maandag · elke 2 weken na afvinken · elke maand op de 1e)', breed: true, plaats: 'geen' }, { naam: 'notitie', label: 'Toelichting', type: 'textarea' }]);
   }
+  // v4.5: de tekst uit het veld Herhaling → object voor de backend; '' = geen herhaling, null = niet begrepen
+  function herhalingUitTekst(txt) { txt = String(txt || '').trim(); if (!txt || /^geen$/i.test(txt)) return ''; var r = ontleedTaak('x ' + txt, parserCtx()); return r.herhaling || null; }
+  var HERHAAL_FOUT = 'Herhaling niet begrepen. Bijvoorbeeld: elke maandag, elke 2 weken na afvinken, elke maand op de 1e, elke werkdag tot 23-10.';
 
   /* --- laden en lijsten --- */
   // v3.2: de laatst geladen Home en CRM-lijsten op dit toestel bewaren, zodat een scherm meteen gevuld is; de backend werkt het daarna bij
@@ -1484,6 +1717,7 @@
     if (CRM.tab === 'pipeline' && !magApp('pipeline')) CRM.tab = 'scholen';  // v4.0
     el('crmTabs').innerHTML = CRM_TABS.filter(function (t) { return t[0] !== 'pipeline' || magApp('pipeline'); }).map(function (t) { return '<button class="chip' + (CRM.tab === t[0] ? ' aan' : '') + '" data-crmtab="' + t[0] + '">' + t[1] + '</button>'; }).join('');
     el('crmZoekVak').style.display = CRM.tab === 'rapport' ? 'none' : 'flex';
+    el('crmSnel').style.display = CRM.tab === 'taken' && CRM.basis ? '' : 'none';  // v4.5
     if (!CRM.basis) { el('crmBalk').innerHTML = ''; el('crmInhoud').innerHTML = '<div class="spinner">Laden</div>'; return; }
     if (CRM.tab === 'scholen') renderScholen();
     else if (CRM.tab === 'personen') renderPersonen();
@@ -1513,8 +1747,8 @@
   function koppelLinks(t) { return [t.schoolId ? crmLink('school', t.schoolId, t.school) : '', t.persoonId ? crmLink('persoon', t.persoonId, t.persoon) : esc(t.persoon), t.kansId ? crmLink('kans', t.kansId, t.kans) : ''].filter(Boolean).join(' · '); }
   function taakRij(t, metKoppeling) {
     REG.taak[t.id] = t;
-    var meta = [esc(t.categorie), esc(t.eigenaar), deadlineTekst(t), metKoppeling ? koppelLinks(t) : ''].filter(Boolean).join(' · ');
-    return '<div class="rij"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
+    var meta = [esc(t.categorie), esc(t.eigenaar), deadlineTekst(t), tijdMeta(t), metKoppeling ? koppelLinks(t) : ''].filter(Boolean).join(' · ');  // v4.5: tijd en herhaling
+    return '<div class="rij" tabindex="0"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
       '<div class="r-body" data-taakbewerk="' + esc(t.id) + '"><div class="r-titel">' + esc(t.tekst) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
       (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</div>';
   }
@@ -1565,18 +1799,37 @@
       '<div class="hint">Tik op een kans om de mijlpaal te wijzigen. Rood = langer stil dan de norm van de mijlpaal.</div>' +
       '<div class="kop">Gesloten <small>laatste 60 dagen</small></div>' + (dicht.length ? dicht.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Nog niets gesloten.</div>');
   }
+  // v4.5: weergaven zoals Todoist (Vandaag, Komende met een kop per dag, Te laat, Zonder datum, Alles, Afgerond); de keuze blijft op dit toestel bewaard
+  var TAAK_WEERGAVEN = [['vandaag', 'Vandaag'], ['komende', 'Komende'], ['laat', 'Te laat'], ['zonder', 'Zonder datum'], ['alles', 'Alles'], ['af', 'Afgerond']];
+  function taakWeergave() {
+    if (!CRM.taakWeergave) { var b = leesOpslag('aa_taakweergave'); CRM.taakWeergave = TAAK_WEERGAVEN.some(function (w) { return w[0] === b; }) ? b : 'alles'; }
+    return CRM.taakWeergave;
+  }
+  function dagKop(ymd, vandaag) { return ymd === vandaag ? 'Vandaag · ' + pKortDatum(ymd, new Date()) : ymd === pYmd(pPlus(new Date(), 1)) ? 'Morgen · ' + pKortDatum(ymd, new Date()) : pKortDatum(ymd, new Date()); }
   function renderTaken() {
-    var T = CRM.taken, B = CRM.basis, q = CRM.zoek.toLowerCase(), vandaag = vandaagStr();
-    el('crmBalk').innerHTML = mijnChip() + '<button class="knop klein" data-crmnieuw="taak">Nieuwe taak</button>';
-    var lijst = T.taken.filter(function (t) { return (!CRM.mijn || t.eigenaar === B.ik.naam) && zoekMatch(q, [t.tekst, t.school, t.persoon, t.kans, t.eigenaar, t.categorie]); });
+    var T = CRM.taken, B = CRM.basis, q = CRM.zoek.toLowerCase(), vandaag = vandaagStr(), W = taakWeergave(), grens = pYmd(pPlus(new Date(), 7));
+    el('crmBalk').innerHTML = mijnChip() + TAAK_WEERGAVEN.map(function (w) { return '<button class="chip' + (W === w[0] ? ' aan' : '') + '" data-taakweergave="' + w[0] + '">' + w[1] + '</button>'; }).join('') + '<button class="knop klein" data-crmnieuw="taak">Nieuwe taak</button>';
+    var lijst = T.taken.filter(function (t) { return (!CRM.mijn || t.eigenaar === B.ik.naam) && zoekMatch(q, [t.tekst, t.school, t.persoon, t.kans, t.project, t.eigenaar, t.categorie]); });
     var open = lijst.filter(function (t) { return t.status !== 'af'; }), af = lijst.filter(function (t) { return t.status === 'af'; });
-    var groep = function (titel, ts) { return ts.length ? '<div class="kop">' + titel + ' <small>' + ts.length + '</small></div>' + (isDesk() ? deskTakenTabel(ts) : ts.map(function (t) { return taakRij(t, true); }).join('')) : ''; };  // v3.0: tabel op desktop
-    var h = open.length ? groep('Te laat', open.filter(function (t) { return t.deadline && t.deadline < vandaag; })) + groep('Vandaag', open.filter(function (t) { return t.deadline === vandaag; })) +
-      groep('Binnenkort', open.filter(function (t) { return t.deadline > vandaag; })) + groep('Zonder datum', open.filter(function (t) { return !t.deadline; })) : '<div class="leeg">Geen open taken' + (CRM.mijn ? ' voor jou' : '') + '.</div>';
-    if (af.length) h += '<div class="kop">Afgerond <small>laatste 14 dagen · tik om te heropenen</small></div>' + af.map(function (t) {
+    var rijen = function (ts) { return isDesk() ? deskTakenTabel(ts) : ts.map(function (t) { return taakRij(t, true); }).join(''); };  // v3.0: tabel op desktop
+    var groep = function (titel, ts, klas) { return ts.length ? '<div class="kop' + (klas ? ' ' + klas : '') + '">' + esc(titel) + ' <small>' + ts.length + '</small></div>' + rijen(ts) : ''; };
+    var laat = open.filter(function (t) { return t.deadline && t.deadline < vandaag; }), nu_ = open.filter(function (t) { return t.deadline === vandaag; }), zonder = open.filter(function (t) { return !t.deadline; });
+    var h = '';  // de snelinvoer (#crmSnel) staat in vaste HTML boven deze lijst
+    if (W === 'vandaag') h += laat.length || nu_.length ? groep('Te laat', laat) + groep('Vandaag', nu_) : '<div class="leeg">Niets voor vandaag.</div>';
+    else if (W === 'komende') {
+      var perDag = {}; open.filter(function (t) { return t.deadline && t.deadline >= vandaag && t.deadline <= grens; }).forEach(function (t) { (perDag[t.deadline] = perDag[t.deadline] || []).push(t); });
+      h += groep('Te laat', laat); Object.keys(perDag).sort().forEach(function (d) { h += groep(dagKop(d, vandaag), perDag[d], 'dagkop'); });
+      if (!laat.length && !Object.keys(perDag).length) h += '<div class="leeg">Niets in de komende 7 dagen.</div>';
+    }
+    else if (W === 'laat') h += laat.length ? groep('Te laat', laat) : '<div class="leeg">Niets te laat.</div>';
+    else if (W === 'zonder') h += zonder.length ? groep('Zonder datum', zonder) : '<div class="leeg">Alles heeft een datum.</div>';
+    else if (W === 'af') h += af.length ? '' : '<div class="leeg">Niets afgerond in de laatste 14 dagen.</div>';
+    else h += open.length ? groep('Te laat', laat) + groep('Vandaag', nu_) + groep('Binnenkort', open.filter(function (t) { return t.deadline > vandaag; })) + groep('Zonder datum', zonder) : '<div class="leeg">Geen open taken' + (CRM.mijn ? ' voor jou' : '') + '.</div>';
+    if ((W === 'alles' || W === 'af') && af.length) h += '<div class="kop">Afgerond <small>laatste 14 dagen · tik om te heropenen</small></div>' + af.map(function (t) {
       REG.taak[t.id] = t;
       return '<div class="rij"><div class="r-body" data-taakbewerk="' + esc(t.id) + '"><div class="r-titel" style="text-decoration:line-through;color:var(--gedempt)">' + esc(t.tekst) + '</div><div class="r-meta">' + [t.eigenaar, t.school, t.afgerond ? 'af ' + kortDatum(t.afgerond) : ''].filter(Boolean).map(esc).join(' · ') + '</div></div></div>';
     }).join('');
+    if (isDesk()) h += '<div class="sneltoetsen">Sneltoetsen: <kbd>n</kbd> nieuwe taak · <kbd>/</kbd> zoeken · <kbd>e</kbd> bewerken · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> prioriteit van de gekozen rij · <kbd>Esc</kbd> sluiten</div>';  // v4.5
     el('crmInhoud').innerHTML = h;
   }
 
@@ -2075,8 +2328,10 @@
       return run('apiKansOpslaan', samen({}, f)).then(function (r) { toast('Kans aangemaakt.'); doel.innerHTML = ''; crmVerouderd(); openDetail('kans', r.kans.id, true); });
     });
     else if (soort === 'taak') h = formHtml('Nieuwe taak', taakVelden(true), { eigenaar: ikNaam() }, 'Opslaan', function (f) {
+      delete f.snel;  // v4.5: het snelinvoerveld zelf gaat niet mee
       if (!f.tekst) { toast('Wat moet er gebeuren?'); return; }
-      return run('apiTaakOpslaan', samen({}, f)).then(function () { toast('Taak toegevoegd.'); doel.innerHTML = ''; CRM.taken = null; renderCrm(); });
+      var hh = herhalingUitTekst(f.herhaling); if (hh === null) { toast(HERHAAL_FOUT); return; } f.herhaling = hh;
+      return run('apiTaakOpslaan', samen({}, f)).then(function (x) { toast('Taak toegevoegd.'); doel.innerHTML = ''; taakLokaal(x.id, x); });
     });
     if (h) toonForm(doel, h);
   }
@@ -2099,6 +2354,7 @@
       if (x.dataset.zbsluit) sluitZoek();
       if (x.closest('#venster')) sluitVenster();  // v4.1: een melding opent het project
       var soortO = w.slice(0, i);
+      if (soortO === 'taak') { openTaakOpId(w.slice(i + 1)); return; }  // v4.5: een melding over een taak opent de taak
       if (soortO === 'project') { CRM.terugNaar = el('view-facturatie').classList.contains('actief') ? 'facturatie' : el('view-trajecten').classList.contains('actief') ? (S.pWeergave === 'bezetting' ? 'bezetting' : 'projecten') : CRM.terugNaar; }  // v3.8; v4.1: bezetting
       if (!el('view-relaties').classList.contains('actief')) {
         if (isDesk()) { if (soortO === 'project') { wisselView('relaties'); zetZijbalk(CRM.terugNaar || 'projecten'); } else deskNaar(soortO === 'kans' ? 'pipeline' : 'contacten'); } else wisselView('relaties');
@@ -2109,6 +2365,7 @@
     if (t.closest('[data-crm-terug]')) { if (history.state && history.state.crm) history.back(); else sluitDetail(); return; }
     if ((x = t.closest('[data-crmtab]'))) { CRM.tab = x.dataset.crmtab; if (isDesk()) DESK.contacten = CRM.tab; el('crmNieuw').innerHTML = ''; formActie = null; renderCrm(); return; }
     if (t.closest('[data-crmmijn]')) { CRM.mijn = !CRM.mijn; renderCrm(); return; }
+    if ((x = t.closest('[data-taakweergave]'))) { CRM.taakWeergave = x.dataset.taakweergave; zetOpslag('aa_taakweergave', CRM.taakWeergave); renderCrm(); return; }  // v4.5
     if ((x = t.closest('[data-crmnieuw]'))) { if (CRM.basis) nieuwVanuitLijst(x.dataset.crmnieuw); return; }
     if ((x = t.closest('[data-crmpreset]'))) { if (x.disabled) return; CRM.preset = x.dataset.crmpreset; CRM.rStap = 0; laadRapport(); return; }  // v4.4: andere periode begint bij nu
     if ((x = t.closest('[data-rstap]'))) { if (x.disabled) return; var st = x.getAttribute('data-rstap'); CRM.rStap = st === 'nu' ? 0 : Math.min(0, (CRM.rStap || 0) + Number(st)); laadRapport(); return; }  // v4.4
@@ -2270,22 +2527,49 @@
     var t = REG.taak[id]; if (!t) return;
     basisKlaar().then(function () {
       var personen = t.schoolId ? CRM.basis.personen.filter(function (p) { return p.schoolId === t.schoolId; }) : [];
-      var w = kopie(t), knoppenrij = '<div class="balk">' + (t.status === 'af' ? '<button class="knop licht klein" data-taakheropen="' + esc(t.id) + '">Heropenen</button>' : '') +
+      var w = kopie(t); w.herhaling = herhalingTekst(t.herhaling);  // v4.5: de herhaling staat als tekst in het veld
+      var knoppenrij = '<div class="balk">' + (t.status === 'af' ? '<button class="knop licht klein" data-taakheropen="' + esc(t.id) + '">Heropenen</button>' : '') +
+        (t.herhaling && t.status !== 'af' ? '<button class="knop licht klein" data-herhaalstop="' + esc(t.id) + '">Herhaling stoppen</button>' : '') +  // v4.5
         (t.trackRunId && t.status !== 'af' ? '<button class="knop licht klein" data-trackstop="' + esc(t.trackRunId) + '">Rest van deze track stoppen</button>' : '') +
         (magWijzigen(t.eigenaar) ? '<button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '">Verwijderen</button>' : '') + '</div>';
       openVenster(formHtml(t.status === 'af' ? 'Afgeronde taak' : 'Taak', taakVelden(true, personen, t), w, 'Opslaan', function (f) {
+        delete f.snel;
         if (!f.tekst) { toast('Wat moet er gebeuren?'); return; }
         var obj = bouwWijziging(t, w, f); if (!obj) { sluitVenster(); return; }
+        if (obj.herhaling !== undefined) { var hh = herhalingUitTekst(obj.herhaling); if (hh === null) { toast(HERHAAL_FOUT); return; } obj.herhaling = hh; }  // v4.5
         taakLokaal(t.id, lokaalSamen(t, obj)); sluitVenster();
         return run('apiTaakOpslaan', obj).then(function (x) { taakLokaal(t.id, x); toast('Taak opgeslagen.'); }).catch(herlaadHuidig);
       }) + knoppenrij);
+    }).catch(function () {});
+  }
+  // v4.5: Shift+Enter in de snelinvoer: het venster met alle velden, voorgevuld met wat de parser begreep
+  function nieuweTaakVenster(r) {
+    r = r || {};
+    basisKlaar().then(function () {
+      var w = { snel: '', tekst: r.tekst || '', deadline: r.deadline || '', tijd: r.tijd || '', prio: r.prio || 'midden', categorie: r.categorie || 'opvolgen', eigenaar: r.eigenaar || ikNaam(), schoolId: r.schoolId || '', trajectId: r.trajectId || '', kansId: r.kansId || '', herhaling: herhalingTekst(r.herhaling), notitie: '' };
+      openVenster(formHtml('Nieuwe taak', taakVelden(true, [], {}), w, 'Opslaan', function (f) {
+        delete f.snel; if (!f.tekst) { toast('Wat moet er gebeuren?'); return; }
+        var hh = herhalingUitTekst(f.herhaling); if (hh === null) { toast(HERHAAL_FOUT); return; } f.herhaling = hh;
+        return run('apiTaakOpslaan', samen({}, f)).then(function (x) { sluitVenster(); taakLokaal(x.id, x); toast('Taak toegevoegd.'); });
+      }));
     }).catch(function () {});
   }
   function taakAfvinken(id, knop) {
     var t = REG.taak[id];
     if (knop) knop.disabled = true;
     if (t) { var af = kopie(t); af.status = 'af'; af.afgerond = nuLokaal().replace('T', ' '); taakLokaal(id, af); }
-    run('apiActieKlaar', id).then(function () { toast('Taak afgerond. Heropenen kan bij Taken → Afgerond.'); if (!t) herlaadHuidig(); }).catch(herlaadHuidig);
+    run('apiActieKlaar', id).then(function (r) {
+      if (r && r.volgende) { taakLokaal(r.volgende.id, r.volgende); toast('Afgerond. Volgende keer: ' + pKortDatum(r.volgende.deadline, new Date()) + (r.volgende.tijd ? ' ' + r.volgende.tijd : '') + '.'); }  // v4.5: herhalende taak
+      else toastMetActie('Taak afgerond.', 'Ongedaan maken', function () { run('apiTaakHeropen', id).then(function (x) { taakLokaal(id, x); toast('De taak staat weer open.'); }).catch(herlaadHuidig); });  // v4.5
+      if (!t) herlaadHuidig();
+    }).catch(herlaadHuidig);
+  }
+  // v4.5: sneltoets 1/2/3 op de gekozen rij
+  function zetPrioSnel(id, prio) {
+    var t = REG.taak[id]; if (!t || t.prio === prio) return;
+    var obj = { id: id, prio: prio, _oud: { prio: t.prio } };
+    taakLokaal(id, lokaalSamen(t, obj));
+    run('apiTaakOpslaan', obj).then(function (x) { taakLokaal(id, x); toast('Prioriteit: ' + prio + '.'); }).catch(herlaadHuidig);
   }
 
   /* --- tijdlijn --- */
@@ -2497,7 +2781,18 @@
 
   /* --- events --- */
   el('venster').addEventListener('click', function (ev) { if (ev.target === el('venster')) sluitVenster(); });
-  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && el('venster').classList.contains('aan')) sluitVenster(); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && el('venster').classList.contains('aan')) { sluitVenster(); return; }
+    // v4.5: sneltoetsen op desktop, zoals Todoist; nooit in een invoerveld of met een open venster
+    if (!isDesk() || ev.metaKey || ev.ctrlKey || ev.altKey || el('venster').classList.contains('aan')) return;
+    var tag = ((ev.target && ev.target.tagName) || '').toLowerCase(); if (tag === 'input' || tag === 'textarea' || tag === 'select' || (ev.target && ev.target.isContentEditable)) return;
+    var a = document.activeElement, rij = a && a.closest ? (a.closest('[data-taakbewerk]') || (a.classList.contains('rij') ? a.querySelector('[data-taakbewerk]') : null)) : null, id = rij ? rij.getAttribute('data-taakbewerk') : '';  // op een .rij staat de tabindex, data-taakbewerk op het kind
+    if (ev.key === 'n' || ev.key === 'N') { ev.preventDefault(); deskNieuw('taak'); }
+    else if (ev.key === '/') { ev.preventDefault(); var z = el('zbZoek'); if (z) z.focus(); }
+    else if ((ev.key === 'e' || ev.key === 'E') && id) { ev.preventDefault(); bewerkTaak(id); }
+    else if (/^[123]$/.test(ev.key) && id) { ev.preventDefault(); zetPrioSnel(id, ['hoog', 'midden', 'laag'][Number(ev.key) - 1]); }
+    else if (ev.key === 'Escape') sluitZoek();
+  });
   document.addEventListener('click', function (ev) {
     var t = ev.target, x;
     if ((x = t.closest('[data-cf-annuleer]')) && x.closest('#venster')) { ev.stopPropagation(); sluitVenster(); return; }
@@ -2510,6 +2805,11 @@
       run('apiVerwijder', 'taak', tw).then(function () { toast('Taak verwijderd.'); }).catch(herlaadHuidig); return;
     }
     if ((x = t.closest('[data-taakheropen]'))) { var th = x.getAttribute('data-taakheropen'); x.disabled = true; run('apiTaakHeropen', th).then(function (r) { sluitVenster(); taakLokaal(th, r); toast('Taak staat weer open.'); }).catch(function () { x.disabled = false; }); return; }
+    if ((x = t.closest('[data-herhaalstop]'))) {  // v4.5
+      var hs = x.getAttribute('data-herhaalstop'), ht = REG.taak[hs]; x.disabled = true;
+      run('apiTaakOpslaan', { id: hs, herhaling: '', _oud: { herhaling: ht ? ht.herhaling : null } }).then(function (r) { sluitVenster(); taakLokaal(hs, r); toast('Herhaling gestopt; deze taak blijft staan.'); }).catch(function () { x.disabled = false; });
+      return;
+    }
     if ((x = t.closest('[data-trackstop]'))) {
       if (!window.confirm('Alle open taken van deze track weghalen? Afgeronde taken blijven staan.')) return;
       run('apiTrackStoppen', x.getAttribute('data-trackstop')).then(function (r) { sluitVenster(); toast(r.aantal + ' open taken weggehaald.'); herlaadHuidig(); }); return;
@@ -2714,11 +3014,27 @@
   }
   function startApp() {
     if (!CRM.basis) { var bw = uitBewaard('aa_cache_crm'); if (bw && bw.scholen && bw.ik) { CRM.basis = bw; zetRechten(); } }  // v4.0: rechten kennen voordat een scherm opent
-    if (!isDesk()) { laadVandaag(); basisKlaar().catch(function () {}); return; }
     var h = (location.hash || '').replace('#', '');
+    if (!isDesk()) { laadVandaag(); basisKlaar().catch(function () {}); routeHash(h); return; }
     deskNaar(DESK_ITEMS[h] ? h : 'home');
     basisKlaar().catch(function () {});
+    routeHash(h);
   }
+  // v4.5: deeplinks #taak:<id>, #school:<id>, #persoon:<id>, #kans:<id>, #project:<id> (uit meldingen en mails)
+  function routeHash(h) {
+    var i = String(h || '').indexOf(':'); if (i < 0) return false;
+    var soort = h.slice(0, i), id = h.slice(i + 1); if (!id) return false;
+    if (soort !== 'taak' && ['school', 'persoon', 'kans', 'project'].indexOf(soort) < 0) return false;
+    // De deeplink niet in de adresbalk laten staan: iOS herlaadt een PWA uit de achtergrond met dezelfde URL en zou dan opnieuw in het detail springen
+    try { history.replaceState(null, '', location.pathname + location.search + (isDesk() && DESK.item ? '#' + DESK.item : '')); } catch (e) {}
+    if (soort === 'taak') { openTaakOpId(id); return true; }
+    if (isDesk()) deskNaar(soort === 'kans' ? 'pipeline' : soort === 'project' ? 'projecten' : 'contacten'); else wisselView('relaties');
+    openDetail(soort, id, true);
+    return true;
+  }
+  function openTaakOpId(id) { basisKlaar().then(function () { return run('apiTaak', id); }).then(function (t) { REG.taak[t.id] = t; bewerkTaak(t.id); }).catch(function () {}); }
+  // v4.5: een deeplink die binnenkomt terwijl de app al open is (adresbalk, geopende PWA) laadt de pagina niet opnieuw; replaceState in deskNaar vuurt dit niet
+  window.addEventListener('hashchange', function () { if (apiUrl() && secret()) routeHash((location.hash || '').replace('#', '')); });
   function deskNaar(item) {
     if (!DESK_ITEMS[item] || ((item === 'pipeline' || item === 'facturatie') && !magApp(item)) || (item === 'bezetting' && !magApp('vacatures'))) item = 'home';  // v4.0: menu per rechten
     if (item === 'bezetting') { S.pWeergave = 'bezetting'; S.pWeergaveGekozen = true; } else if (item === 'projecten' && S.pWeergave === 'bezetting') S.pWeergave = 'am';  // v4.1
@@ -2791,11 +3107,11 @@
     }).join('') + '</tbody></table></div>' + (l.length > 500 ? '<div class="hint">De eerste 500 staan hier. Zoek of filter om de rest te zien.</div>' : '');
   }
   function deskTakenTabel(ts) {
-    return '<div class="tabel-scroll"><table class="dtabel"><thead><tr><th></th><th>Taak</th><th>Gekoppeld aan</th><th>Categorie</th><th>Voor</th><th>Deadline</th><th>Prio</th></tr></thead><tbody>' + ts.map(function (t) {
+    return '<div class="tabel-scroll"><table class="dtabel"><thead><tr><th></th><th>Taak</th><th>Gekoppeld aan</th><th>Categorie</th><th>Voor</th><th>Deadline</th><th>Tijd</th><th>Prio</th></tr></thead><tbody>' + ts.map(function (t) {
       REG.taak[t.id] = t;  // v3.7: rij = bewerken, koppeling = link
-      return '<tr class="klik" data-taakbewerk="' + esc(t.id) + '"><td style="width:34px"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button></td>' +
-        '<td><b>' + esc(t.tekst) + '</b></td><td>' + koppelLinks(t) + '</td><td>' + esc(t.categorie) + '</td><td>' + esc(t.eigenaar) + '</td>' +
-        '<td>' + (t.deadline ? deadlineTekst(t) : '<span class="zacht">—</span>') + '</td><td>' + (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</td></tr>';
+      return '<tr class="klik" tabindex="0" data-taakbewerk="' + esc(t.id) + '"><td style="width:34px"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button></td>' +
+        '<td><b>' + esc(t.tekst) + '</b>' + (t.herhaling ? ' <span class="herhaal" title="' + esc(herhalingTekst(t.herhaling)) + '">↻</span>' : '') + '</td><td>' + koppelLinks(t) + '</td><td>' + esc(t.categorie) + '</td><td>' + esc(t.eigenaar) + '</td>' +
+        '<td>' + (t.deadline ? deadlineTekst(t) : '<span class="zacht">—</span>') + '</td><td>' + (t.tijd ? esc(t.tijd) : '<span class="zacht">—</span>') + '</td><td>' + (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</td></tr>';  // v4.5: tijd en herhaling
     }).join('') + '</tbody></table></div>';
   }
   function projectBord(lijst) {
@@ -2975,11 +3291,7 @@
   /* ===== Acties afvinken (Vandaag) ===== */
   document.addEventListener('click', function (ev) {
     var v = ev.target.closest('[data-klaar]'); if (!v || !S.data) return;
-    var id = v.dataset.klaar;
-    S.data.focus = S.data.focus.filter(function (a) { return a.id !== id; });
-    S.data.aandacht = S.data.aandacht.filter(function (a) { return a.id !== id; });
-    renderVandaag(S.data);
-    run('apiActieKlaar', id).catch(laadVandaag);
+    taakAfvinken(v.dataset.klaar, v);  // v4.5: zelfde pad als in Taken: ongedaan maken en de volgende instantie van een reeks
   });
 
   /* ===== Navigatie, instellingen, koppelen ===== */

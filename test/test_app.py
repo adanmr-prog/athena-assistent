@@ -16,8 +16,13 @@ with sync_playwright() as p:
     page.fill('#apiInput', 'http://127.0.0.1:8765/api'); page.fill('#codeInput', 'test123'); page.click('#codeOpslaan')
     page.wait_for_selector('#kpis .tegel'); page.wait_for_timeout(500)
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
-    page.click('[data-klaar="a1"]'); page.wait_for_timeout(300)
-    page.fill('#actieInput', 'Testactie uit de browser'); page.press('#actieInput', 'Enter'); page.wait_for_timeout(600)
+    page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
+    assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
+    # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is
+    page.fill('#actieInput', 'Bel Marieke morgen om 14:00 !'); page.wait_for_selector('#actieChip span.tijd:has-text("14:00")'); assert page.locator('#actieChip span.prio:has-text("hoog")').count() == 1, 'chip toont de prioriteit'
+    page.screenshot(path=OUT + '/02a_vandaag_snelinvoer.png', full_page=True)
+    page.press('#actieInput', 'Enter'); page.wait_for_selector('#focusLijst .rij:has-text("Bel Marieke")'); page.wait_for_selector('#toast.aan:has-text("Taak toegevoegd")')
+    assert page.input_value('#actieInput') == '' and '14:00' in page.locator('#focusLijst .rij:has-text("Bel Marieke") .r-meta').inner_text(), 'veld leeg, tijd in de regel'
     page.screenshot(path=OUT + '/02_vandaag_na.png', full_page=True)
     page.click('nav button[data-view="brein"]'); page.wait_for_selector('#breinTegels .tegel'); page.wait_for_timeout(300)
     page.fill('#vraagInput', 'Wat is het uurtarief voor huiswerkbegeleiding?'); page.click('#vraagKnop'); page.wait_for_selector('.bron'); page.wait_for_timeout(200)
@@ -140,18 +145,32 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/14_kans_detail.png', full_page=True)
     page.click('[data-crm-terug]'); page.wait_for_selector('.kolom'); page.wait_for_timeout(100)
     page.click('[data-crmtab="taken"]'); page.wait_for_selector('[data-taakklaar]'); page.wait_for_timeout(150)
-    page.click('[data-taakklaar="tk1"]'); page.wait_for_timeout(500)
-    page.click('[data-crmnieuw="taak"]'); page.fill('#cf-tekst', 'Offerte surveillance maken'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.rij:has-text("Offerte surveillance maken")'); page.wait_for_timeout(150)
+    # v4.5: weergaven zoals Todoist, snelinvoer in de lijst, ongedaan maken, herhalende taken
+    page.click('[data-taakweergave="komende"]'); page.wait_for_selector('#crmInhoud .kop.dagkop'); assert page.locator('#crmBalk .chip.aan[data-taakweergave="komende"]').count() == 1, 'weergave Komende met een kop per dag'
+    page.screenshot(path=OUT + '/15a_taken_komende.png', full_page=True)
+    page.click('[data-taakweergave="alles"]'); page.wait_for_selector('[data-taakklaar="tk1"]')
+    page.click('[data-taakklaar="tk1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")'); page.click('#toast [data-toastactie]'); page.wait_for_selector('[data-taakklaar="tk1"]')  # ongedaan maken
+    page.click('[data-taakklaar="tk1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")'); page.wait_for_timeout(200)
+    page.click('[data-taakklaar="tk4"]'); page.wait_for_selector('#toast.aan:has-text("Volgende keer")'); assert page.locator('.rij:has-text("Weekstart team") .herhaal').count() == 1, 'herhalende taak krijgt een volgende instantie'
+    page.fill('#taakSnel', 'Teamuitje plannen vr 16:00 @afspraak'); page.wait_for_selector('#taakSnelChip span.tijd:has-text("16:00")'); page.press('#taakSnel', 'Enter'); page.wait_for_selector('.rij:has-text("Teamuitje plannen")')
+    page.fill('#taakSnel', 'Nog een taak'); page.click('[data-taakweergave="laat"]'); page.wait_for_selector('#crmBalk .chip.aan[data-taakweergave="laat"]')
+    assert page.input_value('#taakSnel') == 'Nog een taak', 'de snelinvoer overleeft een hertekening van de lijst'  # v4.5: het veld staat buiten #crmInhoud
+    page.fill('#taakSnel', ''); page.click('[data-taakweergave="alles"]'); page.wait_for_selector('[data-taakklaar="tk3"]')
+    page.click('[data-crmnieuw="taak"]'); page.fill('#cf-snel', 'Offerte surveillance maken morgen om 11:00'); page.wait_for_timeout(100)
+    assert page.input_value('#cf-tekst') == 'Offerte surveillance maken' and page.input_value('#cf-tijd') == '11:00', 'snelinvoer vult de velden van het formulier'
+    page.click('[data-cf-opslaan]'); page.wait_for_selector('.rij:has-text("Offerte surveillance maken")'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/15_taken.png', full_page=True)
     page.click('.rij [data-taakbewerk]:has-text("Offerte surveillance maken")'); page.wait_for_selector('#venster.aan #vf-tekst')  # v3.7
+    assert page.locator('#venster #vf-kansId').count() == 1 and page.locator('#venster #vf-trajectId').count() == 1 and page.locator('#venster #vf-snel').count() == 0, 'kans en project in het venster; geen snelinvoer bij een bestaande taak'  # v4.5
     page.screenshot(path=OUT + '/15b_taak_venster.png', full_page=True)
-    page.fill('#vf-tekst', 'Offerte surveillance versturen'); page.select_option('#vf-prio', 'hoog'); page.click('#venster [data-cf-opslaan]')
-    page.wait_for_selector('.rij:has-text("Offerte surveillance versturen")', timeout=1500)  # meteen zichtbaar, zonder te herladen
+    page.fill('#vf-tekst', 'Offerte surveillance versturen'); page.select_option('#vf-prio', 'hoog'); page.fill('#vf-herhaling', 'elke maandag'); page.click('#venster [data-cf-opslaan]')
+    page.wait_for_selector('.rij:has-text("Offerte surveillance versturen") .herhaal', timeout=1500)  # meteen zichtbaar, zonder te herladen; met herhaling
     page.click('[data-taakbewerk="tk1"]'); page.wait_for_selector('#venster.aan [data-taakheropen]'); page.click('[data-taakheropen]'); page.wait_for_selector('[data-taakklaar="tk1"]')
     page.click('[data-taakbewerk="tk2"]'); page.wait_for_selector('#venster.aan [data-taakweg]'); page.click('[data-taakweg]'); page.wait_for_selector('[data-taakbewerk="tk2"]', state='detached')
     page.click('[data-crmtab="rapport"]'); page.wait_for_selector('.tabel'); page.wait_for_timeout(200)
     assert page.locator('#crmInhoud .kop:has-text("Bedrijfsdoelen")').count() == 1, 'bedrijfsdoelen in het rapport'  # v4.2
     page.click('[data-rteam="accountmanagement"]'); page.wait_for_selector('#crmInhoud .tegel:has-text("Bezetting (gevuld van nodig)")')
+    page.wait_for_selector('#crmInhoud .rapport-tabel td:has-text("Joris")')  # v4.5: de tegel staat ook in de weergave van alle teams; wacht tot de teamtabel er echt is
     assert page.locator('#crmInhoud .rapport-tabel td:has-text("Joris")').count() == 1, 'per persoon in het AM-team'  # v4.4: Joris staat ook in het verloop
     page.screenshot(path=OUT + '/16a_rapport_am.png', full_page=True)
     page.click('[data-rteam="consultancy"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Forecast")')
@@ -207,8 +226,12 @@ with sync_playwright() as p:
     page.click('#crmBalk [data-crmtab="scholen"]'); page.click('.dtabel tr[data-crm-open="school:s1"]'); page.wait_for_selector('.detail-3'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/22_desk_school.png')
     page.click('.zb-item[data-desk="taken"]'); page.wait_for_selector('.dtabel [data-taakklaar]'); page.wait_for_timeout(150)
+    assert page.locator('.dtabel th:has-text("Tijd")').count() >= 1 and page.locator('#crmInhoud .sneltoetsen').count() == 1, 'kolom Tijd en de sneltoetsenhint'  # v4.5
     page.screenshot(path=OUT + '/23_desk_taken.png')
     page.locator('.dtabel tr[data-taakbewerk] td:nth-child(2)').first.click(); page.wait_for_selector('#venster.aan #vf-tekst'); page.screenshot(path=OUT + '/23b_desk_taak_venster.png'); page.click('#venster [data-cf-annuleer]')  # v3.7
+    page.locator('.dtabel tr[data-taakbewerk="tk3"]').focus(); page.keyboard.press('1'); page.wait_for_selector('.dtabel tr[data-taakbewerk="tk3"] .tag.hoog')  # v4.5: sneltoets 1 = hoog
+    page.keyboard.press('n'); page.wait_for_selector('#crmNieuw #cf-tekst'); page.click('#crmNieuw [data-cf-annuleer]')  # v4.5: n = nieuwe taak
+    page.goto('http://127.0.0.1:8765/#taak:tk3'); page.wait_for_selector('#venster.aan #vf-tekst'); assert page.input_value('#vf-tekst') == 'Evaluatie periode 1 inplannen', 'deeplink #taak:<id> opent de taak'; page.click('#venster [data-cf-annuleer]')  # v4.5
     page.click('.zb-item[data-desk="agenda"]'); page.wait_for_selector('.maand .dag'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/24_desk_agenda.png')
     page.click('[data-agnav="1"]'); page.wait_for_timeout(300); page.click('[data-agnav="0"]'); page.wait_for_selector('.maand .dag.vandaag')
