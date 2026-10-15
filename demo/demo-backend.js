@@ -63,7 +63,8 @@ var _demoCache = {};
 var CacheService = { getScriptCache: function () { return { get: function (k) { return _demoCache[k] || null; }, put: function (k, v) { _demoCache[k] = v; }, remove: function (k) { delete _demoCache[k]; } }; } };
 var ContentService = { MimeType: { JSON: 'json' }, createTextOutput: function (t) { return { setMimeType: function () { return t; }, getContent: function () { return t; } }; } };
 var Logger = { log: function () {} };
-var MailApp = { sendEmail: function () {} };
+var _demoVerzonden = [];  // v4.6: verstuurde mails (herinneringen), voor de rooktest
+var MailApp = { sendEmail: function (o) { _demoVerzonden.push(o); } };
 var MimeType = { GOOGLE_DOCS: 'gdoc', GOOGLE_SHEETS: 'gsheet', PLAIN_TEXT: 'txt', CSV: 'csv', PDF: 'pdf', MICROSOFT_WORD: 'doc' };
 var ScriptApp = { getProjectTriggers: function () { return []; }, deleteTrigger: function () {},
   newTrigger: function () { var t = { timeBased: function () { return t; }, everyHours: function () { return t; }, everyMinutes: function () { return t; }, everyDays: function () { return t; }, atHour: function () { return t; }, onMonthDay: function () { return t; }, nearMinute: function () { return t; }, create: function () { return t; } }; return t; } };
@@ -366,7 +367,11 @@ function demoVul() {
     taak('tk3', 'Tweede gesprek Vakcollege Rijnzicht plannen', M.noor, -3, 'midden', 'afspraak', { schoolId: 's8', kansId: 'k8' }),
     taak('tk4', 'Tarief Waterpoort College bevestigen', M.lars, 1, 'hoog', 'mailen', { schoolId: 's7', kansId: 'k7' }),
     taak('tk5', 'Kennismaking De Zonnewijzer plannen', M.yara, 4, 'midden', 'afspraak', { schoolId: 's9', kansId: 'k9' }),
-    taak('tk6', 'Rooster periode 2 afstemmen met Marieke', M.femke, 1, 'hoog', 'afspraak', { schoolId: 's1', trajectId: 't1', persoonId: 'p1', tijd: '10:30' }),  // v4.5: met tijd
+    taak('tk6', 'Rooster periode 2 afstemmen met Marieke', M.femke, 1, 'hoog', 'afspraak', { schoolId: 's1', trajectId: 't1', persoonId: 'p1', tijd: '10:30', tags: 'rooster, periode 2' }),  // v4.5: met tijd; v4.6: tags
+    // v4.6: twee subtaken onder tk6 en een taak met een tijd over tien minuten (voor de herinneringsmail)
+    taak('tk6a', 'Beschikbaarheid ondersteuners nagaan', M.femke, 1, 'midden', 'overig', { schoolId: 's1', trajectId: 't1', ouderId: 'tk6', tags: 'rooster' }),
+    taak('tk6b', 'Conceptrooster naar Marieke mailen', M.femke, 1, 'midden', 'mailen', { schoolId: 's1', trajectId: 't1', persoonId: 'p1', ouderId: 'tk6' }),
+    taak('tk19', 'Bellen met de administratie van het Kompas College', M.femke, 0, 'hoog', 'bellen', { schoolId: 's2', trajectId: 't2', tijd: (function () { var z = new Date(Date.now() + 10 * 60000); return ('0' + z.getHours()).slice(-2) + ':' + ('0' + z.getMinutes()).slice(-2); })(), tags: 'factuur' }),
     taak('tk7', 'Factuur Lyceum Valkenoord versturen', M.ruben, -2, 'hoog', 'overig', { schoolId: 's6', trajectId: 't5' }),
     taak('tk8', 'Matchinggesprek Thijs Brouwer (Kompas College, Rekenondersteuner)', M.ruben, 3, 'hoog', 'afspraak', { schoolId: 's2', trajectId: 't9' }),
     taak('tk9', 'Kennismaking ondersteuners ISK Havenstad plannen', M.bas, 5, 'midden', 'afspraak', { schoolId: 's4', trajectId: 't4' }),

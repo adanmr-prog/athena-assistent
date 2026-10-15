@@ -26,7 +26,7 @@ Draai hem onder het werkaccount (`menno.adan@athenastudies.nl`), dan ziet hij de
 
 4. Kies bovenin de functie `setup` en klik **Uitvoeren**. Geef de gevraagde rechten (Sheets, Drive, Gmail, Agenda, externe verbindingen).
    De log toont drie dingen: de URL van de Sheet, de URL van de documentenmap en de **koppelcode**. Bewaar die koppelcode.
-   `setup()` maakt ook de triggers aan: documenten inlezen (04:00), de nachtelijke review (05:00) en (v2.0) elk uur mail en agenda aan het CRM koppelen.
+   `setup()` maakt ook de triggers aan: documenten inlezen (04:00), de nachtelijke review (05:00), (v2.0) elk uur mail en agenda aan het CRM koppelen en (v4.6) elk kwartier de herinneringsmail bij taken met een tijd. Bestaande installatie na v4.6: één keer `setup()` draaien onder het account van de eigenaar, anders ontbreekt die laatste trigger (het instellingenscherm in de app meldt dat).
    Bestaande installatie bijwerken naar v2.0: plak de nieuwe `Code.gs`, draai `setup()` één keer opnieuw (maakt de nieuwe tabbladen en kolommen,
    zet contactpersonen en notities over, installeert de uurlijkse trigger) en implementeer een nieuwe versie.
 5. Optioneel: **Services → + → Drive API** toevoegen. Dan leest de index ook de tekst uit PDF's en Word-bestanden (met OCR).
@@ -59,7 +59,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | fn | args | result |
 |---|---|---|
 | `apiOverzicht` | — | `{ datum, groet, kpi:{trajecten,kansen,scholen,omzet,schooljaar,pijplijn}, focus:[actie], aandacht:[actie], mails:[{onderwerp,van,dagen,link}], agenda:[{tijd,titel,duurMin}], kansen:[kans] }` |
-| `apiActieKlaar` | id | `{ id, status: 'af', afgerond, volgende: taak\|null }` (v4.5: `volgende` is de nieuwe instantie van een herhalende taak; alleen eigen taken of die van je team) |
+| `apiActieKlaar` | id | `{ id, status: 'af', afgerond, volgende: taak\|null, ouderKlaar }` (v4.5: `volgende` is de nieuwe instantie van een herhalende taak; alleen eigen taken of die van je team; v4.6: open subtaken gaan mee af, `ouderKlaar` = dit was de laatste open subtaak) |
 | `apiActieToevoegen` | tekst, prio, deadline, extra? `{tijd, herhaling, categorie, eigenaar, schoolId, persoonId, kansId, trajectId, notitie}` | taak (v4.5: intern `apiTaakOpslaan` met `bron: 'handmatig'`; de oude aanroep met drie argumenten blijft werken) |
 | `apiKennisbank` | — | `{ tellingen, documenten:[{id,titel,type,school,url,gewijzigd,woorden}], laatsteIndex, mapUrl }` |
 | `apiIndexeer` | — | `{ aantal, nieuw, bijgewerkt, verwijderd }` |
@@ -76,7 +76,7 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiTrajectOpslaan` | object (met of zonder id) | traject |
 | `apiNotitieToevoegen` | trajectId, tekst | `{ id, datum, tekst }` |
 | `apiImporteer` | tabel, rijen | `{ ingevoegd, bijgewerkt, ongewijzigd }` |
-| `apiStatus` | — | status van de installatie (v2.0: ook `gebruiker`, `crmSyncTrigger`, `laatsteCrmSync`, `capsuleToken`, `capsuleMigratie`) |
+| `apiStatus` | — | status van de installatie (v2.0: ook `gebruiker`, `crmSyncTrigger`, `laatsteCrmSync`, `capsuleToken`, `capsuleMigratie`; v4.6: `herinneringTrigger`, `herinneringen`, `email`) |
 
 ### CRM (v2.0, module Relaties)
 
@@ -93,9 +93,11 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiMijlpalenOpslaan` | `[{pipeline,mijlpaal,kans,dagenNorm}]` | mijlpalen (alleen beheerder) |
 | `apiActiviteitToevoegen` | `{type:notitie\|gesprek\|mail\|afspraak, schoolId?, persoonId?, kansId?, onderwerp, tekst, datum?, duurMin?}` | activiteit |
 | `apiAfspraakPlannen` | `{titel, start:'yyyy-MM-ddTHH:mm', duurMin, locatie, notitie, uitnodigen, schoolId?, persoonId?, kansId?}` | activiteit (zet ook een afspraak in Google Agenda) |
-| `apiTaken` | — | `{ taken:[taak], categorieen, gebruikers, tracks }` (open + afgerond in de laatste 14 dagen) |
-| `apiTaakOpslaan` | object (`TAAK_VELDEN`; v4.5 ook `tijd` `HH:mm`, `herhaling` als object, `bron` alleen bij nieuw) | taak (afvinken gaat via `apiActieKlaar`; een bestaande taak alleen als hij van jou of je team is; toewijzen aan een ander geeft die persoon een melding) |
+| `apiTaken` | — | `{ taken:[taak], categorieen, gebruikers, tracks, tags, weergaven, herinneringen }` (open + afgerond in de laatste 14 dagen; v4.6: `tags` in gebruik, de opgeslagen weergaven en de herinneringsinstelling van deze gebruiker) |
+| `apiTaakOpslaan` | object (`TAAK_VELDEN`; v4.5 ook `tijd` `HH:mm`, `herhaling` als object, `bron` alleen bij nieuw; v4.6 `tags` als kommatekst en `ouderId` van de hoofdtaak) | taak (afvinken gaat via `apiActieKlaar`; een bestaande taak alleen als hij van jou of je team is; toewijzen aan een ander geeft die persoon een melding) |
 | `apiTaak` (v4.5) | id | taak (van jou of je team, of gekoppeld aan een zichtbaar project of een zichtbare kans) |
+| `apiTaakWeergavenOpslaan` (v4.6) | `[{naam, filter:{mijn, schoolId, trajectId, categorie, tag, prio, weergave}}]` (max. 12; vervangt de hele lijst) | de opgeschoonde lijst |
+| `apiHerinneringenZetten` (v4.6) | aan (boolean) | `{ aan }` |
 | `apiTrackOpslaan` | `{id?, naam, omschrijving, stappen:[{tekst,categorie,dagenNaStart,prio}]}` | tracks (alleen beheerder) |
 | `apiTrackStart` | trackId, `{schoolId?,persoonId?,kansId?}`, startdatum, eigenaar | `{ aantal, track }` |
 | `apiRapport` | preset (zie `apiTeamRapport`), eigenaar?, stap? (v4.4) | `{ team, perPersoon:[{naam,cijfers,doelen}], totaal, forecast, trechter, winst, redenen, stil, ... }` |
@@ -104,14 +106,14 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiCrmSync` | — | `{ mails, afspraken, bijgewerkt }` |
 | `apiCrmInrichten` | — | `{ personen, kansen, trajecten, notities, eigenaren }` (oude velden overzetten; idempotent) |
 | `apiCapsuleMigratie` | stap, pagina | `{ stap, aantal, volgende:{stap,pagina}\|null }` (de app roept herhaald aan tot `volgende` null is) |
-| `apiHome` | — | `{ groet, datum, ik, taken:[taak], agenda:[{id,sleutel,titel,start,eind,heleDag,locatie}], pipeline:{open,waarde,gewogen,stil}, recent:[activiteit], mails }` (v3.0, desktop-Home) |
+| `apiHome` | — | `{ groet, datum, ik, taken:[taak], agenda:[{id,sleutel,titel,start,eind,heleDag,locatie}], pipeline:{open,waarde,gewogen,stil}, recent:[activiteit], mails, afgerondWeek, streak }` (v3.0, desktop-Home; v4.6: eigen taken afgerond deze week en het aantal werkdagen op rij met minstens één afgevinkte taak) |
 | `apiActiviteiten` | door, van, tot, team? | `{ door, totaal, perType, tijdlijn }` (v3.3; niet-beheerders krijgen altijd hun eigen activiteit; v4.4: met `team` zonder `door` alleen de activiteit van dat team) |
 | `apiArchiefTijdlijn` | `school\|persoon\|kans`, id | `[activiteit]` uit `Activiteiten_archief` (v3.3) |
 | `apiArchiveer` | — | `{ gearchiveerd, over }` (v3.3, alleen beheerder; draait ook elke 1e van de maand) |
 | `apiHomeMails` | — | `[{onderwerp,van,dagen,link}]` (v3.2: los van `apiHome`, omdat Gmail traag is; `apiHome` geeft `mails: []`) |
 | `apiAgenda` | van, tot (`yyyy-MM-dd`, max. 62 dagen) | `{ van, tot, events:[google-afspraak (+schoolId/school als hij aan het CRM hangt)], afspraken:[activiteit], taken:[taak] }` (v3.0) |
 | `apiExport` | `scholen\|personen\|kansen\|activiteiten\|taken\|trajecten` | `{ bestandsnaam, csv }` |
-| `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak\|traject\|notitie\|content\|doel`, id, opties? `{agenda: true}` | null (school alleen zonder personen en kansen; eigenaar of beheerder; `agenda` haalt een afspraak ook uit Google Agenda) |
+| `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak\|traject\|notitie\|content\|doel`, id, opties? `{agenda: true}` of `{metSubtaken: true}` | null (school alleen zonder personen en kansen; eigenaar of beheerder; `agenda` haalt een afspraak ook uit Google Agenda; v4.6: bij een taak gaan de subtaken mee met `metSubtaken`, anders worden ze losse taken) |
 | `apiProject` (v3.8) | id | `{ project, school, kans, personen, taken, tijdlijn (incl. historie van de kans), losseMails, facturen (null zonder facturatierecht), keuzes, rechten:{wijzigen,facturatie,facturatieWijzigen} }` |
 | `apiFacturatie` | — | `{ projecten (+facturen), keuzes, gebruikers, ik }` |
 | `apiFactuurOpslaan` / `apiFacturenMaken` | `{id?, trajectId, omschrijving, bedrag, datum, status, factuurnummer, bijzonderheden, _oud?}` / trajectId, `{per: 'maand'\|'eenmalig', van, tot, bedrag, zomer}` | termijn / termijnen van het project |
@@ -121,13 +123,22 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiTaakHeropen` | id | taak (v4.5: alleen eigen taken of die van je team; de heropende instantie verliest haar `herhaling`, anders ontstaan twee open instanties) |
 | `apiTrackStoppen` / `apiTrackVerwijderen` | trackRunId / trackId | `{aantal}` / tracks |
 | `apiInstellingen` / `apiKeuzelijstOpslaan` | — / sleutel (`schoolStatussen\|taakCategorieen\|trajectStatussen`), `[{waarde, oud}]` | `{schoolStatussen, taakCategorieen, trajectStatussen}`; hernoemde waarden gaan mee in bestaande rijen |
-| `apiVelden` / `apiTagHernoem` / `apiVeldHernoem` | — / oud, nieuw (leeg = weg) | `{tags, velden}` / `{aantal}` |
+| `apiVelden` / `apiTagHernoem` / `apiVeldHernoem` | — / oud, nieuw (leeg = weg) | `{tags, velden}` / `{aantal}` (v4.6: tags ook op `Acties`) |
 | `apiHuisstijlOpslaan` | `{veld: waarde, …}` | zoals `apiHuisstijl` (+ `magBewerken`) |
 | `apiContentOpslaan` | `{id, onderwerp?, tekst?}` | content |
 | `apiDocumentOpslaan` | id, `{type?, school?}` | document; de correctie blijft bij het volgende inlezen (Instellingen `documentCorrecties`) |
 
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans` en sinds v4.5 `tijd, herhaling, bijgewerkt`.
+
+## Taken zoals Todoist, deel 2 (v4.6)
+
+- **Nieuwe kolommen** op `Acties` (achteraan): `tags` (kommatekst, klein en uniek via `tagsIn`), `ouderId` (de hoofdtaak; één niveau) en `herinnerd` (datum-tijd van de herinneringsmail).
+- **Subtaken:** `apiTaakOpslaan` controleert dat de hoofdtaak bestaat, zichtbaar is en zelf geen hoofdtaak heeft, en dat een taak met subtaken geen subtaak wordt. `taakUit` geeft `ouderId`, `ouder` (tekst van de hoofdtaak) en `subtaken: {aantal, af}`; `taakIndex()` telt dat één keer per verzoek. Afvinken van een hoofdtaak vinkt open subtaken mee af; de laatste subtaak geeft `ouderKlaar: true`. Verwijderen: met `{metSubtaken: true}` gaan de subtaken mee, anders worden ze losse taken. De volgende instantie van een herhalende taak houdt haar `tags` en `ouderId`; subtaken van een herhalende hoofdtaak worden niet gekopieerd.
+- **Tags:** `apiTaken` geeft `tags` (alles in gebruik); `apiTagHernoem` en `apiVelden` nemen `Acties` mee.
+- **Opgeslagen weergaven en instellingen per gebruiker** staan in `Instellingen` onder `taakWeergaven:<gebruikersId>` en `herinneringen:<gebruikersId>` (de eigenaar van het script is `beheer`): `apiTaakWeergavenOpslaan(lijst)` (whitelist, max. 12) en `apiHerinneringenZetten(aan)`; `apiTaken` geeft beide mee.
+- **Herinneringsmail:** `herinneringTrigger` (elke 15 minuten, in `TRIGGERS`; één keer `setup()` draaien onder het account van de eigenaar) zoekt open taken van vandaag met een `tijd` die binnen een kwartier begint en nog geen `herinnerd` hebben, zet eerst `herinnerd` (alleen die cel, zonder `bijgewerkt` te raken) en stuurt daarna per gebruiker één mail in de huisstijl naar `Gebruikers.email` (eigenaar: `RAPPORT_EMAIL`), onderwerp `Athena · 14:00 · Bel Marieke`, met een knop naar `APP_URL#taak:<id>`. Geen e-mailadres of herinneringen uit → geen mail. Een tijd die al meer dan een uur voorbij is (trigger stond stil) wordt alleen gemarkeerd. Scripteigenschap `APP_URL` (standaard de GitHub Pages-URL) bepaalt de link.
+- **Home:** `apiHome` geeft `afgerondWeek` en `streak` (werkdagen op rij met minstens één afgevinkte eigen taak; vandaag breekt de reeks niet zolang de dag loopt). `apiStatus` geeft `herinneringTrigger`, `herinneringen` en `email`.
 
 ## Taken zoals Todoist, deel 1 (v4.5)
 
