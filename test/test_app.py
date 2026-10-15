@@ -158,14 +158,17 @@ with sync_playwright() as p:
     page.fill('#taakSnel', ''); page.click('[data-taakweergave="alles"]'); page.wait_for_selector('[data-taakklaar="tk3"]')
     # v4.6: subtaken onder de hoofdtaak, tags als filter, opgeslagen weergaven, weekweergave
     assert page.locator('.rij.sub:has-text("Datum prikken met Anna")').count() == 1 and 'subtaken' in page.locator('.rij:has-text("Evaluatie periode 1 inplannen") .r-meta').inner_text(), 'subtaken ingesprongen onder de hoofdtaak, met teller'
+    assert page.locator('#tfTag').count() == 0, 'filterbalk op de telefoon ingeklapt'; page.click('[data-filtertoon]'); page.wait_for_selector('#tfTag')  # v4.6: filters achter één chip
     page.select_option('#tfTag', 'evaluatie'); page.wait_for_selector('.rij:has-text("Evaluatie periode 1 inplannen")'); page.wait_for_timeout(100)
+    assert 'Filter (1)' in page.locator('[data-filtertoon]').inner_text(), 'de chip telt de actieve filters'
     assert page.locator('.rij:has-text("Teamuitje plannen")').count() == 0, 'tagfilter verbergt taken zonder die tag'
     page.click('[data-weergave-opslaan]'); page.wait_for_selector('#venster.aan #vf-naam'); page.fill('#vf-naam', 'Evaluaties'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.opgeslagen .chip.aan:has-text("Evaluaties")')
     page.select_option('#tfTag', ''); page.wait_for_selector('.rij:has-text("Teamuitje plannen")'); assert page.locator('.opgeslagen .chip.aan').count() == 0, 'een filter wijzigen maakt de opgeslagen weergave niet-actief'
     page.click('.opgeslagen [data-weergave-kies="0"]'); page.wait_for_selector('.opgeslagen .chip.aan'); page.wait_for_timeout(100); assert page.locator('.rij:has-text("Teamuitje plannen")').count() == 0, 'opgeslagen weergave zet het tagfilter terug'
     page.screenshot(path=OUT + '/15c_taken_filter.png', full_page=True)
     page.select_option('#tfTag', ''); page.wait_for_selector('.rij:has-text("Teamuitje plannen")')
-    page.click('[data-taakweergave="week"]'); page.wait_for_selector('.weekblok'); page.wait_for_timeout(200); assert page.locator('.weekblok').count() == 7, 'weekweergave met zeven dagblokken'
+    page.click('[data-taakweergave="week"]'); page.wait_for_selector('.weekblok'); page.wait_for_timeout(200); assert page.locator('.weekblok').count() == 7 and page.locator('[data-filtertoon]').count() == 1, 'weekweergave met zeven dagblokken en de filterchip'
+    page.select_option('#tfTag', 'evaluatie'); page.wait_for_timeout(200); assert page.locator('.weekblok .rij:has-text("Teamuitje plannen")').count() == 0 and page.locator('.weekblok').count() == 7, 'de weekweergave volgt het tagfilter'; page.select_option('#tfTag', ''); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/15d_taken_week.png', full_page=True)
     page.click('[data-weeknav="1"]'); page.wait_for_selector('.weekblok'); page.click('[data-weeknav="0"]'); page.wait_for_selector('.weekblok'); assert page.locator('.weekblok').count() == 7, 'weeknavigatie'
     page.click('[data-taakweergave="alles"]'); page.wait_for_selector('[data-taakklaar="tk3"]')

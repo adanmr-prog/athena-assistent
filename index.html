@@ -556,7 +556,9 @@
   .filterbalk { margin-top: 12px; }
   .filterbalk select { flex: 1 1 120px; font-size: 12.5px; padding: 6px 8px; }
   .opgeslagen { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 12.5px; color: var(--gedempt); }
-  .opgeslagen .weg { margin-left: 8px; padding: 0 4px; color: var(--gedempt); font-weight: 400; }
+  .chipgroep { display: inline-flex; }  /* kiezen en verwijderen als twee losse knoppen: eigen tikdoel, bereikbaar voor VoiceOver */
+  .chipgroep .chip:first-child { border-radius: 999px 0 0 999px; border-right: none; }
+  .chipgroep .chip.weg { border-radius: 0 999px 999px 0; min-width: 32px; min-height: 30px; padding: 4px 10px; color: var(--gedempt); font-weight: 400; }
   .weekblok .kop { margin-top: 18px; }
   .weekblok .kop.dagkop { color: var(--inkt2); }
 </style>
@@ -1588,7 +1590,7 @@
 
   /* ===== 6. Relaties (v2.0): het eigen CRM — vervangt Capsule. Scholen, personen, pipeline, taken, tracks, tijdlijn en rapportage. ===== */
   var CRM = { tab: 'scholen', basis: null, pipeline: null, taken: null, rapport: null, pijp: null, mijn: false, zoek: '', fStatus: '', fTag: '', fPipeline: '', preset: 'maand', rTeam: '', rEigenaar: '', rStap: 0, rMetric: '', detail: null,
-    tf: { schoolId: '', trajectId: '', categorie: '', tag: '', prio: '' }, weergaveActief: null, week: null, weekDatum: null };  // v4.2: rTeam, pijp; v4.4: rStap (‹ ›), rMetric (verloop); v4.6: taakfilters, gekozen opgeslagen weergave, weekweergave
+    tf: { schoolId: '', trajectId: '', categorie: '', tag: '', prio: '' }, filterOpen: false, weergaveActief: null, week: null, weekDatum: null };  // v4.2: rTeam, pijp; v4.4: rStap (‹ ›), rMetric (verloop); v4.6: taakfilters (op de telefoon ingeklapt), gekozen opgeslagen weergave, weekweergave
   var CRM_TABS = [['scholen', 'Scholen'], ['personen', 'Personen'], ['pipeline', 'Pipeline'], ['taken', 'Taken'], ['rapport', 'Rapport']];
   var ACT_KORT = { notitie: 'NOT', gesprek: 'BEL', mail: 'MAIL', afspraak: 'AFS', fase: 'FASE', taak: 'TAAK' };
   var ACT_LABEL = { notitie: 'Notitie', gesprek: 'Gesprek', mail: 'Mail', afspraak: 'Afspraak', fase: 'Mijlpaal', taak: 'Taak' };
@@ -1841,11 +1843,20 @@
     if (f.schoolId && !scholen[f.schoolId]) scholen[f.schoolId] = naamVan(B.scholen, f.schoolId) || f.schoolId;
     if (f.trajectId && !projecten[f.trajectId]) projecten[f.trajectId] = naamVan(B.projecten || [], f.trajectId) || f.trajectId;
     var opties = function (m) { return Object.keys(m).map(function (k) { return { waarde: k, label: m[k] }; }).sort(function (a, b) { return String(a.label).localeCompare(String(b.label), 'nl'); }); };
-    var tags = metHuidig((T.tags || []).slice(), f.tag);
-    var h = '<div class="balk filterbalk">' + sel('tfSchool', 'Alle scholen', opties(scholen), f.schoolId) + sel('tfProject', 'Alle projecten', opties(projecten), f.trajectId) + sel('tfCategorie', 'Alle categorieën', metHuidig(B.categorieen.slice(), f.categorie), f.categorie) +
+    var tags = metHuidig((T.tags || []).slice(), f.tag), actief = [f.schoolId, f.trajectId, f.categorie, f.tag, f.prio].filter(Boolean).length, open = isDesk() || CRM.filterOpen, h = '';
+    // op de telefoon staan de keuzelijsten achter één chip, anders staat de eerste taak pas onder een scherm vol bediening
+    if (!isDesk()) h += '<div class="balk" style="margin-top:12px"><button class="chip' + (actief ? ' aan' : '') + '" data-filtertoon="1" aria-expanded="' + (open ? 'true' : 'false') + '">Filter' + (actief ? ' (' + actief + ')' : '') + (open ? ' ▴' : ' ▾') + '</button></div>';
+    if (open) h += '<div class="balk filterbalk">' + sel('tfSchool', 'Alle scholen', opties(scholen), f.schoolId) + sel('tfProject', 'Alle projecten', opties(projecten), f.trajectId) + sel('tfCategorie', 'Alle categorieën', metHuidig(B.categorieen.slice(), f.categorie), f.categorie) +
       (tags.length ? sel('tfTag', 'Alle tags', tags, f.tag) : '') + sel('tfPrio', 'Alle prioriteiten', ['hoog', 'midden', 'laag'], f.prio) + '<button class="chip" data-weergave-opslaan="1">Weergave opslaan</button></div>';
-    if ((T.weergaven || []).length) h += '<div class="opgeslagen">Opgeslagen:' + T.weergaven.map(function (w, i) { return '<button class="chip' + (CRM.weergaveActief === i ? ' aan' : '') + '" data-weergave-kies="' + i + '">' + esc(w.naam) + '<span class="weg" data-weergave-weg="' + i + '" aria-label="Weergave verwijderen">×</span></button>'; }).join('') + '</div>';
+    if ((T.weergaven || []).length) h += '<div class="opgeslagen">Opgeslagen:' + T.weergaven.map(function (w, i) {
+      return '<span class="chipgroep"><button class="chip' + (CRM.weergaveActief === i ? ' aan' : '') + '" data-weergave-kies="' + i + '">' + esc(w.naam) + '</button><button class="chip weg" data-weergave-weg="' + i + '" aria-label="Weergave ' + esc(w.naam) + ' verwijderen">×</button></span>';
+    }).join('') + '</div>';
     return h;
+  }
+  // v4.6: dezelfde voorwaarde voor de lijst en de weekweergave: Alleen mijn, de filterbalk en het zoekveld
+  function taakInLijst(t) {
+    var B = CRM.basis, q = CRM.zoek.toLowerCase();
+    return (!CRM.mijn || t.eigenaar === B.ik.naam) && taakFilter(t) && zoekMatch(q, [t.tekst, t.school, t.persoon, t.kans, t.project, t.eigenaar, t.categorie, (t.tags || []).join(' ')]);
   }
   function taakFilter(t) {  // v4.6
     var f = CRM.tf;
@@ -1861,12 +1872,12 @@
   function renderTaken() {
     var T = CRM.taken, B = CRM.basis, q = CRM.zoek.toLowerCase(), vandaag = vandaagStr(), W = taakWeergave(), grens = pYmd(pPlus(new Date(), 7));
     el('crmBalk').innerHTML = mijnChip() + TAAK_WEERGAVEN.map(function (w) { return '<button class="chip' + (W === w[0] ? ' aan' : '') + '" data-taakweergave="' + w[0] + '">' + w[1] + '</button>'; }).join('') + '<button class="knop klein" data-crmnieuw="taak">Nieuwe taak</button>';
-    var lijst = T.taken.filter(function (t) { return (!CRM.mijn || t.eigenaar === B.ik.naam) && taakFilter(t) && zoekMatch(q, [t.tekst, t.school, t.persoon, t.kans, t.project, t.eigenaar, t.categorie, (t.tags || []).join(' ')]); });  // v4.6: filters en tags
+    var lijst = T.taken.filter(taakInLijst);  // v4.6: filters en tags
     var open = lijst.filter(function (t) { return t.status !== 'af'; }), af = lijst.filter(function (t) { return t.status === 'af'; });
     var rijen = function (ts) { var l = geordend(ts), inL = {}; l.forEach(function (t) { inL[t.id] = true; }); return isDesk() ? deskTakenTabel(l) : l.map(function (t) { return taakRij(t, true, !!(t.ouderId && inL[t.ouderId])); }).join(''); };  // v3.0: tabel op desktop; v4.6: subtaken onder de hoofdtaak
     var groep = function (titel, ts, klas) { return ts.length ? '<div class="kop' + (klas ? ' ' + klas : '') + '">' + esc(titel) + ' <small>' + ts.length + '</small></div>' + rijen(ts) : ''; };
     var laat = open.filter(function (t) { return t.deadline && t.deadline < vandaag; }), nu_ = open.filter(function (t) { return t.deadline === vandaag; }), zonder = open.filter(function (t) { return !t.deadline; });
-    var h = W === 'week' ? '' : taakFilterBalk(T);  // de snelinvoer (#crmSnel) staat in vaste HTML boven deze lijst; v4.6: filterbalk
+    var h = taakFilterBalk(T);  // de snelinvoer (#crmSnel) staat in vaste HTML boven deze lijst; v4.6: filterbalk (geldt ook voor de weekweergave)
     if (W === 'week') h += weekHtml();
     else if (W === 'vandaag') h += laat.length || nu_.length ? groep('Te laat', laat) + groep('Vandaag', nu_) : '<div class="leeg">Niets voor vandaag.</div>';
     else if (W === 'komende') {
@@ -1890,17 +1901,21 @@
   function laadWeek() {
     var ma = weekStart(CRM.weekDatum || new Date()), van = ymd(ma), tot = ymd(new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() + 6, 12));
     if (CRM.week && CRM.week.van === van) return;
-    CRM.week = { van: van, tot: tot, data: null };
-    run('apiAgenda', van, tot).then(function (r) { if (CRM.week && CRM.week.van === van) { CRM.week.data = r; if (CRM.tab === 'taken' && taakWeergave() === 'week' && CRM.taken) renderTaken(); } }).catch(function () { CRM.week = null; });
+    CRM.week = { van: van, tot: tot, data: null, fout: false };
+    var vers = function () { if (CRM.tab === 'taken' && taakWeergave() === 'week' && CRM.taken) renderTaken(); };
+    // alleen de week die nog getoond wordt bijwerken: wie intussen naar een andere week bladerde, mag geen oud antwoord of oude fout krijgen
+    run('apiAgenda', van, tot).then(function (r) { if (CRM.week && CRM.week.van === van) { CRM.week.data = r; vers(); } })
+      .catch(function () { if (CRM.week && CRM.week.van === van) { CRM.week.fout = true; vers(); } });
   }
   function weekHtml() {
     var ma = weekStart(CRM.weekDatum || new Date()), vandaag = vandaagStr(), zo = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() + 6, 12);
     var h = '<div class="balk" style="margin-top:12px"><button class="chip" data-weeknav="-1" aria-label="Vorige week">‹</button><button class="chip" data-weeknav="0">Vandaag</button><button class="chip" data-weeknav="1" aria-label="Volgende week">›</button><span class="zacht">' + esc(kortDatum(ymd(ma)) + ' – ' + kortDatum(ymd(zo))) + '</span></div>';
-    if (!CRM.week || !CRM.week.data || CRM.week.van !== ymd(ma)) { laadWeek(); return h + '<div class="spinner">Laden</div>'; }
+    if (!CRM.week || CRM.week.van !== ymd(ma) || (!CRM.week.data && !CRM.week.fout)) { laadWeek(); return h + '<div class="spinner">Laden</div>'; }
+    if (CRM.week.fout) return h + '<div class="leeg">Kon de week niet laden. <button class="chip" data-weekopnieuw="1">Opnieuw</button></div>';  // nooit een eeuwige spinner
     var per = agendaPerDag(CRM.week.data);
     for (var i = 0; i < 7; i++) {
-      var d = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() + i, 12), k = ymd(d), items = per[k] || [];
-      h += '<div class="weekblok"><div class="kop' + (k === vandaag ? '' : ' dagkop') + '">' + esc(DAGEN_KORT[i] + ' ' + kortDatum(k)) + (k === vandaag ? ' <small>vandaag</small>' : '') + ' <small>' + items.length + '</small></div>' +
+      var d = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() + i, 12), k = ymd(d), items = (per[k] || []).filter(function (x) { return !x.taak || taakInLijst(x.taak); });  // taken volgen Alleen mijn, de filters en het zoekveld
+      h += '<div class="weekblok"><div class="kop' + (k === vandaag ? '' : ' dagkop') + '">' + esc(DAGEN_KORT[i] + ' ' + kortDatum(k)) + ' <small>' + (k === vandaag ? 'vandaag · ' : '') + items.length + '</small></div>' +
         (items.length ? items.map(function (x) {
           if (x.taak) return taakRij(x.taak, true);
           return '<div class="agenda-blok' + (x.open ? ' klik" data-crm-open="' + esc(x.open) + '" style="cursor:pointer' : '') + '"><span class="tijd">' + (x.tijd ? esc(x.tijd) : 'dag') + '</span><div>' + esc(x.titel) + (x.sub ? ' <span class="zacht">· ' + esc(x.sub) + '</span>' : '') + '</div></div>';
@@ -2472,6 +2487,8 @@
     if ((x = t.closest('[data-weergave-kies]'))) { weergaveKies(Number(x.getAttribute('data-weergave-kies'))); return; }
     if (t.closest('[data-weergave-opslaan]')) { weergaveOpslaan(); return; }
     if ((x = t.closest('[data-weeknav]'))) { var wn = Number(x.dataset.weeknav), wb = CRM.weekDatum || new Date(); CRM.weekDatum = wn === 0 ? new Date() : new Date(wb.getFullYear(), wb.getMonth(), wb.getDate() + 7 * wn, 12); CRM.week = null; renderCrm(); return; }
+    if (t.closest('[data-weekopnieuw]')) { CRM.week = null; renderCrm(); return; }
+    if (t.closest('[data-filtertoon]')) { CRM.filterOpen = !CRM.filterOpen; renderCrm(); return; }
     if ((x = t.closest('[data-crmnieuw]'))) { if (CRM.basis) nieuwVanuitLijst(x.dataset.crmnieuw); return; }
     if ((x = t.closest('[data-crmpreset]'))) { if (x.disabled) return; CRM.preset = x.dataset.crmpreset; CRM.rStap = 0; laadRapport(); return; }  // v4.4: andere periode begint bij nu
     if ((x = t.closest('[data-rstap]'))) { if (x.disabled) return; var st = x.getAttribute('data-rstap'); CRM.rStap = st === 'nu' ? 0 : Math.min(0, (CRM.rStap || 0) + Number(st)); laadRapport(); return; }  // v4.4
@@ -2640,7 +2657,10 @@
       var knoppenrij = '<div class="balk">' + (t.status === 'af' ? '<button class="knop licht klein" data-taakheropen="' + esc(t.id) + '">Heropenen</button>' : '') +
         (t.herhaling && t.status !== 'af' ? '<button class="knop licht klein" data-herhaalstop="' + esc(t.id) + '">Herhaling stoppen</button>' : '') +  // v4.5
         (t.trackRunId && t.status !== 'af' ? '<button class="knop licht klein" data-trackstop="' + esc(t.trackRunId) + '">Rest van deze track stoppen</button>' : '') +
-        (magWijzigen(t.eigenaar) ? '<button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '">Verwijderen</button>' : '') + '</div>';
+        // v4.6: een hoofdtaak met subtaken krijgt twee duidelijke knoppen; elke knop vraagt één keer om bevestiging en Annuleren doet dan echt niets
+        (magWijzigen(t.eigenaar) ? (t.subtaken && t.subtaken.aantal && t.status !== 'af'
+          ? '<button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '">Verwijderen, subtaken blijven</button><button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '" data-metsub="1">Verwijderen met ' + esc(t.subtaken.aantal) + ' subtaken</button>'
+          : '<button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '">Verwijderen</button>') : '') + '</div>';
       openVenster(formHtml(t.status === 'af' ? 'Afgeronde taak' : 'Taak', taakVelden(true, personen, t), w, 'Opslaan', function (f) {
         delete f.snel;
         if (!f.tekst) { toast('Wat moet er gebeuren?'); return; }
@@ -2918,8 +2938,8 @@
     if ((x = t.closest('[data-actbewerk]'))) { ev.stopPropagation(); bewerkActiviteit(x.getAttribute('data-actbewerk')); return; }
     if ((x = t.closest('[data-actweg]'))) { verwijderActiviteit(x.getAttribute('data-actweg')); return; }
     if ((x = t.closest('[data-taakweg]'))) {
-      var tw = x.getAttribute('data-taakweg'), tt = REG.taak[tw]; if (!window.confirm('Deze taak verwijderen?')) return;
-      var metSub = !!(tt && tt.subtaken && tt.subtaken.aantal) && window.confirm('Ook de ' + tt.subtaken.aantal + ' subtaken verwijderen? Annuleren laat ze staan als losse taken.');  // v4.6
+      var tw = x.getAttribute('data-taakweg'), tt = REG.taak[tw], metSub = x.getAttribute('data-metsub') === '1', nSub = tt && tt.subtaken ? tt.subtaken.aantal : 0;  // v4.6: één vraag, Annuleren annuleert
+      if (!window.confirm(metSub ? 'Deze taak en de ' + nSub + ' subtaken verwijderen?' : 'Deze taak verwijderen?' + (nSub ? ' De ' + nSub + ' subtaken blijven staan als losse taken.' : ''))) return;
       sluitVenster(); taakLokaal(tw, null); delete REG.taak[tw];
       run('apiVerwijder', 'taak', tw, { metSubtaken: metSub }).then(function () { toast('Taak verwijderd.'); if (tt && tt.subtaken && tt.subtaken.aantal) herlaadHuidig(); }).catch(herlaadHuidig); return;
     }
