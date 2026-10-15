@@ -71,11 +71,16 @@ CRMKANSEN = [
 TAKEN = [
     {'id': 'tk1', 'tekst': 'Voorstel NT2 nabellen', 'bron': 'crm', 'prio': 'hoog', 'deadline': d(-1), 'link': '', 'over': 1, 'categorie': 'bellen', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's3', 'persoonId': 'p3', 'kansId': 'k1'},
     {'id': 'tk2', 'tekst': 'Kennismakingsmail Montessori Demo', 'bron': 'track', 'prio': 'midden', 'deadline': d(0), 'link': '', 'over': 0, 'categorie': 'mailen', 'eigenaar': 'Mees', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's4', 'persoonId': '', 'kansId': 'k3'},
-    {'id': 'tk3', 'tekst': 'Evaluatie periode 1 inplannen', 'bron': 'crm', 'prio': 'laag', 'deadline': d(6), 'link': '', 'over': -6, 'categorie': 'afspraak', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's1', 'persoonId': 'p1', 'kansId': ''},
+    {'id': 'tk3', 'tekst': 'Evaluatie periode 1 inplannen', 'bron': 'crm', 'prio': 'laag', 'deadline': d(6), 'link': '', 'over': -6, 'categorie': 'afspraak', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's1', 'persoonId': 'p1', 'kansId': '', 'tags': ['evaluatie']},
+    # v4.6: twee subtaken onder tk3
+    {'id': 'tk3a', 'tekst': 'Datum prikken met Anna', 'bron': 'crm', 'prio': 'midden', 'deadline': d(6), 'link': '', 'over': -6, 'categorie': 'bellen', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's1', 'persoonId': 'p1', 'kansId': '', 'ouderId': 'tk3'},
+    {'id': 'tk3b', 'tekst': 'Zaal reserveren', 'bron': 'crm', 'prio': 'laag', 'deadline': d(6), 'link': '', 'over': -6, 'categorie': 'overig', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': 's1', 'persoonId': '', 'kansId': '', 'ouderId': 'tk3'},
     # v4.5: herhalende taak met tijd
     {'id': 'tk4', 'tekst': 'Weekstart team', 'bron': 'crm', 'prio': 'midden', 'deadline': d(5), 'link': '', 'over': -5, 'categorie': 'afspraak', 'eigenaar': 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': '', 'persoonId': '', 'kansId': '', 'tijd': '09:00', 'herhaling': {'eenheid': 'week', 'interval': 1, 'dagen': [1]}},
 ]
-for _t in TAKEN: _t.setdefault('tijd', ''); _t.setdefault('herhaling', None); _t.setdefault('trajectId', '')
+for _t in TAKEN: _t.setdefault('tijd', ''); _t.setdefault('herhaling', None); _t.setdefault('trajectId', ''); _t.setdefault('tags', []); _t.setdefault('ouderId', '')  # v4.6: tags, hoofdtaak
+WEERGAVEN, HERINNERINGEN = {}, {}  # v4.6: opgeslagen weergaven en de herinneringsinstelling per koppelcode
+def tags_lijst(v): return v if isinstance(v, list) else [x.strip().lower() for x in str(v or '').split(',') if x.strip()]
 ACTIVITEITEN = [
     {'id': 'e1', 'type': 'mail', 'datum': d(-3) + ' 09:12', 'door': 'Menno', 'schoolId': 's1', 'persoonId': 'p1', 'kansId': '', 'onderwerp': 'Mail verstuurd: Rooster periode 2', 'tekst': 'Hoi Anna,\n\nHierbij het rooster voor periode 2.', 'duurMin': 0, 'bron': 'gmail-uit'},
     {'id': 'e2', 'type': 'gesprek', 'datum': d(-9) + ' 14:00', 'door': 'Menno', 'schoolId': 's3', 'persoonId': 'p3', 'kansId': 'k1', 'onderwerp': 'Toelichting voorstel', 'tekst': 'Positief over de aanpak, wacht op budget van het bestuur.', 'duurMin': 20, 'bron': 'app'},
@@ -168,8 +173,10 @@ def kans_uit(k):
     return k
 def taak_uit(t):
     s, p, k = per_id(SCHOLEN).get(t.get('schoolId')), per_id(PERSONEN).get(t.get('persoonId')), per_id(CRMKANSEN).get(t.get('kansId'))
+    kinderen = [x for x in TAKEN if x.get('ouderId') == t['id']]; ouder = per_id(TAKEN).get(t.get('ouderId') or '')
     return dict(t, school=s['naam'] if s else '', persoon=persoon_uit(p)['naam'] if p else '', kans=k['naam'] if k else '', trajectId=t.get('trajectId', ''), project=projectnaam(t.get('trajectId')),
-                tijd=t.get('tijd', ''), herhaling=t.get('herhaling') or None, bijgewerkt=nu())  # v4.5
+                tijd=t.get('tijd', ''), herhaling=t.get('herhaling') or None, bijgewerkt=nu(),  # v4.5
+                tags=tags_lijst(t.get('tags')), ouderId=t.get('ouderId', ''), ouder=ouder['tekst'] if ouder else '', subtaken={'aantal': len(kinderen), 'af': len([x for x in kinderen if x['status'] == 'af'])})  # v4.6
 def volgende_instantie(t):  # v4.5: zoals volgendeInstantie in Code.gs, versimpeld: een week later
     n = dict(t, id='tk' + uuid.uuid4().hex[:5], status='open', afgerond='', deadline=(datetime.date.fromisoformat(t['deadline'] or d(0)) + datetime.timedelta(days=7)).isoformat()); TAKEN.append(n); return n
 def basis():
@@ -281,12 +288,16 @@ def handle_crm(fn, args):
         ACTIVITEITEN.append(a); return act_uit(a)
     if fn == 'apiPipeline' and not beheer(): geen_toegang()
     if fn == 'apiPipeline': return {'mijlpalen': MIJLPALEN, 'pipelines': ['Scholen'], 'kansen': [kans_uit(k) for k in CRMKANSEN], 'verliesRedenen': ['Te duur']}
-    if fn == 'apiTaken': return {'taken': [taak_uit(t) for t in TAKEN], 'categorieen': basis()['categorieen'], 'gebruikers': GEBRUIKERS_NAMEN, 'tracks': TRACKS}
+    if fn == 'apiTaken': return {'taken': [taak_uit(t) for t in TAKEN], 'categorieen': basis()['categorieen'], 'gebruikers': GEBRUIKERS_NAMEN, 'tracks': TRACKS,
+                                 'tags': sorted({x for t in TAKEN for x in tags_lijst(t.get('tags'))}), 'weergaven': WEERGAVEN.get(HUIDIG[0], []), 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True)}  # v4.6
     if fn == 'apiTaakOpslaan':
         o = dict(args[0]); o.pop('_oud', None); o.pop('snel', None)
         if o.get('herhaling') == '': o['herhaling'] = None  # v4.5
-        if not o.get('id'): o.update({'bron': o.get('bron') or 'crm', 'status': 'open', 'link': '', 'over': None, 'afgerond': ''}); [o.setdefault(k, '') for k in ['schoolId', 'persoonId', 'kansId', 'trajectId', 'deadline', 'tijd', 'categorie', 'notitie', 'eigenaar']]; o.setdefault('herhaling', None)
+        if 'tags' in o: o['tags'] = tags_lijst(o['tags'])  # v4.6
+        if not o.get('id'): o.update({'bron': o.get('bron') or 'crm', 'status': 'open', 'link': '', 'over': None, 'afgerond': ''}); [o.setdefault(k, '') for k in ['schoolId', 'persoonId', 'kansId', 'trajectId', 'deadline', 'tijd', 'categorie', 'notitie', 'eigenaar', 'ouderId']]; o.setdefault('herhaling', None); o.setdefault('tags', [])
         return taak_uit(opslaan(TAKEN, o, 'tk'))
+    if fn == 'apiTaakWeergavenOpslaan': WEERGAVEN[HUIDIG[0]] = list(args[0]); return WEERGAVEN[HUIDIG[0]]  # v4.6
+    if fn == 'apiHerinneringenZetten': HERINNERINGEN[HUIDIG[0]] = bool(args[0]); return {'aan': bool(args[0])}  # v4.6
     if fn == 'apiTaak': return taak_uit(per_id(TAKEN)[args[0]])  # v4.5
     if fn == 'apiTaakHeropen':  # v3.7
         t = per_id(TAKEN)[args[0]]; t.update({'status': 'open', 'afgerond': '', 'herhaling': None}); return taak_uit(t)
@@ -415,7 +426,7 @@ def handle_crm(fn, args):
         return {'gebruiker': g, 'code': 'am' + uuid.uuid4().hex[:12] if (not o.get('id') or (len(args) > 1 and args[1])) else ''}
     if fn == 'apiHome':  # v3.0
         open_ = [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')]
-        return {'groet': 'Goedemorgen Menno', 'datum': 'dinsdag 22 september', 'ik': ik(), 'bedrijf': bedrijf(), 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af'],
+        return {'groet': 'Goedemorgen Menno', 'datum': 'dinsdag 22 september', 'ik': ik(), 'bedrijf': bedrijf(), 'taken': [taak_uit(t) for t in TAKEN if t['status'] != 'af'], 'afgerondWeek': len([t for t in TAKEN if t['status'] == 'af']), 'streak': 2,  # v4.6
                 'agenda': [{'id': 'g1', 'sleutel': 'g1', 'titel': 'Gesprek teamleider Lyceum Demo', 'start': d(1) + ' 10:00', 'eind': d(1) + ' 11:00', 'heleDag': False, 'locatie': ''}, {'id': 'g2', 'sleutel': 'g2', 'titel': 'Teamoverleg', 'start': d(3) + ' 09:00', 'eind': d(3) + ' 10:00', 'heleDag': False, 'locatie': 'Kantoor'}], 'gekoppeld': True,
                 'pipeline': {'open': len(open_), 'waarde': sum(k['waarde'] for k in open_), 'gewogen': sum(k['gewogen'] for k in open_), 'stil': [k for k in open_ if k['stil']]},
                 'recent': [act_uit(a) for a in sorted(ACTIVITEITEN, key=lambda a: a['datum'], reverse=True) if a['datum'] <= nu()], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}]}
@@ -445,6 +456,12 @@ def handle_crm(fn, args):
         if lijst is None:  # notitie (Historie)
             for l in NOTITIES.values(): l[:] = [x for x in l if x['id'] != args[1]]
             return None
+        if args[0] == 'taak':  # v4.6: subtaken mee verwijderen of losmaken
+            opties = args[2] if len(args) > 2 and isinstance(args[2], dict) else {}
+            if opties.get('metSubtaken'): TAKEN[:] = [t for t in TAKEN if t.get('ouderId') != args[1]]
+            else:
+                for t in TAKEN:
+                    if t.get('ouderId') == args[1]: t['ouderId'] = ''
         lijst[:] = [x for x in lijst if x['id'] != args[1]]; return None
     raise ValueError('onbekende functie ' + fn)
 
@@ -459,12 +476,15 @@ def handle(fn, args):
                 'focus': open_[:3], 'aandacht': open_[3:], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}, {'onderwerp': 'Factuur september', 'van': 'Administratie Lyceum Demo', 'dagen': 2, 'link': 'https://mail.google.com/'}],
                 'agenda': [{'tijd': '10:00', 'titel': 'Gesprek teamleider Lyceum Demo', 'duurMin': 60}, {'tijd': '14:30', 'titel': 'Intake ondersteuner', 'duurMin': 45}], 'kansen': [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')], 'tellingScholen': 4}
     if fn == 'apiActieKlaar':
-        volgende = None
+        volgende, ouder_klaar = None, False
         for t in TAKEN:
             if t['id'] == args[0] and t['status'] != 'af':
                 t['status'] = 'af'; t['afgerond'] = nu()
                 if t.get('herhaling'): volgende = taak_uit(volgende_instantie(t))  # v4.5: de volgende instantie van een reeks
-        ACTIES[:] = [a for a in ACTIES if a['id'] != args[0]]; return {'id': args[0], 'status': 'af', 'afgerond': nu(), 'volgende': volgende}
+                for k in TAKEN:  # v4.6: open subtaken gaan mee af
+                    if k.get('ouderId') == t['id'] and k['status'] != 'af': k['status'] = 'af'; k['afgerond'] = nu()
+                if t.get('ouderId'): ouder_klaar = all(k['status'] == 'af' for k in TAKEN if k.get('ouderId') == t['ouderId'])  # v4.6
+        ACTIES[:] = [a for a in ACTIES if a['id'] != args[0]]; return {'id': args[0], 'status': 'af', 'afgerond': nu(), 'volgende': volgende, 'ouderKlaar': ouder_klaar}
     if fn == 'apiActieToevoegen':  # v4.5: extra velden uit de snelinvoer; de taak komt ook in de takenlijst
         extra = args[3] if len(args) > 3 and isinstance(args[3], dict) else {}
         o = {'tekst': args[0], 'bron': 'handmatig', 'prio': args[1] or 'midden', 'deadline': args[2] if len(args) > 2 else ''}
@@ -537,7 +557,8 @@ def handle(fn, args):
         n = {'id': uuid.uuid4().hex[:6], 'datum': nu(), 'tekst': args[1]}; NOTITIES.setdefault(args[0], []).insert(0, n); return dict(n, soort='activiteit', door='Menno', ruw=args[1], onderwerp='')
     if fn == 'apiStatus':
         return {'versie': '2.0', 'sheetUrl': 'https://docs.google.com/', 'mapUrl': 'https://drive.google.com/', 'model': 'claude-opus-5', 'effort': 'medium', 'claudeIngesteld': True, 'driveApi': False, 'laatsteIndex': d(0) + ' 04:01', 'laatsteReview': d(0) + ' 05:02', 'rapportEmail': 'menno@voorbeeld.nl', 'reviewTrigger': True, 'indexTrigger': True, 'tijdzone': 'Europe/Amsterdam',
-                'gebruiker': ik(), 'crmSyncTrigger': True, 'laatsteCrmSync': nu(), 'capsuleToken': True, 'capsuleMigratie': ''}
+                'gebruiker': ik(), 'crmSyncTrigger': True, 'laatsteCrmSync': nu(), 'capsuleToken': True, 'capsuleMigratie': '',
+                'herinneringTrigger': True, 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True), 'email': 'menno@voorbeeld.nl'}  # v4.6
     if fn == 'apiImporteer': return {'ingevoegd': len(args[1]), 'bijgewerkt': 0}
     return handle_crm(fn, args)
 

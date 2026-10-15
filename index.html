@@ -308,7 +308,7 @@
   .tabel-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .dtabel { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--wit); border: 1px solid var(--lijn); border-radius: 12px; overflow: hidden; font-size: 14px; margin-top: 10px; }
   .dtabel th { text-align: left; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--inkt2); background: var(--vlak); padding: 9px 12px; white-space: nowrap; }
-  .dtabel th[data-sorteer] { cursor: pointer; user-select: none; }
+  .dtabel th[data-sorteer], .dtabel th[data-taaksorteer] { cursor: pointer; user-select: none; }  /* v4.6: ook de takentabel */
   .dtabel td { padding: 9px 12px; border-top: 1px solid var(--lijn); vertical-align: middle; }
   .dtabel tr.klik { cursor: pointer; }
   .dtabel tr.klik:hover td { background: var(--paars-l); }
@@ -549,6 +549,18 @@
   body:not(.desk) .alleen-desk { display: none; }
   .sneltoetsen { font-size: 12px; color: var(--gedempt); margin-top: 10px; }
   .sneltoetsen kbd { font: inherit; font-weight: 800; color: var(--inkt2); background: var(--wit); border: 1px solid var(--lijn); border-radius: 5px; padding: 0 5px; }
+  /* v4.6: subtaken, tags, filterbalk met opgeslagen weergaven, weekweergave */
+  .rij.sub { margin-left: 28px; }
+  .dtabel tr.sub td:nth-child(2) { padding-left: 28px; }
+  .rij .r-meta .tag.zacht { font-size: 10.5px; padding: 1px 7px; }
+  .filterbalk { margin-top: 12px; }
+  .filterbalk select { flex: 1 1 120px; font-size: 12.5px; padding: 6px 8px; }
+  .opgeslagen { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 12.5px; color: var(--gedempt); }
+  .chipgroep { display: inline-flex; }  /* kiezen en verwijderen als twee losse knoppen: eigen tikdoel, bereikbaar voor VoiceOver */
+  .chipgroep .chip:first-child { border-radius: 999px 0 0 999px; border-right: none; }
+  .chipgroep .chip.weg { border-radius: 0 999px 999px 0; min-width: 32px; min-height: 30px; padding: 4px 10px; color: var(--gedempt); font-weight: 400; }
+  .weekblok .kop { margin-top: 18px; }
+  .weekblok .kop.dagkop { color: var(--inkt2); }
 </style>
 </head>
 <body class="v-vandaag">
@@ -1577,7 +1589,8 @@
   function openProjectVanuit(terug, id) { CRM.terugNaar = terug; if (isDesk()) { wisselView('relaties'); zetZijbalk(terug); } else wisselView('relaties'); openDetail('project', id, true); }
 
   /* ===== 6. Relaties (v2.0): het eigen CRM — vervangt Capsule. Scholen, personen, pipeline, taken, tracks, tijdlijn en rapportage. ===== */
-  var CRM = { tab: 'scholen', basis: null, pipeline: null, taken: null, rapport: null, pijp: null, mijn: false, zoek: '', fStatus: '', fTag: '', fPipeline: '', preset: 'maand', rTeam: '', rEigenaar: '', rStap: 0, rMetric: '', detail: null };  // v4.2: rTeam, pijp; v4.4: rStap (‹ ›), rMetric (verloop)
+  var CRM = { tab: 'scholen', basis: null, pipeline: null, taken: null, rapport: null, pijp: null, mijn: false, zoek: '', fStatus: '', fTag: '', fPipeline: '', preset: 'maand', rTeam: '', rEigenaar: '', rStap: 0, rMetric: '', detail: null,
+    tf: { schoolId: '', trajectId: '', categorie: '', tag: '', prio: '' }, filterOpen: false, weergaveActief: null, week: null, weekDatum: null };  // v4.2: rTeam, pijp; v4.4: rStap (‹ ›), rMetric (verloop); v4.6: taakfilters (op de telefoon ingeklapt), gekozen opgeslagen weergave, weekweergave
   var CRM_TABS = [['scholen', 'Scholen'], ['personen', 'Personen'], ['pipeline', 'Pipeline'], ['taken', 'Taken'], ['rapport', 'Rapport']];
   var ACT_KORT = { notitie: 'NOT', gesprek: 'BEL', mail: 'MAIL', afspraak: 'AFS', fase: 'FASE', taak: 'TAAK' };
   var ACT_LABEL = { notitie: 'Notitie', gesprek: 'Gesprek', mail: 'Mail', afspraak: 'Afspraak', fase: 'Mijlpaal', taak: 'Taak' };
@@ -1694,7 +1707,11 @@
     var projecten = (B.projecten || []).filter(function (p) { return ['afgelopen', 'afgerond', 'gestopt'].indexOf(p.status) < 0 || p.id === t.trajectId; }).map(function (p) { return { id: p.id, naam: (p.school ? p.school + ' · ' : '') + p.naam }; });
     if (kansen.length) v.push({ naam: 'kansId', label: 'Kans', type: 'select', opties: optiesLijst(kansen, 'Geen kans'), breed: true });
     if (projecten.length) v.push({ naam: 'trajectId', label: 'Project', type: 'select', opties: optiesLijst(projecten, 'Geen project'), breed: true });
-    return v.concat([{ naam: 'herhaling', label: 'Herhaling (bijv. elke maandag · elke 2 weken na afvinken · elke maand op de 1e)', breed: true, plaats: 'geen' }, { naam: 'notitie', label: 'Toelichting', type: 'textarea' }]);
+    // v4.6: hoofdtaak (één niveau; alleen als deze taak zelf geen subtaken heeft) en tags
+    var hoofdtaken = (CRM.taken ? CRM.taken.taken : []).filter(function (x) { return x.status !== 'af' && !x.ouderId && x.id !== t.id; }).map(function (x) { return { id: x.id, naam: x.tekst }; });
+    if (t.ouderId && !hoofdtaken.some(function (x) { return x.id === t.ouderId; })) hoofdtaken.push({ id: t.ouderId, naam: t.ouder || t.ouderId });
+    if (hoofdtaken.length && !(t.subtaken && t.subtaken.aantal)) v.push({ naam: 'ouderId', label: 'Onderdeel van (hoofdtaak)', type: 'select', opties: optiesLijst(hoofdtaken, 'Geen hoofdtaak'), breed: true });
+    return v.concat([{ naam: 'tags', label: 'Tags (met komma\'s)', breed: true }, { naam: 'herhaling', label: 'Herhaling (bijv. elke maandag · elke 2 weken na afvinken · elke maand op de 1e)', breed: true, plaats: 'geen' }, { naam: 'notitie', label: 'Toelichting', type: 'textarea' }]);
   }
   // v4.5: de tekst uit het veld Herhaling → object voor de backend; '' = geen herhaling, null = niet begrepen
   function herhalingUitTekst(txt) { txt = String(txt || '').trim(); if (!txt || /^geen$/i.test(txt)) return ''; var r = ontleedTaak('x ' + txt, parserCtx()); return r.herhaling || null; }
@@ -1745,10 +1762,18 @@
   }
   // v3.7: tik op de taak = bewerken; de gekoppelde school, persoon of kans is een link in de regel eronder
   function koppelLinks(t) { return [t.schoolId ? crmLink('school', t.schoolId, t.school) : '', t.persoonId ? crmLink('persoon', t.persoonId, t.persoon) : esc(t.persoon), t.kansId ? crmLink('kans', t.kansId, t.kans) : ''].filter(Boolean).join(' · '); }
-  function taakRij(t, metKoppeling) {
+  // v4.6: "1/3 subtaken" op een hoofdtaak; "↳ hoofdtaak" op een subtaak die los van haar hoofdtaak staat
+  function subMeta(t, sub) {
+    if (t.subtaken && t.subtaken.aantal) return '<span class="herhaal" title="subtaken">' + esc(t.subtaken.af + '/' + t.subtaken.aantal) + ' subtaken</span>';
+    if (t.ouderId && !sub) return '↳ ' + esc(t.ouder || 'hoofdtaak');
+    return '';
+  }
+  function tagsTekst(tags) { return (tags instanceof Array ? tags : String(tags || '').split(',')).map(function (x) { return String(x).trim(); }).filter(Boolean).join(', '); }  // v4.6: lijst → veldtekst
+  function tagsLijst(v) { return v instanceof Array ? v : String(v || '').split(',').map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean); }  // v4.6: veldtekst → lijst
+  function taakRij(t, metKoppeling, sub) {
     REG.taak[t.id] = t;
-    var meta = [esc(t.categorie), esc(t.eigenaar), deadlineTekst(t), tijdMeta(t), metKoppeling ? koppelLinks(t) : ''].filter(Boolean).join(' · ');  // v4.5: tijd en herhaling
-    return '<div class="rij" tabindex="0"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
+    var meta = [esc(t.categorie), esc(t.eigenaar), deadlineTekst(t), tijdMeta(t), subMeta(t, sub), metKoppeling ? koppelLinks(t) : '', tagsHtml(t.tags)].filter(Boolean).join(' · ');  // v4.5: tijd en herhaling; v4.6: subtaken en tags
+    return '<div class="rij' + (sub ? ' sub' : '') + '" tabindex="0"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
       '<div class="r-body" data-taakbewerk="' + esc(t.id) + '"><div class="r-titel">' + esc(t.tekst) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
       (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</div>';
   }
@@ -1800,22 +1825,61 @@
       '<div class="kop">Gesloten <small>laatste 60 dagen</small></div>' + (dicht.length ? dicht.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Nog niets gesloten.</div>');
   }
   // v4.5: weergaven zoals Todoist (Vandaag, Komende met een kop per dag, Te laat, Zonder datum, Alles, Afgerond); de keuze blijft op dit toestel bewaard
-  var TAAK_WEERGAVEN = [['vandaag', 'Vandaag'], ['komende', 'Komende'], ['laat', 'Te laat'], ['zonder', 'Zonder datum'], ['alles', 'Alles'], ['af', 'Afgerond']];
+  var TAAK_WEERGAVEN = [['vandaag', 'Vandaag'], ['komende', 'Komende'], ['week', 'Week'], ['laat', 'Te laat'], ['zonder', 'Zonder datum'], ['alles', 'Alles'], ['af', 'Afgerond']];  // v4.6: Week
   function taakWeergave() {
     if (!CRM.taakWeergave) { var b = leesOpslag('aa_taakweergave'); CRM.taakWeergave = TAAK_WEERGAVEN.some(function (w) { return w[0] === b; }) ? b : 'alles'; }
     return CRM.taakWeergave;
   }
   function dagKop(ymd, vandaag) { return ymd === vandaag ? 'Vandaag · ' + pKortDatum(ymd, new Date()) : ymd === pYmd(pPlus(new Date(), 1)) ? 'Morgen · ' + pKortDatum(ymd, new Date()) : pKortDatum(ymd, new Date()); }
+  // v4.6: filterbalk (school, project, categorie, tag, prioriteit) en de opgeslagen weergaven van deze gebruiker
+  function taakFilterBalk(T) {
+    var B = CRM.basis, f = CRM.tf;
+    var sel = function (id, leeg, lijst, huidig) {
+      return '<select id="' + id + '"><option value="">' + esc(leeg) + '</option>' + lijst.map(function (o) { var v = (o && typeof o === 'object') ? o.waarde : o, l = (o && typeof o === 'object') ? o.label : o; return '<option value="' + esc(v) + '"' + (String(v) === String(huidig) ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select>';
+    };
+    var scholen = {}, projecten = {};
+    T.taken.forEach(function (t) { if (t.schoolId) scholen[t.schoolId] = t.school || t.schoolId; if (t.trajectId) projecten[t.trajectId] = t.project || t.trajectId; });
+    // een gekozen filter (bijv. uit een opgeslagen weergave) blijft kiesbaar, ook als er nu geen taak meer bij hoort
+    if (f.schoolId && !scholen[f.schoolId]) scholen[f.schoolId] = naamVan(B.scholen, f.schoolId) || f.schoolId;
+    if (f.trajectId && !projecten[f.trajectId]) projecten[f.trajectId] = naamVan(B.projecten || [], f.trajectId) || f.trajectId;
+    var opties = function (m) { return Object.keys(m).map(function (k) { return { waarde: k, label: m[k] }; }).sort(function (a, b) { return String(a.label).localeCompare(String(b.label), 'nl'); }); };
+    var tags = metHuidig((T.tags || []).slice(), f.tag), actief = [f.schoolId, f.trajectId, f.categorie, f.tag, f.prio].filter(Boolean).length, open = isDesk() || CRM.filterOpen, h = '';
+    // op de telefoon staan de keuzelijsten achter één chip, anders staat de eerste taak pas onder een scherm vol bediening
+    if (!isDesk()) h += '<div class="balk" style="margin-top:12px"><button class="chip' + (actief ? ' aan' : '') + '" data-filtertoon="1" aria-expanded="' + (open ? 'true' : 'false') + '">Filter' + (actief ? ' (' + actief + ')' : '') + (open ? ' ▴' : ' ▾') + '</button></div>';
+    if (open) h += '<div class="balk filterbalk">' + sel('tfSchool', 'Alle scholen', opties(scholen), f.schoolId) + sel('tfProject', 'Alle projecten', opties(projecten), f.trajectId) + sel('tfCategorie', 'Alle categorieën', metHuidig(B.categorieen.slice(), f.categorie), f.categorie) +
+      (tags.length ? sel('tfTag', 'Alle tags', tags, f.tag) : '') + sel('tfPrio', 'Alle prioriteiten', ['hoog', 'midden', 'laag'], f.prio) + '<button class="chip" data-weergave-opslaan="1">Weergave opslaan</button></div>';
+    if ((T.weergaven || []).length) h += '<div class="opgeslagen">Opgeslagen:' + T.weergaven.map(function (w, i) {
+      return '<span class="chipgroep"><button class="chip' + (CRM.weergaveActief === i ? ' aan' : '') + '" data-weergave-kies="' + i + '">' + esc(w.naam) + '</button><button class="chip weg" data-weergave-weg="' + i + '" aria-label="Weergave ' + esc(w.naam) + ' verwijderen">×</button></span>';
+    }).join('') + '</div>';
+    return h;
+  }
+  // v4.6: dezelfde voorwaarde voor de lijst en de weekweergave: Alleen mijn, de filterbalk en het zoekveld
+  function taakInLijst(t) {
+    var B = CRM.basis, q = CRM.zoek.toLowerCase();
+    return (!CRM.mijn || t.eigenaar === B.ik.naam) && taakFilter(t) && zoekMatch(q, [t.tekst, t.school, t.persoon, t.kans, t.project, t.eigenaar, t.categorie, (t.tags || []).join(' ')]);
+  }
+  function taakFilter(t) {  // v4.6
+    var f = CRM.tf;
+    return (!f.schoolId || t.schoolId === f.schoolId) && (!f.trajectId || t.trajectId === f.trajectId) && (!f.categorie || t.categorie === f.categorie) && (!f.tag || (t.tags || []).indexOf(f.tag) >= 0) && (!f.prio || t.prio === f.prio);
+  }
+  // v4.6: hoofdtaken met hun subtaken eronder; een subtaak waarvan de hoofdtaak niet in deze groep staat, staat los (met "↳ hoofdtaak")
+  function geordend(ts) {
+    var inGroep = {}, perOuder = {}, uit = [];
+    ts.forEach(function (t) { inGroep[t.id] = true; if (t.ouderId) (perOuder[t.ouderId] = perOuder[t.ouderId] || []).push(t); });
+    ts.forEach(function (t) { if (t.ouderId && inGroep[t.ouderId]) return; uit.push(t); (perOuder[t.id] || []).forEach(function (k) { uit.push(k); }); });
+    return uit;
+  }
   function renderTaken() {
     var T = CRM.taken, B = CRM.basis, q = CRM.zoek.toLowerCase(), vandaag = vandaagStr(), W = taakWeergave(), grens = pYmd(pPlus(new Date(), 7));
     el('crmBalk').innerHTML = mijnChip() + TAAK_WEERGAVEN.map(function (w) { return '<button class="chip' + (W === w[0] ? ' aan' : '') + '" data-taakweergave="' + w[0] + '">' + w[1] + '</button>'; }).join('') + '<button class="knop klein" data-crmnieuw="taak">Nieuwe taak</button>';
-    var lijst = T.taken.filter(function (t) { return (!CRM.mijn || t.eigenaar === B.ik.naam) && zoekMatch(q, [t.tekst, t.school, t.persoon, t.kans, t.project, t.eigenaar, t.categorie]); });
+    var lijst = T.taken.filter(taakInLijst);  // v4.6: filters en tags
     var open = lijst.filter(function (t) { return t.status !== 'af'; }), af = lijst.filter(function (t) { return t.status === 'af'; });
-    var rijen = function (ts) { return isDesk() ? deskTakenTabel(ts) : ts.map(function (t) { return taakRij(t, true); }).join(''); };  // v3.0: tabel op desktop
+    var rijen = function (ts) { var l = geordend(ts), inL = {}; l.forEach(function (t) { inL[t.id] = true; }); return isDesk() ? deskTakenTabel(l) : l.map(function (t) { return taakRij(t, true, !!(t.ouderId && inL[t.ouderId])); }).join(''); };  // v3.0: tabel op desktop; v4.6: subtaken onder de hoofdtaak
     var groep = function (titel, ts, klas) { return ts.length ? '<div class="kop' + (klas ? ' ' + klas : '') + '">' + esc(titel) + ' <small>' + ts.length + '</small></div>' + rijen(ts) : ''; };
     var laat = open.filter(function (t) { return t.deadline && t.deadline < vandaag; }), nu_ = open.filter(function (t) { return t.deadline === vandaag; }), zonder = open.filter(function (t) { return !t.deadline; });
-    var h = '';  // de snelinvoer (#crmSnel) staat in vaste HTML boven deze lijst
-    if (W === 'vandaag') h += laat.length || nu_.length ? groep('Te laat', laat) + groep('Vandaag', nu_) : '<div class="leeg">Niets voor vandaag.</div>';
+    var h = taakFilterBalk(T);  // de snelinvoer (#crmSnel) staat in vaste HTML boven deze lijst; v4.6: filterbalk (geldt ook voor de weekweergave)
+    if (W === 'week') h += weekHtml();
+    else if (W === 'vandaag') h += laat.length || nu_.length ? groep('Te laat', laat) + groep('Vandaag', nu_) : '<div class="leeg">Niets voor vandaag.</div>';
     else if (W === 'komende') {
       var perDag = {}; open.filter(function (t) { return t.deadline && t.deadline >= vandaag && t.deadline <= grens; }).forEach(function (t) { (perDag[t.deadline] = perDag[t.deadline] || []).push(t); });
       h += groep('Te laat', laat); Object.keys(perDag).sort().forEach(function (d) { h += groep(dagKop(d, vandaag), perDag[d], 'dagkop'); });
@@ -1831,6 +1895,58 @@
     }).join('');
     if (isDesk()) h += '<div class="sneltoetsen">Sneltoetsen: <kbd>n</kbd> nieuwe taak · <kbd>/</kbd> zoeken · <kbd>e</kbd> bewerken · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> prioriteit van de gekozen rij · <kbd>Esc</kbd> sluiten</div>';  // v4.5
     el('crmInhoud').innerHTML = h;
+  }
+  // v4.6: weekweergave — zeven dagblokken met agenda-afspraken en taken, ‹ Vandaag ›; de gegevens komen uit apiAgenda (ma t/m zo)
+  function weekStart(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7, 12); }
+  function laadWeek() {
+    var ma = weekStart(CRM.weekDatum || new Date()), van = ymd(ma), tot = ymd(new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() + 6, 12));
+    if (CRM.week && CRM.week.van === van) return;
+    CRM.week = { van: van, tot: tot, data: null, fout: false };
+    var vers = function () { if (CRM.tab === 'taken' && taakWeergave() === 'week' && CRM.taken) renderTaken(); };
+    // alleen de week die nog getoond wordt bijwerken: wie intussen naar een andere week bladerde, mag geen oud antwoord of oude fout krijgen
+    run('apiAgenda', van, tot).then(function (r) { if (CRM.week && CRM.week.van === van) { CRM.week.data = r; vers(); } })
+      .catch(function () { if (CRM.week && CRM.week.van === van) { CRM.week.fout = true; vers(); } });
+  }
+  function weekHtml() {
+    var ma = weekStart(CRM.weekDatum || new Date()), vandaag = vandaagStr(), zo = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() + 6, 12);
+    var h = '<div class="balk" style="margin-top:12px"><button class="chip" data-weeknav="-1" aria-label="Vorige week">‹</button><button class="chip" data-weeknav="0">Vandaag</button><button class="chip" data-weeknav="1" aria-label="Volgende week">›</button><span class="zacht">' + esc(kortDatum(ymd(ma)) + ' – ' + kortDatum(ymd(zo))) + '</span></div>';
+    if (!CRM.week || CRM.week.van !== ymd(ma) || (!CRM.week.data && !CRM.week.fout)) { laadWeek(); return h + '<div class="spinner">Laden</div>'; }
+    if (CRM.week.fout) return h + '<div class="leeg">Kon de week niet laden. <button class="chip" data-weekopnieuw="1">Opnieuw</button></div>';  // nooit een eeuwige spinner
+    var per = agendaPerDag(CRM.week.data);
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() + i, 12), k = ymd(d), items = (per[k] || []).filter(function (x) { return !x.taak || taakInLijst(x.taak); });  // taken volgen Alleen mijn, de filters en het zoekveld
+      h += '<div class="weekblok"><div class="kop' + (k === vandaag ? '' : ' dagkop') + '">' + esc(DAGEN_KORT[i] + ' ' + kortDatum(k)) + ' <small>' + (k === vandaag ? 'vandaag · ' : '') + items.length + '</small></div>' +
+        (items.length ? items.map(function (x) {
+          if (x.taak) return taakRij(x.taak, true);
+          return '<div class="agenda-blok' + (x.open ? ' klik" data-crm-open="' + esc(x.open) + '" style="cursor:pointer' : '') + '"><span class="tijd">' + (x.tijd ? esc(x.tijd) : 'dag') + '</span><div>' + esc(x.titel) + (x.sub ? ' <span class="zacht">· ' + esc(x.sub) + '</span>' : '') + '</div></div>';
+        }).join('') : '<div class="leeg" style="padding:4px 0">Niets gepland.</div>') + '</div>';
+    }
+    return h;
+  }
+  // v4.6: opgeslagen weergaven (filters + weergave), per gebruiker bewaard in de backend
+  function huidigFilter() { var f = CRM.tf; return { mijn: CRM.mijn, schoolId: f.schoolId, trajectId: f.trajectId, categorie: f.categorie, tag: f.tag, prio: f.prio, weergave: taakWeergave() }; }
+  function weergavenOpslaan(lijst, melding, actief) {
+    return run('apiTaakWeergavenOpslaan', lijst).then(function (w) { if (CRM.taken) CRM.taken.weergaven = w; CRM.weergaveActief = actief === undefined ? null : actief; renderCrm(); toast(melding); }).catch(renderCrm);
+  }
+  function weergaveOpslaan() {
+    if (!CRM.taken) return;
+    openVenster(formHtml('Weergave opslaan', [{ naam: 'naam', label: 'Naam (bijv. Rooster deze week)', breed: true }], { naam: '' }, 'Opslaan', function (f) {
+      if (!f.naam) { toast('Geef de weergave een naam.'); return; }
+      var lijst = (CRM.taken.weergaven || []).concat([{ naam: f.naam, filter: huidigFilter() }]);
+      if (lijst.length > 12) { toast('Maximaal 12 weergaven; verwijder er eerst een.'); return; }
+      sluitVenster(); return weergavenOpslaan(lijst, 'Weergave opgeslagen.', lijst.length - 1);
+    }));
+  }
+  function weergaveKies(i) {
+    var w = CRM.taken && CRM.taken.weergaven ? CRM.taken.weergaven[i] : null; if (!w) return;
+    var f = w.filter || {}; CRM.mijn = !!f.mijn; CRM.tf = { schoolId: f.schoolId || '', trajectId: f.trajectId || '', categorie: f.categorie || '', tag: f.tag || '', prio: f.prio || '' };
+    if (f.weergave && TAAK_WEERGAVEN.some(function (x) { return x[0] === f.weergave; })) { CRM.taakWeergave = f.weergave; zetOpslag('aa_taakweergave', f.weergave); }
+    CRM.weergaveActief = i; renderCrm();
+  }
+  function weergaveWeg(i) {
+    var l = CRM.taken && CRM.taken.weergaven; if (!l || !l[i]) return;
+    if (!window.confirm('Weergave "' + l[i].naam + '" verwijderen?')) return;
+    weergavenOpslaan(l.filter(function (x, j) { return j !== i; }), 'Weergave verwijderd.');
   }
 
   /* --- rapport en beheer --- */
@@ -2364,8 +2480,15 @@
     }
     if (t.closest('[data-crm-terug]')) { if (history.state && history.state.crm) history.back(); else sluitDetail(); return; }
     if ((x = t.closest('[data-crmtab]'))) { CRM.tab = x.dataset.crmtab; if (isDesk()) DESK.contacten = CRM.tab; el('crmNieuw').innerHTML = ''; formActie = null; renderCrm(); return; }
-    if (t.closest('[data-crmmijn]')) { CRM.mijn = !CRM.mijn; renderCrm(); return; }
+    if (t.closest('[data-crmmijn]')) { CRM.mijn = !CRM.mijn; CRM.weergaveActief = null; renderCrm(); return; }
     if ((x = t.closest('[data-taakweergave]'))) { CRM.taakWeergave = x.dataset.taakweergave; zetOpslag('aa_taakweergave', CRM.taakWeergave); renderCrm(); return; }  // v4.5
+    // v4.6: opgeslagen weergaven en de weekweergave
+    if ((x = t.closest('[data-weergave-weg]'))) { ev.stopPropagation(); weergaveWeg(Number(x.getAttribute('data-weergave-weg'))); return; }
+    if ((x = t.closest('[data-weergave-kies]'))) { weergaveKies(Number(x.getAttribute('data-weergave-kies'))); return; }
+    if (t.closest('[data-weergave-opslaan]')) { weergaveOpslaan(); return; }
+    if ((x = t.closest('[data-weeknav]'))) { var wn = Number(x.dataset.weeknav), wb = CRM.weekDatum || new Date(); CRM.weekDatum = wn === 0 ? new Date() : new Date(wb.getFullYear(), wb.getMonth(), wb.getDate() + 7 * wn, 12); CRM.week = null; renderCrm(); return; }
+    if (t.closest('[data-weekopnieuw]')) { CRM.week = null; renderCrm(); return; }
+    if (t.closest('[data-filtertoon]')) { CRM.filterOpen = !CRM.filterOpen; renderCrm(); return; }
     if ((x = t.closest('[data-crmnieuw]'))) { if (CRM.basis) nieuwVanuitLijst(x.dataset.crmnieuw); return; }
     if ((x = t.closest('[data-crmpreset]'))) { if (x.disabled) return; CRM.preset = x.dataset.crmpreset; CRM.rStap = 0; laadRapport(); return; }  // v4.4: andere periode begint bij nu
     if ((x = t.closest('[data-rstap]'))) { if (x.disabled) return; var st = x.getAttribute('data-rstap'); CRM.rStap = st === 'nu' ? 0 : Math.min(0, (CRM.rStap || 0) + Number(st)); laadRapport(); return; }  // v4.4
@@ -2411,6 +2534,8 @@
     var t = ev.target;
     if (t.id === 'crmFStatus') { CRM.fStatus = t.value; renderCrm(); return; }
     if (t.id === 'crmFTag') { CRM.fTag = t.value; renderCrm(); return; }
+    var tfVeld = { tfSchool: 'schoolId', tfProject: 'trajectId', tfCategorie: 'categorie', tfTag: 'tag', tfPrio: 'prio' }[t.id];  // v4.6: taakfilters
+    if (tfVeld) { CRM.tf[tfVeld] = t.value; CRM.weergaveActief = null; renderCrm(); return; }
     if (t.id === 'crmFPipeline') { CRM.fPipeline = t.value; renderCrm(); return; }
     if (t.id === 'crmREigenaar') { CRM.rEigenaar = t.value; laadRapport(); return; }
     var s = t.closest('[data-kansfase]'); if (!s) return;
@@ -2520,6 +2645,7 @@
     if (DESK.home) { DESK.home.taken = vervangIn(DESK.home.taken, vanMij, id); bewaar('aa_cache_home', DESK.home); }
     if (S.data) { S.data.focus = vervangIn(S.data.focus, vanMij, id); S.data.aandacht = vervangIn(S.data.aandacht, null, id); }
     if (DESK.agenda && DESK.agenda.taken) DESK.agenda.taken = vervangIn(DESK.agenda.taken, open && open.deadline ? open : null, id);
+    if (CRM.week && CRM.week.data && CRM.week.data.taken) CRM.week.data.taken = vervangIn(CRM.week.data.taken, open && open.deadline ? open : null, id);  // v4.6: weekweergave
     CRM.rapport = null;
     herteken();
   }
@@ -2527,17 +2653,22 @@
     var t = REG.taak[id]; if (!t) return;
     basisKlaar().then(function () {
       var personen = t.schoolId ? CRM.basis.personen.filter(function (p) { return p.schoolId === t.schoolId; }) : [];
-      var w = kopie(t); w.herhaling = herhalingTekst(t.herhaling);  // v4.5: de herhaling staat als tekst in het veld
+      var w = kopie(t); w.herhaling = herhalingTekst(t.herhaling); w.tags = tagsTekst(t.tags);  // v4.5: de herhaling staat als tekst in het veld; v4.6: tags ook
       var knoppenrij = '<div class="balk">' + (t.status === 'af' ? '<button class="knop licht klein" data-taakheropen="' + esc(t.id) + '">Heropenen</button>' : '') +
         (t.herhaling && t.status !== 'af' ? '<button class="knop licht klein" data-herhaalstop="' + esc(t.id) + '">Herhaling stoppen</button>' : '') +  // v4.5
         (t.trackRunId && t.status !== 'af' ? '<button class="knop licht klein" data-trackstop="' + esc(t.trackRunId) + '">Rest van deze track stoppen</button>' : '') +
-        (magWijzigen(t.eigenaar) ? '<button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '">Verwijderen</button>' : '') + '</div>';
+        // v4.6: een hoofdtaak met subtaken krijgt twee duidelijke knoppen; elke knop vraagt één keer om bevestiging en Annuleren doet dan echt niets
+        (magWijzigen(t.eigenaar) ? (t.subtaken && t.subtaken.aantal && t.status !== 'af'
+          ? '<button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '">Verwijderen, subtaken blijven</button><button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '" data-metsub="1">Verwijderen met ' + esc(t.subtaken.aantal) + ' subtaken</button>'
+          : '<button class="knop licht klein gevaar" data-taakweg="' + esc(t.id) + '">Verwijderen</button>') : '') + '</div>';
       openVenster(formHtml(t.status === 'af' ? 'Afgeronde taak' : 'Taak', taakVelden(true, personen, t), w, 'Opslaan', function (f) {
         delete f.snel;
         if (!f.tekst) { toast('Wat moet er gebeuren?'); return; }
-        var obj = bouwWijziging(t, w, f); if (!obj) { sluitVenster(); return; }
+        var orig = kopie(t); orig.tags = tagsTekst(t.tags);  // v4.6: _oud.tags als tekst, zoals de Sheet hem bewaart
+        var obj = bouwWijziging(orig, w, f); if (!obj) { sluitVenster(); return; }
         if (obj.herhaling !== undefined) { var hh = herhalingUitTekst(obj.herhaling); if (hh === null) { toast(HERHAAL_FOUT); return; } obj.herhaling = hh; }  // v4.5
-        taakLokaal(t.id, lokaalSamen(t, obj)); sluitVenster();
+        var lok = lokaalSamen(t, obj); if (obj.tags !== undefined) lok.tags = tagsLijst(obj.tags);  // v4.6
+        taakLokaal(t.id, lok); sluitVenster();
         return run('apiTaakOpslaan', obj).then(function (x) { taakLokaal(t.id, x); toast('Taak opgeslagen.'); }).catch(herlaadHuidig);
       }) + knoppenrij);
     }).catch(function () {});
@@ -2546,7 +2677,7 @@
   function nieuweTaakVenster(r) {
     r = r || {};
     basisKlaar().then(function () {
-      var w = { snel: '', tekst: r.tekst || '', deadline: r.deadline || '', tijd: r.tijd || '', prio: r.prio || 'midden', categorie: r.categorie || 'opvolgen', eigenaar: r.eigenaar || ikNaam(), schoolId: r.schoolId || '', trajectId: r.trajectId || '', kansId: r.kansId || '', herhaling: herhalingTekst(r.herhaling), notitie: '' };
+      var w = { snel: '', tekst: r.tekst || '', deadline: r.deadline || '', tijd: r.tijd || '', prio: r.prio || 'midden', categorie: r.categorie || 'opvolgen', eigenaar: r.eigenaar || ikNaam(), schoolId: r.schoolId || '', trajectId: r.trajectId || '', kansId: r.kansId || '', herhaling: herhalingTekst(r.herhaling), notitie: '', tags: '', ouderId: r.ouderId || '' };  // v4.6: tags, hoofdtaak
       openVenster(formHtml('Nieuwe taak', taakVelden(true, [], {}), w, 'Opslaan', function (f) {
         delete f.snel; if (!f.tekst) { toast('Wat moet er gebeuren?'); return; }
         var hh = herhalingUitTekst(f.herhaling); if (hh === null) { toast(HERHAAL_FOUT); return; } f.herhaling = hh;
@@ -2557,9 +2688,16 @@
   function taakAfvinken(id, knop) {
     var t = REG.taak[id];
     if (knop) knop.disabled = true;
-    if (t) { var af = kopie(t); af.status = 'af'; af.afgerond = nuLokaal().replace('T', ' '); taakLokaal(id, af); }
+    if (t) {
+      var af = kopie(t); af.status = 'af'; af.afgerond = nuLokaal().replace('T', ' '); taakLokaal(id, af);
+      // v4.6: open subtaken gaan lokaal mee af; de teller op de hoofdtaak loopt mee
+      (CRM.taken ? CRM.taken.taken : []).filter(function (k) { return k.ouderId === id && k.status !== 'af'; }).forEach(function (k) { var ka = kopie(k); ka.status = 'af'; ka.afgerond = af.afgerond; taakLokaal(k.id, ka); });
+      var ouder = t.ouderId ? REG.taak[t.ouderId] : null;
+      if (ouder && ouder.subtaken) { var ok = kopie(ouder); ok.subtaken = { aantal: ouder.subtaken.aantal, af: Math.min(ouder.subtaken.aantal, (ouder.subtaken.af || 0) + 1) }; taakLokaal(ouder.id, ok); }
+    }
     run('apiActieKlaar', id).then(function (r) {
       if (r && r.volgende) { taakLokaal(r.volgende.id, r.volgende); toast('Afgerond. Volgende keer: ' + pKortDatum(r.volgende.deadline, new Date()) + (r.volgende.tijd ? ' ' + r.volgende.tijd : '') + '.'); }  // v4.5: herhalende taak
+      else if (r && r.ouderKlaar && t && t.ouderId) toastMetActie('Alle subtaken zijn af.', 'Hoofdtaak ook afvinken', function () { taakAfvinken(t.ouderId); });  // v4.6
       else toastMetActie('Taak afgerond.', 'Ongedaan maken', function () { run('apiTaakHeropen', id).then(function (x) { taakLokaal(id, x); toast('De taak staat weer open.'); }).catch(herlaadHuidig); });  // v4.5
       if (!t) herlaadHuidig();
     }).catch(herlaadHuidig);
@@ -2800,10 +2938,12 @@
     if ((x = t.closest('[data-actbewerk]'))) { ev.stopPropagation(); bewerkActiviteit(x.getAttribute('data-actbewerk')); return; }
     if ((x = t.closest('[data-actweg]'))) { verwijderActiviteit(x.getAttribute('data-actweg')); return; }
     if ((x = t.closest('[data-taakweg]'))) {
-      var tw = x.getAttribute('data-taakweg'); if (!window.confirm('Deze taak verwijderen?')) return;
+      var tw = x.getAttribute('data-taakweg'), tt = REG.taak[tw], metSub = x.getAttribute('data-metsub') === '1', nSub = tt && tt.subtaken ? tt.subtaken.aantal : 0;  // v4.6: één vraag, Annuleren annuleert
+      if (!window.confirm(metSub ? 'Deze taak en de ' + nSub + ' subtaken verwijderen?' : 'Deze taak verwijderen?' + (nSub ? ' De ' + nSub + ' subtaken blijven staan als losse taken.' : ''))) return;
       sluitVenster(); taakLokaal(tw, null); delete REG.taak[tw];
-      run('apiVerwijder', 'taak', tw).then(function () { toast('Taak verwijderd.'); }).catch(herlaadHuidig); return;
+      run('apiVerwijder', 'taak', tw, { metSubtaken: metSub }).then(function () { toast('Taak verwijderd.'); if (tt && tt.subtaken && tt.subtaken.aantal) herlaadHuidig(); }).catch(herlaadHuidig); return;
     }
+    if ((x = t.closest('[data-herinneringen]'))) { x.disabled = true; run('apiHerinneringenZetten', x.getAttribute('data-herinneringen') === '1').then(function () { toast('Opgeslagen.'); toonStatus(); }).catch(toonStatus); return; }  // v4.6
     if ((x = t.closest('[data-taakheropen]'))) { var th = x.getAttribute('data-taakheropen'); x.disabled = true; run('apiTaakHeropen', th).then(function (r) { sluitVenster(); taakLokaal(th, r); toast('Taak staat weer open.'); }).catch(function () { x.disabled = false; }); return; }
     if ((x = t.closest('[data-herhaalstop]'))) {  // v4.5
       var hs = x.getAttribute('data-herhaalstop'), ht = REG.taak[hs]; x.disabled = true;
@@ -2996,7 +3136,7 @@
   });
 
   /* ===== v3.0: desktopweergave in Capsule-opbouw — zijbalk, brede tabellen, Home, Agenda, Doelen. Alleen actief met body.desk (vanaf 1024 px). ===== */
-  var DESK = { item: 'home', sorteer: { veld: 'naam', op: 1 }, contacten: 'scholen', maand: null, start: null, gekozen: '', agenda: null, doelPreset: 'maand', basisBezig: null };
+  var DESK = { item: 'home', sorteer: { veld: 'naam', op: 1 }, taakSorteer: { veld: '', op: 1 }, contacten: 'scholen', maand: null, start: null, gekozen: '', agenda: null, doelPreset: 'maand', basisBezig: null };  // v4.6: taakSorteer (leeg = volgorde van de backend)
   var DESK_ITEMS = { home: ['home', 'Home'], contacten: ['relaties', 'Contacten'], taken: ['relaties', 'Taken'], agenda: ['agenda', 'Agenda'], pipeline: ['relaties', 'Pipeline'], projecten: ['trajecten', 'Projecten'], bezetting: ['trajecten', 'Bezetting'],
     facturatie: ['facturatie', 'Facturatie'], rapporten: ['relaties', 'Rapporten'], doelen: ['doelen', 'Doelen'], brein: ['brein', 'Assistent'], review: ['review', 'Dagstart'], huisstijl: ['huisstijl', 'Studio'] };
   var DESK_TAB = { taken: 'taken', pipeline: 'pipeline', rapporten: 'rapport' };
@@ -3106,11 +3246,24 @@
       return '<tr class="klik" data-crm-open="' + soort + ':' + esc(x.id) + '">' + kolommen.map(function (k) { return '<td' + (k.getal ? ' class="getal"' : '') + '>' + k.html(x) + '</td>'; }).join('') + '</tr>';
     }).join('') + '</tbody></table></div>' + (l.length > 500 ? '<div class="hint">De eerste 500 staan hier. Zoek of filter om de rest te zien.</div>' : '');
   }
+  // v4.6: sorteerbaar per kolom (klik op de kop; zonder keuze de volgorde van de backend), met tags en subtaken
+  function taakSorteerWaarde(t, veld) {
+    if (veld === 'koppeling') return t.school || t.project || t.kans || t.persoon || '';
+    if (veld === 'prio') return ['hoog', 'midden', 'laag'].indexOf(t.prio);
+    if (veld === 'tags') return (t.tags || []).join(', ');
+    return t[veld] === undefined || t[veld] === null ? '' : t[veld];
+  }
   function deskTakenTabel(ts) {
-    return '<div class="tabel-scroll"><table class="dtabel"><thead><tr><th></th><th>Taak</th><th>Gekoppeld aan</th><th>Categorie</th><th>Voor</th><th>Deadline</th><th>Tijd</th><th>Prio</th></tr></thead><tbody>' + ts.map(function (t) {
+    var kol = [['tekst', 'Taak'], ['koppeling', 'Gekoppeld aan'], ['categorie', 'Categorie'], ['tags', 'Tags'], ['eigenaar', 'Voor'], ['deadline', 'Deadline'], ['tijd', 'Tijd'], ['prio', 'Prio']], o = DESK.taakSorteer, l = ts.slice(), inL = {};
+    if (o.veld) l.sort(function (a, b) { return vergelijk(taakSorteerWaarde(a, o.veld), taakSorteerWaarde(b, o.veld)) * o.op; });
+    l.forEach(function (t) { inL[t.id] = true; });
+    return '<div class="tabel-scroll"><table class="dtabel"><thead><tr><th></th>' + kol.map(function (k) { return '<th data-taaksorteer="' + k[0] + '">' + k[1] + (o.veld === k[0] ? (o.op > 0 ? ' ▲' : ' ▼') : '') + '</th>'; }).join('') + '</tr></thead><tbody>' + l.map(function (t) {
       REG.taak[t.id] = t;  // v3.7: rij = bewerken, koppeling = link
-      return '<tr class="klik" tabindex="0" data-taakbewerk="' + esc(t.id) + '"><td style="width:34px"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button></td>' +
-        '<td><b>' + esc(t.tekst) + '</b>' + (t.herhaling ? ' <span class="herhaal" title="' + esc(herhalingTekst(t.herhaling)) + '">↻</span>' : '') + '</td><td>' + koppelLinks(t) + '</td><td>' + esc(t.categorie) + '</td><td>' + esc(t.eigenaar) + '</td>' +
+      var sub = !!(t.ouderId && inL[t.ouderId] && !o.veld);
+      return '<tr class="klik' + (sub ? ' sub' : '') + '" tabindex="0" data-taakbewerk="' + esc(t.id) + '"><td style="width:34px"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button></td>' +
+        '<td>' + (t.ouderId ? '<span class="zacht">↳ </span>' : '') + '<b>' + esc(t.tekst) + '</b>' + (t.herhaling ? ' <span class="herhaal" title="' + esc(herhalingTekst(t.herhaling)) + '">↻</span>' : '') +
+        (t.subtaken && t.subtaken.aantal ? ' <span class="zacht">' + esc(t.subtaken.af + '/' + t.subtaken.aantal) + '</span>' : '') + (t.ouderId && !sub ? ' <span class="zacht">· ' + esc(t.ouder || '') + '</span>' : '') + '</td>' +
+        '<td>' + koppelLinks(t) + '</td><td>' + esc(t.categorie) + '</td><td>' + tagsHtml(t.tags) + '</td><td>' + esc(t.eigenaar) + '</td>' +
         '<td>' + (t.deadline ? deadlineTekst(t) : '<span class="zacht">—</span>') + '</td><td>' + (t.tijd ? esc(t.tijd) : '<span class="zacht">—</span>') + '</td><td>' + (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</td></tr>';  // v4.5: tijd en herhaling
     }).join('') + '</tbody></table></div>';
   }
@@ -3144,7 +3297,8 @@
     var vandaag = vandaagStr(), laat = h.taken.filter(function (t) { return t.deadline && t.deadline < vandaag; }), nu_ = h.taken.filter(function (t) { return t.deadline === vandaag; });
     var rest = h.taken.filter(function (t) { return !t.deadline || t.deadline > vandaag; }).slice(0, 5), P = h.pipeline;
     el('homeGroet').textContent = h.groet; el('homeDatum').textContent = h.datum;
-    el('homeInhoud').innerHTML = '<div class="tegels">' + tegel(h.taken.length, 'Open taken') + tegel(laat.length, 'Te laat', 'oranje') + tegel(P.open, 'Open kansen') + tegel(euro(P.gewogen), 'Gewogen pijplijn') + '</div>' +
+    el('homeInhoud').innerHTML = '<div class="tegels">' + tegel(h.taken.length, 'Open taken') + tegel(laat.length, 'Te laat', 'oranje') + tegel(P.open, 'Open kansen') + tegel(euro(P.gewogen), 'Gewogen pijplijn') +
+      (h.afgerondWeek !== undefined ? tegel(h.afgerondWeek, 'Deze week afgerond') + tegel(h.streak, h.streak === 1 ? 'Werkdag op rij' : 'Werkdagen op rij') : '') + '</div>' +  // v4.6: teller en streak
       '<div class="home-grid">' + (h.bedrijf ? hkaart('Bedrijfsdoelen ' + h.bedrijf.schooljaar, h.bedrijf.metrieken.map(function (d) { return doelBalk(d, h.bedrijf.cijfers[d.id], h.bedrijf.doelen[d.id]); }).join(''), 'doelen') : '') +  // v4.2
       hkaart('Mijn taken', laat.concat(nu_).concat(rest).map(function (t) { return taakRij(t, true); }).join('') || '<div class="leeg">Geen open taken.</div>', 'taken') +
       hkaart('Agenda komende 7 dagen', h.agenda.map(agendaRegel).join('') || '<div class="leeg">' + (h.gekoppeld === false ? GMAIL_HINT : 'Niets gepland.') + '</div>', 'agenda') +
@@ -3165,8 +3319,9 @@
     if (!DESK.agenda) el('agendaInhoud').innerHTML = '<div class="spinner">Laden</div>';
     run('apiAgenda', ymd(start), ymd(eind)).then(function (r) { DESK.agenda = r; renderAgenda(); }).catch(function () { el('agendaInhoud').innerHTML = '<div class="leeg">Kon de agenda niet laden.</div>'; });
   }
-  function agendaPerDag() {
-    var A = DESK.agenda, per = {}, zet = function (d, x) { (per[d] = per[d] || []).push(x); };
+  function agendaPerDag(A) {
+    A = A || DESK.agenda;  // v4.6: ook voor de weekweergave in Taken
+    var per = {}, zet = function (d, x) { (per[d] = per[d] || []).push(x); };
     A.events.forEach(function (e) { zet(String(e.start).slice(0, 10), { soort: e.schoolId ? 'crm' : 'ev', tijd: e.heleDag ? '' : String(e.start).slice(11, 16), titel: e.titel, sub: e.school || e.locatie || '', open: e.schoolId ? 'school:' + e.schoolId : '' }); });
     A.afspraken.forEach(function (a) { REG.act[a.id] = a; zet(String(a.datum).slice(0, 10), { soort: 'crm', tijd: String(a.datum).slice(11, 16), titel: a.onderwerp, sub: a.school, open: a.schoolId ? 'school:' + a.schoolId : '', act: magWijzigen(a.door) ? a.id : '' }); });  // v3.7
     A.taken.forEach(function (t) { zet(t.deadline, { soort: 'taak', tijd: '', titel: t.tekst, sub: t.school || t.persoon, taak: t }); });
@@ -3249,6 +3404,7 @@
     if ((x = t.closest('[data-desknieuw]'))) { el('zbNieuwMenu').classList.remove('aan'); deskNieuw(x.dataset.desknieuw); return; }
     if ((x = t.closest('[data-desk]'))) { deskNaar(x.dataset.desk); return; }
     if ((x = t.closest('[data-sorteer]'))) { var v = x.dataset.sorteer; DESK.sorteer = { veld: v, op: DESK.sorteer.veld === v ? -DESK.sorteer.op : 1 }; renderCrm(); return; }
+    if ((x = t.closest('[data-taaksorteer]'))) { var tv = x.dataset.taaksorteer; DESK.taakSorteer = { veld: tv, op: DESK.taakSorteer.veld === tv ? -DESK.taakSorteer.op : 1 }; renderCrm(); return; }  // v4.6
     if ((x = t.closest('[data-deskklik]'))) { el(x.dataset.deskklik).click(); return; }
     if ((x = t.closest('[data-agdag]'))) { DESK.gekozen = x.dataset.agdag; renderAgenda(); return; }
     if ((x = t.closest('[data-agnav]'))) {
@@ -3325,7 +3481,9 @@
         rij('Claude', st.claudeIngesteld ? ja + ' · ' + esc(st.model) + ' · ' + esc(st.effort) : nee + ' — zet ANTHROPIC_API_KEY') + rij('Drive API', st.driveApi ? ja : nee + ' — pdf/docx alleen titel') +
         rij('Ingelogd als', st.gebruiker ? esc(st.gebruiker.naam) + ' · ' + esc(st.gebruiker.rol) : '—') + rij('Mail & agenda → CRM', st.crmSyncTrigger ? ja + (st.laatsteCrmSync ? ' · laatst ' + esc(st.laatsteCrmSync) : '') : nee) +
         rij('Capsule-migratie', st.capsuleMigratie ? ja + ' · ' + esc(st.capsuleMigratie) : (st.capsuleToken ? 'token staat klaar' : nee)) +
-        rij('Dagstart (nacht)', st.reviewTrigger ? ja + (st.laatsteReview ? ' · laatst ' + esc(st.laatsteReview) : '') : nee) + rij('Rapport per mail', st.rapportEmail ? esc(st.rapportEmail) : nee) + rij('Index', st.indexTrigger ? ja + (st.laatsteIndex ? ' · laatst ' + esc(st.laatsteIndex) : '') : nee);
+        rij('Dagstart (nacht)', st.reviewTrigger ? ja + (st.laatsteReview ? ' · laatst ' + esc(st.laatsteReview) : '') : nee) + rij('Rapport per mail', st.rapportEmail ? esc(st.rapportEmail) : nee) + rij('Index', st.indexTrigger ? ja + (st.laatsteIndex ? ' · laatst ' + esc(st.laatsteIndex) : '') : nee) +
+        // v4.6: herinneringsmail een kwartier vóór een taak met tijd, per gebruiker aan of uit (alleen met een backend die het kent)
+        ('herinneringen' in st ? rij('Herinnering bij taak met tijd', (st.herinneringTrigger === false ? nee + ' — draai setup() voor de trigger · ' : '') + '<button class="knop klein' + (st.herinneringen ? '' : ' licht') + '" data-herinneringen="' + (st.herinneringen ? '0' : '1') + '">' + (st.herinneringen ? 'Aan' : 'Uit') + '</button>' + (st.email ? ' · naar ' + esc(st.email) : ' · <span class="nee">geen e-mailadres</span>')) : '');
     }).catch(function () { s.innerHTML = '<div class="leeg">Geen verbinding met de backend.</div>'; });
   }
   el('instellingenKnop').addEventListener('click', function () {

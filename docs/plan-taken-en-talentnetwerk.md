@@ -68,8 +68,8 @@ Peildatum onderzoek: 14-10-2026. ⚠️ = aanname of nog te verifiëren.
 
 | Release | Doel | Inschatting |
 |---|---|---|
-| **v4.5** Taken zoals Todoist, deel 1 | NL-snelinvoer met parser, herhaling, tijd, Vandaag/Komende, ongedaan maken, sneltoetsen, meldingen en rechten rond taken | 5–6 werkdagen |
-| **v4.6** Taken zoals Todoist, deel 2 | tags, subtaken, opgeslagen weergaven, weekagenda telefoon, herinneringsmail, teller/streak, sorteerbare tabel | 6–7 werkdagen |
+| **v4.5** Taken zoals Todoist, deel 1 | NL-snelinvoer met parser, herhaling, tijd, Vandaag/Komende, ongedaan maken, sneltoetsen, meldingen en rechten rond taken — klaar 14-10-2026 | 5–6 werkdagen |
+| **v4.6** Taken zoals Todoist, deel 2 | tags, subtaken, opgeslagen weergaven, weekagenda telefoon, herinneringsmail, teller/streak, sorteerbare tabel — klaar 15-10-2026 | 6–7 werkdagen |
 | **v4.7** (optie) Push | Web Push via kleine relay; overslaan als v6.0 binnen ±3 maanden start | 0 of 2 werkdagen |
 | **v5.0** Talentnetwerk fase 1 | één profiel per persoon, beschikbaarheid, documenten/VOG, relaties met scholen, beoordelingen, matching, uren uit XPS, rapport, lichte zelfservice | 18–22 werkdagen |
 | **v6.0** Supabase/Vercel | bestaande migratie (docs/supabase-migratie.md) + nieuwe tabellen en Storage; voorwaarde voor fase 2 | 12–16 werkdagen + 1 week parallel |

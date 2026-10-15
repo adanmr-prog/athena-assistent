@@ -156,6 +156,22 @@ with sync_playwright() as p:
     page.fill('#taakSnel', 'Nog een taak'); page.click('[data-taakweergave="laat"]'); page.wait_for_selector('#crmBalk .chip.aan[data-taakweergave="laat"]')
     assert page.input_value('#taakSnel') == 'Nog een taak', 'de snelinvoer overleeft een hertekening van de lijst'  # v4.5: het veld staat buiten #crmInhoud
     page.fill('#taakSnel', ''); page.click('[data-taakweergave="alles"]'); page.wait_for_selector('[data-taakklaar="tk3"]')
+    # v4.6: subtaken onder de hoofdtaak, tags als filter, opgeslagen weergaven, weekweergave
+    assert page.locator('.rij.sub:has-text("Datum prikken met Anna")').count() == 1 and 'subtaken' in page.locator('.rij:has-text("Evaluatie periode 1 inplannen") .r-meta').inner_text(), 'subtaken ingesprongen onder de hoofdtaak, met teller'
+    assert page.locator('#tfTag').count() == 0, 'filterbalk op de telefoon ingeklapt'; page.click('[data-filtertoon]'); page.wait_for_selector('#tfTag')  # v4.6: filters achter één chip
+    page.select_option('#tfTag', 'evaluatie'); page.wait_for_selector('.rij:has-text("Evaluatie periode 1 inplannen")'); page.wait_for_timeout(100)
+    assert 'Filter (1)' in page.locator('[data-filtertoon]').inner_text(), 'de chip telt de actieve filters'
+    assert page.locator('.rij:has-text("Teamuitje plannen")').count() == 0, 'tagfilter verbergt taken zonder die tag'
+    page.click('[data-weergave-opslaan]'); page.wait_for_selector('#venster.aan #vf-naam'); page.fill('#vf-naam', 'Evaluaties'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.opgeslagen .chip.aan:has-text("Evaluaties")')
+    page.select_option('#tfTag', ''); page.wait_for_selector('.rij:has-text("Teamuitje plannen")'); assert page.locator('.opgeslagen .chip.aan').count() == 0, 'een filter wijzigen maakt de opgeslagen weergave niet-actief'
+    page.click('.opgeslagen [data-weergave-kies="0"]'); page.wait_for_selector('.opgeslagen .chip.aan'); page.wait_for_timeout(100); assert page.locator('.rij:has-text("Teamuitje plannen")').count() == 0, 'opgeslagen weergave zet het tagfilter terug'
+    page.screenshot(path=OUT + '/15c_taken_filter.png', full_page=True)
+    page.select_option('#tfTag', ''); page.wait_for_selector('.rij:has-text("Teamuitje plannen")')
+    page.click('[data-taakweergave="week"]'); page.wait_for_selector('.weekblok'); page.wait_for_timeout(200); assert page.locator('.weekblok').count() == 7 and page.locator('[data-filtertoon]').count() == 1, 'weekweergave met zeven dagblokken en de filterchip'
+    page.select_option('#tfTag', 'evaluatie'); page.wait_for_timeout(200); assert page.locator('.weekblok .rij:has-text("Teamuitje plannen")').count() == 0 and page.locator('.weekblok').count() == 7, 'de weekweergave volgt het tagfilter'; page.select_option('#tfTag', ''); page.wait_for_timeout(200)
+    page.screenshot(path=OUT + '/15d_taken_week.png', full_page=True)
+    page.click('[data-weeknav="1"]'); page.wait_for_selector('.weekblok'); page.click('[data-weeknav="0"]'); page.wait_for_selector('.weekblok'); assert page.locator('.weekblok').count() == 7, 'weeknavigatie'
+    page.click('[data-taakweergave="alles"]'); page.wait_for_selector('[data-taakklaar="tk3"]')
     page.click('[data-crmnieuw="taak"]'); page.fill('#cf-snel', 'Offerte surveillance maken morgen om 11:00'); page.wait_for_timeout(100)
     assert page.input_value('#cf-tekst') == 'Offerte surveillance maken' and page.input_value('#cf-tijd') == '11:00', 'snelinvoer vult de velden van het formulier'
     page.click('[data-cf-opslaan]'); page.wait_for_selector('.rij:has-text("Offerte surveillance maken")'); page.wait_for_timeout(150)
@@ -212,12 +228,15 @@ with sync_playwright() as p:
     page.click('nav button[data-view="vandaag"]'); page.wait_for_selector('#kansenLijst [data-crm-open]'); page.click('#kansenLijst [data-crm-open="kans:k2"]'); page.wait_for_selector('[data-kansfase]'); page.wait_for_timeout(150)
     assert page.locator('#view-relaties.actief').count() == 1, 'kans vanuit Vandaag opent in Relaties'
     page.click('#instellingenKnop'); page.wait_for_selector('#statusInfo .k-rij'); page.wait_for_timeout(200)
+    page.click('#statusInfo [data-herinneringen="0"]'); page.wait_for_selector('#statusInfo [data-herinneringen="1"]:has-text("Uit")')  # v4.6: herinneringsmail uitzetten
+    page.click('#statusInfo [data-herinneringen="1"]'); page.wait_for_selector('#statusInfo [data-herinneringen="0"]:has-text("Aan")')
     page.screenshot(path=OUT + '/09_instellingen.png', full_page=True)
     page.click('#koppelSluit')
     # v3.0: desktopweergave (zijbalk, Capsule-opbouw)
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     assert page.locator('body.desk #zijbalk').is_visible(), 'zijbalk op desktop'
     page.click('.zb-item[data-desk="home"]'); page.wait_for_selector('#homeInhoud .hkaart'); page.wait_for_timeout(200)
+    assert page.locator('#homeInhoud .tegel:has-text("Deze week afgerond")').count() == 1 and page.locator('#homeInhoud .tegel:has-text("op rij")').count() == 1, 'tegels teller en streak'  # v4.6
     page.screenshot(path=OUT + '/20_desk_home.png')
     page.click('.zb-item[data-desk="contacten"]'); page.wait_for_selector('.dtabel tr.klik'); page.wait_for_timeout(150)
     page.click('th[data-sorteer="plaats"]'); page.wait_for_timeout(150)
@@ -227,6 +246,8 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/22_desk_school.png')
     page.click('.zb-item[data-desk="taken"]'); page.wait_for_selector('.dtabel [data-taakklaar]'); page.wait_for_timeout(150)
     assert page.locator('.dtabel th:has-text("Tijd")').count() >= 1 and page.locator('#crmInhoud .sneltoetsen').count() == 1, 'kolom Tijd en de sneltoetsenhint'  # v4.5
+    page.click('th[data-taaksorteer="deadline"]'); page.wait_for_selector('th[data-taaksorteer="deadline"]:has-text("▲")'); assert page.locator('.dtabel th:has-text("Tags")').count() >= 1 and page.locator('.dtabel tr.sub').count() == 0, 'kop Deadline sorteert (subtaken dan niet ingesprongen), kolom Tags'  # v4.6
+    page.click('th[data-taaksorteer="deadline"]'); page.wait_for_selector('th[data-taaksorteer="deadline"]:has-text("▼")')
     page.screenshot(path=OUT + '/23_desk_taken.png')
     page.locator('.dtabel tr[data-taakbewerk] td:nth-child(2)').first.click(); page.wait_for_selector('#venster.aan #vf-tekst'); page.screenshot(path=OUT + '/23b_desk_taak_venster.png'); page.click('#venster [data-cf-annuleer]')  # v3.7
     page.locator('.dtabel tr[data-taakbewerk="tk3"]').focus(); page.keyboard.press('1'); page.wait_for_selector('.dtabel tr[data-taakbewerk="tk3"] .tag.hoog')  # v4.5: sneltoets 1 = hoog
