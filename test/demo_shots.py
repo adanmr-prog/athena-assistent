@@ -110,5 +110,39 @@ with sync_playwright() as p:
             if v != 'vandaag': klik(page, 'nav button[data-view="%s"]' % v, 1000)
             shot(page, 't_%s_%s' % (rol, v))
         ctx.close()
+
+    # ---- v5.0: talentnetwerk ----
+    # talentteam (Iris): het bestand, een profiel met tabs, voorstellen met matchscore, het rapport
+    ctx, page = open_rol(b, 'iris')
+    desk(page, 'talent', 1200); shot(page, 'v50_iris_talentbestand')
+    klik(page, '.dtabel tr[data-crm-open="talent:tl1"]', 1200); shot(page, 'v50_iris_profiel_beschikbaarheid')
+    for tab in ['documenten', 'plaatsingen', 'beoordelingen']:
+        klik(page, '[data-dtab="%s"]' % tab, 700); shot(page, 'v50_iris_profiel_' + tab)
+    desk(page, 'bezetting', 1000); klik(page, '.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]', 1500)
+    page.wait_for_selector('#venster.aan .match-rij'); page.locator('#venster .match-rij [data-mtoggle]').first.click(); rust(page, 400); shot(page, 'v50_iris_voorstellen')
+    page.keyboard.press('Escape'); rust(page, 300)
+    desk(page, 'rapporten', 1000); page.wait_for_selector('#rapportTalent .tegel'); rust(page, 600); shot(page, 'v50_rapport_talentnetwerk', True)  # een teamlead ziet meteen het eigen team, zonder teamkeuze
+    ctx.close()
+    # accountmanager (Femke): VOG-badge op de kandidaatregel, beoordelen per plaatsing, het beperkte profiel
+    ctx, page = open_rol(b, 'femke')
+    desk(page, 'projecten', 1000)
+    if page.locator('[data-pweergave="am"]:visible').count(): klik(page, '[data-pweergave="am"]', 600)
+    klik(page, '[data-crm-open="project:t1"]', 1200); klik(page, '[data-dtab="bezetting"]', 800); shot(page, 'v50_femke_bezetting_vog')
+    klik(page, '#dTab .rij:has-text("Eva de Wit") [data-beoordeel]', 800); shot(page, 'v50_femke_beoordelen')
+    page.keyboard.press('Escape'); rust(page, 300)
+    klik(page, '#dTab .rij:has-text("Eva de Wit") a[data-crm-open="talent:tl1"]', 1200); shot(page, 'v50_femke_talent_beperkt')
+    ctx.close()
+    # telefoon (Sem): de lijst en het profiel
+    ctx, page = open_rol(b, 'sem', telefoon=True)
+    klik(page, 'nav button[data-view="trajecten"]', 1000); klik(page, '[data-pweergave="talent"]', 1000); shot(page, 'v50_t_sem_talentbestand', True)
+    klik(page, '.rij[data-crm-open="talent:tl1"]', 1200); shot(page, 'v50_t_sem_profiel', True)
+    ctx.close()
+    # het portaal: de mail-link van een talent, zonder inlog (v5.1: ook in de demo)
+    ctx = context(b, telefoon=True); page = ctx.new_page(); volg(page)
+    page.goto(url('iris', '&t=demotokenali0000000000000000000000000001')); page.wait_for_selector('#view-portaal.actief .raster button'); rust(page, 800)
+    assert not page.locator('nav').is_visible() and 'Ali' in page.inner_text('#portaalKop'), 'portaal in de demo met de voornaam van het talent'
+    shot(page, 'v50_t_portaal', True)
+    klik(page, '[data-pbevestig]', 900); assert 'Bevestigd op' in page.inner_text('#portaalTekst'), 'bevestigen via het portaal'; shot(page, 'v50_t_portaal_bevestigd')
+    ctx.close()
     server.shutdown()
 print('\n'.join('%s: %s' % m for m in meldingen) or 'meldingen: geen')

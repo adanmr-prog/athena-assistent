@@ -1926,16 +1926,19 @@
   }
   /* --- portaal: ?t=<token>&api=<exec>[&actie=bevestig]. Het token gaat alleen naar een Apps Script-adres (of de lokale testmock); de koppelcode en localStorage blijven buiten beeld. --- */
   var PORTAAL = (function () {
-    var q = location.search || '', t = /[?&]t=([A-Za-z0-9]{8,80})(&|$)/.exec(q), a = /[?&]api=([^&]+)/.exec(q); if (!t || !a) return null;
+    var q = location.search || '', t = /[?&]t=([A-Za-z0-9]{8,80})(&|$)/.exec(q), a = /[?&]api=([^&]+)/.exec(q); if (!t) return null;
+    if (DEMO) return { token: t[1], api: 'demo', bevestig: /[?&]actie=bevestig(&|$)/.test(q) };  // v5.1: in de demo (?demo=1&t=<token>) gaat het token naar de nagebootste backend (demo/demo.js)
+    if (!a) return null;
     var api = decodeURIComponent(a[1]);
     if (!/^https:\/\/script\.google\.com\/macros\//.test(api) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(api)) return null;
     return { token: t[1], api: api, bevestig: /[?&]actie=bevestig(&|$)/.test(q) };
   })();
   function runPortaal(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
-    return fetch(PORTAAL.api + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, portaal: PORTAAL.token }) })
-      .then(function (r) { return r.json().catch(function () { throw new Error('serverfout'); }); })  // HTML van Apps Script (quota, inlogpagina) is geen melding voor het talent
-      .then(function (d) { if (d && d.ok) return d.result; throw new Error((d && d.fout) || 'serverfout'); });
+    var p = DEMO ? laadDemo().then(function (d) { return d.portaal(fn, args, PORTAAL.token); })  // v5.1: demomodus
+      : fetch(PORTAAL.api + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, portaal: PORTAAL.token }) })
+        .then(function (r) { return r.json().catch(function () { throw new Error('serverfout'); }); });  // HTML van Apps Script (quota, inlogpagina) is geen melding voor het talent
+    return p.then(function (d) { if (d && d.ok) return d.result; throw new Error((d && d.fout) || 'serverfout'); });
   }
   function startPortaal() {
     document.body.classList.add('portaal'); wisselView('portaal');
