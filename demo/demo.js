@@ -21,6 +21,7 @@
   var rol = bekend(param) ? param : bekend(sessie('athena_demo_rol')) ? sessie('athena_demo_rol') : 'sophie';
   sessie('athena_demo_rol', rol);
   var kaal = /[?&]kaal=1(&|$)/.test(location.search);
+  var portaalModus = /[?&]t=[A-Za-z0-9]{8,80}(&|$)/.test(location.search);  // v5.1: de mail-link van een talent (?demo=1&t=<token>)
   var klaar = null, opslaanTimer = null, gestopt = false, venster = null;
   var SLEUTEL = 'athena_demo_data_v4.3';  // met versie: een sessie van een oudere demo wordt niet teruggezet
 
@@ -56,6 +57,14 @@
       return JSON.parse(tekst);
     });
   }
+  // v5.1: het talentportaal tegen dezelfde nagebootste backend; het token vervangt de koppelcode (zie demoPortaal in demo-backend.js)
+  function portaal(fn, args, token) {
+    return start().then(function (w) {
+      var tekst = w.demoPortaal(fn, JSON.stringify(args || []), token);
+      bewaar();
+      return JSON.parse(tekst);
+    });
+  }
   function opnieuw() { gestopt = true; clearTimeout(opslaanTimer); sessie(SLEUTEL, null); location.reload(); }
   function wissel(nieuw) {
     bewaarNu();
@@ -73,13 +82,19 @@
       '@media (max-width:359px){#demoBalk span{display:none}}';
     document.head.appendChild(st);
     var b = document.createElement('div'); b.id = 'demoBalk';
+    if (portaalModus) {  // v5.1: in het portaal geen rolkeuze; terug naar de app als talentteam, dat ziet de bevestiging dan op het profiel
+      b.innerHTML = '<span>Demo · zo ziet een talent de mail-link</span><button type="button">Naar de app</button>';
+      b.querySelector('button').addEventListener('click', function () { bewaarNu(); location.href = location.pathname + '?demo=1&rol=' + (rol === 'sophie' ? 'iris' : rol); });
+      document.body.appendChild(b);
+      return;
+    }
     var opties = ROLLEN.map(function (r) { return '<option value="' + r[0] + '"' + (r[0] === rol ? ' selected' : '') + '>' + r[1] + ' · ' + r[2] + '</option>'; }).join('');
     b.innerHTML = '<span>Demo · fictief</span><select aria-label="Bekijk als">' + opties + '</select><button type="button">Opnieuw</button>';
     b.querySelector('select').addEventListener('change', function () { wissel(this.value); });
     b.querySelector('button').addEventListener('click', function () { if (confirm('Alle wijzigingen in de demo wissen en opnieuw beginnen?')) opnieuw(); });
     document.body.appendChild(b);
   }
-  window.AthenaDemo = { run: run, rol: rol, opnieuw: opnieuw };
+  window.AthenaDemo = { run: run, portaal: portaal, rol: rol, opnieuw: opnieuw };
   window.addEventListener('pagehide', bewaarNu);  // iOS bevriest timers als de app naar de achtergrond gaat
   if (document.body) balk(); else document.addEventListener('DOMContentLoaded', balk);
 })();
