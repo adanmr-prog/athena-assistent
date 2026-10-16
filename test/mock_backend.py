@@ -121,13 +121,15 @@ FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'b
             {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
 KEUZES = {'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
 # v4.0: twee gebruikers. test123 = Menno (management), am123 = Joris (accountmanager): ziet geen pipeline, alleen zijn eigen projecten en facturatie
-ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten')}
+ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen')}  # v5.0: talenten, beoordelingen
 IKKEN = {'test123': {'naam': 'Menno', 'team': 'management', 'rol': 'management', 'beheer': True, 'gekoppeld': True, 'rechten': dict(ALLES, beheer=True, teamlead=False, doelen=True)},
          'am123': {'naam': 'Joris', 'team': 'accountmanagement', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'alles'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
-                   'projecten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'facturatie': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'vacatures': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'kandidaten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},
-         # v4.1: talentscout Lotte (code talent123): bezetting, geen pipeline of facturatie
+                   'projecten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'facturatie': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'vacatures': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'kandidaten': {'zien': 'eigen', 'wijzigen': 'eigen'},
+                   'talenten': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beoordelingen': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},
+         # v4.1: talentscout Lotte (code talent123): bezetting, geen pipeline of facturatie; v5.0: het hele talentbestand
          'talent123': {'naam': 'Lotte', 'team': 'talent', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'geen'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
-                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'}, 'beheer': False, 'teamlead': False, 'doelen': False}}}
+                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'},
+                   'talenten': {'zien': 'alles', 'wijzigen': 'alles'}, 'beoordelingen': {'zien': 'alles', 'wijzigen': 'alles'}, 'beheer': False, 'teamlead': False, 'doelen': False}}}
 HUIDIG = ['test123']
 def ik(): return dict(IKKEN[HUIDIG[0]])
 def beheer(): return ik()['beheer']
@@ -135,17 +137,23 @@ def eigen_project(t):
     if ik()['team'] == 'talent': return t.get('status') == 'opstart' or any(v['trajectId'] == t['id'] and v['status'] == 'open' for v in VACATURES)
     return beheer() or t.get('am') == ik()['naam']
 # v4.1: vacatures, kandidaten, taskforce en meldingen
-VACATURES = [{'id': 'v1', 'trajectId': 't4', 'titel': 'NT2-ondersteuner', 'aantal': 2, 'dagen': 'ma t/m do 9-15 uur', 'urenPerWeek': 16, 'start': '2026-11-02', 'eind': '2027-04-30', 'profiel': 'Ervaring met NT2, liefst pabo', 'status': 'open', 'door': 'Menno', 'aangemaakt': nu()}]
-KANDIDATEN = [{'id': 'c1', 'vacatureId': 'v1', 'trajectId': 't4', 'naam': 'Eva de Wit', 'email': 'eva@voorbeeld.nl', 'telefoon': '', 'bron': 'XPS-bestand', 'xpsId': 'X123', 'afasNummer': '', 'status': 'voorgesteld', 'statusSinds': d(-2) + ' 10:00', 'gesprek': '', 'notitie': '', 'door': 'Lotte'}]
+VACATURES = [{'id': 'v1', 'trajectId': 't4', 'titel': 'NT2-ondersteuner', 'aantal': 2, 'dagen': 'ma t/m do 9-15 uur', 'urenPerWeek': 16, 'start': '2026-11-02', 'eind': '2027-04-30', 'profiel': 'Ervaring met NT2, liefst pabo', 'status': 'open', 'door': 'Menno', 'aangemaakt': nu()},
+             # v5.0: een vacature op het project van Joris, met een geplaatste kandidaat uit het talentbestand (Beoordelen)
+             {'id': 'v2', 'trajectId': 't6', 'titel': 'Examentrainer wiskunde', 'aantal': 2, 'dagen': 'Woensdagmiddag', 'urenPerWeek': 10, 'start': '2027-03-01', 'eind': '2027-05-15', 'profiel': 'Wiskunde A op havo/vwo-niveau', 'status': 'open', 'door': 'Joris', 'aangemaakt': nu()}]
+KANDIDATEN = [{'id': 'c1', 'vacatureId': 'v1', 'trajectId': 't4', 'naam': 'Eva de Wit', 'email': 'eva@voorbeeld.nl', 'telefoon': '', 'bron': 'talentbestand', 'xpsId': 'X123', 'afasNummer': '', 'status': 'voorgesteld', 'statusSinds': d(-2) + ' 10:00', 'gesprek': '', 'notitie': '', 'door': 'Lotte', 'talentId': 'tl1'},
+              {'id': 'c2', 'vacatureId': 'v2', 'trajectId': 't6', 'naam': 'Noor Bakker', 'email': 'noor.bakker@voorbeeld.nl', 'telefoon': '', 'bron': 'talentbestand', 'xpsId': 'X124', 'afasNummer': '', 'status': 'geplaatst', 'statusSinds': d(-9) + ' 10:00', 'gesprek': '', 'notitie': '', 'door': 'Lotte', 'talentId': 'tl2', 'functie': 'Examentrainer wiskunde', 'start': d(-9), 'eind': '2027-05-15', 'urenPerWeek': 10, 'dagen': 'Woensdagmiddag'}]
 MELDINGEN = [{'id': 'm1', 'voor': 'Menno', 'tekst': 'Nieuwe kandidaat voor NT2-ondersteuner bij ISK Voorbeeld: Eva de Wit. Plan het matchinggesprek.', 'link': 'project:t4', 'datum': nu(), 'gelezen': '', 'door': 'Lotte'},
              {'id': 'm2', 'voor': 'Lotte', 'tekst': 'Nieuwe vacature: NT2-ondersteuner (2×) bij ISK Voorbeeld', 'link': 'project:t4', 'datum': nu(), 'gelezen': '', 'door': 'Menno'}]
-KSTATUS = ['voorgesteld', 'gesprek', 'geselecteerd', 'academy', 'contract', 'vog', 'klaar voor start', 'reserve', 'afgewezen']
+KSTATUS = ['voorgesteld', 'gesprek', 'geselecteerd', 'academy', 'contract', 'vog', 'klaar voor start', 'geplaatst', 'afgerond', 'gestopt', 'reserve', 'afgewezen']  # v5.0: geplaatst, afgerond, gestopt
+GEVULD = ('klaar voor start', 'geplaatst'); VOORBIJ = ('afgerond', 'gestopt')
 VRAGEN = [{'naam': 'hulpvraag', 'label': 'Hulpvraag van de school'}, {'naam': 'inzet', 'label': 'Inzet (aantal ondersteuners, rol)'}, {'naam': 'rooster', 'label': 'Rooster (dagen en tijden)'},
           {'naam': 'startdatum', 'label': 'Gewenste startdatum'}, {'naam': 'bijzonderheden', 'label': 'Bijzonderheden'}, {'naam': 'contactpersonen', 'label': 'Contactpersonen op school'}]
-def kand_uit(k): return dict(k, dagenInStatus=2)
+def kand_uit(k):
+    t = per_id(TALENTEN).get(k.get('talentId') or '')  # v5.0: talentId en VOG-badge
+    return dict({'talentId': '', 'functie': '', 'start': '', 'eind': '', 'urenPerWeek': '', 'dagen': '', 'xpsPlaatsingId': '', 'eindReden': ''}, **dict(k, dagenInStatus=2, vog=t['vogStatus'] if t else ''))
 def vac_uit(v, met=True):
     ks = [k for k in KANDIDATEN if k['vacatureId'] == v['id']]
-    u = dict(v, gevuld=len([k for k in ks if k['status'] == 'klaar voor start']), inProces=len([k for k in ks if k['status'] not in ('afgewezen', 'reserve', 'klaar voor start')]))
+    u = dict(v, gevuld=len([k for k in ks if k['status'] in GEVULD]), inProces=len([k for k in ks if k['status'] not in ('afgewezen', 'reserve') + GEVULD + VOORBIJ]))
     if met: u['kandidaten'] = [kand_uit(k) for k in sorted(ks, key=lambda k: KSTATUS.index(k['status']))]
     return u
 def bezetting_van(tid):
@@ -158,6 +166,174 @@ def project_bezetting(t):
             'rechtenBezetting': {'vacatures': ik()['team'] != 'consultancy', 'kandidatenZien': True, 'kandidaten': True, 'taskforce': True}}
 def meld(voor, tekst, link):
     if voor and voor != ik()['naam']: MELDINGEN.append({'id': 'm' + uuid.uuid4().hex[:5], 'voor': voor, 'tekst': tekst, 'link': link, 'datum': nu(), 'gelezen': '', 'door': ik()['naam']})
+# v5.0: het talentbestand (fictief). tl1 hangt aan kandidaat c1 (project van Menno), tl2 aan c2 (project van Joris, geplaatst → Beoordelen)
+DAGEN = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
+def raster(o, m, a): return {dg: ([o, m, a] if dg not in ('za', 'zo') else [0, 0, 0]) for dg in DAGEN}
+def talent(id, vn, an, plaats, functies, sectoren, status='actief', vog='groen', **k):
+    t = {'id': id, 'voornaam': vn, 'achternaam': an, 'naam': vn + ' ' + an, 'email': (vn + '.' + an).lower().replace(' ', '.') + '@voorbeeld.nl', 'telefoon': '06-3000' + id[2:].zfill(4), 'postcode': '3011 AB', 'woonplaats': plaats, 'lat': 51.92, 'lon': 4.48,
+         'functies': functies, 'sectoren': sectoren, 'vakken': [], 'opleiding': 'pabo, 3e jaar', 'bevoegdheid': 'geen', 'vervoer': 'ov', 'reisafstandKm': 25, 'maxUrenWeek': 24, 'beschikbaarVanaf': '', 'beschikbaarTot': '', 'beschikbaarheid': raster(2, 2, 0), 'uitzonderingen': [],
+         'beschikbaarheidBevestigd': d(-5) + ' 08:00', 'laatstePeiling': '', 'contractvorm': 'min-max', 'status': status, 'statusSinds': d(-100) + ' 10:00', 'bron': 'website', 'xpsId': 'X' + id[2:], 'afasNummer': '', 'tags': [], 'velden': {}, 'toestemmingDatum': d(-100), 'toestemmingGrondslag': 'toestemming', 'bewarenTot': d(630),
+         'portaalToken': '', 'portaalTokenTot': '', 'notitie': '', 'laatsteContact': d(-3), 'door': 'Lotte', 'aangemaakt': d(-100) + ' 10:00', 'bijgewerkt': nu(), 'vogStatus': vog}
+    t.update(k); return t
+TALENTEN = [talent('tl1', 'Eva', 'de Wit', 'Delft', ['nt2-ondersteuner', 'onderwijsondersteuner'], ['isk', 'vo'], email='eva@voorbeeld.nl', beschikbaarheid=raster(2, 0, 0), portaalToken='testtoken12345678901234', portaalTokenTot=d(60) + ' 09:00', vakken=['nederlands']),
+            talent('tl2', 'Noor', 'Bakker', 'Rotterdam', ['onderwijsondersteuner', 'nt2-ondersteuner'], ['vo', 'po'], vog='oranje'),
+            talent('tl3', 'Sam', 'Visser', 'Den Haag', ['nt2-ondersteuner'], ['isk'], status='aangemeld', vog='ontbreekt', beschikbaarheidBevestigd=''),
+            talent('tl4', 'Lara', 'Smit', 'Leiden', ['huiswerkbegeleider', 'examentrainer'], ['vo'], status='slapend', vog='verlopen', laatstePeiling=d(-20) + ' 06:35')]
+TALENTDOCS = [{'id': 'td1', 'talentId': 'tl1', 'soort': 'vog', 'afgifte': d(-40), 'geldigTot': '', 'status': 'geldig', 'heeftBestand': False, 'gecontroleerdDoor': 'Lotte', 'gecontroleerdOp': d(-38) + ' 10:00', 'notitie': '', 'door': 'Lotte', 'aangemaakt': d(-38) + ' 10:00'},
+              {'id': 'td2', 'talentId': 'tl2', 'soort': 'vog', 'afgifte': d(-200), 'geldigTot': '', 'status': 'geldig', 'heeftBestand': True, 'gecontroleerdDoor': 'Lotte', 'gecontroleerdOp': d(-198) + ' 10:00', 'notitie': '', 'door': 'Lotte', 'aangemaakt': d(-198) + ' 10:00'}]
+BEOORDELINGEN, TALENTSCHOOL = [], []
+TALENTUREN = [{'week': '2026-W%02d' % w, 'talentId': 'tl2', 'uren': 10, 'diensten': 1, 'noShows': 0, 'lateAfmeldingen': 0, 'xpsProject': '10.880', 'project': 'Lyceum Demo · Examentraining'} for w in range(37, 41)]
+TALENT_KEUZES = {'functies': ['onderwijsondersteuner', 'studentdocent', 'huiswerkbegeleider', 'examentrainer', 'nt2-ondersteuner', 'rekenondersteuner', 'surveillant'], 'sectoren': ['po', 'vo', 'mbo', 'so', 'isk'], 'vakken': ['nederlands', 'engels', 'wiskunde', 'rekenen'], 'statussen': ['aangemeld', 'gescreend', 'actief', 'slapend', 'uitgeschreven'],
+                 'contractvormen': ['ovo', 'min-max', 'zzp', 'stage'], 'documentSoorten': ['vog', 'diploma', 'certificaat', 'bevoegdheid', 'overig'], 'bronnen': ['website', 'xps-bestand', 'linkedin', 'eigen netwerk', 'sollicitatie', 'anders'], 'vervoer': ['auto', 'ov', 'fiets'], 'criteria': ['punctualiteit', 'didactiek', 'samenwerking', 'communicatie'],
+                 'oordelen': ['favoriet', 'goed', 'niet geschikt'], 'schoolStatussen': ['favoriet', 'neutraal', 'niet meer'], 'documentStatussen': ['geldig', 'verlopen', 'ontbreekt', 'in aanvraag'], 'dagen': DAGEN, 'dagdelen': ['ochtend', 'middag', 'avond']}
+PUNTEN = {'favoriet': 3, 'goed': 2, 'niet geschikt': 1}
+def talent_alles(): return ik()['rechten'].get('talenten', {}).get('zien') == 'alles'
+def mijn_talenten(): return {k['talentId'] for k in KANDIDATEN if k.get('talentId') and eigen_project(per_id(TRAJECTEN)[k['trajectId']])}
+def vog_van(t): return {'status': t.get('vogStatus', 'ontbreekt'), 'afgifte': next((x['afgifte'] for x in TALENTDOCS if x['talentId'] == t['id'] and x['soort'] == 'vog'), ''), 'geldigTot': ''}
+def beo_samen(tid):
+    l = sorted([b for b in BEOORDELINGEN if b['talentId'] == tid], key=lambda b: b['datum'], reverse=True)
+    if not l: return {'aantal': 0, 'gem': None, 'laatste': None, 'favorieten': 0, 'nietGeschikt': 0}
+    return {'aantal': len(l), 'gem': round(sum(PUNTEN[b['oordeel']] for b in l) / len(l), 1), 'laatste': {'oordeel': l[0]['oordeel'], 'datum': l[0]['datum'], 'door': l[0]['door']}, 'favorieten': len([b for b in l if b['oordeel'] == 'favoriet']), 'nietGeschikt': len([b for b in l if b['oordeel'] == 'niet geschikt'])}
+def beo_uit(b):
+    s = per_id(SCHOLEN).get(b.get('schoolId')); t = per_id(TRAJECTEN).get(b.get('trajectId'))
+    return dict(b, school=s['naam'] if s else '', project=(t['traject'] + ' ' + t['schooljaar']) if t else '', magWijzigen=beheer() or b['door'] == ik()['naam'] or talent_alles())
+def ts_uit(r): return dict(r, school=per_id(SCHOLEN)[r['schoolId']]['naam'])
+def talent_uit(t, beperkt):
+    u = {'id': t['id'], 'voornaam': t['voornaam'], 'achternaam': t['achternaam'], 'naam': t['naam'], 'functies': t['functies'], 'sectoren': t['sectoren'], 'vakken': t['vakken'], 'status': t['status'], 'statusSinds': t['statusSinds'], 'email': t['email'], 'telefoon': t['telefoon'], 'vog': vog_van(t), 'beoordeling': beo_samen(t['id']),
+         'plaatsingen': len([k for k in KANDIDATEN if k.get('talentId') == t['id'] and k['status'] in GEVULD]), 'beschikbaarheidBevestigd': t['beschikbaarheidBevestigd'], 'beperkt': beperkt, 'compleetheid': 87 if t['beschikbaarheidBevestigd'] else 60, 'woonplaats': t['woonplaats']}
+    if beperkt: return u
+    u.update({k: t[k] for k in ('postcode', 'lat', 'lon', 'opleiding', 'bevoegdheid', 'vervoer', 'reisafstandKm', 'maxUrenWeek', 'beschikbaarVanaf', 'beschikbaarTot', 'beschikbaarheid', 'uitzonderingen', 'laatstePeiling', 'contractvorm', 'bron', 'xpsId', 'afasNummer', 'tags', 'velden', 'toestemmingDatum', 'toestemmingGrondslag', 'bewarenTot', 'notitie', 'laatsteContact', 'door', 'aangemaakt', 'bijgewerkt')})
+    u['portaal'] = bool(t['portaalToken']); u['ontbreekt'] = [] if t['beschikbaarheidBevestigd'] else ['beschikbaarheid', 'vervoer']
+    return u
+def talent_rechten(): return {'wijzigen': talent_alles(), 'vol': talent_alles(), 'beheer': beheer()}
+def plaatsingen_van(t, vol):
+    tm, vm, uit = per_id(TRAJECTEN), per_id(VACATURES), []
+    for k in KANDIDATEN:
+        if k.get('talentId') != t['id']: continue
+        tr = tm.get(k['trajectId'], {}); v = vm.get(k['vacatureId'], {})
+        if not vol and not eigen_project(tr): continue
+        uit.append({'id': k['id'], 'vacatureId': k['vacatureId'], 'trajectId': k['trajectId'], 'school': tr.get('school', ''), 'schoolId': tr.get('schoolId', ''), 'traject': tr.get('traject', ''), 'schooljaar': tr.get('schooljaar', ''), 'am': tr.get('am', ''), 'vacature': v.get('titel', ''), 'functie': k.get('functie') or v.get('titel', ''), 'status': k['status'], 'statusSinds': k.get('statusSinds', ''),
+                    'start': k.get('start') or v.get('start', ''), 'eind': k.get('eind') or v.get('eind', ''), 'urenPerWeek': k.get('urenPerWeek') or v.get('urenPerWeek', ''), 'dagen': k.get('dagen') or v.get('dagen', ''), 'eindReden': k.get('eindReden', ''), 'door': k.get('door', ''), 'magBeoordelen': vol or k['status'] in GEVULD + VOORBIJ})
+    return uit
+def handle_talent(fn, args):
+    if fn == 'apiTalenten':
+        if ik()['rechten'].get('talenten', {}).get('zien', 'geen') == 'geen': geen_toegang()
+        vol = talent_alles(); lijst = TALENTEN if vol else [t for t in TALENTEN if t['id'] in mijn_talenten()]; act = [t for t in lijst if t['status'] == 'actief']
+        return {'talenten': [talent_uit(t, not vol) for t in lijst], 'ik': ik(), 'keuzes': TALENT_KEUZES,
+                'tellingen': {'totaal': len(lijst), 'actief': len(act), 'slapend': len([t for t in lijst if t['status'] == 'slapend']), 'aangemeld': len([t for t in lijst if t['status'] == 'aangemeld']), 'gescreend': 0, 'vogGroen': len([t for t in act if t['vogStatus'] == 'groen']), 'compleet': len(lijst) - 1},
+                'rechten': talent_rechten(), 'scholen': [{'id': s['id'], 'naam': s['naam'], 'lat': 52.0, 'lon': 4.5} for s in SCHOLEN] if vol else [],
+                'benaderen': [{'id': 'tl4', 'naam': 'Lara Smit', 'redenen': ['peiling niet beantwoord', 'VOG verlopen']}, {'id': 'tl3', 'naam': 'Sam Visser', 'redenen': ['aanmelding wacht al 8 dagen op screening']}] if vol else []}
+    if fn == 'apiTalent':
+        t = per_id(TALENTEN).get(args[0]); vol = talent_alles()
+        if not t: raise ValueError('Talent niet gevonden.')
+        if not vol and t['id'] not in mijn_talenten(): geen_toegang()
+        return {'talent': talent_uit(t, not vol), 'documenten': [x for x in TALENTDOCS if x['talentId'] == t['id']] if vol else [], 'beoordelingen': [beo_uit(b) for b in BEOORDELINGEN if b['talentId'] == t['id']],
+                'scholen': [ts_uit(r) for r in TALENTSCHOOL if r['talentId'] == t['id']] if vol else [], 'plaatsingen': plaatsingen_van(t, vol), 'uren': [u for u in TALENTUREN if u['talentId'] == t['id']] if vol else [],
+                'tijdlijn': tijdlijn(lambda a: a.get('talentId') == t['id']) if vol else [], 'keuzes': TALENT_KEUZES, 'rechten': {'wijzigen': vol, 'vol': vol, 'beoordelen': vol or t['id'] in mijn_talenten(), 'beheer': beheer()}}
+    if fn == 'apiTalentOpslaan':
+        if not talent_alles(): geen_toegang()
+        o = dict(args[0]); o.pop('_oud', None); forceer = o.pop('forceer', False); oud = per_id(TALENTEN).get(o.get('id') or '')
+        email = (o.get('email') or (oud or {}).get('email') or '').lower(); tel = o.get('telefoon') or (oud or {}).get('telefoon') or ''
+        dub = next((t for t in TALENTEN if t is not oud and t['status'] != 'uitgeschreven' and ((email and t['email'].lower() == email) or (tel and t['telefoon'] == tel))), None)
+        if dub and not forceer: raise ValueError('Er is al een profiel met dit e-mailadres of telefoonnummer: ' + dub['naam'] + ' [talent:' + dub['id'] + ']')
+        if not oud:
+            if not o.get('toestemmingDatum'): raise ValueError('Leg de toestemming vast: de datum waarop deze persoon akkoord ging met opname in het talentbestand.')
+            t = talent('tl' + uuid.uuid4().hex[:5], o.get('voornaam', ''), o.get('achternaam', ''), o.get('woonplaats', ''), o.get('functies') or [], o.get('sectoren') or [], status='aangemeld', vog='ontbreekt', email=email, telefoon=tel, door=ik()['naam'], aangemaakt=nu(), statusSinds=nu(), beschikbaarheidBevestigd='', beschikbaarheid=raster(0, 0, 0))
+            for k in ('postcode', 'vakken', 'opleiding', 'bevoegdheid', 'vervoer', 'reisafstandKm', 'maxUrenWeek', 'contractvorm', 'bron', 'xpsId', 'afasNummer', 'notitie', 'toestemmingDatum', 'toestemmingGrondslag'):
+                if k in o: t[k] = o[k]
+            t['tags'] = tags_lijst(o.get('tags', [])); t['velden'] = o.get('velden') or {}; TALENTEN.append(t)
+            ACTIVITEITEN.append({'id': 'e' + uuid.uuid4().hex[:5], 'type': 'notitie', 'datum': nu(), 'door': ik()['naam'], 'schoolId': '', 'persoonId': '', 'kansId': '', 'talentId': t['id'], 'onderwerp': 'Profiel aangemaakt', 'tekst': '', 'duurMin': 0, 'bron': 'app'})
+        else:
+            if 'tags' in o: o['tags'] = tags_lijst(o['tags'])
+            oud.update({k: v for k, v in o.items() if k != 'id'}); oud['naam'] = (oud['voornaam'] + ' ' + oud['achternaam']).strip(); t = oud
+        u = talent_uit(t, False)
+        if t.get('contractvorm') == 'zzp': u['waarschuwing'] = 'Let op: zzp in het onderwijs geldt volgens de Wet DBA meestal als schijnzelfstandigheid. Overleg met de administratie.'
+        return u
+    if fn == 'apiTalentBeschikbaarheidOpslaan':
+        t = per_id(TALENTEN)[args[0]]
+        if args[1]: t['beschikbaarheid'] = {dg: [int(x) if str(x) in ('1', '2') else 0 for x in (args[1].get(dg) or [0, 0, 0])] for dg in DAGEN}
+        if len(args) > 2 and args[2] is not None: t['uitzonderingen'] = args[2]
+        t['beschikbaarheidBevestigd'] = nu(); return talent_uit(t, False)
+    if fn == 'apiTalentPortaalLink':
+        t = per_id(TALENTEN)[args[0]]; t['portaalToken'] = 'tok' + uuid.uuid4().hex[:37]; t['portaalTokenTot'] = d(90) + ' 09:00'
+        link = 'http://127.0.0.1:8765/?t=' + t['portaalToken'] + '&api=http%3A%2F%2F127.0.0.1%3A8765%2Fapi'
+        return {'link': link, 'bevestigLink': link.replace('&api=', '&actie=bevestig&api='), 'tot': t['portaalTokenTot'], 'gemaild': bool(args[1]) if len(args) > 1 else False}
+    if fn == 'apiTalentDocumentOpslaan':
+        o = dict(args[0]); bestand = args[1] if len(args) > 1 else None; oud = per_id(TALENTDOCS).get(o.get('id') or '')
+        if (o.get('soort') or (oud or {}).get('soort')) == 'vog' and not (o.get('afgifte') or (oud or {}).get('afgifte')): raise ValueError('Vul de afgiftedatum van de VOG in.')
+        if oud: oud.update({k: v for k, v in o.items() if k not in ('id', 'gecontroleerd')}); doc = oud
+        else:
+            doc = {'id': 'td' + uuid.uuid4().hex[:5], 'talentId': o['talentId'], 'soort': o.get('soort', 'vog'), 'afgifte': o.get('afgifte', ''), 'geldigTot': o.get('geldigTot', ''), 'status': o.get('status') or 'geldig', 'heeftBestand': bool(bestand), 'gecontroleerdDoor': ik()['naam'] if o.get('gecontroleerd') else '', 'gecontroleerdOp': nu() if o.get('gecontroleerd') else '', 'notitie': o.get('notitie', ''), 'door': ik()['naam'], 'aangemaakt': nu()}
+            TALENTDOCS.append(doc)
+        if bestand: doc['heeftBestand'] = True
+        t = per_id(TALENTEN)[doc['talentId']]
+        if doc['soort'] == 'vog': t['vogStatus'] = 'groen'
+        return {'document': doc, 'vog': vog_van(t)}
+    if fn == 'apiTalentDocumentLink':
+        if not talent_alles(): geen_toegang()
+        return {'url': 'https://drive.google.com/file/d/mock-' + args[0]}
+    if fn == 'apiTalentSchoolOpslaan':
+        o = args[0]; s = per_id(SCHOLEN)[o['schoolId']]
+        TALENTSCHOOL[:] = [r for r in TALENTSCHOOL if not (r['talentId'] == o['talentId'] and r['schoolId'] == o['schoolId'] and r.get('richting', 'school') == o.get('richting', 'school'))]
+        TALENTSCHOOL.append({'id': 'ts' + uuid.uuid4().hex[:5], 'talentId': o['talentId'], 'schoolId': o['schoolId'], 'status': o.get('status', 'neutraal'), 'richting': o.get('richting', 'school'), 'reden': o.get('reden', ''), 'door': ik()['naam'], 'datum': nu()})
+        return [ts_uit(r) for r in TALENTSCHOOL if r['talentId'] == o['talentId']]
+    if fn == 'apiBeoordelingOpslaan':
+        o = dict(args[0]); oud = per_id(BEOORDELINGEN).get(o.get('id') or ''); talentteam = talent_alles(); kand = per_id(KANDIDATEN).get(o.get('kandidaatId') or (oud or {}).get('kandidaatId') or '')
+        if not talentteam and not kand: raise ValueError('Kies de plaatsing waarover je oordeelt.')
+        tr = per_id(TRAJECTEN).get(kand['trajectId']) if kand else None
+        if oud: oud.update({k: v for k, v in o.items() if k not in ('id', 'talentId')}); b = oud
+        else:
+            b = {'id': 'b' + uuid.uuid4().hex[:5], 'talentId': o['talentId'], 'kandidaatId': kand['id'] if kand else '', 'trajectId': tr['id'] if tr else '', 'schoolId': tr['schoolId'] if tr else o.get('schoolId', ''), 'door': ik()['naam'], 'rol': 'talent' if talentteam else 'am', 'datum': nu(), 'oordeel': o.get('oordeel', ''), 'criteria': o.get('criteria') or {}, 'tekst': o.get('tekst', ''), 'zichtbaarheid': 'intern', 'wederhoor': o.get('wederhoor', ''), 'aangemaakt': nu()}
+            BEOORDELINGEN.append(b)
+            if b['oordeel'] == 'niet geschikt': meld('Lotte', per_id(TALENTEN)[b['talentId']]['naam'] + ' is door ' + ik()['naam'] + ' beoordeeld als niet geschikt.', 'talent:' + b['talentId'])
+        s = per_id(SCHOLEN).get(b['schoolId'])
+        return {'beoordeling': beo_uit(b), 'voorstelNietMeer': {'schoolId': b['schoolId'], 'school': s['naam'] if s else ''} if (not oud and b['oordeel'] == 'niet geschikt' and b['schoolId']) else None}
+    if fn == 'apiMatch':
+        if not talent_alles(): raise ValueError('Voorstellen uit het talentbestand doet het talentteam.')
+        v = per_id(VACATURES)[args[0]]; t = per_id(TRAJECTEN)[v['trajectId']]; al = {k.get('talentId') for k in KANDIDATEN if k['vacatureId'] == v['id']}; kands, uit = [], []
+        for tl in TALENTEN:
+            if tl['status'] != 'actief': uit.append({'talentId': tl['id'], 'naam': tl['naam'], 'status': tl['status'], 'reden': 'status ' + tl['status']}); continue
+            if 'nt2-ondersteuner' not in tl['functies'] and 'onderwijsondersteuner' not in tl['functies']: uit.append({'talentId': tl['id'], 'naam': tl['naam'], 'status': tl['status'], 'reden': 'functie past niet (' + ', '.join(tl['functies']) + ')'}); continue
+            top = tl['id'] == 'tl1'
+            onderdelen = [{'naam': 'rol', 'punten': 20, 'max': 25, 'uitleg': 'functie nt2-ondersteuner'}, {'naam': 'relatie met de school', 'punten': 8, 'max': 20, 'uitleg': 'nog niet eerder op deze school'}, {'naam': 'beschikbaarheid', 'punten': 15 if top else 8, 'max': 15, 'uitleg': 'beschikbaar op alle gevraagde dagdelen, bevestigd 5 dagen geleden' if top else 'deels "liever niet"'},
+                          {'naam': 'afstand', 'punten': 15 if top else 11, 'max': 15, 'uitleg': '4 km hemelsbreed' if top else '16 km hemelsbreed'}, {'naam': 'betrouwbaarheid', 'punten': 6, 'max': 10, 'uitleg': 'nog geen uren uit XPS'}, {'naam': 'beoordeling en VOG', 'punten': 5 if top else 3, 'max': 10, 'uitleg': 'nog niet beoordeeld, VOG ' + tl['vogStatus']}, {'naam': 'voorkeur', 'punten': 3 if top else 0, 'max': 5, 'uitleg': 'uren passen'}]
+            kands.append({'talentId': tl['id'], 'naam': tl['naam'], 'score': sum(x['punten'] for x in onderdelen), 'onderdelen': onderdelen, 'waarschuwingen': [] if tl['vogStatus'] == 'groen' else ['VOG ' + tl['vogStatus']], 'vog': tl['vogStatus'], 'afstandKm': 4 if top else 16, 'vastGezicht': False, 'alVoorgedragen': tl['id'] in al, 'functies': tl['functies'], 'woonplaats': tl['woonplaats'], 'beschikbaarheidBevestigd': tl['beschikbaarheidBevestigd'], 'beoordeling': beo_samen(tl['id'])})
+        kands.sort(key=lambda k: -k['score'])
+        return {'vacature': vac_uit(v, False), 'project': {'id': t['id'], 'school': t['school'], 'schoolId': t['schoolId'], 'traject': t['traject']}, 'functie': 'nt2-ondersteuner', 'sector': 'isk', 'roosterHerkend': True, 'dagdelen': ['ma ochtend', 'di ochtend', 'wo ochtend', 'do ochtend'], 'kandidaten': kands, 'totaal': len(kands), 'uitgesloten': uit}
+    if fn == 'apiVoorstellen':
+        if not talent_alles(): raise ValueError('Voorstellen uit het talentbestand doet het talentteam.')
+        v = per_id(VACATURES)[args[0]]; t = per_id(TRAJECTEN)[v['trajectId']]; al = {k.get('talentId') for k in KANDIDATEN if k['vacatureId'] == v['id']}; namen = []
+        for tid in args[1]:
+            if tid in al: continue
+            tl = per_id(TALENTEN)[tid]
+            KANDIDATEN.append({'id': 'c' + uuid.uuid4().hex[:5], 'vacatureId': v['id'], 'trajectId': t['id'], 'talentId': tid, 'naam': tl['naam'], 'email': tl['email'], 'telefoon': tl['telefoon'], 'bron': 'talentbestand', 'xpsId': tl['xpsId'], 'afasNummer': '', 'status': 'voorgesteld', 'statusSinds': nu(), 'gesprek': '', 'notitie': args[2] if len(args) > 2 else '', 'door': ik()['naam'], 'functie': v['titel'], 'start': v.get('start', ''), 'eind': v.get('eind', ''), 'urenPerWeek': v.get('urenPerWeek', ''), 'dagen': v.get('dagen', '')})
+            TAKEN.append({'id': 'tk' + uuid.uuid4().hex[:5], 'tekst': 'Matchinggesprek met ' + tl['naam'] + ' (' + t['school'] + ', ' + v['titel'] + ')', 'bron': 'bezetting', 'prio': 'hoog', 'deadline': d(3), 'link': 'talent:' + tid, 'over': -3, 'categorie': 'afspraak', 'eigenaar': t['am'], 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': t['schoolId'], 'persoonId': '', 'kansId': '', 'trajectId': t['id']})
+            namen.append(tl['naam'])
+        if namen: meld(t['am'], str(len(namen)) + ' kandidaten voorgedragen voor ' + v['titel'] + ' bij ' + t['school'] + ': ' + ', '.join(namen) + '. Plan de matchinggesprekken.', 'project:' + t['id'])
+        r = project_bezetting(t); r['aantal'] = len(namen); r['overgeslagen'] = len(args[1]) - len(namen); return r
+    if fn == 'apiTalentRapport':
+        if not talent_alles(): geen_toegang()
+        c = {'aanmeldingen': 3, 'gescreend': 2, 'voordrachten': 5, 'plaatsingen': 2, 'beoordelingen': len(BEOORDELINGEN), 'beoordelingGem': 2.5, 'reactiePeiling': 3}
+        return {'preset': args[0] or 'maand', 'stap': 0, 'van': d(-20), 'tot': d(0), 'label': 'oktober 2026', 'lopend': True, 'vergelijk': {'label': 'vorige periode', 'kort': 'vorige', 'cijfers': {k: (x - 1 if isinstance(x, int) else x) for k, x in c.items()}}, 'cijfers': c, 'reeksLabels': ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
+                'reeks': {'aanmeldingen': [1, 2, 1, 3, 2, 3], 'voordrachten': [2, 3, 4, 3, 5, 5], 'plaatsingen': [0, 1, 1, 2, 1, 2]}, 'pool': {'aangemeld': 1, 'gescreend': 0, 'actief': 2, 'slapend': 1, 'uitgeschreven': 0}, 'actief': 2, 'vogGroen': 1, 'vogCompliance': 50, 'compleet': 3,
+                'dekking': [{'functie': f, 'totaal': 2 if f in ('nt2-ondersteuner', 'onderwijsondersteuner') else 0, 'dagdelen': [2, 1, 0] if f in ('nt2-ondersteuner', 'onderwijsondersteuner') else [0, 0, 0]} for f in TALENT_KEUZES['functies']], 'perSector': [{'sector': s, 'aantal': 1} for s in TALENT_KEUZES['sectoren']], 'dagdelen': TALENT_KEUZES['dagdelen']}
+    if fn == 'apiTalentExport': return {'bestandsnaam': 'inzage-' + args[0] + '.json', 'tekst': json.dumps({'profiel': talent_uit(per_id(TALENTEN)[args[0]], False)})}
+    if fn == 'apiTalentAnonimiseer':
+        t = per_id(TALENTEN)[args[0]]; t.update({'voornaam': 'Verwijderd', 'achternaam': 'profiel', 'naam': 'Verwijderd profiel', 'email': '', 'telefoon': '', 'postcode': '', 'notitie': '', 'status': 'uitgeschreven'}); return talent_uit(t, False)
+    if fn == 'apiTalentRunNu': return {'vog': 'niet vandaag (1 mei en 1 juni)', 'peiling': 0, 'slapend': 0, 'bewaartermijn': 0, 'geocoderen': 0, 'aanmeldingen': '0 nieuw, 0 bestaand, 0 mails'}
+    if fn == 'apiTalentUrenImport': return {'bestanden': 1, 'regels': 12, 'weken': 1, 'onbekend': [], 'kandidatenBijgewerkt': 0, 'overgeslagen': []}
+    return None
+def handle_portaal(token, fn, args):
+    t = next((x for x in TALENTEN if x['portaalToken'] and x['portaalToken'] == token), None)
+    if fn not in ('apiPortaalToon', 'apiPortaalBeschikbaarheid'): return {'ok': False, 'fout': 'onbekende functie ' + str(fn)}
+    if not t: return {'ok': False, 'fout': 'Deze link is verlopen; vraag een nieuwe aan bij het talentteam.'}
+    if fn == 'apiPortaalToon': return {'ok': True, 'result': {'naam': t['voornaam'], 'functies': t['functies'], 'beschikbaarheid': t['beschikbaarheid'], 'uitzonderingen': t['uitzonderingen'], 'beschikbaarheidBevestigd': t['beschikbaarheidBevestigd'], 'bedrijf': 'AthenaSchool', 'dagen': DAGEN, 'dagdelen': TALENT_KEUZES['dagdelen']}}
+    alleen = len(args) > 2 and args[2]
+    if not alleen and args and args[0]: t['beschikbaarheid'] = args[0]
+    if not alleen and len(args) > 1 and args[1] is not None: t['uitzonderingen'] = args[1]
+    t['beschikbaarheidBevestigd'] = nu(); weer = t['status'] == 'slapend'
+    if weer: t['status'] = 'actief'
+    return {'ok': True, 'result': {'ok': True, 'beschikbaarheidBevestigd': t['beschikbaarheidBevestigd'], 'beschikbaarheid': t['beschikbaarheid'], 'uitzonderingen': t['uitzonderingen'], 'weerActief': weer}}
 def geen_toegang(): raise ValueError('Daar heb je geen toegang toe.')
 def project_uit(t): return dict(t, facturen=[f for f in FACTUREN if f['trajectId'] == t['id']])
 def projectnaam(tid):
@@ -315,7 +491,8 @@ def handle_crm(fn, args):
             return {'id': o['id']}
         a = per_id(ACTIVITEITEN)[o['id']]; a.update(o); return dict(act_uit(a), agendaBijgewerkt=bool(a.get('agenda')))
     if fn == 'apiInstellingen': return dict(INSTELLINGEN, schooljaar=INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027', schooljaarOpDatum='2026-2027', schooljaarHandmatig=INSTELLINGEN.get('schooljaarHandmatig', ''),
-                                            verlenging=KEUZES['verlenging'], kandidaatBronnen=['XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders'])
+                                            verlenging=KEUZES['verlenging'], kandidaatBronnen=['talentbestand', 'XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders'],
+                                            talentFuncties=TALENT_KEUZES['functies'], sectoren=TALENT_KEUZES['sectoren'], vakken=TALENT_KEUZES['vakken'], documentSoorten=TALENT_KEUZES['documentSoorten'], contractvormen=TALENT_KEUZES['contractvormen'], beoordelingsCriteria=TALENT_KEUZES['criteria'], talentBronnen=TALENT_KEUZES['bronnen'])  # v5.0
     if fn == 'apiSchooljaarOpslaan': INSTELLINGEN['schooljaarHandmatig'] = args[0]; return {'schooljaar': args[0] or '2026-2027'}  # v4.1
     if fn == 'apiMeldingen': return sorted([m for m in MELDINGEN if m['voor'] == ik()['naam']], key=lambda m: m['datum'], reverse=True)
     if fn == 'apiMeldingenGelezen':
@@ -339,7 +516,10 @@ def handle_crm(fn, args):
         v = opslaan(VACATURES, o, 'v'); return project_bezetting(per_id(TRAJECTEN)[v['trajectId']])
     if fn == 'apiKandidaatOpslaan':
         o = dict(args[0]); o.pop('_oud', None)
-        if not o.get('id'): o.update({'status': o.get('status') or 'voorgesteld', 'door': ik()['naam'], 'statusSinds': nu()}); [o.setdefault(k, '') for k in ['email', 'telefoon', 'bron', 'xpsId', 'afasNummer', 'gesprek', 'notitie']]
+        tl = per_id(TALENTEN).get(o.get('talentId') or '')  # v5.0: uit het talentbestand → naam en contact van het profiel
+        if tl and not o.get('id'): o.update({'naam': tl['naam'], 'email': tl['email'], 'telefoon': tl['telefoon'], 'xpsId': tl['xpsId'], 'bron': 'talentbestand'})
+        if o.get('status') in VOORBIJ and not (o.get('eindReden') or per_id(KANDIDATEN).get(o.get('id') or '', {}).get('eindReden')): raise ValueError('Geef de reden waarom de inzet is ' + o['status'] + '.')
+        if not o.get('id'): o.update({'status': o.get('status') or 'voorgesteld', 'door': ik()['naam'], 'statusSinds': nu()}); [o.setdefault(k, '') for k in ['email', 'telefoon', 'bron', 'xpsId', 'afasNummer', 'gesprek', 'notitie', 'talentId', 'functie', 'start', 'eind', 'urenPerWeek', 'dagen', 'eindReden']]
         if o.get('vacatureId') or not o.get('id'): o['trajectId'] = per_id(VACATURES)[o['vacatureId']]['trajectId']
         k = opslaan(KANDIDATEN, o, 'c'); t = per_id(TRAJECTEN)[k['trajectId']]
         if not args[0].get('id'): meld(t['am'], 'Nieuwe kandidaat: ' + k['naam'], 'project:' + t['id'])
@@ -452,7 +632,8 @@ def handle_crm(fn, args):
         return {'stap': args[0], 'aantal': 3, 'volgende': {'stap': stappen[i + 1], 'pagina': 1} if i + 1 < len(stappen) else None}
     if fn == 'apiExport': return {'bestandsnaam': 'athena-' + args[0] + '.csv', 'csv': 'id,naam\ns1,Voorbeeldcollege Zuid'}
     if fn == 'apiVerwijder':
-        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN, 'activiteit': ACTIVITEITEN, 'traject': TRAJECTEN, 'doel': DOELEN, 'content': CONTENT, 'factuur': FACTUREN, 'vacature': VACATURES, 'kandidaat': KANDIDATEN}.get(args[0])
+        lijst = {'school': SCHOLEN, 'persoon': PERSONEN, 'kans': CRMKANSEN, 'taak': TAKEN, 'activiteit': ACTIVITEITEN, 'traject': TRAJECTEN, 'doel': DOELEN, 'content': CONTENT, 'factuur': FACTUREN, 'vacature': VACATURES, 'kandidaat': KANDIDATEN,
+                 'talent': TALENTEN, 'beoordeling': BEOORDELINGEN, 'talentdocument': TALENTDOCS, 'talentschool': TALENTSCHOOL}.get(args[0])  # v5.0
         if lijst is None:  # notitie (Historie)
             for l in NOTITIES.values(): l[:] = [x for x in l if x['id'] != args[1]]
             return None
@@ -463,6 +644,8 @@ def handle_crm(fn, args):
                 for t in TAKEN:
                     if t.get('ouderId') == args[1]: t['ouderId'] = ''
         lijst[:] = [x for x in lijst if x['id'] != args[1]]; return None
+    r = handle_talent(fn, args)  # v5.0
+    if r is not None: return r
     raise ValueError('onbekende functie ' + fn)
 
 BREIN_UITGEVOERD = []
@@ -558,7 +741,8 @@ def handle(fn, args):
     if fn == 'apiStatus':
         return {'versie': '2.0', 'sheetUrl': 'https://docs.google.com/', 'mapUrl': 'https://drive.google.com/', 'model': 'claude-opus-5', 'effort': 'medium', 'claudeIngesteld': True, 'driveApi': False, 'laatsteIndex': d(0) + ' 04:01', 'laatsteReview': d(0) + ' 05:02', 'rapportEmail': 'menno@voorbeeld.nl', 'reviewTrigger': True, 'indexTrigger': True, 'tijdzone': 'Europe/Amsterdam',
                 'gebruiker': ik(), 'crmSyncTrigger': True, 'laatsteCrmSync': nu(), 'capsuleToken': True, 'capsuleMigratie': '',
-                'herinneringTrigger': True, 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True), 'email': 'menno@voorbeeld.nl'}  # v4.6
+                'herinneringTrigger': True, 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True), 'email': 'menno@voorbeeld.nl',  # v4.6
+                'talentTrigger': True, 'urenTrigger': True, 'xpsExportMap': True, 'laatsteUrenImport': d(-1) + ' 06:05'}  # v5.0
     if fn == 'apiImporteer': return {'ingevoegd': len(args[1]), 'bijgewerkt': 0}
     return handle_crm(fn, args)
 
@@ -566,7 +750,8 @@ class H(SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_POST(self):
         n = int(self.headers.get('Content-Length', 0)); body = json.loads(self.rfile.read(n) or b'{}')
-        if body.get('secret') not in IKKEN: out = {'ok': False, 'fout': 'secret'}
+        if body.get('portaal'): out = handle_portaal(str(body['portaal']), body.get('fn'), body.get('args') or [])  # v5.0: het portaal kent geen koppelcode
+        elif body.get('secret') not in IKKEN: out = {'ok': False, 'fout': 'secret'}
         else:
             HUIDIG[0] = body.get('secret')
             try: out = {'ok': True, 'result': handle(body.get('fn'), body.get('args') or [])}

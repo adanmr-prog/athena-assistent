@@ -68,6 +68,13 @@ with sync_playwright() as p:
     page.click('[data-pweergave="examen"]'); page.wait_for_selector('[data-crm-open="project:t6"]'); assert page.locator('[data-crm-open="project:t1"]').count() == 0, 'alleen examentraining'
     page.select_option('[data-pveld="status"][data-pid="t6"]', 'bezig'); page.wait_for_selector('select.pill.p-bezig[data-pid="t6"]')
     page.click('[data-pweergave="am"]'); page.click('#projectAms [data-pam="Menno"]'); page.wait_for_selector('[data-crm-open="project:t1"]')
+    # v5.0: het talentbestand op de telefoon (weergave Talent), het profiel met tabs, terug naar de lijst
+    page.click('[data-pweergave="talent"]'); page.wait_for_selector('.rij[data-crm-open="talent:tl1"]'); assert page.locator('#trajectLijst .vog').count() >= 1, 'VOG-badge in de lijst'
+    page.screenshot(path=OUT + '/07g_talent_lijst.png', full_page=True)
+    page.click('.rij[data-crm-open="talent:tl1"]'); page.wait_for_selector('.d-naam h2:has-text("Eva de Wit")'); assert page.locator('[data-dtab="beschikbaarheid"].aan').count() == 1 and page.locator('.raster button').count() == 21, 'profiel opent bij de beschikbaarheid met een raster van 7 × 3'
+    page.click('[data-dtab="documenten"]'); page.wait_for_selector('#dTab .rij:has-text("vog")'); page.click('[data-dtab="plaatsingen"]'); page.wait_for_selector('#dTab .rij:has-text("NT2-ondersteuning")')
+    page.screenshot(path=OUT + '/07h_talent_profiel.png', full_page=True)
+    page.click('[data-crm-terug]'); page.wait_for_selector('#view-trajecten.actief .rij[data-crm-open="talent:tl1"]'); page.click('[data-pweergave="am"]'); page.wait_for_selector('[data-crm-open="project:t1"]')
     # v4.1: bezettingsbord, meldingen, taskforce, vacature en kandidaat
     page.click('[data-pweergave="bezetting"]'); page.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner")')
     page.select_option('[data-kstatus="c1"]', 'gesprek'); page.wait_for_selector('select.pill.p-gesprek[data-kstatus="c1"]'); page.wait_for_timeout(300)
@@ -189,6 +196,8 @@ with sync_playwright() as p:
     page.wait_for_selector('#crmInhoud .rapport-tabel td:has-text("Joris")')  # v4.5: de tegel staat ook in de weergave van alle teams; wacht tot de teamtabel er echt is
     assert page.locator('#crmInhoud .rapport-tabel td:has-text("Joris")').count() == 1, 'per persoon in het AM-team'  # v4.4: Joris staat ook in het verloop
     page.screenshot(path=OUT + '/16a_rapport_am.png', full_page=True)
+    page.click('[data-rteam="talent"]'); page.wait_for_selector('#rapportTalent .tegel'); page.wait_for_selector('#rapportTalent .dekking td'); assert page.locator('#rapportTalent .tegel:has-text("VOG op orde")').count() == 1, 'talentrapport met VOG-compliance en dekking'  # v5.0
+    page.screenshot(path=OUT + '/16c_rapport_talent.png', full_page=True)
     page.click('[data-rteam="consultancy"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Forecast")')
     page.screenshot(path=OUT + '/16_rapport.png', full_page=True)
     print('horizontale scroll (rapport):', page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
@@ -215,6 +224,7 @@ with sync_playwright() as p:
     page.click('[data-beheer="mijlpalen"]'); page.wait_for_selector('#leMijlpalen .le-rij'); page.click('[data-le-erbij="leMijlpalen"]'); inp = page.locator('#leMijlpalen .le-rij').last.locator('input')
     inp.nth(0).fill('Scholen'); inp.nth(1).fill('contract'); inp.nth(2).fill('90'); inp.nth(3).fill('5'); page.screenshot(path=OUT + '/17b_beheer_mijlpalen.png', full_page=True); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Mijlpalen opgeslagen")')
     page.click('[data-beheer="tags"]'); page.wait_for_selector('#crmBeheer [data-hernoem]')
+    page.click('[data-beheer="talentrun"]'); page.wait_for_selector('#toast.aan:has-text("Talentrun klaar")')  # v5.0
     page.click('[data-beheer="doelen"]'); page.wait_for_selector('#venster.aan [data-doelbewerk]'); page.locator('[data-doelbewerk]').first.click(); page.wait_for_selector('#venster.aan #vf-doel'); page.fill('#vf-doel', '12'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan [data-doelbewerk]')
     page.select_option('#vf-eigenaar', 'team:talent'); page.select_option('#vf-metric', 'timeToFill'); page.fill('#vf-doel', '14'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan .rij:has-text("Team talent")')  # v4.2: teamdoel
     page.screenshot(path=OUT + '/18_doelen_beheer.png'); page.click('#venster [data-cf-annuleer]')
@@ -266,6 +276,9 @@ with sync_playwright() as p:
     page.click('.zb-item[data-desk="bezetting"]'); page.wait_for_selector('.vac-grid .vac-kaart'); page.wait_for_timeout(150)  # v4.1
     assert page.locator('.zb-item.aan[data-desk="bezetting"]').count() == 1, 'zijbalk: Bezetting actief'
     page.screenshot(path=OUT + '/26c_desk_bezetting.png')
+    page.click('.zb-item[data-desk="talent"]'); page.wait_for_selector('.dtabel tr[data-crm-open="talent:tl1"]'); assert page.locator('.zb-item.aan[data-desk="talent"]').count() == 1 and page.locator('.dtabel th:has-text("VOG")').count() == 1, 'zijbalk Talent: tabel met VOG-kolom'  # v5.0
+    page.select_option('#tVog', 'oranje'); page.wait_for_timeout(150); assert page.locator('.dtabel tr[data-crm-open^="talent:"]').count() == 1, 'filter op VOG'; page.select_option('#tVog', ''); page.wait_for_timeout(100)
+    page.screenshot(path=OUT + '/26d_desk_talent.png')
     page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]')
     page.click('[data-pweergave="huidig"]'); page.wait_for_timeout(200); assert 'schooljaar 2027-2028' in page.inner_text('#trajectTelling'), 'ingesteld schooljaar wordt gebruikt'
     page.click('[data-pweergave="bord"]'); page.wait_for_selector('.kaartje[data-crm-open^="project:"]'); page.wait_for_timeout(150)
@@ -325,6 +338,14 @@ with sync_playwright() as p:
     am.click('.ftabel a[data-crm-open="project:t6"]'); am.wait_for_selector('.d-naam h2:has-text("Examentraining")'); am.locator('.d-links [data-crm-open^="kans:"]').first.click()
     am.wait_for_selector('.d-naam h2'); assert am.locator('.d-naam [data-composer="bewerk"]').count() == 0 and am.locator('[data-kansfase]').count() == 0, 'kans van eigen project alleen lezen'
     am.screenshot(path=OUT + '/41_am_kans_lezen.png')
+    # v5.0: de accountmanager beoordeelt zijn geplaatste kandidaat en ziet een beperkt profiel (geen documenten, geen adres)
+    am.click('.zb-item[data-desk="projecten"]'); am.wait_for_selector('.ftabel [data-crm-open="project:t6"]'); am.click('.ftabel a[data-crm-open="project:t6"]'); am.wait_for_selector('.d-naam h2:has-text("Examentraining")')
+    am.click('[data-dtab="bezetting"]'); am.wait_for_selector('#dTab .rij:has-text("Noor Bakker") [data-beoordeel]'); assert am.locator('#dTab .rij:has-text("Noor Bakker") .vog.oranje').count() == 1, 'VOG-badge op de kandidaatregel'
+    am.click('#dTab .rij:has-text("Noor Bakker") [data-beoordeel]'); am.wait_for_selector('#venster.aan [data-oordeel="favoriet"]'); am.click('#venster [data-oordeel="favoriet"]'); am.click('#venster [data-crit="punctualiteit"][data-punt="3"]'); am.fill('#vf-tekst', 'Rustig en duidelijk voor de klas.')
+    am.screenshot(path=OUT + '/44_am_beoordelen.png'); am.click('#venster [data-cf-opslaan]'); am.wait_for_selector('#toast.aan:has-text("Beoordeling opgeslagen")')
+    am.click('#dTab .rij:has-text("Noor Bakker") a[data-crm-open="talent:tl2"]'); am.wait_for_selector('.d-naam h2:has-text("Noor Bakker")')
+    assert am.locator('[data-dtab="documenten"]').count() == 0 and '3011' not in am.inner_text('.d-links'), 'beperkt profiel voor de accountmanager: geen documenten, geen adres'
+    am.click('[data-dtab="beoordelingen"]'); am.wait_for_selector('#dTab .rij .tag.favoriet'); am.screenshot(path=OUT + '/45_am_talent_beperkt.png')
     am.set_viewport_size({'width': 390, 'height': 844}); am.wait_for_timeout(300); am.click('nav button[data-view="relaties"]'); am.wait_for_selector('#crmTabs [data-crmtab="scholen"]')
     assert am.locator('#crmTabs [data-crmtab="pipeline"]').count() == 0, 'geen pipeline-tab op de telefoon'
     am.screenshot(path=OUT + '/42_am_relaties.png', full_page=True)
@@ -340,6 +361,34 @@ with sync_playwright() as p:
     tl.locator('.vac-kaart a[data-crm-open="project:t4"]').first.click(); tl.wait_for_selector('#dTab .vac-kaart'); assert tl.locator('[data-dtab="bezetting"].aan').count() == 1, 'project opent bij de bezetting'
     assert tl.locator('.d-links .kop:has-text("Facturatie")').count() == 0, 'talent ziet geen facturatie'
     tl.screenshot(path=OUT + '/43_talent_project.png')
+    # v5.0: talentteam — het bestand, een nieuw profiel met dubbelcontrole, het beschikbaarheidsraster, een VOG, voorstellen met matchscore en de VOG-badge op de kandidaatregel
+    tl.click('.zb-item[data-desk="talent"]'); tl.wait_for_selector('.dtabel tr[data-crm-open="talent:tl1"]'); assert tl.locator('#trajectLijst .kop:has-text("Vandaag benaderen")').count() == 1, 'lijst vandaag benaderen voor het talentteam'
+    tl.screenshot(path=OUT + '/46_talent_bestand.png')
+    tl.click('#deskActies [data-talentnieuw]'); tl.wait_for_selector('#venster.aan #vf-voornaam'); tl.fill('#vf-voornaam', 'Test'); tl.fill('#vf-achternaam', 'Persoon'); tl.fill('#vf-email', 'eva@voorbeeld.nl'); tl.check('#venster .vink-chips input[data-cf="f_huiswerkbegeleider"]'); tl.check('#venster .vink-chips input[data-cf="s_vo"]')
+    tl.click('#venster [data-cf-opslaan]'); tl.wait_for_selector('#dubbelHint'); assert tl.locator('#dubbelHint [data-crm-open="talent:tl1"]').count() == 1, 'dubbelcontrole toont het bestaande profiel'
+    tl.fill('#vf-email', 'test.persoon@voorbeeld.nl'); tl.click('#venster [data-cf-opslaan]'); tl.wait_for_selector('.d-naam h2:has-text("Test Persoon")'); assert tl.locator('[data-dtab="beschikbaarheid"].aan').count() == 1, 'nieuw profiel opent bij de beschikbaarheid'
+    tl.click('[data-rcel="ma:0"]'); assert tl.locator('[data-rcel="ma:0"].b2').count() == 1, 'tik zet een dagdeel op ja'; tl.click('[data-rcel="ma:0"]'); assert tl.locator('[data-rcel="ma:0"].b1').count() == 1, 'tweede tik: liever niet'
+    tl.click('[data-rasteropslaan]'); tl.wait_for_selector('#toast.aan:has-text("Beschikbaarheid opgeslagen")'); tl.wait_for_selector('[data-rcel="ma:0"].b1')
+    tl.screenshot(path=OUT + '/47_talent_profiel.png')
+    tl.click('[data-dtab="documenten"]'); tl.click('[data-talentdoc="nieuw"]'); tl.wait_for_selector('#venster.aan #vf-soort'); tl.fill('#vf-afgifte', '2026-09-01'); tl.check('#vf-gecontroleerd'); tl.click('#venster [data-cf-opslaan]'); tl.wait_for_selector('#dTab .rij:has-text("vog")'); tl.wait_for_selector('.cijfers .vog.groen')
+    tl.click('.zb-item[data-desk="bezetting"]'); tl.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]'); tl.click('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]')
+    tl.wait_for_selector('#venster.aan .match-rij'); assert tl.locator('#venster .match-rij').count() >= 2 and tl.locator('#venster .match-rij:has-text("Eva de Wit") [data-mkies]').is_disabled(), 'matchlijst; de al voorgedragene is niet aan te vinken'
+    tl.click('#venster .match-rij:has-text("Noor Bakker") [data-mtoggle]'); assert tl.locator('#venster .match-rij.open .m-uitleg .b-rij').count() == 7, 'uitleg per onderdeel van de score'
+    tl.screenshot(path=OUT + '/48_voorstellen.png')
+    tl.check('#venster .match-rij:has-text("Noor Bakker") [data-mkies]'); tl.wait_for_selector('#venster [data-voordragen]:has-text("Voordragen (1)")'); tl.click('#venster [data-voordragen]')
+    tl.wait_for_selector('#toast.aan:has-text("voorgedragen")'); tl.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner") .rij:has-text("Noor Bakker") .vog.oranje')
+    tl.screenshot(path=OUT + '/49_bezetting_na_voordracht.png')
     ctx3.close()
+    # v5.0: het portaal voor talenten: beschikbaarheid bevestigen via de link uit de mail, zonder koppelscherm en zonder iets in localStorage
+    ctx4 = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True); pp = ctx4.new_page()
+    pp.on('pageerror', lambda e: meldingen.append(('pageerror portaal', str(e))))
+    pp.goto('http://127.0.0.1:8765/?t=testtoken12345678901234&api=http%3A%2F%2F127.0.0.1%3A8765%2Fapi'); pp.wait_for_selector('#view-portaal.actief .raster button')
+    assert pp.locator('#koppel.aan').count() == 0 and not pp.locator('nav').is_visible() and 'Eva' in pp.inner_text('#portaalKop'), 'portaal zonder koppelscherm en navigatie, met de voornaam'
+    pp.click('[data-rcel="vr:1"]'); pp.click('[data-pbevestig]'); pp.wait_for_selector('#toast.aan:has-text("bevestigd")')
+    assert pp.evaluate("() => Object.keys(localStorage).filter(k => k.indexOf('aa_') === 0).length") == 0, 'het portaal schrijft niets in localStorage'
+    pp.screenshot(path=OUT + '/50_portaal.png', full_page=True)
+    pp.click('[data-popslaan]'); pp.wait_for_selector('#toast.aan:has-text("Opgeslagen")')
+    pp.goto('http://127.0.0.1:8765/?t=verkeerdtoken12345678&api=http%3A%2F%2F127.0.0.1%3A8765%2Fapi'); pp.wait_for_selector('#portaalKop:has-text("werkt niet meer")')
+    ctx4.close()
     b.close()
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

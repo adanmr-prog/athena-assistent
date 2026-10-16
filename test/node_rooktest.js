@@ -111,8 +111,145 @@ eis(home.afgerondWeek >= 3 && home.streak >= (wd >= 1 && wd <= 5 ? 1 : 0) && typ
 var st = roep(FEMKE, 'apiStatus');
 eis(st.herinneringen === true && st.email === 'femke@athena.example' && 'herinneringTrigger' in st, 'apiStatus geeft de herinneringsinstelling en het mailadres');
 
+/* ---- v5.0: talentnetwerk — bestand, rechten, matching, voorstellen, beoordelen, documenten, portaal, dagelijkse run, XPS-uren, rapport, AVG ---- */
+var SEM = 'demo-sem', IRIS = 'demo-iris', RUBEN = 'demo-ruben';
+function portaal(token, fn) { var args = Array.prototype.slice.call(arguments, 2); return JSON.parse(ctx.demoPortaal(fn, JSON.stringify(args), token)); }
+var tlS = roep(SEM, 'apiTalenten');
+eis(tlS.talenten.length === 25 && tlS.rechten.vol === true && tlS.rechten.wijzigen === true && tlS.tellingen.actief === 20 && tlS.tellingen.slapend === 2 && tlS.tellingen.aangemeld === 2 && tlS.scholen.length === 12 && tlS.keuzes.functies.length === 7, 'talentteam ziet het hele bestand met tellingen, scholen (ligging) en keuzelijsten');
+var eva = tlS.talenten.filter(function (t) { return t.id === 'tl1'; })[0];
+eis(!!eva && eva.vog.status === 'oranje' && eva.beoordeling.laatste.oordeel === 'favoriet' && eva.plaatsingen === 1 && eva.postcode === '3511 AB' && eva.compleetheid >= 80, 'profiel Eva: VOG oranje (op tijd voor de lopende inzet, niet voor een nieuwe), favoriet, 1 plaatsing, postcode zichtbaar');
+var vogs = {}; tlS.talenten.forEach(function (t) { vogs[t.vog.status] = (vogs[t.vog.status] || 0) + 1; });
+eis(vogs.oranje === 3 && vogs.groen === 14 && vogs.verlopen === 4 && vogs.ontbreekt === 4, 'VOG-statussen op de seed: 3 oranje, 14 groen, 4 verlopen, 4 ontbreekt (' + JSON.stringify(vogs) + ')');
+eis(tlS.benaderen.some(function (b) { return b.id === 'tl15' && /peiling/.test(b.redenen.join()); }) && tlS.benaderen.some(function (b) { return b.id === 'tl9' && /VOG verlopen/.test(b.redenen.join()); }), 'vandaag benaderen: onbeantwoorde peiling en een verlopen VOG bij een lopende inzet');
+var tlF = roep(FEMKE, 'apiTalenten');
+eis(tlF.rechten.vol === false && tlF.talenten.length === 5 && tlF.talenten.every(function (t) { return t.beperkt && t.postcode === undefined && t.notitie === undefined && ['tl1', 'tl2', 'tl3', 'tl6', 'tl7'].indexOf(t.id) >= 0; }) && tlF.scholen.length === 0, 'accountmanager ziet alleen de talenten uit eigen projecten, zonder adres of notitie');
+eis(/toegang/.test(faalt(FEMKE, 'apiTalent', 'tl15')) && !faalt(FEMKE, 'apiTalent', 'tl1') && /toegang/.test(faalt(LARS, 'apiTalenten')) && /toegang/.test(faalt(LARS, 'apiTalent', 'tl1')), 'rechten: AM alleen eigen talenten, consultant niets');
+var pf = roep(FEMKE, 'apiTalent', 'tl1');
+eis(pf.talent.beperkt && pf.documenten.length === 0 && pf.uren.length === 0 && pf.scholen.length === 0 && pf.plaatsingen.length === 1 && pf.plaatsingen[0].magBeoordelen === true && pf.rechten.beoordelen === true && pf.rechten.wijzigen === false, 'AM-profiel: geen documenten, uren of relaties; wel de eigen plaatsing met Beoordelen');
+var ps = roep(SEM, 'apiTalent', 'tl1');
+eis(ps.documenten.length === 1 && ps.documenten[0].heeftBestand === false && ps.documenten[0].url === undefined && ps.uren.length === 12 && ps.scholen.length === 1 && ps.tijdlijn instanceof Array && ps.rechten.vol && ps.rechten.wijzigen, 'talentteam-profiel: documenten zonder Drive-URL, 12 weken uren, relaties, tijdlijn');
+
+var nieuw = roep(SEM, 'apiTalentOpslaan', { voornaam: 'Test', achternaam: 'Talent', email: 'Test.Talent@mail.example', telefoon: '+31 6 12345678', postcode: '3512ab', functies: ['huiswerkbegeleider'], sectoren: ['vo'], vakken: 'Wiskunde, Natuurkunde', toestemmingDatum: plusDagen(0), contractvorm: 'zzp' });
+eis(nieuw.status === 'aangemeld' && nieuw.email === 'test.talent@mail.example' && nieuw.telefoon === '0612345678' && nieuw.postcode === '3512 AB' && nieuw.vakken.join() === 'wiskunde,natuurkunde' && !!nieuw.lat && nieuw.bewarenTot > plusDagen(700) && /DBA/.test(nieuw.waarschuwing || ''), 'nieuw talent: e-mail klein, telefoon en postcode genormaliseerd, ligging via PDOK, bewaartermijn, zzp-waarschuwing');
+eis(/al een profiel.*\[talent:tl1\]/.test(faalt(SEM, 'apiTalentOpslaan', { voornaam: 'Eva', achternaam: 'Dubbel', email: 'eva.de.wit@mail.example', toestemmingDatum: plusDagen(0) })), 'dubbel e-mailadres wordt geweigerd met het id van het bestaande profiel');
+var dubbel = roep(SEM, 'apiTalentOpslaan', { voornaam: 'Eva', achternaam: 'Dubbel', email: 'eva.de.wit@mail.example', toestemmingDatum: plusDagen(0), forceer: true });
+eis(dubbel.id && dubbel.id !== 'tl1', 'met forceer mag een tweede profiel toch');
+eis(/toestemming/i.test(faalt(SEM, 'apiTalentOpslaan', { voornaam: 'Zonder', achternaam: 'Toestemming', email: 'zt@mail.example' })) && /Onbekende functie/.test(faalt(SEM, 'apiTalentOpslaan', { voornaam: 'X', functies: ['piloot'], toestemmingDatum: plusDagen(0) })) && /toegang/.test(faalt(FEMKE, 'apiTalentOpslaan', { voornaam: 'X', toestemmingDatum: plusDagen(0) })), 'toestemming verplicht, functie uit de keuzelijst, alleen het talentteam');
+var gew = roep(SEM, 'apiTalentOpslaan', { id: 'tl22', status: 'actief', functies: ['onderwijsondersteuner', 'rekenondersteuner'], _oud: { status: 'gescreend', functies: ['onderwijsondersteuner'] } });
+eis(gew.status === 'actief' && gew.functies.join() === 'onderwijsondersteuner,rekenondersteuner' && ctx.lees('Activiteiten').some(function (a) { return a.talentId === 'tl22' && /gescreend → actief/.test(a.onderwerp); }), 'statuswissel met conflictcontrole op een JSON-lijst; mijlpaal op de tijdlijn');
+eis(/Intussen gewijzigd/.test(faalt(SEM, 'apiTalentOpslaan', { id: 'tl22', functies: ['surveillant'], _oud: { functies: ['onderwijsondersteuner'] } })), 'verouderde _oud op functies geeft een conflictmelding');
+var r0 = roep(SEM, 'apiTalentBeschikbaarheidOpslaan', 'tl12', { ma: [2, 1, 0], di: [0, 0, 0], wo: [2, 2, 2], do: [0, 0, 0], vr: [0, 0, 0], za: [0, 0, 0], zo: [9, 'x', 2] }, [{ van: plusDagen(10), tot: plusDagen(12), soort: 'niet', reden: 'tentamen' }]);
+eis(r0.beschikbaarheid.ma.join() === '2,1,0' && r0.beschikbaarheid.zo.join() === '0,0,2' && r0.uitzonderingen.length === 1 && r0.uitzonderingen[0].soort === 'niet' && !!r0.beschikbaarheidBevestigd, 'beschikbaarheid: raster genormaliseerd (alleen 0, 1, 2), uitzondering bewaard, bevestigd gezet');
+
+var ro = ctx.roosterUitTekst('Di en do 14:00-17:00');
+eis(ro.herkend && JSON.stringify(ro.dagdelen) === '[[2,1],[4,1]]' && ctx.roosterUitTekst('woensdagmiddag').dagdelen.join('|') === '3,1' && !ctx.roosterUitTekst('Volgens rooster').herkend && JSON.stringify(ctx.roosterUitTekst('Ma t/m do 9:00-13:00').dagdelen) === '[[1,0],[2,0],[3,0],[4,0]]' && JSON.stringify(ctx.roosterUitTekst('Ma, wo en vr 9:00-12:00').dagdelen) === '[[1,0],[3,0],[5,0]]', 'roosterUitTekst: dagen, bereiken, dagdelen uit tijden en woorden, niet herkend');
+var mt = roep(SEM, 'apiMatch', 'v3');  // NT2-ondersteuner bij ISK Havenstad: isk, ma t/m do 9:00-13:00, start over drie weken
+eis(mt.functie === 'nt2-ondersteuner' && mt.sector === 'isk' && mt.roosterHerkend && mt.dagdelen.join() === 'ma ochtend,di ochtend,wo ochtend,do ochtend' && mt.project.school === 'ISK Havenstad', 'match: functie, sector en rooster van de vacature herkend');
+var mIds = mt.kandidaten.map(function (k) { return k.talentId; }), uit = {}; mt.uitgesloten.forEach(function (u) { uit[u.talentId] = u.reden; });
+eis(mIds.indexOf('tl8') >= 0 && mIds.indexOf('tl9') >= 0 && mIds.indexOf('tl24') >= 0 && mt.kandidaten.every(function (k) { return k.score >= 0 && k.score <= 100 && k.onderdelen.reduce(function (s, o) { return s + o.punten; }, 0) === k.score && k.onderdelen.length === 7 && k.onderdelen.every(function (o) { return o.uitleg && o.punten <= o.max; }); }), 'match: nt2-ondersteuners komen in aanmerking; score = som van zeven onderdelen met uitleg');
+eis(/sector/.test(uit.tl1 || '') && /functie/.test(uit.tl6 || '') && /te ver/.test(uit.tl19 || '') && /status/.test(uit.tl18 || ''), 'match: harde filters met reden (sector, functie, afstand, status): ' + JSON.stringify([uit.tl1, uit.tl6, uit.tl19, uit.tl18]));
+var f8 = mt.kandidaten.filter(function (k) { return k.talentId === 'tl8'; })[0], f24 = mt.kandidaten.filter(function (k) { return k.talentId === 'tl24'; })[0], f9 = mt.kandidaten.filter(function (k) { return k.talentId === 'tl9'; })[0];
+eis(f8.alVoorgedragen === true && f8.vog === 'groen' && f8.afstandKm === 0 && f8.score > f24.score && f24.beoordeling.nietGeschikt === 1 && f9.waarschuwingen.some(function (w) { return /VOG verlopen/.test(w); }), 'match: Fatima (al voorgedragen, VOG groen, 0 km) scoort boven Zoë (niet geschikt); Jesse krijgt een VOG-waarschuwing');
+var vs = roep(SEM, 'apiVoorstellen', 'v3', ['tl24', 'tl8'], 'Testvoordracht');
+eis(vs.aantal === 1 && vs.overgeslagen === 1 && ctx.lees('Kandidaten').some(function (k) { return k.talentId === 'tl24' && k.vacatureId === 'v3' && k.status === 'voorgesteld' && k.bron === 'talentbestand' && k.naam === 'Zoë Kaya' && k.functie === 'NT2-ondersteuner' && k.notitie === 'Testvoordracht'; }), 'voorstellen: één nieuwe kandidaat (de al voorgedragene wordt overgeslagen) met naam, functie en notitie');
+eis(ctx.lees('Meldingen').some(function (m) { return m.voor === 'Bas Meijer' && /Zoë Kaya/.test(m.tekst); }) && acties().some(function (a) { return /Matchinggesprek met Zoë Kaya/.test(a.tekst) && a.link === 'talent:tl24' && a.eigenaar === 'Bas Meijer'; }), 'voorstellen: melding en matchinggesprek-taak voor de accountmanager, met link naar het profiel');
+eis(/talentteam/.test(faalt(FEMKE, 'apiVoorstellen', 'v2', ['tl6'])) && /talentteam/.test(faalt(FEMKE, 'apiMatch', 'v2')) && /toegang/.test(faalt(LARS, 'apiMatch', 'v2')), 'voorstellen en matchen alleen door het talentteam');
+var mt2 = roep(SEM, 'apiMatch', 'v4');  // Rekenondersteuner bij Kompas College, start over vier weken
+eis(mt2.uitgesloten.some(function (u) { return u.talentId === 'tl25' && /afwezig/.test(u.reden); }) && mt2.kandidaten.some(function (k) { return k.talentId === 'tl11' && k.alVoorgedragen; }), 'match: een afwezigheid rond de start sluit uit; de voorgedragen kandidaat staat gemarkeerd');
+
+roep(RUBEN, 'apiKandidaatOpslaan', { id: 'c11', status: 'geplaatst', _oud: { status: 'voorgesteld' } });  // Thijs Brouwer bij Kompas College (project van Ruben)
+var bt = acties().filter(function (a) { return /Beoordeel Thijs Brouwer/.test(a.tekst); })[0], thijs = ctx.lees('Talenten').filter(function (t) { return t.id === 'tl11'; })[0];
+eis(!!bt && bt.eigenaar === 'Ruben Smit' && bt.link === 'talent:tl11' && /maand/.test(bt.herhaling) && bt.bron === 'bezetting' && thijs.laatsteContact === plusDagen(0), 'geplaatst → herhalende beoordelingstaak voor de AM met link naar het profiel; laatste contact op het talent');
+eis(/reden/.test(faalt(RUBEN, 'apiKandidaatOpslaan', { id: 'c11', status: 'gestopt', _oud: { status: 'geplaatst' } })), 'afgerond of gestopt vraagt een reden');
+var bo = roep(RUBEN, 'apiBeoordelingOpslaan', { talentId: 'tl11', kandidaatId: 'c11', oordeel: 'niet geschikt', criteria: { punctualiteit: 1, onzin: 3, didactiek: 7 }, tekst: 'Kwam twee keer niet opdagen.' });
+eis(bo.beoordeling.rol === 'am' && bo.beoordeling.schoolId === 's2' && bo.beoordeling.school === 'Kompas College' && Object.keys(bo.beoordeling.criteria).join() === 'punctualiteit' && bo.voorstelNietMeer && bo.voorstelNietMeer.schoolId === 's2', 'AM beoordeelt zijn plaatsing: rol am, school uit het project, criteria gefilterd, voorstel "niet meer"');
+eis(ctx.lees('Meldingen').some(function (m) { return m.voor === 'Iris Mulder' && /Thijs Brouwer.*niet geschikt/.test(m.tekst) && m.link === 'talent:tl11'; }), 'niet geschikt → melding aan het talentteam');
+eis(/plaatsing/.test(faalt(RUBEN, 'apiBeoordelingOpslaan', { talentId: 'tl11', oordeel: 'goed' })) && /toegang/.test(faalt(FEMKE, 'apiBeoordelingOpslaan', { talentId: 'tl11', kandidaatId: 'c11', oordeel: 'goed' })) && /talentteam/.test(faalt(RUBEN, 'apiBeoordelingOpslaan', { id: bo.beoordeling.id, wederhoor: 'x' })) && /toegang/.test(faalt(LARS, 'apiBeoordelingOpslaan', { talentId: 'tl11', oordeel: 'goed' })), 'AM alleen per eigen plaatsing, wederhoor alleen het talentteam, consultant niets');
+var bo2 = roep(IRIS, 'apiBeoordelingOpslaan', { id: bo.beoordeling.id, wederhoor: 'Thijs was ziek en had zich bij de docent afgemeld.' });
+eis(bo2.beoordeling.wederhoor.indexOf('ziek') >= 0 && roep(IRIS, 'apiBeoordelingOpslaan', { talentId: 'tl16', oordeel: 'goed', tekst: 'Los oordeel' }).beoordeling.rol === 'talent', 'talentteam legt wederhoor vast en beoordeelt ook zonder plaatsing');
+var rel = roep(SEM, 'apiTalentSchoolOpslaan', { talentId: 'tl11', schoolId: 's2', status: 'niet meer', richting: 'school', reden: 'beoordeeld als niet geschikt' });
+eis(rel.some(function (r) { return r.schoolId === 's2' && r.status === 'niet meer' && r.school === 'Kompas College'; }) && roep(SEM, 'apiMatch', 'v4').uitgesloten.some(function (u) { return u.talentId === 'tl11' && /school/.test(u.reden); }), 'relatie "niet meer" opgeslagen en sluit uit in de matching');
+eis(roep(SEM, 'apiTalentSchoolOpslaan', { talentId: 'tl11', schoolId: 's2', status: 'neutraal', richting: 'school' }).filter(function (r) { return r.schoolId === 's2'; }).length === 1, 'relatie per talent, school en richting is een upsert');
+
+var doc = roep(SEM, 'apiTalentDocumentOpslaan', { talentId: 'tl7', soort: 'vog', afgifte: plusDagen(-10), gecontroleerd: true }, { naam: 'vog-lotte.pdf', mime: 'application/pdf', base64: ctx.Utilities.base64Encode('%PDF-1.4 demo') });
+eis(doc.document.heeftBestand && doc.document.gecontroleerdDoor === 'Sem de Boer' && doc.document.status === 'geldig' && doc.vog.status === 'groen' && roep(SEM, 'apiTalent', 'tl7').talent.vog.status === 'groen', 'document met bestand in Drive; de VOG-badge springt op groen');
+var link = roep(SEM, 'apiTalentDocumentLink', doc.document.id);
+eis(/drive\.google\.com/.test(link.url) && ctx.lees('Activiteiten').some(function (a) { return a.talentId === 'tl7' && /Document geopend door Sem/.test(a.onderwerp); }) && /toegang/.test(faalt(FEMKE, 'apiTalentDocumentLink', doc.document.id)), 'documentlink alleen voor het talentteam, gelogd op de tijdlijn');
+eis(/afgiftedatum/.test(faalt(SEM, 'apiTalentDocumentOpslaan', { talentId: 'tl7', soort: 'vog' })) && /toegang/.test(faalt(FEMKE, 'apiTalentDocumentOpslaan', { talentId: 'tl1', soort: 'diploma' })), 'VOG zonder afgiftedatum geweigerd; de AM voegt geen documenten toe');
+roep(SEM, 'apiVerwijder', 'talentdocument', doc.document.id);
+eis(roep(SEM, 'apiTalent', 'tl7').documenten.length === 0 && roep(SEM, 'apiTalent', 'tl7').talent.vog.status === 'ontbreekt', 'document verwijderd: het bestand naar de prullenbak, de VOG-badge weer op ontbreekt');
+
+var TOKEN = 'demotokenali0000000000000000000000000001', TOKEN2 = 'demotokenyusuf00000000000000000000000002';
+var pt = portaal(TOKEN, 'apiPortaalToon');
+eis(pt.ok && pt.result.naam === 'Ali' && pt.result.beschikbaarheid.ma.join() === '2,2,0' && pt.result.email === undefined && pt.result.telefoon === undefined, 'portaal: toont alleen voornaam en beschikbaarheid');
+var pb = portaal(TOKEN, 'apiPortaalBeschikbaarheid', { ma: [0, 0, 0], di: [2, 2, 2], wo: [2, 2, 0], do: [2, 2, 0], vr: [1, 1, 0], za: [0, 0, 0], zo: [0, 0, 0] }, [{ van: plusDagen(30), tot: plusDagen(37), soort: 'niet', reden: 'vakantie' }], false);
+var ali = ctx.lees('Talenten').filter(function (t) { return t.id === 'tl2'; })[0];
+eis(pb.ok && pb.result.beschikbaarheid.di.join() === '2,2,2' && JSON.parse(ali.beschikbaarheid).ma.join() === '0,0,0' && JSON.parse(ali.uitzonderingen).length === 1 && String(ali.beschikbaarheidBevestigd).slice(0, 10) === plusDagen(0) && ctx.lees('Activiteiten').some(function (a) { return a.talentId === 'tl2' && a.door === 'Portaal' && /aangepast via mail/.test(a.onderwerp); }), 'portaal: beschikbaarheid aangepast, bevestigd en gelogd door Portaal');
+var pv = portaal(TOKEN, 'apiPortaalBeschikbaarheid', null, null, true);
+eis(pv.ok && pv.result.beschikbaarheid.di.join() === '2,2,2' && /bevestigd via mail/.test(ctx.lees('Activiteiten').filter(function (a) { return a.talentId === 'tl2' && a.door === 'Portaal'; }).pop().onderwerp), 'portaal: "klopt nog" bevestigt zonder iets te wijzigen');
+eis(!portaal(TOKEN, 'apiTalent', 'tl2').ok && /onbekende functie/.test(portaal(TOKEN, 'apiTalent', 'tl2').fout) && /verlopen|geldig/.test(portaal('verkeerdtoken000000000000000000000000000', 'apiPortaalToon').fout) && /onbekende functie|toegang/.test(faalt(SEM, 'apiPortaalToon', TOKEN)), 'portaal: alleen de twee portaalfuncties met een geldig token; via de koppelcode zijn ze niet aan te roepen');
+var nB = 0, laatsteFout = ''; for (var bi = 0; bi < 40 && !laatsteFout; bi++) { var rb = portaal(TOKEN, 'apiPortaalToon'); if (!rb.ok) laatsteFout = rb.fout; else nB++; }
+eis(nB <= 30 && /te veel/.test(laatsteFout), 'portaal: budget van 30 verzoeken per token per uur');
+ctx.GEBRUIKER = null; ctx.schrijf('Talenten', { id: 'tl15', portaalTokenTot: plusDagen(-1) + ' 00:00' });
+eis(/verlopen/.test(portaal(TOKEN2, 'apiPortaalToon').fout), 'portaal: een verlopen token wordt geweigerd');
+var pl = roep(SEM, 'apiTalentPortaalLink', 'tl15', false);
+eis(/\?t=[a-f0-9]{40}&api=https%3A%2F%2Fscript\.google\.com/.test(pl.link) && /&actie=bevestig/.test(pl.bevestigLink) && pl.gemaild === false && portaal(/t=([a-f0-9]{40})/.exec(pl.link)[1], 'apiPortaalToon').ok, 'nieuwe portaallink: vers token (40 hex) met exec-URL; de oude werkt niet meer en de nieuwe wel');
+eis(/toegang/.test(faalt(FEMKE, 'apiTalentPortaalLink', 'tl1', false)), 'portaallink alleen voor het talentteam');
+
+ctx.GEBRUIKER = null; ctx._demoVerzonden.length = 0;
+var pr = ctx.peilingRun(), yusuf = ctx.lees('Talenten').filter(function (t) { return t.id === 'tl15'; })[0];
+eis(pr === 1 && ctx._demoVerzonden.length === 1 && ctx._demoVerzonden[0].to === 'yusuf.demir@mail.example' && /Klopt nog/.test(ctx._demoVerzonden[0].htmlBody) && /actie=bevestig/.test(ctx._demoVerzonden[0].htmlBody) && String(yusuf.laatstePeiling).slice(0, 10) === plusDagen(0), 'peilingRun: alleen Yusuf (beschikbaarheid 70 dagen oud, peiling 16 dagen geleden) krijgt een mail met Klopt nog; laatste peiling gezet');
+eis(ctx.peilingRun() === 0, 'tweede peilingRun stuurt niets (14 dagen wachten)');
+ctx.schrijf('Talenten', { id: 'tl-oud', voornaam: 'Oud', achternaam: 'Profiel', email: 'oud.profiel@mail.example', status: 'actief', statusSinds: plusDagen(-300) + ' 10:00', aangemaakt: plusDagen(-300) + ' 10:00', laatsteContact: plusDagen(-200), toestemmingDatum: plusDagen(-300), bewarenTot: plusDagen(-1), door: 'Sem de Boer' });
+ctx._demoVerzonden.length = 0;
+var sl = ctx.slapendRun(), oud1 = ctx.lees('Talenten').filter(function (t) { return t.id === 'tl-oud'; })[0];
+eis(sl === 1 && oud1.status === 'slapend' && ctx._demoVerzonden.length === 1 && /Werk je nog graag/.test(ctx._demoVerzonden[0].subject) && !!oud1.portaalToken, 'slapendRun: zes maanden geen inzet of contact → slapend, met een heractivatiemail en portaaltoken');
+var hb = portaal(oud1.portaalToken, 'apiPortaalBeschikbaarheid', null, null, true);
+eis(hb.ok && hb.result.weerActief === true && ctx.lees('Talenten').filter(function (t) { return t.id === 'tl-oud'; })[0].status === 'actief', 'portaal: bevestigen zet een slapend profiel weer op actief');
+ctx.schrijf('Talenten', { id: 'tl-oud', status: 'slapend' });
+var bw = ctx.bewaartermijnRun(), oud2 = ctx.lees('Talenten').filter(function (t) { return t.id === 'tl-oud'; })[0];
+eis(bw === 1 && oud2.voornaam === 'Verwijderd' && oud2.email === '' && oud2.status === 'uitgeschreven' && oud2.portaalToken === '' && ctx.bewaartermijnRun() === 0, 'bewaartermijnRun: verstreken termijn zonder lopende inzet → geanonimiseerd, en niet nog eens');
+ctx._demoVerzonden.length = 0;
+var vr = ctx.vogRun(true);
+eis(vr >= 15 && ctx._demoVerzonden.length === vr && /Nieuwe VOG voor schooljaar/.test(ctx._demoVerzonden[0].subject) && acties().some(function (a) { return /VOG vernieuwen voor \d+ talenten vóór schooljaar/.test(a.tekst) && a.eigenaar === 'Iris Mulder'; }), 'vogRun: iedereen zonder verse VOG voor volgend schooljaar krijgt een mail; het talentteam één verzameltaak');
+ctx._demoVerzonden.length = 0;
+var ar = ctx.aanmeldingenRun(), lieke = ctx.lees('Talenten').filter(function (t) { return t.email === 'lieke.vos@mail.example'; })[0];
+eis(/1 nieuw, 0 bestaand, 1 mails/.test(ar) && !!lieke && lieke.status === 'aangemeld' && lieke.bron === 'website' && lieke.door === 'Formulier' && JSON.parse(lieke.functies).join() === 'huiswerkbegeleider,examentrainer' && JSON.parse(lieke.sectoren).join() === 'vo' && JSON.parse(lieke.beschikbaarheid).ma.join() === '0,2,0' && JSON.parse(lieke.beschikbaarheid).do.join() === '2,2,0' && String(lieke.portaalToken).length === 40 && lieke.toestemmingDatum === plusDagen(-1) && lieke.postcode === '3581 KL', 'aanmeldingenRun: de formulierrij wordt een profiel (functies, sector, beschikbaarheid uit tekst, toestemming = tijdstempel, token)');
+eis(ctx._demoVerzonden[0].to === 'lieke.vos@mail.example' && /Beschikbaarheid doorgeven/.test(ctx._demoVerzonden[0].htmlBody) && ctx.lees('Meldingen').some(function (m) { return /Nieuwe aanmelding: Lieke Vos/.test(m.tekst) && m.link === 'talent:' + lieke.id; }) && /0 nieuw/.test(ctx.aanmeldingenRun()), 'bevestigingsmail met portaallink, melding aan het talentteam; de tweede run doet niets');
+ctx.blad('Aanmeldingen').appendRow([plusDagen(0) + ' 08:00', 'Yusuf', 'Demir', '', 'yusuf.demir@mail.example', '', 'surveillant', 'vo', '', 'Ja', '', '']);
+eis(/0 nieuw, 1 bestaand/.test(ctx.aanmeldingenRun()) && ctx.lees('Activiteiten').some(function (a) { return a.talentId === 'tl15' && /Opnieuw aangemeld/.test(a.onderwerp); }), 'een bekende aanmelder krijgt geen tweede profiel, wel een notitie en een melding');
+var geo = ctx.geocodeerRun();
+eis(geo >= 1 && Number(ctx.lees('Talenten').filter(function (t) { return t.id === lieke.id; })[0].lat) > 50, 'geocodeerRun vult de ligging van nieuwe profielen (PDOK)');
+
+var rij = [['Accountnummer', 'Naam', 'E-mail', 'Projectnummer', 'Week', 'Uren', 'Status'], ['X5001', 'Eva de Wit', '', '10.880', '2026-W40', '7,5', 'Gewerkt'], ['X5001', 'Eva de Wit', '', '10.880', '2026-W40', '8', 'Gewerkt'], ['X5001', 'Eva de Wit', '', '10.880', '2026-W40', '0', 'No-show'], ['', '', 'tim.verhoeven@mail.example', '10.887', '40', '6', 'Gewerkt'], ['X7777', 'Onbekend', '', '10.880', '2026-W40', '4', 'Gewerkt']];
+var ur = ctx.urenUitRijen(rij, ctx.lees('Talenten')), e40 = ur.regels.filter(function (x) { return x.talentId === 'tl1'; })[0];
+eis(ur.aantalRegels === 5 && ur.regels.length === 2 && e40.uren === 15.5 && e40.diensten === 2 && e40.noShows === 1 && e40.week === '2026-W40' && ur.regels.some(function (x) { return x.talentId === 'tl4' && x.week === new Date().getFullYear() + '-W40'; }) && ur.onbekend.length === 1 && ur.onbekend[0].xpsId === 'x7777', 'urenUitRijen: per talent, week en project; match op XPS-nummer of e-mail; no-show apart; onbekende accounts gemeld');
+eis(/Geen kolom/.test((function () { try { ctx.urenUitRijen([['a', 'b'], ['1', '2']], []); return ''; } catch (e) { return e.message; } })()), 'een export zonder uren- of statuskolom wordt geweigerd met een duidelijke melding');
+ctx.GEBRUIKER = null; var imp = ctx.urenImport(), wk1 = ctx.isoWeekStr(ctx.plusDagen(-7));
+eis(imp.bestanden === 1 && imp.regels === 8 && imp.onbekend.length === 1 && imp.onbekend[0].naam === 'Onbekend Account' && ctx.lees('TalentUren').some(function (u) { return u.talentId === 'tl3' && u.week === wk1 && Number(u.lateAfmeldingen) === 1 && Number(u.diensten) === 1 && u.trajectId === 't1'; }), 'urenImport leest de weekexport uit de Drive-map XPS-export: uren per week, late afmelding, project gekoppeld, onbekend account gemeld');
+eis(ctx.urenImport().bestanden === 0, 'een tweede import slaat het al gelezen bestand over');
+eis(/toegang/.test(faalt(FEMKE, 'apiTalentUrenImport')) && typeof roep(IRIS, 'apiTalentUrenImport').bestanden === 'number', 'urenimport met de hand: alleen het talentteam');
+var rp = roep(IRIS, 'apiTalentRapport', 'maand', 0);
+eis(rp.pool.actief >= 19 && typeof rp.vogCompliance === 'number' && rp.dekking.length === 7 && rp.dekking[0].dagdelen.length === 3 && rp.reeks.plaatsingen.length === rp.reeksLabels.length && 'aanmeldingen' in rp.cijfers && rp.vergelijk.cijfers && /toegang/.test(faalt(FEMKE, 'apiTalentRapport', 'maand', 0)), 'talentrapport: pool, VOG-compliance, dekking functie × dagdeel, verloop en vergelijking; niet voor de AM');
+var tr = roep(IRIS, 'apiTeamRapport', 'maand', 'talent', '', 0);
+eis(tr.metrieken.some(function (m) { return m.id === 'poolActief'; }) && tr.metrieken.some(function (m) { return m.id === 'vogCompliance'; }) && typeof tr.totaal.cijfers.poolActief === 'number', 'teamrapport talent kent de nieuwe maatstaven poolActief en vogCompliance');
+
+eis(/management/i.test(faalt(SEM, 'apiTalentAnonimiseer', 'tl14')) && /management/i.test(faalt(SEM, 'apiTalentExport', 'tl14')), 'inzage-export en anonimiseren alleen voor het management');
+var ex = roep(SOPHIE, 'apiTalentExport', 'tl14');
+eis(/^inzage-hanna-wolters-\d{4}-\d{2}-\d{2}\.json$/.test(ex.bestandsnaam) && JSON.parse(ex.tekst).profiel.email === 'hanna.wolters@mail.example' && JSON.parse(ex.tekst).plaatsingen.length === 1, 'inzage-export als json met profiel en plaatsingen');
+var an = roep(SOPHIE, 'apiTalentAnonimiseer', 'tl14'), hw = ctx.lees('Talenten').filter(function (t) { return t.id === 'tl14'; })[0], hwK = ctx.lees('Kandidaten').filter(function (k) { return k.id === 'c14'; })[0];
+eis(an.naam === 'Verwijderd profiel' && hw.email === '' && hw.status === 'uitgeschreven' && hwK.naam === 'Verwijderd profiel' && hwK.email === '' && ctx.lees('TalentDocumenten').every(function (dd) { return dd.talentId !== 'tl14'; }), 'anonimiseren: persoonsgegevens en documenten weg, kandidaatrij zonder naam; gebeurtenissen blijven');
+eis(/voordrachten of plaatsingen/.test(faalt(SOPHIE, 'apiVerwijder', 'talent', 'tl1')) && /management/i.test(faalt(SEM, 'apiVerwijder', 'talent', nieuw.id)) && !faalt(SOPHIE, 'apiVerwijder', 'talent', nieuw.id) && !ctx.lees('Talenten').some(function (t) { return t.id === nieuw.id; }), 'een talent met voordrachten is niet te verwijderen (anonimiseren), een leeg profiel wel, alleen door het management');
+ctx.GEBRUIKER = null; var run1 = ctx.talentDagelijksTrigger();
+eis(['vog', 'peiling', 'slapend', 'bewaartermijn', 'geocoderen', 'aanmeldingen'].every(function (k) { return k in run1 && !/^fout/.test(String(run1[k])); }), 'talentDagelijksTrigger draait alle stappen zonder fout: ' + JSON.stringify(run1));
+var stS = roep(SOPHIE, 'apiStatus');
+eis('talentTrigger' in stS && 'urenTrigger' in stS && stS.xpsExportMap === true && !!stS.laatsteUrenImport, 'apiStatus kent de talenttriggers, de XPS-map en de laatste urenimport');
+eis(roep(IRIS, 'apiInstellingen').talentFuncties.length === 7 && roep(SOPHIE, 'apiExport', 'talenten').csv.split('\n').length > 20, 'keuzelijsten en csv-export van talenten');
+ctx.GEBRUIKER = null; var bl = ctx.kandidatenBlijvenLiggen(true);
+eis(bl.some(function (x) { return /VOG van Jesse Vos.*verlopen, nodig vóór de start/.test(x.tekst); }) && bl.some(function (x) { return /VOG van Eva de Wit.*oranje/.test(x.tekst); }), 'blijven liggen (dagstart): verlopen VOG bij een voordracht, oranje VOG bij een lopende inzet');
+
 /* ---- bestaande schermen blijven werken ---- */
-['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)), 'schermen laden als ' + c); });
+['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });
 try { ctx.GEBRUIKER = null; ctx.nachtelijkeReview(); eis(true, 'nachtelijke review draait'); } catch (e) { eis(false, 'nachtelijke review draait: ' + e.message); }
 
 console.log(fouten ? 'FOUTEN: ' + fouten : 'ALLES GOED');

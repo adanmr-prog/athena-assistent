@@ -1,6 +1,6 @@
 # Voorstel: teams, rechten en het trajectproces (v4)
 
-Status: **v4.2 gebouwd**: teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen; rapporten en doelen per team, plus bedrijfsdoelen. v4.3 (koppelingen) volgt. ⚠️ = aanname die bevestigd moet worden.
+Status: **v5.0 gebouwd** (16-10-2026): teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen; rapporten en doelen per team, plus bedrijfsdoelen; taken zoals Todoist; talentnetwerk fase 1 (talentbestand naast XPS, §6 en §9). ⚠️ = aanname die bevestigd moet worden.
 
 **Besluiten (oktober 2026):** rechtentabel akkoord. Consultants zien de facturatie van hun eigen projecten (alleen lezen). Een AM ziet de historie van de kans achter zijn project, en alleen die. Teamlead accountmanagers: Mees; teamlead onderwijsconsultants: Mariama; management: Anne-Maartje en Menno. XPS blijft voor diensten en roosters (export/API later). De academy is een eigen platform.
 
@@ -36,14 +36,17 @@ In de Sheet krijgt `Gebruikers` de kolommen `team` en `rol`. Zo gaan de huidige 
 | Projecten | die hij binnenhaalde (lezen, evaluaties) | **eigen** (beheren) | met open vacature (lezen) | team | alles |
 | Taskforce (overdracht) | eigen | eigen | eigen | team | alles |
 | Vacatures | lezen (eigen projecten) | **eigen** (invullen) | **alles** (werken) | team | alles |
-| Kandidaten / talentbestand | — | alleen voorgedragen voor eigen project | **alles** | team | alles |
-| Academy, contract, VOG | — | status van eigen kandidaten | **alles** | team | alles |
+| Kandidaten / talentbestand (v5.0: profiel, beschikbaarheid, relaties met scholen) | — | alleen talenten die kandidaat zijn in een eigen project, als **beperkt profiel** (naam, functies, VOG-stand, beoordeling, contact; geen postcode, documenten, notitie of uren) | **alles** (voorstellen uit het bestand met matchscore) | team | alles |
+| Academy, contract, VOG (v5.0: documenten en VOG per schooljaar) | — | VOG-stand van eigen kandidaten (badge) | **alles** (bestanden in Drive, inzage gelogd) | team | alles |
+| Beoordelingen (v5.0) | — | **eigen plaatsingen** geven en lezen (favoriet / goed / niet geschikt) | **alles**, ook los van een plaatsing en met wederhoor | team | alles; inzage-export en anonimiseren |
 | Facturatie | eigen projecten (lezen) | **eigen projecten** | — | team (AM-lead) | alles |
 | Mail, agenda, dagstart | eigen | eigen | eigen | eigen | eigen |
 | Rapporten en doelen | eigen + teamtotaal | eigen + teamtotaal | eigen + teamtotaal | hele team | alles |
 | Bedrijfsdoelen | **iedereen ziet ze** | iedereen | iedereen | iedereen | zet ze |
 
 Technisch komt dit in één tabel `RECHTEN` in de backend. Elke `api*`-functie filtert daarop bij het lezen en controleert bij het schrijven. De app krijgt `ik.rechten` en laat alleen de menu's en knoppen zien die iemand mag gebruiken. Bij de overstap naar Supabase worden dezelfde regels RLS-policies.
+
+Het talent zelf (v5.0) heeft geen account: de mail-link van de peiling opent een portaal dat met een vast extern profiel zonder rechten alleen de eigen beschikbaarheid kan tonen en bevestigen of aanpassen. Een eigen inlog voor talenten komt in fase 2 (Supabase).
 
 ## 3. Het proces in het dashboard
 
@@ -52,7 +55,7 @@ Kans gewonnen (consultant)
   → project "Opstart" + taak: taskforcemeeting plannen (consultant)
   → Taskforcemeeting (consultant + AM + talentscout): overdrachtsformulier, afspraken, deadlines, startdatum
   → AM vult vacature(s) in (aantal ondersteuners, dagen/tijden, start, profiel)
-  → Talentscout zoekt in het bestand (XPS) → anders LinkedIn e.d. → draagt kandidaten voor
+  → Talentscout zoekt eerst in het Athena-talentbestand (v5.0: "Voorstellen" met matchscore en uitleg) → anders XPS, LinkedIn e.d. → draagt kandidaten voor
   → AM: matchinggesprek → geselecteerd / afgewezen
   → Academy: modules (talentscout volgt voortgang)
   → Talentscout/HR: contract + VOG (AFAS) → "klaar voor start"
@@ -67,8 +70,9 @@ Wat het dashboard bij elke stap doet:
 | Kans gewonnen | project (bestaat al, v3.8) | taak "Taskforcemeeting plannen" (consultant), agenda-uitnodiging voor AM en talentscout |
 | Taskforce | tab **Taskforce** in het project: vaste vragen (hulpvraag, inzet, rooster, startdatum, bijzonderheden, contactpersonen), afspraken en deadlines | deadlines worden taken bij de juiste persoon |
 | Vacature | tab **Bezetting**: vacatures per project | melding aan het talentteam: "nieuwe vacature" |
-| Voordragen | kandidaatkaart per vacature: voorgesteld → gesprek → geselecteerd/afgewezen → academy → contract → VOG → klaar | AM krijgt een taak "matchinggesprek" bij elke voordracht |
-| Academy, contract, VOG | statussen op de kandidaatkaart (talentscout) | herinnering als een stap te lang open staat |
+| Voordragen | kandidaatkaart per vacature: voorgesteld → gesprek → geselecteerd/afgewezen → academy → contract → VOG → klaar; v5.0: knop **Voorstellen** op de vacature toont de best passende talenten uit het bestand (score 0–100 met uitleg per onderdeel, harde uitsluitingen met reden), het talentteam kiest wie wordt voorgedragen | AM krijgt een taak "matchinggesprek" bij elke voordracht |
+| Academy, contract, VOG | statussen op de kandidaatkaart (talentscout); v5.0: VOG-stand per schooljaar als badge op de kandidaatregel en in het profiel | herinnering als een stap te lang open staat; v5.0: op 1 mei en 1 juni een mail aan wie volgend schooljaar een nieuwe VOG nodig heeft, plus één verzameltaak voor het talentteam |
+| Inzet loopt (v5.0) | kandidaat `geplaatst` (ook automatisch uit de XPS-weekexport); daarna `afgerond` of `gestopt` met reden | AM krijgt na zes weken en daarna elk kwartaal een taak "Beoordeel <naam> bij <school>" (favoriet / goed / niet geschikt + criteria); "niet geschikt" meldt het talentteam |
 | Bezetting rond | teller "3 van 4 plekken gevuld" op het project | project naar "Bezig", melding aan consultant |
 | Evaluatie | afspraak in het project (AM + consultant) | taak voor de AM elke periode |
 | Verlenging | weergave **Verlenging 26/27** | 3 maanden voor het einde een kans "Verlenging" voor de consultant |
@@ -145,11 +149,12 @@ Verder staan in het menu onder meer Declaraties, Factureren, Klokuren en Onderte
 | Scholen, kansen, offertes (pipeline) | **dashboard** | de consultants werken hier; één pipeline |
 | Project na winst: taskforce, account management, verlenging, facturatie | **dashboard** | hangt aan school, kans en AM |
 | Vraag (vacature: aantal, dagen, start, profiel) | **dashboard** | komt uit de taskforce, de AM vult hem in |
-| Flexkrachten, plaatsingen, contracten (OvO), roosters, uren, declaraties | **XPS** | daar werkt talent al, met de app voor de flexkrachten |
-| Bezetting en kandidaatstatus in het dashboard | **kopie uit XPS** (later automatisch) | de AM en consultant zien de voortgang zonder XPS te openen |
+| Talentprofiel, beschikbaarheid, documenten en VOG per schooljaar, relaties met scholen, beoordelingen, matching, aanmeldformulier en peiling (v5.0) | **dashboard** (weergave Talent) | één profiel per persoon, uitlegbare match en de AVG-regels op één plek; XPS kent geen beschikbaarheid per dagdeel, VOG per schooljaar of beoordelingen |
+| Plaatsingen, contracten (OvO), roosters, uren, declaraties, verloning | **XPS** (tot fase 2) | daar werkt talent al, met de app voor de flexkrachten |
+| Bezetting, kandidaatstatus en uren in het dashboard | **weekexport uit XPS** (v5.0: Drive-map `XPS-export`, maandag 06:00) | de AM en consultant zien de voortgang zonder XPS te openen; no-shows en late afmeldingen voeden de betrouwbaarheid in de matching |
 
 **XPS: wat we nu het best kunnen doen**
-1. **Geen tweede plaatsingssysteem.** Talent blijft plaatsen in XPS. In het dashboard zet talent per vacature alleen de kandidaten die de AM moet zien, met hun XPS-nummer. Zodra de import er is (v4.3), gaat dat vanzelf.
+1. **Geen tweede plaatsingssysteem.** Talent blijft plaatsen in XPS. In het dashboard zet talent per vacature alleen de kandidaten die de AM moet zien, met hun XPS-nummer (v5.0: gekozen uit het talentbestand, het profiel levert de contactgegevens en het `xpsId`). De weekexport (v5.0) zet een kandidaat die op de werkvloer staat vanzelf op `geplaatst`.
 2. **Projecten koppelen.** Het projectveld "Projectnummer in XPS" (v4.1) verbindt een dashboardproject met het XPS-project, bijvoorbeeld 10.912. Maak het XPS-project pas aan bij **Boeking**, dus als de kans gewonnen is, met de knop "Kopieer voor XPS" op de projectpagina.
 3. ⚠️ **Besluit nodig:** stop met Lead, Offerte en Optie in XPS. Dan is er één commerciële pipeline, die in het dashboard.
 4. **Statussen vertalen.** Dit is de vertaling voor de import:
@@ -165,7 +170,7 @@ Verder staan in het menu onder meer Declaraties, Factureren, Klokuren en Onderte
    HRM-Contracten op "goedgekeurd" betekent dat de stap contract klaar is.
 5. **Koppeling zonder API, in volgorde van voorkeur:**
    1. Vraag XPSLogic (info@xps.nl) om een API, webhooks of een geplande export (CSV of Excel) van Plaatsingen, HRM-Contracten en Roosters.
-   2. Anders: talent exporteert wekelijks die lijsten uit XPS en zet ze in een vaste Drive-map; het dashboard leest ze 's nachts in.
+   2. Anders: talent exporteert wekelijks die lijsten uit XPS en zet ze in een vaste Drive-map; het dashboard leest ze 's nachts in. **Gebouwd in v5.0:** map `XPS-export`, maandag 06:00 (of Beheer → "Uren importeren"), CSV, Excel of Google Sheet, kolommen herkend op naam (afwijkende koppen via de instelling `xpsKolommen`), koppeling op accountnummer en anders e-mail, weekaggregaten in `TalentUren`.
    3. Pas als laatste: automatisch uitlezen van de lijstpagina's (die hebben een vaste URL per module) met een aparte XPS-gebruiker die alleen mag lezen. Dat is kwetsbaar en alleen met toestemming van XPSLogic.
 6. **Uren en facturatie.** De gewerkte uren staan in XPS (Roosters, Klokuren). Met de import kan de facturatie per project uit die uren komen (uren × tarief → Exact), in plaats van met de hand. Zoek uit of de module Factureren in XPS al gebruikt wordt; anders blijft Exact de plek.
 7. **Privacy.** Haal alleen naam, nummer en status op. Geen contract-pdf's, BSN of loongegevens in de Sheet.
@@ -192,7 +197,7 @@ Verder staan in het menu onder meer Declaraties, Factureren, Klokuren en Onderte
 4. **v4.2 Rapporten en doelen per team, plus bedrijfsdoelen (klaar).**
 5. **v4.3 Demomodus (klaar)** en **v4.4 Rapporten per periode (klaar).**
 6. **v4.5 en v4.6 Taken zoals Todoist** (besluit 14-10-2026: geen Todoist-koppeling, Athena neemt de functies over): snelinvoer in het Nederlands, herhalingen, tijd, Vandaag/Komende, ongedaan maken, sneltoetsen, meldingen en rechten (v4.5, klaar 14-10-2026); tags, subtaken, opgeslagen weergaven, weekweergave, herinneringsmail en streak (v4.6, klaar 15-10-2026).
-7. **v5.0 Talentnetwerk fase 1** (naast XPS): één profiel per flexkracht, beschikbaarheid, documenten en VOG per schooljaar, relaties met scholen, beoordelingen door accountmanager en talentteam, matching met uitleg, uren als weekexport uit XPS, rapport, aanmeldformulier en bevestigen van beschikbaarheid via een mail-link.
+7. **v5.0 Talentnetwerk fase 1 (klaar 16-10-2026)** (naast XPS): één profiel per flexkracht, beschikbaarheid, documenten en VOG per schooljaar, relaties met scholen, beoordelingen door accountmanager en talentteam, matching met uitleg, uren als weekexport uit XPS, rapport, aanmeldformulier (Google Form) en bevestigen van beschikbaarheid via een mail-link. Na het mergen: `Code.gs` plakken, één keer `setup()` (twee nieuwe triggers, mappen `Talent` en `XPS-export`), het Google Form aan de Sheet koppelen en de eerste XPS-export in de map zetten.
 8. **v6.0 Supabase en Vercel** met een eigen domein; voorwaarde voor fase 2. monday-import en de Exact-API komen hier mee.
 9. **v6.1+ Talentnetwerk fase 2** (besluit 14-10-2026: XPS op termijn vervangen): diensten en roosters, toewijzing in golven, uren bevestigen, werkers-app, schoolfeedback, WhatsApp/sms, push, payroll-export; XPS uitfaseren. AFAS alleen als blijkt dat er flexkrachtgegevens in staan.
 
@@ -203,13 +208,18 @@ Onderzoek en uitvoeringsplan: `docs/onderzoek-todoist-en-talentnetwerk.md` en `d
 Besloten op 14-10-2026: geen Todoist-koppeling (functies in Athena); XPS wordt op termijn vervangen (fase 1 ernaast, fase 2 op Supabase); zelfservice in fase 1 licht (aanmelden en beschikbaarheid bevestigen via mail-link); beoordelen in fase 1 door accountmanager en talentteam, schoolfeedback via link in fase 2.
 
 Nog open:
-6. **XPS-export:** voor v5.0 is één voorbeeldexport nodig (Roosters/Klokuren en Plaatsingen, CSV of Excel) in een vaste Drive-map; de kolommapping wordt daarop ingesteld.
-7. **Juridische toets:** de VOG-regel per schooljaar (art. 34b WPO; WVO 2020 en WEC nalezen) en of de inzet van ondersteuners onder leiding van de leraar als uitlenen geldt (Wtta, handhaving 2028).
-8. **Privacyverklaring** voor het aanmeldformulier en de bewaartermijn voor poolleden (voorstel: 24 maanden na het laatste contact of de laatste plaatsing).
+6. **XPS-export:** v5.0 leest CSV, Excel en Google Sheets uit de map `XPS-export` en herkent de kolommen op naam (accountnummer, e-mail, naam, project, week of datum, uren, status, no-show, late afmelding). Nog nodig: één echte export van Roosters/Klokuren om de koppen te controleren; afwijkende koppen gaan in de instelling `xpsKolommen`. Zet in elk dashboardproject het XPS-projectnummer, anders landen de uren niet bij het project.
+7. **Juridische toets:** de VOG-regel per schooljaar (art. 34b WPO; WVO 2020 en WEC nalezen) en of de inzet van ondersteuners onder leiding van de leraar als uitlenen geldt (Wtta, handhaving 2028). De termijn staat als instelling `vogMaandenGeldig` (6 maanden) en is zonder code aan te passen.
+8. **Privacyverklaring** voor het aanmeldformulier (het toestemmingsvinkje in het Google Form verwijst ernaar) en de tekst van de peiling-, VOG- en bevestigingsmail. De bewaartermijn staat als instelling `bewaartermijnMaanden` (24) en wordt gehandhaafd door anonimisering (§9).
 9. **E-mailadressen:** hebben alle gebruikers in Beheer → Gebruikers een e-mailadres? Nodig voor de herinneringsmail (v4.6).
+10. **Talentteam:** wie zit in team `talent` in Beheer → Gebruikers? Meldingen over aanmeldingen, "niet geschikt" en de VOG-verzameltaak gaan naar dat team.
 
 1. ⚠️ **Schooljaar:** de datum van de server (oktober 2026) geeft schooljaar 2026-2027. Is het huidige schooljaar 2027-2028, zet dat dan in Beheer → Keuzelijsten → Huidig schooljaar.
 2. **XPS:** heeft XPSLogic een export of API voor Plaatsingen, Contracten en Roosters? Wordt de module Factureren gebruikt?
 3. **XPS-projecten:** stoppen met Lead, Offerte en Optie in XPS en een project pas aanmaken bij Boeking?
 4. **AFAS:** wat doet het talentteam precies in InSite (alleen vast personeel of ook flexkrachten, bijvoorbeeld VOG)?
 5. **Interne werving:** XPS Sollicitanten of monday "Werving talent"?
+
+## 9. Verwerkingsregister talentbestand (v5.0)
+
+**Doel:** flexkrachten (ondersteuners, studentdocenten, huiswerkbegeleiders, examentrainers, NT2-ondersteuners, surveillanten) bemiddelen naar scholen: passende mensen vinden, voordragen en de kwaliteit van de inzet bewaken. **Grondslag:** toestemming bij aanmelding (`toestemmingDatum`, `toestemmingGrondslag` per profiel; het Google Form vraagt een vinkje met link naar de privacyverklaring); voor lopende plaatsingen de uitvoering van de overeenkomst. **Gegevens:** naam, e-mail, telefoon, postcode en woonplaats (en de daaruit berekende ligging), functies, sectoren, vakken, opleiding en bevoegdheid, vervoer en reisafstand, beschikbaarheid, contractvorm, XPS- en AFAS-nummer, documentmetadata met het bestand in Drive (VOG, diploma, certificaat, bevoegdheid), relaties met scholen, beoordelingen door accountmanagers en het talentteam (met wederhoor), weekuren, no-shows en late afmeldingen uit XPS, en de tijdlijn. **Niet opgenomen:** BSN, kopie identiteitsbewijs, IBAN, geboortedatum, tarief, contract-pdf en gezondheid; die horen bij de werkgever of payroller. **Toegang:** talentteam en management volledig; een accountmanager alleen een beperkt profiel van de talenten in zijn eigen projecten; consultants niets; elke inzage in een document wordt op de tijdlijn gelogd; de Drive-submap `Talent` wordt alleen met het talentteam gedeeld. **Bewaartermijn:** `bewaartermijnMaanden` (24) na de toestemmingsdatum; een nieuwe toestemming of plaatsing verlengt. Daarna anonimiseert de dagelijkse run het profiel (naam "Verwijderd profiel", contact, postcode, notitie en documenten weg; uren en beoordelingen blijven zonder naam voor de statistiek) zolang er geen lopende inzet of voordracht is. **Rechten van de betrokkene:** inzage via Beheer → export per talent (profiel, documenten, beoordelingen, relaties, uren, tijdlijn; dus ook interne notities: schrijf feitelijk), correctie in het profiel of via de mail-link (beschikbaarheid), verwijdering via anonimiseren. **Verwerkers:** Google Workspace (Sheet, Drive, Gmail; bestaande verwerkersovereenkomst), PDOK Locatieserver (alleen een postcode of adres, geen naam), Anthropic (de Assistent zoekt in het bestand zonder contactgegevens). **Geautomatiseerde besluitvorming:** geen; de matchscore is uitlegbaar per onderdeel, sluit niemand uit en het talentteam beslist zelf wie wordt voorgedragen.

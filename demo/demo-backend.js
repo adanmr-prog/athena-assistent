@@ -19,7 +19,8 @@ var DEMO_MENSEN = [
 ];
 
 /* ----- Apps Script nagebootst ----- */
-var _demoProps = { SHEET_ID: 'demo', DRIVE_MAP_ID: 'demo', SECRET: 'demo-sophie', NAAM: 'Sophie de Graaf', ANTHROPIC_API_KEY: 'demo', MIGRATIE_V4: '1', LAATSTE_INDEX: '', LAATSTE_CRM_SYNC: '' };
+var _demoProps = { SHEET_ID: 'demo', DRIVE_MAP_ID: 'demo', SECRET: 'demo-sophie', NAAM: 'Sophie de Graaf', ANTHROPIC_API_KEY: 'demo', MIGRATIE_V4: '1', LAATSTE_INDEX: '', LAATSTE_CRM_SYNC: '',
+  TALENT_MAP_ID: 'demo-talent', XPS_EXPORT_MAP_ID: 'demo-xps' };  // v5.0: de twee Drive-mappen van het talentnetwerk bestaan in het geheugen (zie DriveApp hieronder)
 function _demoCodes() { var c = {}; DEMO_MENSEN.forEach(function (m) { if (m.id !== 'beheer') c[m.code] = m.id; }); return JSON.stringify(c); }
 _demoProps.CODES = _demoCodes();
 var PropertiesService = { getScriptProperties: function () { return {
@@ -50,10 +51,42 @@ var _demoSS = { getName: function () { return 'Athena Assistent — data (demo)'
 var SpreadsheetApp = { openById: function () { return _demoSS; }, create: function () { return _demoSS; } };
 
 function _p2(n) { return (n < 10 ? '0' : '') + n; }
+// v5.0: base64, blobs en csv zonder Google (voor documenten van talenten en de XPS-export)
+var _B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function _demoB64Decode(s) {
+  var uit = [], buf = 0, bits = 0; s = String(s || '').replace(/[^A-Za-z0-9+\/]/g, '');
+  for (var i = 0; i < s.length; i++) { buf = ((buf << 6) | _B64.indexOf(s.charAt(i))) & 0xFFFFFF; bits += 6; if (bits >= 8) { bits -= 8; uit.push((buf >> bits) & 255); } }
+  return uit;
+}
+function _demoB64Encode(bytes) {
+  var s = '', i; if (typeof bytes === 'string') bytes = _demoTekstNaarBytes(bytes);
+  for (i = 0; i < bytes.length; i += 3) { var n = (bytes[i] << 16) | ((bytes[i + 1] || 0) << 8) | (bytes[i + 2] || 0); s += _B64.charAt(n >> 18) + _B64.charAt((n >> 12) & 63) + (i + 1 < bytes.length ? _B64.charAt((n >> 6) & 63) : '=') + (i + 2 < bytes.length ? _B64.charAt(n & 63) : '='); }
+  return s;
+}
+function _demoTekstNaarBytes(s) { var uit = []; s = String(s); for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); if (c < 128) uit.push(c); else if (c < 2048) uit.push(192 | (c >> 6), 128 | (c & 63)); else uit.push(224 | (c >> 12), 128 | ((c >> 6) & 63), 128 | (c & 63)); } return uit; }
+function _demoBytesNaarTekst(b) { var s = ''; for (var i = 0; i < b.length; i++) { var c = b[i] & 255; if (c < 128) s += String.fromCharCode(c); else if (c >= 192 && c < 224) s += String.fromCharCode(((c & 31) << 6) | (b[++i] & 63)); else if (c >= 224 && c < 240) s += String.fromCharCode(((c & 15) << 12) | ((b[++i] & 63) << 6) | (b[++i] & 63)); else { i += 3; s += '?'; } } return s; }
+function _demoBlob(data, mime, naam) {
+  return { getBytes: function () { return typeof data === 'string' ? _demoTekstNaarBytes(data) : data; }, getDataAsString: function () { return typeof data === 'string' ? data : _demoBytesNaarTekst(data); },
+    getContentType: function () { return mime || 'application/octet-stream'; }, getName: function () { return naam || 'bestand'; }, setName: function (n) { naam = n; return this; } };
+}
+function _demoParseCsv(tekst, sep) {
+  sep = sep || ','; var rijen = [], rij = [], veld = '', q = false, s = String(tekst || '');
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charAt(i);
+    if (q) { if (c === '"') { if (s.charAt(i + 1) === '"') { veld += '"'; i++; } else q = false; } else veld += c; }
+    else if (c === '"') q = true;
+    else if (c === sep) { rij.push(veld); veld = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && s.charAt(i + 1) === '\n') i++; rij.push(veld); rijen.push(rij); rij = []; veld = ''; }
+    else veld += c;
+  }
+  if (veld !== '' || rij.length) { rij.push(veld); rijen.push(rij); }
+  return rijen;
+}
 var Utilities = {
   getUuid: function () { var s = ''; for (var i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16); return s.slice(0, 8) + '-' + s.slice(8, 12) + '-' + s.slice(12, 16) + '-' + s.slice(16, 20) + '-' + s.slice(20); },
   formatDate: function (d, tz, f) { return String(f).replace('yyyy', d.getFullYear()).replace('MM', _p2(d.getMonth() + 1)).replace('dd', _p2(d.getDate())).replace('HH', _p2(d.getHours())).replace('mm', _p2(d.getMinutes())); },
-  sleep: function () {}
+  sleep: function () {},
+  newBlob: _demoBlob, base64Decode: _demoB64Decode, base64Encode: _demoB64Encode, parseCsv: _demoParseCsv  // v5.0
 };
 var Session = { getScriptTimeZone: function () { return 'Europe/Amsterdam'; },
   getEffectiveUser: function () { var m = DEMO_MENSEN.filter(function (x) { return x.code === DEMO_HUIDIG; })[0] || DEMO_MENSEN[0]; return { getEmail: function () { return m.email; } }; },
@@ -66,10 +99,30 @@ var Logger = { log: function () {} };
 var _demoVerzonden = [];  // v4.6: verstuurde mails (herinneringen), voor de rooktest
 var MailApp = { sendEmail: function (o) { _demoVerzonden.push(o); } };
 var MimeType = { GOOGLE_DOCS: 'gdoc', GOOGLE_SHEETS: 'gsheet', PLAIN_TEXT: 'txt', CSV: 'csv', PDF: 'pdf', MICROSOFT_WORD: 'doc' };
-var ScriptApp = { getProjectTriggers: function () { return []; }, deleteTrigger: function () {},
-  newTrigger: function () { var t = { timeBased: function () { return t; }, everyHours: function () { return t; }, everyMinutes: function () { return t; }, everyDays: function () { return t; }, atHour: function () { return t; }, onMonthDay: function () { return t; }, nearMinute: function () { return t; }, create: function () { return t; } }; return t; } };
+var ScriptApp = { getProjectTriggers: function () { return []; }, deleteTrigger: function () {}, WeekDay: { MONDAY: 'MONDAY', TUESDAY: 'TUESDAY', WEDNESDAY: 'WEDNESDAY', THURSDAY: 'THURSDAY', FRIDAY: 'FRIDAY' },  // v5.0: WeekDay en getService
+  getService: function () { return { getUrl: function () { return 'https://script.google.com/macros/s/demo/exec'; } }; },
+  newTrigger: function () { var t = { timeBased: function () { return t; }, everyHours: function () { return t; }, everyMinutes: function () { return t; }, everyDays: function () { return t; }, atHour: function () { return t; }, onMonthDay: function () { return t; }, onWeekDay: function () { return t; }, nearMinute: function () { return t; }, create: function () { return t; } }; return t; } };
 function _demoNiet() { throw new Error('In de demo staat dit uit: hier zou Google Drive een document maken.'); }
-var DriveApp = { getFolderById: _demoNiet, getFileById: _demoNiet, createFolder: _demoNiet };
+// v5.0: Drive in het geheugen voor de mappen Talent (documenten van talenten) en XPS-export (weekexport). De documentenmap zelf blijft uit (indexeren).
+var _demoDrive = { mappen: {}, bestanden: {} };
+function _demoIter(lijst) { var i = 0; return { hasNext: function () { return i < lijst.length; }, next: function () { return lijst[i++]; } }; }
+function _demoBestand(id, naam, mime, inhoud) {
+  var weg = false, tijd = new Date();
+  var f = { getId: function () { return id; }, getName: function () { return naam; }, getMimeType: function () { return mime; }, getLastUpdated: function () { return tijd; }, getDateCreated: function () { return tijd; }, getUrl: function () { return 'https://drive.google.com/file/d/' + id; },
+    getSize: function () { return inhoud.length; }, setTrashed: function (b) { weg = !!b; return f; }, isTrashed: function () { return weg; }, getBlob: function () { return _demoBlob(inhoud, mime, naam); } };
+  _demoDrive.bestanden[id] = f; return f;
+}
+function _demoMap(id, naam) {
+  var kinderen = [], bestanden = [], weg = false;
+  var m = { getId: function () { return id; }, getName: function () { return naam; }, getUrl: function () { return 'https://drive.google.com/drive/folders/' + id; }, setTrashed: function (b) { weg = !!b; return m; }, isTrashed: function () { return weg; },
+    getFolders: function () { return _demoIter(kinderen.filter(function (k) { return !k.isTrashed(); })); }, getFoldersByName: function (n) { return _demoIter(kinderen.filter(function (k) { return k.getName() === n && !k.isTrashed(); })); },
+    getFiles: function () { return _demoIter(bestanden.filter(function (f) { return !f.isTrashed(); })); }, getFilesByName: function (n) { return _demoIter(bestanden.filter(function (f) { return f.getName() === n && !f.isTrashed(); })); },
+    createFolder: function (n) { var k = _demoMap('map-' + Utilities.getUuid().slice(0, 8), n); kinderen.push(k); return k; },
+    createFile: function (a, b, c) { var blob = a && typeof a.getBytes === 'function' ? a : null, f = _demoBestand('bst-' + Utilities.getUuid().slice(0, 8), blob ? blob.getName() : String(a), blob ? blob.getContentType() : (c || 'text/plain'), blob ? blob.getBytes() : String(b || '')); bestanden.push(f); return f; } };
+  _demoDrive.mappen[id] = m; return m;
+}
+_demoMap('demo-talent', 'Talent'); _demoMap('demo-xps', 'XPS-export');
+var DriveApp = { getFolderById: function (id) { var m = _demoDrive.mappen[id]; if (!m) _demoNiet(); return m; }, getFileById: function (id) { var f = _demoDrive.bestanden[id]; if (!f) _demoNiet(); return f; }, createFolder: _demoNiet };
 var DocumentApp = { openById: _demoNiet, create: _demoNiet, ParagraphHeading: {} };
 var Drive = { Files: { list: _demoNiet, get: _demoNiet, insert: _demoNiet, create: _demoNiet, export: _demoNiet, copy: _demoNiet } };
 
@@ -137,13 +190,23 @@ function _demoClaude(body) {
   if (/bedrijfsbrein/.test(sys)) return tekst('Volgens de prijzenlijst kost een onderwijsondersteuner € 45 per uur, huiswerkbegeleiding € 42 en examentraining € 46. Alle diensten zijn vrijgesteld van btw. Elke school krijgt een vaste ondersteuner met een vaste vervanger.');
   return tekst('Onderwerp: Vaste ondersteuning, ook na de kerstvakantie\n\nBeste [naam],\n\nOnderwijsondersteuning wordt beter wanneer docenten, ondersteuner en leerlingen elkaar kennen. Daarom koppelen we een vaste ondersteuner aan de school, met een vaste vervanger bij afwezigheid. Alle medewerkers volgen de AthenaAcademy en hebben een VOG.\n\nZullen we in november een kort gesprek plannen over de tweede helft van het schooljaar?\n\nMet vriendelijke groet,\nSophie de Graaf\nAthenaSchool');
 }
+// v5.0: de PDOK Locatieserver nagebootst: een vaste ligging per postcode (rond Utrecht), zodat de reisafstand in de matching iets laat zien
+function _demoPdok(url) {
+  var m = /q=([^&]*)/.exec(url), q = decodeURIComponent((m && m[1]) || ''), n = 0;
+  for (var i = 0; i < q.length; i++) n = (n * 31 + q.charCodeAt(i)) % 10007;
+  var pc = /(\d{4})/.exec(q), basis = pc ? Number(pc[1]) : n;
+  var lat = 51.9 + ((basis * 7) % 60) / 100, lon = 4.4 + ((basis * 13) % 170) / 100;
+  return { response: { numFound: 1, docs: [{ centroide_ll: 'POINT(' + lon.toFixed(4) + ' ' + lat.toFixed(4) + ')' }] } };
+}
 var UrlFetchApp = { fetch: function (url, o) {
-  var data = /anthropic/.test(url) ? _demoClaude(JSON.parse((o && o.payload) || '{}')) : { error: { message: 'Niet beschikbaar in de demo.' } };
-  var code = /anthropic/.test(url) ? 200 : 503;
+  var pdok = /api\.pdok\.nl/.test(url), claude = /anthropic/.test(url);
+  var data = claude ? _demoClaude(JSON.parse((o && o.payload) || '{}')) : pdok ? _demoPdok(url) : { error: { message: 'Niet beschikbaar in de demo.' } };
+  var code = claude || pdok ? 200 : 503;
   return { getResponseCode: function () { return code; }, getContentText: function () { return JSON.stringify(data); } };
 } };
 
 /* ----- Fictieve gegevens ----- */
+function toeval0(n) { var x = Math.sin(n * 9301 + 49297) * 233280; return x - Math.floor(x); }  // vast "toeval": dezelfde seed bij elke start
 function demoVul() {
   GEBRUIKER = null;
   var d = function (n) { return datumStr(plusDagen(n)); }, dt = function (n, t) { return d(n) + ' ' + (t || '10:00'); };
@@ -162,10 +225,13 @@ function demoVul() {
     ['s9', 'Basisschool De Zonnewijzer', 'Nijmegen', 'PO', 'lead', M.yara, 280, 'Stichting Zonnewijzer'], ['s10', 'Stedelijk Gymnasium Noorderhof', 'Zwolle', 'VO', 'klant', M.lars, 860, 'Stichting Noorderhof'],
     ['s11', 'Praktijkschool De Brug', 'Deventer', 'PRO', 'prospect', M.noor, 240, 'Stichting De Brug'], ['s12', 'College Veldzicht', "'s-Hertogenbosch", 'VO', 'oud-klant', M.yara, 1250, 'Stichting Veldzicht']
   ];
+  // v5.0: ligging van de plaatsen (voor de reisafstand in de matching); ook voor de woonplaatsen van talenten
+  var co = { Utrecht: [52.0907, 5.1214], Amersfoort: [52.1561, 5.3878], Haarlem: [52.3874, 4.6462], Rotterdam: [51.9244, 4.4777], Zeist: [52.0889, 5.2317], Leiden: [52.1601, 4.497], Gouda: [52.0115, 4.7105], Arnhem: [51.9851, 5.8987], Nijmegen: [51.8126, 5.8372], Zwolle: [52.5168, 6.083], Deventer: [52.2552, 6.1639], "'s-Hertogenbosch": [51.6978, 5.3037],
+    Nieuwegein: [52.0292, 5.0808], Hilversum: [52.2292, 5.1669], Delft: [52.0116, 4.3571], Schiedam: [51.9192, 4.3889], Ede: [52.0402, 5.6649], Bunnik: [52.0656, 5.1973], Houten: [52.0283, 5.1685], Woerden: [52.0855, 4.8833] };
   schrijfVeel('Scholen', scholen.map(function (x, i) {
-    var dom = x[1].toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '') + '.example';
+    var dom = x[1].toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '') + '.example', c = co[x[2]] || [];
     return { id: x[0], naam: x[1], plaats: x[2], type: x[3], status: x[4], eigenaar: x[5], leerlingen: x[6], bestuur: x[7], email: 'info@' + dom, website: 'www.' + dom, telefoon: '0' + (30 + i) + '-' + (2000000 + i * 37123),
-      adres: 'Schoolstraat ' + (i + 3) + ', ' + x[2], tags: x[3].toLowerCase(), aangemaakt: dt(-400 + i * 25), laatsteContact: d(-(i % 6) - 1) };
+      adres: 'Schoolstraat ' + (i + 3) + ', ' + x[2], tags: x[3].toLowerCase(), aangemaakt: dt(-400 + i * 25), laatsteContact: d(-(i % 6) - 1), lat: c[0] || '', lon: c[1] || '' };
   }));
   var personen = [
     ['p1', 'Marieke', 'Jansen', 'Teamleider onderbouw', 's1'], ['p2', 'Joost', 'van Leeuwen', 'Conrector', 's1'], ['p3', 'Anouk', 'de Vries', 'Zorgcoördinator', 's2'], ['p4', 'Erik', 'Mol', 'Directeur', 's2'],
@@ -244,22 +310,115 @@ function demoVul() {
     Object.keys(extra || {}).forEach(function (k) { o[k] = extra[k]; });
     return o;
   };
+  // v5.0: elke kandidaat hangt aan een profiel in het talentbestand (talentId, zelfde XPS-nummer) en draagt de inzet zelf (functie, periode, rooster, uren)
+  var inzet = function (tid, n, functie, start, eind, uren, dagen, extra) { var o = { talentId: tid, xpsId: 'X' + (5000 + n), functie: functie, start: start, eind: eind, urenPerWeek: uren, dagen: dagen, bron: 'talentbestand' }; Object.keys(extra || {}).forEach(function (k) { o[k] = extra[k]; }); return o; };
   schrijfVeel('Kandidaten', [
-    kand('c1', 'v1', 't1', 'Eva de Wit', M.sem, 'klaar voor start', { voorgesteld: -44, gesprek: -41, geselecteerd: -39, academy: -38, contract: -35, vog: -33, 'klaar voor start': -31 }),
-    kand('c2', 'v1', 't1', 'Ali Yilmaz', M.iris, 'klaar voor start', { voorgesteld: -43, gesprek: -40, geselecteerd: -38, academy: -37, contract: -34, vog: -33, 'klaar voor start': -31 }, { bron: 'LinkedIn' }),
-    kand('c3', 'v1', 't1', 'Jasmijn Kok', M.sem, 'klaar voor start', { voorgesteld: -42, gesprek: -40, geselecteerd: -38, academy: -36, contract: -34, vog: -32, 'klaar voor start': -31 }),
-    kand('c4', 'v5', 't2', 'Tim Verhoeven', M.iris, 'klaar voor start', { voorgesteld: -60, gesprek: -57, geselecteerd: -55, 'klaar voor start': -49 }),
-    kand('c5', 'v5', 't2', 'Nina Jacobs', M.sem, 'klaar voor start', { voorgesteld: -59, gesprek: -56, geselecteerd: -55, 'klaar voor start': -50 }, { bron: 'eigen netwerk' }),
-    kand('c6', 'v2', 't3', 'Daan Kuipers', M.sem, 'gesprek', { voorgesteld: -6, gesprek: -3 }, { gesprek: dt(3, '11:00') }),
-    kand('c7', 'v2', 't3', 'Lotte van Dam', M.iris, 'voorgesteld', { voorgesteld: -2 }, { bron: 'LinkedIn' }),
-    kand('c8', 'v3', 't4', 'Fatima Aydin', M.sem, 'klaar voor start', { voorgesteld: -13, gesprek: -11, geselecteerd: -9, academy: -8, contract: -5, vog: -3, 'klaar voor start': -2 }),
-    kand('c9', 'v3', 't4', 'Jesse Vos', M.sem, 'contract', { voorgesteld: -12, gesprek: -11, geselecteerd: -10, contract: -9 }),
-    kand('c10', 'v3', 't4', 'Mila Bakker', M.iris, 'afgewezen', { voorgesteld: -13, gesprek: -11, afgewezen: -10 }),
-    kand('c13', 'v6', 't5', 'Ruben Claes', M.iris, 'klaar voor start', { voorgesteld: -18, gesprek: -15, geselecteerd: -13, contract: -9, vog: -7, 'klaar voor start': -6 }, { bron: 'XPS-bestand' }),
-    kand('c14', 'v6', 't5', 'Hanna Wolters', M.sem, 'reserve', { voorgesteld: -17, gesprek: -15, reserve: -13 }),
-    kand('c11', 'v4', 't9', 'Thijs Brouwer', M.sem, 'voorgesteld', { voorgesteld: -3 }),
-    kand('c12', 'v4', 't9', 'Sara Peeters', M.iris, 'voorgesteld', { voorgesteld: -1 }, { bron: 'sollicitatie' })
+    kand('c1', 'v1', 't1', 'Eva de Wit', M.sem, 'geplaatst', { voorgesteld: -44, gesprek: -41, geselecteerd: -39, academy: -38, contract: -35, vog: -33, 'klaar voor start': -31, geplaatst: -29 }, inzet('tl1', 1, 'Onderwijsondersteuner', sjStart, sjEind, 30, 'Ma t/m vr 8:30-15:00')),
+    kand('c2', 'v1', 't1', 'Ali Yilmaz', M.iris, 'geplaatst', { voorgesteld: -43, gesprek: -40, geselecteerd: -38, academy: -37, contract: -34, vog: -33, 'klaar voor start': -31, geplaatst: -29 }, inzet('tl2', 2, 'Onderwijsondersteuner', sjStart, sjEind, 30, 'Ma t/m vr 8:30-15:00', { bron: 'LinkedIn' })),
+    kand('c3', 'v1', 't1', 'Jasmijn Kok', M.sem, 'geplaatst', { voorgesteld: -42, gesprek: -40, geselecteerd: -38, academy: -36, contract: -34, vog: -32, 'klaar voor start': -31, geplaatst: -29 }, inzet('tl3', 3, 'Onderwijsondersteuner', sjStart, sjEind, 30, 'Ma t/m vr 8:30-15:00')),
+    kand('c4', 'v5', 't2', 'Tim Verhoeven', M.iris, 'geplaatst', { voorgesteld: -60, gesprek: -57, geselecteerd: -55, 'klaar voor start': -49, geplaatst: -45 }, inzet('tl4', 4, 'Huiswerkbegeleider', sjStart, sjEind, 12, 'Di en do 14:00-17:00')),
+    kand('c5', 'v5', 't2', 'Nina Jacobs', M.sem, 'geplaatst', { voorgesteld: -59, gesprek: -56, geselecteerd: -55, 'klaar voor start': -50, geplaatst: -45 }, inzet('tl5', 5, 'Huiswerkbegeleider', sjStart, sjEind, 12, 'Di en do 14:00-17:00', { bron: 'eigen netwerk' })),
+    kand('c6', 'v2', 't3', 'Daan Kuipers', M.sem, 'gesprek', { voorgesteld: -6, gesprek: -3 }, inzet('tl6', 6, 'Examentrainer wiskunde en Nederlands', (j1 + 1) + '-03-01', (j1 + 1) + '-05-15', 10, 'Woensdagmiddag en meivakantie', { gesprek: dt(3, '11:00') })),
+    kand('c7', 'v2', 't3', 'Lotte van Dam', M.iris, 'voorgesteld', { voorgesteld: -2 }, inzet('tl7', 7, 'Examentrainer wiskunde en Nederlands', (j1 + 1) + '-03-01', (j1 + 1) + '-05-15', 10, 'Woensdagmiddag en meivakantie', { bron: 'LinkedIn' })),
+    kand('c8', 'v3', 't4', 'Fatima Aydin', M.sem, 'klaar voor start', { voorgesteld: -13, gesprek: -11, geselecteerd: -9, academy: -8, contract: -5, vog: -3, 'klaar voor start': -2 }, inzet('tl8', 8, 'NT2-ondersteuner', d(21), sjEind, 16, 'Ma t/m do 9:00-13:00')),
+    kand('c9', 'v3', 't4', 'Jesse Vos', M.sem, 'contract', { voorgesteld: -12, gesprek: -11, geselecteerd: -10, contract: -9 }, inzet('tl9', 9, 'NT2-ondersteuner', d(21), sjEind, 16, 'Ma t/m do 9:00-13:00')),
+    kand('c10', 'v3', 't4', 'Mila Bakker', M.iris, 'afgewezen', { voorgesteld: -13, gesprek: -11, afgewezen: -10 }, inzet('tl10', 10, 'NT2-ondersteuner', d(21), sjEind, 16, 'Ma t/m do 9:00-13:00')),
+    kand('c13', 'v6', 't5', 'Ruben Claes', M.iris, 'geplaatst', { voorgesteld: -18, gesprek: -15, geselecteerd: -13, contract: -9, vog: -7, 'klaar voor start': -6, geplaatst: -3 }, inzet('tl13', 13, 'Studentdocent Duits', d(-3), sjEind, 16, 'Di en do', { bron: 'XPS-bestand' })),
+    kand('c14', 'v6', 't5', 'Hanna Wolters', M.sem, 'reserve', { voorgesteld: -17, gesprek: -15, reserve: -13 }, inzet('tl14', 14, 'Studentdocent Duits', d(-3), sjEind, 16, 'Di en do')),
+    kand('c11', 'v4', 't9', 'Thijs Brouwer', M.sem, 'voorgesteld', { voorgesteld: -3 }, inzet('tl11', 11, 'Rekenondersteuner', d(28), sjEind, 10, 'Ma, wo en vr 9:00-12:00')),
+    kand('c12', 'v4', 't9', 'Sara Peeters', M.iris, 'voorgesteld', { voorgesteld: -1 }, inzet('tl12', 12, 'Rekenondersteuner', d(28), sjEind, 10, 'Ma, wo en vr 9:00-12:00', { bron: 'sollicitatie' })),
+    // vorig schooljaar: een afgeronde en een gestopte inzet, voor de historie en de beoordeling
+    kand('c15', 'vh3', 't8', 'Zoë Kaya', M.iris, 'gestopt', { voorgesteld: -300, gesprek: -297, geselecteerd: -295, 'klaar voor start': -290, geplaatst: -285, gestopt: -150 }, inzet('tl24', 24, 'Onderwijsondersteuner', d(-285), d(-150), 24, 'Ma t/m do 8:30-14:30', { eindReden: 'Afspraken niet nagekomen; in overleg gestopt.' })),
+    kand('c16', 'vh2', 't11', 'Amir Haddad', M.sem, 'afgerond', { voorgesteld: -320, gesprek: -317, geselecteerd: -315, 'klaar voor start': -310, geplaatst: -305, afgerond: -110 }, inzet('tl19', 19, 'NT2-ondersteuner', d(-305), d(-110), 16, 'Ma t/m do 9:00-13:00', { eindReden: 'Project afgelopen.' }))
   ]);
+
+  // v5.0: het talentbestand. Eén profiel per flexkracht; de kandidaten hierboven hangen eraan. Beschikbaarheid per dagdeel (2 ja, 1 liever niet, 0 nee), VOG's, beoordelingen, relaties met scholen en weekuren uit XPS.
+  var raster = function (s) { var o = {}; s.split('|').forEach(function (x, i) { o[['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'][i]] = x.split('').map(Number); }); return o; };
+  var SCHOOLDAG = '220|220|220|220|220|000|000', MIDDAG = '020|020|020|020|020|000|000', OCHTEND = '200|200|200|200|200|000|000', STUDENT = '022|022|000|022|020|000|000', FLEX = '222|222|222|222|222|200|000', DIDO = '000|222|000|222|000|000|000', HALF = '220|220|000|000|220|000|000';
+  // [id, voornaam, achternaam, plaats, postcode, functies, sectoren, vakken, opleiding, raster, status, bron, contractvorm, vervoer, km, uren/week, bevestigd (dagen), laatste contact (dagen), tags, notitie]
+  var TALENTEN = [
+    ['tl1', 'Eva', 'de Wit', 'Utrecht', '3511 AB', 'onderwijsondersteuner', 'vo', 'nederlands,engels', 'lerarenopleiding Nederlands, 3e jaar', SCHOOLDAG, 'actief', 'website', 'min-max', 'fiets', 15, 32, -12, -3, 'vast gezicht', 'Rustig, zelfstandig, sterk in de onderbouw.'],
+    ['tl2', 'Ali', 'Yilmaz', 'Nieuwegein', '3431 CD', 'onderwijsondersteuner,studentdocent', 'vo,mbo', 'wiskunde,economie', 'hbo lerarenopleiding wiskunde, 4e jaar', SCHOOLDAG, 'actief', 'linkedin', 'min-max', 'ov', 25, 32, -5, -2, '', ''],
+    ['tl3', 'Jasmijn', 'Kok', 'Zeist', '3701 EF', 'onderwijsondersteuner', 'vo,so', 'biologie', 'pabo, afgestudeerd', SCHOOLDAG, 'actief', 'eigen netwerk', 'ovo', 'auto', 30, 36, -20, -6, '', ''],
+    ['tl4', 'Tim', 'Verhoeven', 'Amersfoort', '3811 GH', 'huiswerkbegeleider', 'vo', 'wiskunde,natuurkunde', 'student natuurkunde, 2e jaar', STUDENT, 'actief', 'website', 'min-max', 'fiets', 12, 12, -30, -8, '', ''],
+    ['tl5', 'Nina', 'Jacobs', 'Amersfoort', '3812 JK', 'huiswerkbegeleider,examentrainer', 'vo', 'nederlands,geschiedenis', 'student geschiedenis, 3e jaar', MIDDAG, 'actief', 'eigen netwerk', 'min-max', 'fiets', 15, 16, -9, -4, '', ''],
+    ['tl6', 'Daan', 'Kuipers', 'Haarlem', '2011 LM', 'examentrainer', 'vo', 'wiskunde', 'master wiskunde, afgestudeerd', MIDDAG, 'actief', 'xps-bestand', 'zzp', 'ov', 35, 10, -3, -3, '', 'Alleen examenperiodes.'],
+    ['tl7', 'Lotte', 'van Dam', 'Haarlem', '2012 NP', 'examentrainer,huiswerkbegeleider', 'vo', 'nederlands', 'lerarenopleiding Nederlands, 2e jaar', '020|020|020|020|000|000|000', 'actief', 'linkedin', 'min-max', 'fiets', 10, 12, -2, -2, '', ''],
+    ['tl8', 'Fatima', 'Aydin', 'Rotterdam', '3011 QR', 'nt2-ondersteuner,onderwijsondersteuner', 'isk,vo', 'nederlands', 'nt2-certificaat, pabo', OCHTEND, 'actief', 'website', 'min-max', 'ov', 20, 24, -4, -2, 'nt2', 'Spreekt Turks en Arabisch.'],
+    ['tl9', 'Jesse', 'Vos', 'Schiedam', '3111 ST', 'nt2-ondersteuner', 'isk', 'nederlands', 'nt2-cursus (bezig)', OCHTEND, 'actief', 'sollicitatie', 'min-max', 'auto', 25, 20, -11, -1, 'nt2', ''],
+    ['tl10', 'Mila', 'Bakker', 'Delft', '2611 UV', 'onderwijsondersteuner', 'vo,po', 'engels', 'pabo, 3e jaar', SCHOOLDAG, 'actief', 'website', 'min-max', 'fiets', 15, 24, -15, -10, '', ''],
+    ['tl11', 'Thijs', 'Brouwer', 'Amersfoort', '3813 WX', 'rekenondersteuner', 'po,vo', 'rekenen,wiskunde', 'pabo, afgestudeerd', OCHTEND, 'actief', 'xps-bestand', 'ovo', 'auto', 30, 20, -6, -3, '', ''],
+    ['tl12', 'Sara', 'Peeters', 'Zeist', '3702 YZ', 'rekenondersteuner,huiswerkbegeleider', 'vo', 'rekenen', 'student wiskunde, 1e jaar', HALF, 'actief', 'sollicitatie', 'min-max', 'fiets', 12, 12, -1, -1, '', ''],
+    ['tl13', 'Ruben', 'Claes', 'Leiden', '2311 AB', 'studentdocent', 'vo', 'duits', 'lerarenopleiding Duits, 2e jaar', DIDO, 'actief', 'xps-bestand', 'min-max', 'ov', 30, 16, -7, -3, '', ''],
+    ['tl14', 'Hanna', 'Wolters', 'Leiden', '2312 CD', 'studentdocent', 'vo', 'duits,engels', 'lerarenopleiding Duits, 3e jaar', DIDO, 'actief', 'linkedin', 'min-max', 'fiets', 15, 16, -13, -13, '', ''],
+    ['tl15', 'Yusuf', 'Demir', 'Utrecht', '3524 EF', 'surveillant,onderwijsondersteuner', 'vo,mbo', '', 'mbo 4 onderwijsassistent', FLEX, 'actief', 'xps-bestand', 'min-max', 'ov', 25, 36, -70, -70, '', ''],
+    ['tl16', 'Sophie', 'Vermeer', 'Hilversum', '1211 GH', 'onderwijsondersteuner', 'po', 'rekenen', 'pabo, 4e jaar', OCHTEND, 'actief', 'website', 'min-max', 'auto', 20, 20, -25, -9, '', ''],
+    ['tl17', 'Lucas', 'Mulder', 'Gouda', '2801 JK', 'huiswerkbegeleider', 'vo', 'economie,wiskunde', 'student economie, 2e jaar', MIDDAG, 'actief', 'website', 'min-max', 'fiets', 10, 12, -40, -40, '', ''],
+    ['tl18', 'Noa', 'Hendriks', 'Ede', '6711 LM', 'onderwijsondersteuner', 'vo,so', '', 'pabo, afgestudeerd', SCHOOLDAG, 'slapend', 'xps-bestand', 'min-max', 'auto', 35, 32, -230, -220, '', ''],
+    ['tl19', 'Amir', 'Haddad', 'Arnhem', '6811 NP', 'nt2-ondersteuner', 'isk', 'nederlands', 'nt2-certificaat', OCHTEND, 'actief', 'xps-bestand', 'ovo', 'ov', 40, 24, -18, -12, 'nt2', ''],
+    ['tl20', 'Fleur', 'Jansen', 'Zwolle', '8011 QR', 'examentrainer', 'vo', 'wiskunde', 'student wiskunde, 3e jaar', MIDDAG, 'aangemeld', 'website', '', '', '', '', null, -2, '', ''],
+    ['tl21', 'Bram', 'Smits', 'Deventer', '7411 ST', 'surveillant', 'vo', '', 'havo', FLEX, 'slapend', 'xps-bestand', 'min-max', 'ov', 30, 16, -260, -250, '', ''],
+    ['tl22', 'Isa', 'Bosman', 'Nijmegen', '6511 UV', 'onderwijsondersteuner', 'po', 'rekenen,nederlands', 'pabo, 2e jaar', OCHTEND, 'gescreend', 'website', 'min-max', 'fiets', 15, 16, -8, -5, '', 'Kennismaking gehad; start na de herfstvakantie mogelijk.'],
+    ['tl23', 'Milan', 'Prins', "'s-Hertogenbosch", '5211 WX', 'studentdocent', 'vo', 'economie', 'lerarenopleiding economie, 2e jaar', DIDO, 'aangemeld', 'linkedin', '', 'ov', 30, 16, null, -4, '', ''],
+    ['tl24', 'Zoë', 'Kaya', 'Rotterdam', '3012 YZ', 'nt2-ondersteuner,onderwijsondersteuner', 'vo,isk', 'nederlands', 'mbo 4 onderwijsassistent', SCHOOLDAG, 'actief', 'xps-bestand', 'min-max', 'ov', 20, 24, -35, -35, '', 'Niet meer op Esdoorn Lyceum inzetten (zie beoordeling).'],
+    ['tl25', 'Stijn', 'Maas', 'Bunnik', '3981 AB', 'huiswerkbegeleider,rekenondersteuner', 'vo,po', 'rekenen,wiskunde', 'student bouwkunde, 2e jaar', OCHTEND, 'actief', 'website', 'min-max', 'fiets', 12, 12, -6, -6, '', '']
+  ];
+  var tokens = { tl2: 'demotokenali0000000000000000000000000001', tl15: 'demotokenyusuf00000000000000000000000002' };
+  schrijfVeel('Talenten', TALENTEN.map(function (t, i) {
+    var c = co[t[3]] || [52.09, 5.12], naam = (t[1] + ' ' + t[2]).toLowerCase().replace(/[^a-z]+/g, '.');
+    return { id: t[0], voornaam: t[1], achternaam: t[2], email: naam + '@mail.example', telefoon: '06-3' + String(1000000 + i * 7919).slice(0, 7), postcode: t[4], woonplaats: t[3], lat: c[0], lon: c[1],
+      functies: t[5] ? t[5].split(',') : [], sectoren: t[6] ? t[6].split(',') : [], vakken: t[7] ? t[7].split(',') : [], opleiding: t[8], bevoegdheid: /afgestudeerd|master/.test(t[8]) ? '2e graads' : 'geen', vervoer: t[13], reisafstandKm: t[14], maxUrenWeek: t[15],
+      beschikbaarVanaf: '', beschikbaarTot: '', beschikbaarheid: raster(t[9]), uitzonderingen: t[0] === 'tl25' ? [{ van: d(20), tot: d(35), soort: 'niet', reden: 'tentamens' }] : t[0] === 'tl4' ? [{ van: d(60), tot: d(67), soort: 'niet', reden: 'vakantie' }] : [],
+      beschikbaarheidBevestigd: t[16] === null ? '' : dt(t[16], '08:10'), laatstePeiling: t[0] === 'tl15' ? dt(-16, '06:35') : t[0] === 'tl17' ? dt(-5, '06:35') : '', contractvorm: t[12], status: t[10], statusSinds: dt(t[10] === 'aangemeld' ? t[17] : t[10] === 'slapend' ? -40 : -200 + i * 6),
+      bron: t[11], xpsId: 'X' + (5001 + i), afasNummer: t[10] === 'actief' && i < 15 ? 'A' + (7100 + i) : '', tags: t[18], toestemmingDatum: d(t[10] === 'aangemeld' ? t[17] : -230 + i * 7), toestemmingGrondslag: 'toestemming', bewarenTot: d((t[10] === 'aangemeld' ? t[17] : -230 + i * 7) + 730),
+      portaalToken: tokens[t[0]] || '', portaalTokenTot: tokens[t[0]] ? dt(60, '09:00') : '', notitie: t[19], laatsteContact: d(t[17]), door: t[11] === 'website' && t[10] === 'aangemeld' ? 'Formulier' : (i % 2 ? M.sem : M.iris), aangemaakt: dt(t[10] === 'aangemeld' ? t[17] : -230 + i * 7, '11:00') };  // een aanmelding is vers
+  }));
+  // VOG per talent: dagen geleden afgegeven (jonger dan zes maanden = groen; ouder maar op tijd voor de lopende inzet = oranje; te oud = verlopen); geen regel = ontbreekt
+  var vogDagen = { tl1: -190, tl2: -60, tl3: -195, tl4: -45, tl5: -200, tl6: -30, tl8: -25, tl9: -400, tl10: -90, tl11: -70, tl13: -20, tl14: -110, tl15: -150, tl16: -80, tl17: -140, tl18: -300, tl19: -120, tl21: -330, tl22: -15, tl24: -260, tl25: -50 };
+  var docs = [];
+  Object.keys(vogDagen).forEach(function (tid, i) {
+    docs.push({ id: 'vog-' + tid, talentId: tid, soort: 'vog', afgifte: d(vogDagen[tid]), geldigTot: '', driveId: '', gecontroleerdDoor: i % 3 ? M.iris : M.sem, gecontroleerdOp: dt(vogDagen[tid] + 2, '14:00'), status: vogDagen[tid] < -365 ? 'verlopen' : 'geldig', notitie: '', door: i % 3 ? M.iris : M.sem, aangemaakt: dt(vogDagen[tid] + 2, '14:00') });
+  });
+  [['tl3', 'diploma', 'pabo'], ['tl6', 'diploma', 'master wiskunde'], ['tl8', 'certificaat', 'nt2'], ['tl11', 'diploma', 'pabo'], ['tl19', 'certificaat', 'nt2']].forEach(function (x, i) {
+    docs.push({ id: 'doc-' + x[0] + '-' + x[1], talentId: x[0], soort: x[1], afgifte: d(-600 - i * 90), geldigTot: '', driveId: '', gecontroleerdDoor: M.iris, gecontroleerdOp: dt(-200, '10:00'), status: 'geldig', notitie: x[2], door: M.iris, aangemaakt: dt(-200, '10:00') });
+  });
+  schrijfVeel('TalentDocumenten', docs);
+  // Beoordelingen: de accountmanager per plaatsing (rol am), het talentteam los (rol talent)
+  schrijfVeel('Beoordelingen', [
+    { id: 'b1', talentId: 'tl1', kandidaatId: 'c1', trajectId: 't1', schoolId: 's1', door: M.femke, rol: 'am', datum: dt(-20, '16:00'), oordeel: 'favoriet', criteria: { punctualiteit: 3, didactiek: 3, samenwerking: 3, communicatie: 2 }, tekst: 'Vast gezicht in de onderbouw; leerlingen en docenten lopen met haar weg. Neemt zelf initiatief bij het huiswerkuur.', zichtbaarheid: 'intern', wederhoor: '', aangemaakt: dt(-20, '16:00') },
+    { id: 'b2', talentId: 'tl2', kandidaatId: 'c2', trajectId: 't1', schoolId: 's1', door: M.femke, rol: 'am', datum: dt(-20, '16:10'), oordeel: 'goed', criteria: { punctualiteit: 2, samenwerking: 3 }, tekst: 'Sterk in wiskunde; kwam twee keer te laat door de trein.', zichtbaarheid: 'intern', wederhoor: '', aangemaakt: dt(-20, '16:10') },
+    { id: 'b3', talentId: 'tl4', kandidaatId: 'c4', trajectId: 't2', schoolId: 's2', door: M.ruben, rol: 'am', datum: dt(-14, '15:30'), oordeel: 'goed', criteria: { punctualiteit: 3, didactiek: 2 }, tekst: 'Rustig en gestructureerd. Leerlingen komen graag.', zichtbaarheid: 'intern', wederhoor: '', aangemaakt: dt(-14, '15:30') },
+    { id: 'b4', talentId: 'tl5', kandidaatId: 'c5', trajectId: 't2', schoolId: 's2', door: M.ruben, rol: 'am', datum: dt(-14, '15:40'), oordeel: 'favoriet', criteria: { punctualiteit: 3, didactiek: 3, samenwerking: 3 }, tekst: 'De zorgcoördinator vraagt expliciet naar haar voor volgend jaar.', zichtbaarheid: 'intern', wederhoor: '', aangemaakt: dt(-14, '15:40') },
+    { id: 'b5', talentId: 'tl24', kandidaatId: 'c15', trajectId: 't8', schoolId: 's12', door: M.ruben, rol: 'am', datum: dt(-150, '17:00'), oordeel: 'niet geschikt', criteria: { punctualiteit: 1, samenwerking: 1 }, tekst: 'Drie keer niet verschenen zonder afmelding; afspraken over de lesvoorbereiding niet nagekomen.', zichtbaarheid: 'intern', wederhoor: 'Zoë geeft aan dat ov-storingen een rol speelden en dat ze één keer wel had afgemeld bij de docent.', aangemaakt: dt(-150, '17:00') },
+    { id: 'b6', talentId: 'tl13', kandidaatId: 'c13', trajectId: 't5', schoolId: 's6', door: M.ruben, rol: 'am', datum: dt(-2, '12:00'), oordeel: 'goed', criteria: { didactiek: 2, communicatie: 3 }, tekst: 'Goede start; de sectie Duits is tevreden.', zichtbaarheid: 'intern', wederhoor: '', aangemaakt: dt(-2, '12:00') },
+    { id: 'b7', talentId: 'tl19', kandidaatId: 'c16', trajectId: 't11', schoolId: 's4', door: M.bas, rol: 'am', datum: dt(-112, '10:00'), oordeel: 'favoriet', criteria: { punctualiteit: 3, didactiek: 3, samenwerking: 3, communicatie: 3 }, tekst: 'Onmisbaar geweest in de instroomklassen; school wil hem terug.', zichtbaarheid: 'intern', wederhoor: '', aangemaakt: dt(-112, '10:00') },
+    { id: 'b8', talentId: 'tl15', kandidaatId: '', trajectId: '', schoolId: '', door: M.iris, rol: 'talent', datum: dt(-60, '11:00'), oordeel: 'goed', criteria: { communicatie: 2 }, tekst: 'Flexibel inzetbaar; reageert soms laat op berichten.', zichtbaarheid: 'intern', wederhoor: '', aangemaakt: dt(-60, '11:00') }
+  ]);
+  // Relaties met scholen: favoriet telt mee in de matchscore, niet meer sluit uit
+  schrijfVeel('TalentSchool', [
+    { id: 'ts1', talentId: 'tl1', schoolId: 's1', status: 'favoriet', richting: 'school', reden: 'wil haar graag terug volgend schooljaar', door: M.femke, datum: dt(-20, '16:05') },
+    { id: 'ts2', talentId: 'tl24', schoolId: 's12', status: 'niet meer', richting: 'school', reden: 'beoordeeld als niet geschikt', door: M.ruben, datum: dt(-150, '17:05') },
+    { id: 'ts3', talentId: 'tl19', schoolId: 's4', status: 'favoriet', richting: 'school', reden: 'vraagt naar hem voor de instroomklassen', door: M.bas, datum: dt(-112, '10:05') },
+    { id: 'ts4', talentId: 'tl17', schoolId: 's7', status: 'niet meer', richting: 'talent', reden: 'reisafstand te groot', door: M.sem, datum: dt(-40, '09:00') },
+    { id: 'ts5', talentId: 'tl5', schoolId: 's2', status: 'favoriet', richting: 'school', reden: 'zorgcoördinator vraagt naar haar', door: M.ruben, datum: dt(-14, '15:45') }
+  ]);
+  // Weekuren uit XPS (twaalf weken) voor de lopende plaatsingen; één no-show en één late afmelding, voor de betrouwbaarheid in de matching
+  var uren = [], xpsProj = { t1: '10.880', t2: '10.887', t5: '10.908' };
+  [['tl1', 't1', 30, 5], ['tl2', 't1', 30, 5], ['tl3', 't1', 30, 5], ['tl4', 't2', 12, 2], ['tl5', 't2', 12, 2], ['tl13', 't5', 16, 2]].forEach(function (x, xi) {
+    for (var w = 12; w >= 1; w--) {
+      if (x[1] === 't5' && w > 2) continue;  // Ruben Claes is pas net gestart
+      var wk = isoWeekStr(plusDagen(-7 * w)), noShow = x[0] === 'tl3' && w === 5 ? 1 : 0, laat = x[0] === 'tl5' && w === 7 ? 1 : 0, diensten = x[3] - noShow - laat;
+      uren.push({ id: slug(x[0] + '|' + wk + '|' + xpsProj[x[1]]), talentId: x[0], xpsId: 'X' + (5000 + Number(x[0].slice(2))), xpsProject: xpsProj[x[1]], trajectId: x[1], week: wk, uren: Math.round(x[2] * diensten / x[3] * (0.9 + 0.2 * toeval0(w + xi)) * 2) / 2, diensten: diensten, noShows: noShow, lateAfmeldingen: laat, geimporteerd: dt(-7 * (w - 1), '06:05') });
+    }
+  });
+  schrijfVeel('TalentUren', uren);
+  // De weekexport van XPS die maandag binnenkomt (Drive-map XPS-export): 'XPS-uren importeren' in Beheer leest hem in
+  var csv = 'Accountnummer;Naam;E-mail;Projectnummer;Week;Uren;Status\n' + [['X5001', 'Eva de Wit', 'eva.de.wit@mail.example', '10.880', 29.5, 'Gewerkt'], ['X5002', 'Ali Yilmaz', 'ali.yilmaz@mail.example', '10.880', 30, 'Gewerkt'], ['X5003', 'Jasmijn Kok', 'jasmijn.kok@mail.example', '10.880', 24, 'Gewerkt'], ['X5003', 'Jasmijn Kok', 'jasmijn.kok@mail.example', '10.880', 0, 'Late afmelding'],
+    ['X5004', 'Tim Verhoeven', 'tim.verhoeven@mail.example', '10.887', 12, 'Gewerkt'], ['X5005', 'Nina Jacobs', 'nina.jacobs@mail.example', '10.887', 12, 'Gewerkt'], ['X5013', 'Ruben Claes', 'ruben.claes@mail.example', '10.908', 16, 'Gewerkt'], ['X9999', 'Onbekend Account', 'onbekend@mail.example', '10.880', 8, 'Gewerkt']]
+    .map(function (r) { return r.slice(0, 4).concat([isoWeekStr(plusDagen(-7))]).concat(r.slice(4)).join(';'); }).join('\n');
+  _demoDrive.mappen['demo-xps'].createFile(Utilities.newBlob(csv, 'text/csv', 'xps-uren-' + isoWeekStr(plusDagen(-7)) + '.csv'));
+  // Eén nieuwe aanmelding via het formulier die de dagelijkse run nog moet verwerken
+  schrijfVeel('Aanmeldingen', [{ tijdstempel: dt(-1, '19:42'), voornaam: 'Lieke', achternaam: 'Vos', telefoon: '06-30000099', email: 'lieke.vos@mail.example', postcode: '3581 KL', functies: 'huiswerkbegeleider, examentrainer', sector: 'vo', beschikbaarheid: 'ma middag, wo middag, do', toestemming: 'Ja, ik ga akkoord met de privacyverklaring', verwerkt: '', talentId: '' }]);
 
   // Facturatie: termijnen per project (één te laat, om "facturatie op tijd" te laten zien)
   var maand = function (m, y) { return y + '-' + _p2(m) + '-' + _p2(new Date(y, m, 0).getDate()); };
@@ -302,8 +461,15 @@ function demoVul() {
   act('taak', -2, '11:00', M.sem, 's4', { trajectId: 't4' }, 'Kandidaat Fatima Aydin: vog → klaar voor start');
   act('taak', -3, '12:00', M.sem, 's3', { trajectId: 't3' }, 'Kandidaat Daan Kuipers: voorgesteld → gesprek');
   act('taak', -5, '09:00', M.ruben, 's2', { trajectId: 't9' }, 'Vacature geopend: Rekenondersteuner (2×)');
+  // v5.0: de tijdlijn van talenten (talentId): aanmelding, portaal, beoordeling, voordracht
+  act('notitie', -2, '19:43', 'Formulier', '', { talentId: 'tl20', bron: 'formulier' }, 'Aangemeld via het formulier (toestemming: Ja, ik ga akkoord met de privacyverklaring)');
+  act('notitie', -5, '08:10', 'Portaal', '', { talentId: 'tl2', bron: 'portaal' }, 'Beschikbaarheid bevestigd via mail');
+  act('notitie', -20, '16:00', M.femke, 's1', { talentId: 'tl1', trajectId: 't1' }, 'Beoordeling: favoriet (Esdoorn Lyceum)', 'Vast gezicht in de onderbouw; leerlingen en docenten lopen met haar weg.');
+  act('gesprek', -3, '13:30', M.sem, '', { talentId: 'tl6' }, 'Matchinggesprek voorbereid', 'Kan woensdagmiddag en in de meivakantie; wil het liefst alleen wiskunde A.');
+  act('taak', -1, '11:00', M.iris, 's2', { talentId: 'tl12', trajectId: 't9' }, 'Kandidaat voorgedragen: Sara Peeters (Rekenondersteuner)');
+  act('notitie', -16, '06:35', 'Athena', '', { talentId: 'tl15', bron: 'app' }, 'Peiling gemaild: klopt je beschikbaarheid nog?');
   // aanvullende activiteit, zodat de rapporten per persoon gevuld zijn. v4.4: een heel jaar, op werkdagen, rustig in de zomer- en kerstvakantie
-  var toeval = function (n) { var x = Math.sin(n * 9301 + 49297) * 233280; return x - Math.floor(x); };
+  var toeval = toeval0;
   var vakantie = function (dt0) { var mm = dt0.getMonth(), dd = dt0.getDate(); return (mm === 6 && dd >= 18) || (mm === 7 && dd < 25) || (mm === 11 && dd >= 21) || (mm === 0 && dd < 4); };
   var consultants = [[M.lars, ['s1', 's7', 's10', 's4'], 1.1], [M.noor, ['s2', 's5', 's8', 's11'], 1.0], [M.yara, ['s3', 's6', 's9', 's12'], 0.8]];
   var ams = [[M.femke, [['s1', 't1'], ['s3', 't3']], [['s1', 't7']]], [M.ruben, [['s2', 't2'], ['s6', 't5'], ['s2', 't9']], [['s12', 't8'], ['s6', 't5']]], [M.bas, [['s4', 't4'], ['s10', 't6']], [['s4', 't11'], ['s10', 't6']]]];
@@ -376,7 +542,10 @@ function demoVul() {
     taak('tk8', 'Matchinggesprek Thijs Brouwer (Kompas College, Rekenondersteuner)', M.ruben, 3, 'hoog', 'afspraak', { schoolId: 's2', trajectId: 't9' }),
     taak('tk9', 'Kennismaking ondersteuners ISK Havenstad plannen', M.bas, 5, 'midden', 'afspraak', { schoolId: 's4', trajectId: 't4' }),
     taak('tk10', 'Afscheid surveillance Noorderhof voorbereiden', M.bas, 30, 'laag', 'overig', { schoolId: 's10', trajectId: 't6' }),
-    taak('tk11', 'VOG Jesse Vos nabellen', M.sem, -1, 'hoog', 'bellen', { schoolId: 's4', trajectId: 't4' }),
+    taak('tk11', 'VOG Jesse Vos nabellen', M.sem, -1, 'hoog', 'bellen', { schoolId: 's4', trajectId: 't4', link: 'talent:tl9' }),
+    // v5.0: de accountmanager beoordeelt zes weken na de start en daarna elk kwartaal (herhalende taak met een link naar het profiel); het talentteam screent een aanmelding
+    taak('tk20', 'Beoordeel Jasmijn Kok bij Esdoorn Lyceum', M.femke, 12, 'midden', 'opvolgen', { schoolId: 's1', trajectId: 't1', link: 'talent:tl3', bron: 'bezetting', herhaling: { eenheid: 'maand', interval: 3, tot: sjEind } }),
+    taak('tk21', 'Kennismaking Fleur Jansen (aanmelding examentrainer)', M.iris, 2, 'midden', 'bellen', { link: 'talent:tl20' }),
     taak('tk12', 'Bestand doorzoeken op examentrainers wiskunde', M.iris, 2, 'midden', 'overig', { schoolId: 's3', trajectId: 't3' }),
     taak('tk13', 'Kwartaalcijfers voorbereiden voor het MT', M.sophie, 3, 'midden', 'overig', {}),
     taak('tk14', 'Verlengingsgesprekken inplannen met de accountmanagers', M.sophie, 7, 'midden', 'afspraak', {}),
@@ -411,7 +580,11 @@ function demoVul() {
     meld(M.femke, 'Nieuwe kandidaat voor Examentrainer wiskunde en Nederlands bij Scholengroep Duinrand: Lotte van Dam.', 'project:t3', -2),
     meld(M.sem, 'Nieuwe vacature: Rekenondersteuner (2×) bij Kompas College, start over 4 weken.', 'project:t9', -5),
     meld(M.iris, 'Nieuwe vacature: Rekenondersteuner (2×) bij Kompas College, start over 4 weken.', 'project:t9', -5),
-    meld(M.lars, 'Bezetting ISK Havenstad: 1 van 2 plekken gevuld.', 'project:t4', -2)
+    meld(M.lars, 'Bezetting ISK Havenstad: 1 van 2 plekken gevuld.', 'project:t4', -2),
+    // v5.0: aanmeldingen en beoordelingen komen bij het talentteam binnen
+    meld(M.iris, 'Nieuwe aanmelding: Fleur Jansen (examentrainer)', 'talent:tl20', -2),
+    meld(M.sem, 'Nieuwe aanmelding: Fleur Jansen (examentrainer)', 'talent:tl20', -2),
+    meld(M.iris, 'Zoë Kaya is door Ruben Smit beoordeeld als niet geschikt bij College Veldzicht.', 'talent:tl24', -150, true)
   ]);
 
   // Dagstart van Sophie
@@ -456,6 +629,11 @@ function demoRun(fn, argsJson, code) {
   DEMO_HUIDIG = code || 'demo-sophie';
   _demoProps.CODES = _demoCodes(); _demoProps.SECRET = 'demo-sophie';  // een code die in Beheer vernieuwd is, werkt in de demo gewoon door
   // Apps Script begint elk verzoek met een schone globale scope; hier blijven de globals staan, dus de geheugens per verzoek legen
-  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; GEBRUIKER = null;
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null;  // v5.0: talentindex en talenten-via-project
   return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), secret: DEMO_HUIDIG }) } });
+}
+// v5.0: het portaal (?t=<token>&api=…) in de demo: dezelfde doPost, met het token in plaats van een koppelcode
+function demoPortaal(fn, argsJson, token) {
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null;
+  return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), portaal: token }) } });
 }
