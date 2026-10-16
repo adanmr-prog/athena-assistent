@@ -134,6 +134,17 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans` en sinds v4.5 `tijd, herhaling, bijgewerkt`.
 
+## Op Vercel + Supabase (v6.0)
+
+Dezelfde `Code.gs` kan ook draaien op Vercel met Supabase Postgres als database en inloggen met Google; installatie en overstap staan in `server/README.md`. Wat Code.gs 6.0 daarvoor nieuw heeft:
+
+| fn | args | result |
+|---|---|---|
+| `apiExportAlles` | tabel (een tabblad uit `TABELLEN`, of `eigenschappen`), vanaf?, aantal? (max. 500) | `{ tabel, vanaf, rijen, totaal, volgende }` (alleen management; `eigenschappen` geeft de scripteigenschappen zonder `ANTHROPIC_API_KEY` en `CAPSULE_TOKEN`). Bron van `server/migratie.js` |
+
+- `wieIs()` kijkt eerst naar `SERVER_LOGIN` (alleen gezet door de server, na controle van het Supabase-token) en zoekt die gebruiker met `gebruikerVanEmail`: de eigenaar via de eigenschap `EIGENAAR_EMAIL`, anderen via `Gebruikers.email`; inactief of onbekend geeft `fout: 'secret'`. Op Apps Script bestaat `SERVER_LOGIN` niet en werkt alles zoals altijd.
+- Plak Code.gs 6.0 en implementeer als nieuwe versie vóór je de migratie draait; verder verandert er niets aan de Apps Script-installatie.
+
 ## Talentnetwerk fase 1 (v5.0)
 
 Eén profiel per flexkracht (ondersteuners, studentdocenten, huiswerkbegeleiders, examentrainers, NT2-ondersteuners, surveillanten) met beschikbaarheid, documenten en VOG per schooljaar, relaties met scholen, beoordelingen en de weekuren uit XPS. Het talentteam stelt gericht voor met een uitlegbare matchscore; de accountmanager beoordeelt per plaatsing. Plaatsing, contract, rooster en uren blijven in XPS tot fase 2 (Supabase, v6.1+). Ontwerp: `docs/plan-taken-en-talentnetwerk.md`; proces en rechten: `docs/teams-en-processen.md`.

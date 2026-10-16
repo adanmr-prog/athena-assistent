@@ -12,7 +12,8 @@ Het bedrijfsbrein en dashboard van AthenaSchool, als PWA op je telefoon en je Ma
 ## Opzet
 - `index.html`, `sw.js`, `manifest.webmanifest` en de iconen: de app, zonder build-stap. Gehost via GitHub Pages: https://adanmr-prog.github.io/athena-assistent/
 - `backend/Code.gs`: de Google Apps Script-backend (Google Sheet als database, Drive-map voor documenten, Gmail en Agenda, dagelijkse triggers, Claude API). Installatie in [`backend/README.md`](backend/README.md).
-- `test/`: mock-backend en browsertest.
+- `server/`, `api/`, `supabase/` (v6.0): dezelfde app en dezelfde `Code.gs` op Vercel met Supabase Postgres en inloggen met Google, op een eigen domein. Installatie en overstap in [`server/README.md`](server/README.md).
+- `test/`: mock-backend en browsertests; `server/test/`: de servertests.
 
 ## In gebruik nemen
 1. GitHub Pages aanzetten: Settings → Pages → branch `main`, map `/`.

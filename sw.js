@@ -1,5 +1,5 @@
 /* Athena Assistent — service worker: HTML network-first (cache als fallback), statische shell cache-first, API altijd via netwerk */
-var CACHE = 'athena-assistent-v5.1';  // bump bij elke release (zie /release)
+var CACHE = 'athena-assistent-v6.0';  // bump bij elke release (zie /release)
 var SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 var NET_TIMEOUT_MS = 3000;  // v1.0: bij trage verbinding na 3 s de gecachte shell tonen; het netwerk werkt op de achtergrond door
 
@@ -52,6 +52,7 @@ function netwerkEerst(e) {
 self.addEventListener('fetch', function (e) {
   var url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;  // API (POST, ander domein) nooit cachen
+  if (/\/api(\/|$)/.test(url.pathname)) return;  // v6.0: de eigen server (Vercel: /api, /api/config) altijd via het netwerk
   if (isHtml(e.request, url)) { e.respondWith(netwerkEerst(e)); return; }
   // v4.3: demo-code en de backend die de demo draait network-first; de cache is alleen de offline-terugval (nooit index.html als JS)
   if (/\/demo\/[\w-]+\.js$|\/backend\/Code\.gs$/.test(url.pathname)) {

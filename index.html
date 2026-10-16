@@ -783,12 +783,21 @@
 <div id="koppel">
   <div class="k-binnen">
     <div class="k-label">Athena Assistent</div>
-    <h2>Koppelen</h2>
-    <p>Vul de URL van je Apps Script-backend en de koppelcode in. Beide blijven op dit toestel bewaard.</p>
-    <div class="veld"><label for="apiInput">Backend-URL (eindigt op /exec)</label><input id="apiInput" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="none" inputmode="url"></div>
-    <div class="veld"><label for="codeInput">Koppelcode</label><input id="codeInput" placeholder="koppelcode uit setup() of je eigen code" autocomplete="off" autocapitalize="none"></div>
-    <div class="hint">Accountmanagers krijgen een eigen koppelcode van Menno (Relaties → Rapport → Beheer).</div>
-    <div class="knoppen"><button class="knop" id="codeOpslaan">Koppel</button><button class="knop licht" id="koppelSluit" style="display:none">Sluiten</button></div>
+    <!-- v6.0: op de eigen server (Vercel + Supabase) log je in met Google; de koppelcode blijft voor de Apps Script-backend -->
+    <div id="koppelGoogle" style="display:none">
+      <h2>Inloggen</h2>
+      <p>Log in met je Google-werkaccount. Alleen collega's die in Beheer → Gebruikers staan komen binnen.</p>
+      <div class="knoppen"><button class="knop" id="inloggenGoogle">Inloggen met Google</button><button class="knop licht" id="uitloggen" style="display:none">Uitloggen</button></div>
+    </div>
+    <div id="koppelCode">
+      <h2>Koppelen</h2>
+      <p>Vul de URL van je Apps Script-backend en de koppelcode in. Beide blijven op dit toestel bewaard.</p>
+      <div class="veld"><label for="apiInput">Backend-URL (eindigt op /exec)</label><input id="apiInput" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="none" inputmode="url"></div>
+      <div class="veld"><label for="codeInput">Koppelcode</label><input id="codeInput" placeholder="koppelcode uit setup() of je eigen code" autocomplete="off" autocapitalize="none"></div>
+      <div class="hint">Accountmanagers krijgen een eigen koppelcode van Menno (Relaties → Rapport → Beheer).</div>
+      <div class="knoppen"><button class="knop" id="codeOpslaan">Koppel</button></div>
+    </div>
+    <div class="knoppen"><button class="knop licht" id="koppelSluit" style="display:none">Sluiten</button></div>
     <div class="status-lijst" id="statusInfo"></div>
   </div>
 </div>
@@ -1007,8 +1016,45 @@
   /* parser einde */
 
   /* ===== Backend: run()-RPC naar de Apps Script-web-app. URL en koppelcode staan in localStorage (koppelscherm). ===== */
-  function apiUrl() { return DEMO ? 'demo' : leesOpslag('aa_api'); }
+  function apiUrl() { return DEMO ? 'demo' : SERVER ? 'api' : leesOpslag('aa_api'); }
   function secret() { return DEMO ? 'demo' : leesOpslag('aa_secret'); }
+  // v6.0: de app op de eigen server (Vercel + Supabase). GET api/config zegt of hier met Google wordt ingelogd (Supabase Auth);
+  // dan gaat het sessietoken mee in run() in plaats van de koppelcode. Op GitHub Pages bestaat api/config niet en blijft alles bij het oude.
+  var SERVER = null;
+  function serverConfig() {
+    return fetch('api/config', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (c) { SERVER = (c && c.inloggen === 'google' && c.supabaseUrl) ? c : null; return SERVER; })
+      .catch(function () { SERVER = null; return null; });
+  }
+  function tokenUitHash() {  // na het inloggen komt Supabase terug op deze pagina met #access_token=…&refresh_token=…&expires_at=…
+    var h = location.hash || ''; if (h.indexOf('access_token=') < 0 && h.indexOf('error=') < 0) return false;
+    var o = {}; h.replace(/^#/, '').split('&').forEach(function (p) { var i = p.indexOf('='); if (i > 0) o[decodeURIComponent(p.slice(0, i))] = decodeURIComponent(p.slice(i + 1).replace(/\+/g, ' ')); });
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    if (o.error || !o.access_token) { toast('Inloggen mislukt: ' + (o.error_description || o.error || 'geen token')); return false; }
+    zetOpslag('aa_token', o.access_token); zetOpslag('aa_refresh', o.refresh_token || '');
+    zetOpslag('aa_token_tot', String(o.expires_at ? Number(o.expires_at) * 1000 : Date.now() + (Number(o.expires_in) || 3600) * 1000));
+    return true;
+  }
+  function tokenVers() {  // een geldig token, zo nodig vernieuwd met het refresh-token; '' als er geen is
+    var t = leesOpslag('aa_token'), tot = Number(leesOpslag('aa_token_tot')) || 0, r = leesOpslag('aa_refresh');
+    if (!SERVER || !t || !r || tot - Date.now() > 60000) return Promise.resolve(t);
+    return fetch(SERVER.supabaseUrl + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SERVER.anonKey }, body: JSON.stringify({ refresh_token: r }) })
+      .then(function (x) { return x.ok ? x.json() : null; })
+      .then(function (d) {
+        if (!d || !d.access_token) return t;
+        zetOpslag('aa_token', d.access_token); if (d.refresh_token) zetOpslag('aa_refresh', d.refresh_token);
+        zetOpslag('aa_token_tot', String(d.expires_at ? Number(d.expires_at) * 1000 : Date.now() + (Number(d.expires_in) || 3600) * 1000));
+        return d.access_token;
+      }).catch(function () { return t; });
+  }
+  function wisToken() { ['aa_token', 'aa_refresh', 'aa_token_tot'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} }); }
+  function uitloggen() {
+    var t = leesOpslag('aa_token');
+    if (SERVER && t) { try { fetch(SERVER.supabaseUrl + '/auth/v1/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t, apikey: SERVER.anonKey } }).catch(function () {}); } catch (e) {} }
+    wisToken(); ['aa_cache_home', 'aa_cache_crm', 'aa_chat'].forEach(function (k) { zetOpslag(k, ''); });
+    CRM.basis = null; DESK.mails = null; S.chat = leesChat(); el('statusInfo').innerHTML = ''; checkKoppeling();
+  }
+  function inloggenGoogle() { if (!SERVER) return; location.href = SERVER.supabaseUrl + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(location.origin + location.pathname); }
   function laadDemo() {  // v4.3
     if (!_demoLaden) _demoLaden = new Promise(function (klaar, fout) {
       var s = document.createElement('script'); s.src = 'demo/demo.js';
@@ -1019,19 +1065,23 @@
     return _demoLaden;
   }
   function checkKoppeling() {
-    var ok = !!apiUrl() && !!secret();
+    var ok = SERVER ? !!leesOpslag('aa_token') : (!!apiUrl() && !!secret());  // v6.0: op de eigen server telt het sessietoken
     el('koppel').classList.toggle('aan', !ok);
+    el('koppelGoogle').style.display = SERVER ? '' : 'none'; el('koppelCode').style.display = SERVER ? 'none' : '';
+    el('uitloggen').style.display = (SERVER && ok) ? 'inline-block' : 'none';
     el('koppelSluit').style.display = 'none';
     return ok;
   }
   function run(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
     var verzoek = DEMO ? laadDemo().then(function (D) { return D.run(fn, args); })  // v4.3
+      : SERVER ? tokenVers().then(function (t) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }) }); }).then(function (r) { return r.json(); })  // v6.0: eigen server, sessietoken in plaats van koppelcode
       : fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }) }).then(function (r) { return r.json(); });   // geen headers: geen CORS-preflight op Apps Script
     return verzoek
       .then(function (d) {
         if (d && d.ok) return d.result;
         if (d && d.fout === 'secret' && DEMO) { toast('Deze demorol kan niet meer inloggen. Kies Opnieuw in de demobalk.'); throw new Error('secret'); }  // v4.3: de demo raakt de echte koppelcode nooit aan
+        if (d && d.fout === 'secret' && SERVER) { wisToken(); checkKoppeling(); toast('Je sessie is verlopen of je staat niet in Gebruikers — log opnieuw in.'); throw new Error('secret'); }  // v6.0
         if (d && d.fout === 'secret') { try { localStorage.removeItem('aa_secret'); } catch (e) {} checkKoppeling(); toast('Koppelcode klopt niet — koppel opnieuw.'); throw new Error('secret'); }
         throw new Error((d && d.fout) || 'serverfout');
       })
@@ -1930,7 +1980,7 @@
     if (DEMO) return { token: t[1], api: 'demo', bevestig: /[?&]actie=bevestig(&|$)/.test(q) };  // v5.1: in de demo (?demo=1&t=<token>) gaat het token naar de nagebootste backend (demo/demo.js)
     if (!a) return null;
     var api = decodeURIComponent(a[1]);
-    if (!/^https:\/\/script\.google\.com\/macros\//.test(api) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(api)) return null;
+    if (!/^https:\/\/script\.google\.com\/macros\//.test(api) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(api) && api.indexOf(location.origin + '/') !== 0) return null;  // v6.0: ook de eigen server (zelfde domein)
     return { token: t[1], api: api, bevestig: /[?&]actie=bevestig(&|$)/.test(q) };
   })();
   function runPortaal(fn) {
@@ -3944,7 +3994,7 @@
     run('apiStatus').then(function (st) {
       var rij = function (k, v) { return '<div class="k-rij"><span>' + k + '</span><span>' + v + '</span></div>'; };
       var ja = '<span class="ok">ja</span>', nee = '<span class="nee">nee</span>';
-      s.innerHTML = rij('Backend', 'v' + esc(st.versie) + ' · ' + esc(st.tijdzone)) + rij('Sheet', st.sheetUrl ? '<a href="' + esc(st.sheetUrl) + '">openen</a>' : '—') + rij('Documentenmap', st.mapUrl ? '<a href="' + esc(st.mapUrl) + '">openen</a>' : nee) +
+      s.innerHTML = rij('Backend', 'v' + esc(st.versie) + ' · ' + esc(st.tijdzone) + (SERVER ? ' · eigen server (Vercel + Supabase), ingelogd met Google' : '')) + rij(SERVER ? 'Database' : 'Sheet', st.sheetUrl ? '<a href="' + esc(st.sheetUrl) + '">openen</a>' : '—') + rij('Documentenmap', st.mapUrl ? '<a href="' + esc(st.mapUrl) + '">openen</a>' : nee) +  // v6.0
         rij('Claude', st.claudeIngesteld ? ja + ' · ' + esc(st.model) + ' · ' + esc(st.effort) : nee + ' — zet ANTHROPIC_API_KEY') + rij('Drive API', st.driveApi ? ja : nee + ' — pdf/docx alleen titel') +
         rij('Ingelogd als', st.gebruiker ? esc(st.gebruiker.naam) + ' · ' + esc(st.gebruiker.rol) : '—') + rij('Mail & agenda → CRM', st.crmSyncTrigger ? ja + (st.laatsteCrmSync ? ' · laatst ' + esc(st.laatsteCrmSync) : '') : nee) +
         rij('Capsule-migratie', st.capsuleMigratie ? ja + ' · ' + esc(st.capsuleMigratie) : (st.capsuleToken ? 'token staat klaar' : nee)) +
@@ -3958,10 +4008,13 @@
   el('instellingenKnop').addEventListener('click', function () {
     el('apiInput').value = apiUrl(); el('codeInput').value = secret();
     sluitVenster(); el('koppel').classList.add('aan');  // v3.7
-    el('koppelSluit').style.display = (apiUrl() && secret()) ? 'inline-block' : 'none';
-    if (apiUrl() && secret()) toonStatus(); else el('statusInfo').innerHTML = '';
+    var ok = SERVER ? !!leesOpslag('aa_token') : !!(apiUrl() && secret());  // v6.0
+    el('koppelSluit').style.display = ok ? 'inline-block' : 'none'; el('uitloggen').style.display = (SERVER && ok) ? 'inline-block' : 'none';
+    if (ok) toonStatus(); else el('statusInfo').innerHTML = '';
   });
   el('koppelSluit').addEventListener('click', function () { el('koppel').classList.remove('aan'); });
+  el('inloggenGoogle').addEventListener('click', inloggenGoogle);  // v6.0
+  el('uitloggen').addEventListener('click', function () { uitloggen(); toast('Uitgelogd.'); });
   el('codeOpslaan').addEventListener('click', function () {
     var u = el('apiInput').value.trim().replace(/\?.*$/, ''), c = el('codeInput').value.trim();
     if (!/^https:\/\/.+\/exec$/.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1)/.test(u)) { toast('De backend-URL moet eindigen op /exec.'); return; }
@@ -3981,7 +4034,9 @@
   if (PORTAAL) startPortaal();  // v5.0: de portaalpagina voor talenten: geen koppelscherm, niets in localStorage
   else {
     if (DEMO) laadDemo().catch(function () { toast('De demo kon niet laden.'); });  // v4.3: demobalk meteen tonen
-    if (checkKoppeling()) startApp();
+    var netIngelogd = !DEMO && tokenUitHash();  // v6.0: terug van Google (Supabase Auth)
+    if (DEMO || (leesOpslag('aa_api') && !netIngelogd)) { if (checkKoppeling()) startApp(); }  // met een koppelcode meteen starten, zoals altijd
+    else serverConfig().then(function () { if (checkKoppeling()) startApp(); });  // v6.0: anders eerst kijken of deze server met Google inlogt
   }
   if ('serviceWorker' in navigator && !PORTAAL) { navigator.serviceWorker.register('sw.js').catch(function () {}); }  // v5.0: de browser van een talent hoeft de app-shell niet te bewaren
 </script>
