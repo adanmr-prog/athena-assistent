@@ -16,7 +16,7 @@ Voer de stappen in volgorde uit. Stop bij een fout en meld wat er misging.
    ```bash
    echo '{"tool_input":{"file_path":"index.html"}}' | bash .claude/hooks/check-index.sh
    ```
-   Exitcode 0 is vereist.
+   Exitcode 0 is vereist. Is `backend/Code.gs` of iets in `server/` gewijzigd, draai dan ook `node server/test/server_test.js` (ALLES GOED); is `TABELLEN` gewijzigd, genereer dan `supabase/migrations/0001_init.sql` opnieuw met `node server/schema.js --sql`.
 5. **Commit en push.** Alleen de gewijzigde app-bestanden. Titel: `vX.Y: <korte omschrijving in het Nederlands>`. Push naar de huidige branch met `git push -u origin <branch>`.
 6. **Melden.** Vat samen: versie, cache-naam, gewijzigde bestanden. Vermeld dat gebruikers de PWA één keer volledig moeten sluiten en heropenen om de nieuwe service worker te activeren.
 

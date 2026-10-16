@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '5.0';
+var VERSIE = '6.0';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -814,12 +814,34 @@ var GEBRUIKER = null;  // gezet door doPost; in triggers null (= de beheerder)
 function codes() { try { return JSON.parse(P.getProperty('CODES') || '{}') || {}; } catch (e) { return {}; } }
 function actief(g) { return g.actief !== false && ['nee', 'false', '0'].indexOf(String(g.actief).toLowerCase()) < 0; }
 function wieIs(code) {
+  if (typeof SERVER_LOGIN !== 'undefined' && SERVER_LOGIN) return gebruikerVanEmail(String(SERVER_LOGIN));  // v6.0: op Vercel heeft de server de gebruiker al via Google herkend (server/handler.js); de koppelcode blijft daarnaast werken
   if (!code) return null;
   if (code === P.getProperty('SECRET')) return { id: 'beheer', naam: P.getProperty('NAAM') || 'Menno', email: '', team: 'management', rol: 'management' };
   var gid = codes()[code]; if (!gid) return null;
   var g = lees('Gebruikers').filter(function (x) { return String(x.id) === String(gid); })[0];
   if (!g || !actief(g)) return null;
   return gebruikerVan(g);
+}
+// v6.0: ingelogd via Google (Supabase Auth) op de server: de eigenaar (EIGENAAR_EMAIL) is de beheerder, anderen staan met hun e-mailadres in Gebruikers
+function gebruikerVanEmail(email) {
+  var e = adresZonderPlus(email); if (!e) return null;
+  if (adresZonderPlus(P.getProperty('EIGENAAR_EMAIL') || '') === e) return { id: 'beheer', naam: P.getProperty('NAAM') || 'Menno', email: email, team: 'management', rol: 'management' };
+  var g = lees('Gebruikers').filter(function (x) { return adresZonderPlus(x.email) === e; })[0];
+  if (!g || !actief(g)) return null;
+  return gebruikerVan(g);
+}
+// v6.0: alles uitlezen voor de overstap naar Postgres (server/migratie.js); alleen management. 'eigenschappen' = de scripteigenschappen zonder sleutels.
+function apiExportAlles(tabel, vanaf, aantal) {
+  alleenBeheerder();
+  if (tabel === 'eigenschappen') {
+    var pr = P.getProperties(), eig = {};
+    Object.keys(pr).forEach(function (k) { if (['ANTHROPIC_API_KEY', 'CAPSULE_TOKEN'].indexOf(k) < 0) eig[k] = pr[k]; });
+    return { tabel: tabel, rijen: eig, totaal: Object.keys(eig).length, volgende: null };
+  }
+  if (!TABELLEN[tabel]) throw new Error('Onbekend tabblad ' + tabel);
+  var alle = lees(tabel), v = Math.max(0, Number(vanaf) || 0), n = Math.min(500, Math.max(1, Number(aantal) || 200));
+  var deel = alle.slice(v, v + n).map(function (r) { var o = {}; TABELLEN[tabel].forEach(function (k) { o[k] = r[k]; }); return o; });
+  return { tabel: tabel, vanaf: v, rijen: deel, totaal: alle.length, volgende: v + n < alle.length ? v + n : null };
 }
 // v4.0: teams en rollen. Elke gebruiker hoort bij één team en heeft een rol; de rechtentabel hieronder bepaalt wat hij ziet en mag.
 var TEAMS = ['management', 'consultancy', 'accountmanagement', 'talent'];

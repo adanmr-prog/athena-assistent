@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/**/*.js": { "includeFiles": "backend/Code.gs", "maxDuration": 300 }
+  },
+  "crons": [
+    { "path": "/api/cron/indexeerTrigger", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/nachtelijkeReviewTrigger", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/archiveerTrigger", "schedule": "0 1 1 * *" },
+    { "path": "/api/cron/talentDagelijksTrigger", "schedule": "30 4 * * *" },
+    { "path": "/api/cron/talentUrenTrigger", "schedule": "0 4 * * 1" }
+  ],
+  "headers": [
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/index.html", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }, { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }] }
+  ]
+}

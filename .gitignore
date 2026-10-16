@@ -1,2 +1,7 @@
 test/shots/
 __pycache__/
+node_modules/
+.vercel/
+.env
+.env.*
+server/.pglite/

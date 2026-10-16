@@ -1,6 +1,14 @@
 # Overstap naar Supabase + Vercel (plan)
 
-Status: **gepland**. Het prototype draait op Google Apps Script met een Google Sheet als database. Dat blijft zo tot het CRM inhoudelijk af is. Daarna gaat het naar een snelle stack met een eigen domein. Dit document legt vast hoe we nu bouwen, zodat die overstap later vooral backend-werk is.
+Status: **v6.0 gebouwd (16-10-2026)**, overstap door Menno volgens `server/README.md`. De app en de API draaien op Vercel met Supabase Postgres en Google-login; `backend/Code.gs` blijft ongewijzigd de logica en draait in Node met een adapter voor de Apps Script-diensten (dezelfde aanpak als de demo). De oude stack (GitHub Pages + Apps Script + Sheet) blijft werken tot de overstap. Hieronder eerst het oorspronkelijke plan en de afspraken; de sectie "Wat v6.0 geworden is" zegt waar de uitvoering afwijkt.
+
+## Wat v6.0 geworden is
+- **Eén logica, twee omgevingen.** `Code.gs` is niet herschreven naar Edge Functions: `server/apps-script.js` bootst `SpreadsheetApp` (Postgres), `PropertiesService`, `CacheService`, `LockService`, `Utilities`, `UrlFetchApp` en de Google-diensten na, en `server/code.js` draait Code.gs per verzoek als vers exemplaar. Daarmee werken alle 100+ `api*`-functies, de triggers en het portaal meteen, met dezelfde Node-tests als vangnet (`server/test/server_test.js` draait de demogegevens via de migratie in Postgres-in-WASM en roept de API aan zoals de app).
+- **API op Vercel (Node), niet als Supabase Edge Function.** Code.gs is synchroon geschreven; Node kan dat met een worker-brug (`server/sync.js`) exact nabootsen. Het contract van `run()` is gelijk gebleven: `POST /api` met `{fn, args, token}` → `{ok, result | fout}`.
+- **Schema volgt TABELLEN.** `supabase/migrations/0001_init.sql` wordt gegenereerd uit `TABELLEN` in Code.gs: één tabel per tabblad, kolommen in snake_case, getallen `numeric`, de rest tekst (ook datums, zoals Code.gs ze schrijft), een kolom `rij` voor de volgorde. Het concept-schema hieronder (ids voor namen, `timestamptz`, `text[]`, `jsonb`, RLS per team) blijft het doel voor v6.1+ (fase 2 van het talentnetwerk), als Code.gs stap voor stap wordt vervangen door echte Postgres-logica. Tot die tijd handhaaft Code.gs de rechten (`RECHTEN`); RLS staat aan zonder policies, zodat alleen de server bij de tabellen kan.
+- **Inloggen:** Supabase Auth met Google (implicit flow, zonder bibliotheek in de app). De server controleert het token (`jose`) en geeft het e-mailadres aan Code.gs (`SERVER_LOGIN` → `gebruikerVanEmail`): de eigenaar via `EIGENAAR_EMAIL`, anderen via `Gebruikers.email`. De koppelcode werkt daarnaast nog.
+- **Gmail en Agenda** nog als de eigenaar (één refresh-token, `server/google.js`); de koppeling per gebruiker (Fase B) is niet meegenomen. **Documenten** blijven in Drive. **Triggers** zijn Vercel Cron (`vercel.json`). **Realtime** is niet gebouwd (de app haalt zoals altijd opnieuw op).
+- **Migratie:** `server/migratie.js` leest de Sheet via `apiExportAlles` (Code.gs 6.0) en schrijft Postgres; herhaalbaar (upsert), met aantallen per tabel.
 
 ## Waarom
 - **Snelheid:** elke klik is nu een Apps Script-verzoek dat een Sheet leest. Dat kost 1–3 s, en meer is er niet uit te halen. Postgres achter een API reageert in 50–300 ms.
@@ -85,14 +93,14 @@ create table instellingen (sleutel text primary key, waarde jsonb);
 - `gebruikers`, `doelen`, `mijlpalen`, `tracks`, `huisstijl` en `instellingen` mag alleen de beheerder schrijven.
 - v5.0: `talenten`, `talent_documenten`, `talent_school` en `talent_uren` leest en schrijft het talentteam (en management); een accountmanager leest een talent alleen als er een `kandidaten`-rij is in een traject dat hij mag zien, en dan zonder postcode, documenten, notitie en uren (een view `talenten_beperkt`); `beoordelingen` schrijft de accountmanager alleen voor zo'n kandidaat, het talentteam alles. Een ingelogd talent (`talenten.auth_id = auth.uid()`) leest en wijzigt alleen zijn eigen rij (beschikbaarheid, uitzonderingen) en leest zijn beoordelingen met `zichtbaarheid = 'talent'`. Storage-bucket `talent-documenten`: alleen talentteam en management, signed URLs met een regel in `activiteiten`.
 
-## Stappen bij de overstap (± 2–3 weken werk)
-1. Supabase-project (EU) en Vercel-project aanmaken, domein koppelen. **Menno:** accounts aanmaken en DNS instellen.
-2. Schema plus RLS, en Google-login met domeinbeperking.
-3. Edge Functions per `api*`-functie, met dezelfde Node-stubtests (ze draaien al in Node).
-4. Migratiescript: Sheet naar Postgres (namen naar ids, tags en velden omzetten), daarna een controle per tabel op aantallen.
-5. `run()` omzetten, Realtime voor taken en activiteit.
-6. Een week parallel draaien (Sheet als back-up, alleen lezen), daarna overstappen.
-7. Fase B (eigen Gmail en Agenda) komt hier vanzelf mee: elke gebruiker geeft zelf toestemming bij het inloggen.
+## Stappen bij de overstap
+1. Supabase-project (EU) en Vercel-project aanmaken, domein koppelen. **Menno:** accounts aanmaken en DNS instellen (`server/README.md`, stappen 1–3).
+2. Schema plus RLS (gebouwd: `supabase/migrations/0001_init.sql`), en Google-login (gebouwd; de beperking is "staat in Gebruikers", plus een interne OAuth-consent voor het Workspace-domein).
+3. ~~Edge Functions per `api*`-functie~~ → gebouwd als Code.gs op Vercel met de adapter (zie boven).
+4. Migratiescript (gebouwd: `server/migratie.js`; namen blijven namen, zie het concept-schema voor later), controle per tabel op aantallen (gebouwd).
+5. `run()` omgezet (gebouwd: token in plaats van koppelcode op de eigen server); Realtime later.
+6. Een week parallel draaien (Sheet leidend, migratie dagelijks herhalen), daarna overstappen (`server/README.md`, stap 5). **Menno.**
+7. Fase B (eigen Gmail en Agenda per gebruiker): later; vraagt opslag van refresh-tokens per gebruiker (Supabase Vault) en een aanpassing van `mijnMailbox()`.
 
 ## Planning (bijgewerkt 16-10-2026)
-De overstap is release v6.0 en staat direct na v5.0 (Talentnetwerk fase 1, klaar 16-10-2026). Hij is voorwaarde voor fase 2 van het talentnetwerk (diensten, uren, werkers-app, communicatie), die niet op een Sheet past. De tabellen en kolommen die v4.5–v5.0 toevoegden staan hierboven in het schema (`taken.tijd/herhaling/tags/ouder_id/herinnerd`, `talenten`, `talent_documenten`, `beoordelingen`, `talent_school`, `talent_uren`, `kandidaten.talent_id` enz., `activiteiten.talent_id`, `scholen.lat/lon`); de uitwerking (Edge Functions met de `api*`-namen, `pg_cron` voor de talentrun, de VOG-run en de peiling, Storage voor documenten, talentaccounts met magic link in plaats van portaaltokens) staat in `docs/plan-taken-en-talentnetwerk.md` onder v6.0. Bij de migratie: `Talenten.functies/sectoren/vakken` (JSON-lijst) → `text[]`, `beschikbaarheid`/`uitzonderingen`/`criteria` → `jsonb`, `portaalToken`/`portaalTokenTot` vervallen, `TalentUren_archief` gaat terug in `talent_uren`.
+Release v6.0 is gebouwd op 16-10-2026 (zie "Wat v6.0 geworden is"); de ingebruikname (accounts, migratie, parallel draaien, overstap) staat in `server/README.md`. De overstap is voorwaarde voor fase 2 van het talentnetwerk (diensten, uren, werkers-app, communicatie), die niet op een Sheet past. De tabellen en kolommen die v4.5–v5.0 toevoegden staan hierboven in het schema (`taken.tijd/herhaling/tags/ouder_id/herinnerd`, `talenten`, `talent_documenten`, `beoordelingen`, `talent_school`, `talent_uren`, `kandidaten.talent_id` enz., `activiteiten.talent_id`, `scholen.lat/lon`); de uitwerking (Edge Functions met de `api*`-namen, `pg_cron` voor de talentrun, de VOG-run en de peiling, Storage voor documenten, talentaccounts met magic link in plaats van portaaltokens) staat in `docs/plan-taken-en-talentnetwerk.md` onder v6.0. Bij de migratie: `Talenten.functies/sectoren/vakken` (JSON-lijst) → `text[]`, `beschikbaarheid`/`uitzonderingen`/`criteria` → `jsonb`, `portaalToken`/`portaalTokenTot` vervallen, `TalentUren_archief` gaat terug in `talent_uren`.

@@ -1,9 +1,15 @@
 # Mock van de Apps Script-backend voor lokaal testen van index.html (zelfde origin: repo-root statisch + /api). Start: python3 test/mock_backend.py
-import json, datetime, uuid, copy, os
+import json, datetime, uuid, copy, os, time
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from functools import partial
+from urllib.parse import urlparse, parse_qs
 
 SECRET = 'test123'
+# v6.0: met MOCK_GOOGLE=1 bootst de mock de eigen server na (api/config + Supabase Auth op /supa): de app logt dan in met Google in plaats van een koppelcode
+MOCK_GOOGLE = os.environ.get('MOCK_GOOGLE') == '1'
+POORT = int(os.environ.get('MOCK_POORT') or 8765)
+SUPA_POORT = POORT + 1  # "Supabase" op een eigen origin, zoals echt: dan bemoeit de service worker van de app zich niet met de terugkeer na het inloggen
+TOKENS = {'testtoken-menno': 'test123', 'testtoken-menno-vers': 'test123', 'testtoken-joris': 'am123'}
 vandaag = datetime.date.today()
 def d(n): return (vandaag + datetime.timedelta(days=n)).isoformat()
 def nu(): return datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -748,17 +754,40 @@ def handle(fn, args):
 
 class H(SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
+    def json(self, obj, status=200):
+        data = json.dumps(obj).encode()
+        self.send_response(status); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data)
+    def do_GET(self):  # v6.0: de eigen server nagebootst (api/config, Supabase Auth); de rest zijn de bestanden van de repo
+        p = urlparse(self.path); pad = p.path; qs = parse_qs(p.query)
+        if pad == '/api/config':
+            if not MOCK_GOOGLE: return self.json({'ok': False, 'fout': 'geen inlogconfiguratie'}, 404)
+            return self.json({'ok': True, 'inloggen': 'google', 'supabaseUrl': 'http://127.0.0.1:%d/supa' % SUPA_POORT, 'anonKey': 'anon-test', 'versie': '6.0'})
+        if pad == '/api': return self.json({'ok': True, 'app': 'Athena Assistent (mock)', 'versie': '6.0'})
+        if pad == '/supa/auth/v1/authorize':
+            terug = (qs.get('redirect_to') or ['/'])[0]
+            self.send_response(302); self.send_header('Location', terug + '#access_token=testtoken-menno&expires_in=3600&expires_at=%d&refresh_token=refresh-1&token_type=bearer' % (int(time.time()) + 3600)); self.end_headers(); return
+        return super().do_GET()
     def do_POST(self):
-        n = int(self.headers.get('Content-Length', 0)); body = json.loads(self.rfile.read(n) or b'{}')
+        n = int(self.headers.get('Content-Length', 0)); ruw = self.rfile.read(n) or b'{}'
+        if self.path.startswith('/supa/auth/v1/token'): return self.json({'access_token': 'testtoken-menno-vers', 'refresh_token': 'refresh-2', 'expires_in': 3600, 'expires_at': int(time.time()) + 3600, 'token_type': 'bearer'})  # v6.0: token vernieuwen
+        if self.path.startswith('/supa/auth/v1/logout'): self.send_response(204); self.end_headers(); return
+        body = json.loads(ruw)
         if body.get('portaal'): out = handle_portaal(str(body['portaal']), body.get('fn'), body.get('args') or [])  # v5.0: het portaal kent geen koppelcode
-        elif body.get('secret') not in IKKEN: out = {'ok': False, 'fout': 'secret'}
         else:
-            HUIDIG[0] = body.get('secret')
-            try: out = {'ok': True, 'result': handle(body.get('fn'), body.get('args') or [])}
-            except Exception as e: out = {'ok': False, 'fout': str(e)}
-        data = json.dumps(out).encode()
-        self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data)
+            code = TOKENS.get(body['token']) if body.get('token') else body.get('secret')  # v6.0: een sessietoken van de eigen server, of de koppelcode
+            if code not in IKKEN: out = {'ok': False, 'fout': 'secret'}
+            else:
+                HUIDIG[0] = code
+                try: out = {'ok': True, 'result': handle(body.get('fn'), body.get('args') or [])}
+                except Exception as e: out = {'ok': False, 'fout': str(e)}
+        self.json(out)
+    def do_OPTIONS(self):  # v6.0: de preflight van het tokenverzoek naar "Supabase" (andere origin, JSON-header)
+        self.send_response(204); self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); self.send_header('Access-Control-Allow-Headers', 'Content-Type, apikey, Authorization'); self.end_headers()
     def end_headers(self):
-        self.send_header('Cache-Control', 'no-store'); super().end_headers()
+        self.send_header('Cache-Control', 'no-store'); self.send_header('Access-Control-Allow-Origin', '*'); super().end_headers()
 
-ThreadingHTTPServer(('127.0.0.1', 8765), partial(H, directory=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))).serve_forever()
+_maak = partial(H, directory=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if MOCK_GOOGLE:
+    import threading
+    threading.Thread(target=ThreadingHTTPServer(('127.0.0.1', SUPA_POORT), _maak).serve_forever, daemon=True).start()
+ThreadingHTTPServer(('127.0.0.1', POORT), _maak).serve_forever()
