@@ -391,4 +391,5 @@ with sync_playwright() as p:
     pp.goto('http://127.0.0.1:8765/?t=verkeerdtoken12345678&api=http%3A%2F%2F127.0.0.1%3A8765%2Fapi'); pp.wait_for_selector('#portaalKop:has-text("werkt niet meer")')
     ctx4.close()
     b.close()
+meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

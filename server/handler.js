@@ -51,6 +51,7 @@ async function verwerk(v) {
     if (methode === 'GET') return antwoord(200, { ok: true, app: 'Athena Assistent', versie: schema.versie(), melding: 'Backend actief (Vercel + Supabase). De app gebruikt dit adres zelf.' });
     if (methode !== 'POST') return antwoord(405, { ok: false, fout: 'alleen GET en POST' });
     var req = {};
+    // De body is altijd JSON, ook zonder Content-Type: de app stuurt (net als naar Apps Script) geen headers, dus de browser zet text/plain. api/index.js heeft daarom bodyParser uit.
     try { req = JSON.parse(v.body || '{}') || {}; } catch (e) { return antwoord(400, { ok: false, fout: 'geen geldige JSON' }); }
     var login = null;
     if (req.token && !req.portaal) {

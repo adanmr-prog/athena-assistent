@@ -797,6 +797,12 @@
       <div class="hint">Accountmanagers krijgen een eigen koppelcode van Menno (Relaties → Rapport → Beheer).</div>
       <div class="knoppen"><button class="knop" id="codeOpslaan">Koppel</button></div>
     </div>
+    <!-- v6.1: geen antwoord van api/config op een onbekend toestel (offline of traag): niet raden tussen Google en koppelcode, maar opnieuw proberen -->
+    <div id="koppelOffline" style="display:none">
+      <h2>Geen verbinding</h2>
+      <p>De server antwoordt niet. Controleer je internetverbinding en probeer het opnieuw.</p>
+      <div class="knoppen"><button class="knop" id="koppelOpnieuw">Opnieuw proberen</button></div>
+    </div>
     <div class="knoppen"><button class="knop licht" id="koppelSluit" style="display:none">Sluiten</button></div>
     <div class="status-lijst" id="statusInfo"></div>
   </div>
@@ -1018,35 +1024,49 @@
   /* ===== Backend: run()-RPC naar de Apps Script-web-app. URL en koppelcode staan in localStorage (koppelscherm). ===== */
   function apiUrl() { return DEMO ? 'demo' : SERVER ? 'api' : leesOpslag('aa_api'); }
   function secret() { return DEMO ? 'demo' : leesOpslag('aa_secret'); }
+  function ingelogd() { return SERVER ? !!leesOpslag('aa_token') : !!(apiUrl() && secret()); }  // v6.1: op de eigen server telt het sessietoken, anders backend-URL + koppelcode
   // v6.0: de app op de eigen server (Vercel + Supabase). GET api/config zegt of hier met Google wordt ingelogd (Supabase Auth);
   // dan gaat het sessietoken mee in run() in plaats van de koppelcode. Op GitHub Pages bestaat api/config niet en blijft alles bij het oude.
-  var SERVER = null;
-  function serverConfig() {
-    return fetch('api/config', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (c) { SERVER = (c && c.inloggen === 'google' && c.supabaseUrl) ? c : null; return SERVER; })
-      .catch(function () { SERVER = null; return null; });
+  // v6.1: de config van de vorige keer staat in aa_server, zodat de geïnstalleerde PWA ook offline of op een traag netwerk meteen start.
+  var SERVER = null, SERVER_TIMEOUT_MS = 3000, _tokenVersBezig = null;
+  function serverBekend() { try { var c = JSON.parse(leesOpslag('aa_server') || 'null'); return (c && c.inloggen === 'google' && c.supabaseUrl) ? c : null; } catch (e) { return null; } }
+  function serverConfig() {  // de config (eigen server), null (geen eigen server: GitHub Pages geeft 404) of undefined (geen antwoord binnen de tijd)
+    var vanNet = fetch('api/config', { cache: 'no-store' }).then(function (r) { if (r.ok) return r.json(); if (r.status === 404) return null; throw new Error('status ' + r.status); });
+    var naTimeout = new Promise(function (klaar, fout) { setTimeout(function () { fout(new Error('timeout')); }, SERVER_TIMEOUT_MS); });
+    return Promise.race([vanNet, naTimeout]).then(function (c) {
+      var ok = !!(c && c.inloggen === 'google' && c.supabaseUrl);
+      if (ok) zetOpslag('aa_server', JSON.stringify(c)); else { try { localStorage.removeItem('aa_server'); } catch (e) {} }
+      return ok ? c : null;
+    }).catch(function () { return undefined; });
   }
   function tokenUitHash() {  // na het inloggen komt Supabase terug op deze pagina met #access_token=…&refresh_token=…&expires_at=…
     var h = location.hash || ''; if (h.indexOf('access_token=') < 0 && h.indexOf('error=') < 0) return false;
-    var o = {}; h.replace(/^#/, '').split('&').forEach(function (p) { var i = p.indexOf('='); if (i > 0) o[decodeURIComponent(p.slice(0, i))] = decodeURIComponent(p.slice(i + 1).replace(/\+/g, ' ')); });
+    var o = {};
+    try { h.replace(/^#/, '').split('&').forEach(function (p) { var i = p.indexOf('='); if (i > 0) o[decodeURIComponent(p.slice(0, i))] = decodeURIComponent(p.slice(i + 1).replace(/\+/g, ' ')); }); }
+    catch (e) { o = { error: 'ongeldige link' }; }  // v6.1: decodeURIComponent gooit bij een kapotte %-reeks; dat mag de start niet platleggen
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
     if (o.error || !o.access_token) { toast('Inloggen mislukt: ' + (o.error_description || o.error || 'geen token')); return false; }
     zetOpslag('aa_token', o.access_token); zetOpslag('aa_refresh', o.refresh_token || '');
     zetOpslag('aa_token_tot', String(o.expires_at ? Number(o.expires_at) * 1000 : Date.now() + (Number(o.expires_in) || 3600) * 1000));
+    if (leesOpslag('aa_token') !== o.access_token) { toast('Opslag niet beschikbaar (privémodus?) — de app kan je login niet bewaren.'); return false; }  // v6.1: anders een stille inloglus
     return true;
   }
   function tokenVers() {  // een geldig token, zo nodig vernieuwd met het refresh-token; '' als er geen is
     var t = leesOpslag('aa_token'), tot = Number(leesOpslag('aa_token_tot')) || 0, r = leesOpslag('aa_refresh');
     if (!SERVER || !t || !r || tot - Date.now() > 60000) return Promise.resolve(t);
-    return fetch(SERVER.supabaseUrl + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SERVER.anonKey }, body: JSON.stringify({ refresh_token: r }) })
+    if (_tokenVersBezig) return _tokenVersBezig;  // v6.1: één vernieuwing tegelijk: na het hervatten van de PWA vuren meerdere run()'s, en Supabase trekt de sessie in als een refresh-token twee keer wordt gebruikt
+    _tokenVersBezig = fetch(SERVER.supabaseUrl + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SERVER.anonKey }, body: JSON.stringify({ refresh_token: r }) })
       .then(function (x) { return x.ok ? x.json() : null; })
       .then(function (d) {
         if (!d || !d.access_token) return t;
         zetOpslag('aa_token', d.access_token); if (d.refresh_token) zetOpslag('aa_refresh', d.refresh_token);
         zetOpslag('aa_token_tot', String(d.expires_at ? Number(d.expires_at) * 1000 : Date.now() + (Number(d.expires_in) || 3600) * 1000));
         return d.access_token;
-      }).catch(function () { return t; });
+      }).catch(function () { return t; })
+      .then(function (uit) { _tokenVersBezig = null; return uit; });
+    return _tokenVersBezig;
   }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && SERVER && leesOpslag('aa_token')) tokenVers(); });  // v6.1: na het hervatten het token alvast verversen, vóór het eerste verzoek
   function wisToken() { ['aa_token', 'aa_refresh', 'aa_token_tot'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} }); }
   function uitloggen() {
     var t = leesOpslag('aa_token');
@@ -1054,7 +1074,8 @@
     wisToken(); ['aa_cache_home', 'aa_cache_crm', 'aa_chat'].forEach(function (k) { zetOpslag(k, ''); });
     CRM.basis = null; DESK.mails = null; S.chat = leesChat(); el('statusInfo').innerHTML = ''; checkKoppeling();
   }
-  function inloggenGoogle() { if (!SERVER) return; location.href = SERVER.supabaseUrl + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(location.origin + location.pathname); }
+  // v6.1: terug naar de map van de app (gelijk aan de scope van het manifest), ook vanaf …/index.html: dan volstaat één adres in de Supabase-allowlist
+  function inloggenGoogle() { if (!SERVER) return; location.href = SERVER.supabaseUrl + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(location.origin + location.pathname.replace(/index\.html$/, '')); }
   function laadDemo() {  // v4.3
     if (!_demoLaden) _demoLaden = new Promise(function (klaar, fout) {
       var s = document.createElement('script'); s.src = 'demo/demo.js';
@@ -1065,12 +1086,18 @@
     return _demoLaden;
   }
   function checkKoppeling() {
-    var ok = SERVER ? !!leesOpslag('aa_token') : (!!apiUrl() && !!secret());  // v6.0: op de eigen server telt het sessietoken
+    var ok = ingelogd();  // v6.0: op de eigen server telt het sessietoken; v6.1: via ingelogd()
     el('koppel').classList.toggle('aan', !ok);
-    el('koppelGoogle').style.display = SERVER ? '' : 'none'; el('koppelCode').style.display = SERVER ? 'none' : '';
+    el('koppelGoogle').style.display = SERVER ? '' : 'none'; el('koppelCode').style.display = SERVER ? 'none' : ''; el('koppelOffline').style.display = 'none';
     el('uitloggen').style.display = (SERVER && ok) ? 'inline-block' : 'none';
     el('koppelSluit').style.display = 'none';
     return ok;
+  }
+  // v6.1: onbekend toestel zonder antwoord van api/config: niet raden. Een koppelcode die hier zou worden opgeslagen, zou de Google-login op dit toestel voorgoed blokkeren.
+  function toonGeenVerbinding(opnieuw) {
+    el('koppel').classList.add('aan'); el('koppelGoogle').style.display = 'none'; el('koppelCode').style.display = 'none'; el('koppelOffline').style.display = '';
+    el('uitloggen').style.display = 'none'; el('koppelSluit').style.display = 'none'; el('statusInfo').innerHTML = '';
+    if (opnieuw) toast('Nog geen verbinding.');
   }
   function run(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -3689,7 +3716,7 @@
   }
   function openTaakOpId(id) { basisKlaar().then(function () { return run('apiTaak', id); }).then(function (t) { REG.taak[t.id] = t; bewerkTaak(t.id); }).catch(function () {}); }
   // v4.5: een deeplink die binnenkomt terwijl de app al open is (adresbalk, geopende PWA) laadt de pagina niet opnieuw; replaceState in deskNaar vuurt dit niet
-  window.addEventListener('hashchange', function () { if (apiUrl() && secret()) routeHash((location.hash || '').replace('#', '')); });
+  window.addEventListener('hashchange', function () { if (ingelogd()) routeHash((location.hash || '').replace('#', '')); });  // v6.1: ook met een sessietoken (secret() is dan leeg)
   function deskNaar(item) {
     if (!DESK_ITEMS[item] || ((item === 'pipeline' || item === 'facturatie') && !magApp(item)) || (item === 'bezetting' && !magApp('vacatures')) || (item === 'talent' && !magApp('talenten'))) item = 'home';  // v4.0: menu per rechten; v5.0: talent
     if (item === 'bezetting' || item === 'talent') { S.pWeergave = item; S.pWeergaveGekozen = true; } else if (item === 'projecten' && (S.pWeergave === 'bezetting' || S.pWeergave === 'talent')) S.pWeergave = 'am';  // v4.1; v5.0: talent
@@ -3938,7 +3965,7 @@
   // Wisselen tussen telefoon- en desktopbreedte (venster verkleinen, iPad draaien)
   if (deskMq) {
     var deskWissel = function () {
-      var was = isDesk(); zetDesk(); if (PORTAAL || isDesk() === was || !apiUrl() || !secret()) return;  // v5.0: de portaalpagina heeft maar één scherm
+      var was = isDesk(); zetDesk(); if (PORTAAL || isDesk() === was || !ingelogd()) return;  // v5.0: de portaalpagina heeft maar één scherm; v6.1: ook met een sessietoken
       // v3.0: een half ingevuld formulier nooit weggooien bij draaien of Split View; alleen de layout wisselt dan
       var concept = ['crmComposer', 'crmNieuw', 'crmBeheer', 'agendaForm', 'doelForm', 'vensterInhoud'].some(function (id) { var f = el(id); return f && f.innerHTML.trim(); });
       if (isDesk()) {
@@ -4008,12 +4035,13 @@
   el('instellingenKnop').addEventListener('click', function () {
     el('apiInput').value = apiUrl(); el('codeInput').value = secret();
     sluitVenster(); el('koppel').classList.add('aan');  // v3.7
-    var ok = SERVER ? !!leesOpslag('aa_token') : !!(apiUrl() && secret());  // v6.0
-    el('koppelSluit').style.display = ok ? 'inline-block' : 'none'; el('uitloggen').style.display = (SERVER && ok) ? 'inline-block' : 'none';
+    var ok = ingelogd();  // v6.0
+    el('koppelSluit').style.display = ok ? 'inline-block' : 'none'; el('uitloggen').style.display = (SERVER && ok) ? 'inline-block' : 'none'; el('koppelOffline').style.display = 'none';
     if (ok) toonStatus(); else el('statusInfo').innerHTML = '';
   });
   el('koppelSluit').addEventListener('click', function () { el('koppel').classList.remove('aan'); });
   el('inloggenGoogle').addEventListener('click', inloggenGoogle);  // v6.0
+  el('koppelOpnieuw').addEventListener('click', function () { startKoppeling(false, true); });  // v6.1
   el('uitloggen').addEventListener('click', function () { uitloggen(); toast('Uitgelogd.'); });
   el('codeOpslaan').addEventListener('click', function () {
     var u = el('apiInput').value.trim().replace(/\?.*$/, ''), c = el('codeInput').value.trim();
@@ -4034,9 +4062,20 @@
   if (PORTAAL) startPortaal();  // v5.0: de portaalpagina voor talenten: geen koppelscherm, niets in localStorage
   else {
     if (DEMO) laadDemo().catch(function () { toast('De demo kon niet laden.'); });  // v4.3: demobalk meteen tonen
-    var netIngelogd = !DEMO && tokenUitHash();  // v6.0: terug van Google (Supabase Auth)
-    if (DEMO || (leesOpslag('aa_api') && !netIngelogd)) { if (checkKoppeling()) startApp(); }  // met een koppelcode meteen starten, zoals altijd
-    else serverConfig().then(function () { if (checkKoppeling()) startApp(); });  // v6.0: anders eerst kijken of deze server met Google inlogt
+    if (DEMO) { if (checkKoppeling()) startApp(); }
+    else startKoppeling(tokenUitHash(), false);  // v6.0: tokenUitHash = terug van Google (Supabase Auth); v6.1: start zonder op het netwerk te wachten
+  }
+  // v6.1: de start buiten de demo. Met een bekende eigen server (aa_server) of een koppelcode (aa_api) meteen door, zonder op het netwerk te wachten;
+  // alleen een onbekend toestel vraagt api/config (met timeout): Google-login, koppelcode (GitHub Pages: 404) of "geen verbinding" met Opnieuw proberen.
+  function startKoppeling(netIngelogd, opnieuw) {
+    SERVER = serverBekend();
+    if (SERVER) { if (checkKoppeling()) startApp(); serverConfig().then(function (c) { if (c) SERVER = c; }); return; }  // de config op de achtergrond verversen (andere sleutel of url)
+    if (leesOpslag('aa_api') && !netIngelogd) { if (checkKoppeling()) startApp(); return; }  // koppelcode: zoals altijd
+    serverConfig().then(function (c) {
+      if (c === undefined && !leesOpslag('aa_api')) { toonGeenVerbinding(opnieuw); return; }
+      SERVER = c || null;
+      if (checkKoppeling()) startApp();
+    });
   }
   if ('serviceWorker' in navigator && !PORTAAL) { navigator.serviceWorker.register('sw.js').catch(function () {}); }  // v5.0: de browser van een talent hoeft de app-shell niet te bewaren
 </script>
