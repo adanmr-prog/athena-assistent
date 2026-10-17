@@ -5,3 +5,5 @@ node_modules/
 .env
 .env.*
 server/.pglite/
+# v6.1.1: de export van server/migratie.js (--bewaar) bevat alle gegevens uit de Sheet, ook de talentprofielen; nooit in de repo
+export*.json
