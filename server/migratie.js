@@ -66,10 +66,14 @@ async function exportVanAppsScript(execUrl, code, alleen, log) {
   return uit;
 }
 // De demogegevens als export: demo-backend.js + Code.gs in een vm, zoals test/node_rooktest.js
-function exportUitDemo() {
+function demoContext() {  // v6.2: ook voor server/vergelijk.js, dat dezelfde demo als orakel gebruikt
   var R = path.join(__dirname, '..'), ctx = { console: console }; ctx.globalThis = ctx; vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(R, 'demo/demo-backend.js'), 'utf8') + '\n;\n' + schema.codeTekst(), ctx, { filename: 'demo.js' });
   ctx.demoStart('');
+  return ctx;
+}
+function exportUitDemo(ctx) {
+  ctx = ctx || demoContext();
   var exp = JSON.parse(ctx.demoExport()), uit = { tabellen: {}, eigenschappen: exp.props || {} }, T = schema.tabellen();
   Object.keys(exp.bladen || {}).forEach(function (naam) {
     if (!T[naam]) return;
@@ -99,5 +103,5 @@ async function main() {
   console.log(mis.length ? 'LET OP: minder rijen in de database dan geïmporteerd bij ' + mis.join(', ') : 'Klaar: alle tabellen staan in de database.');
   brug.stop();
 }
-module.exports = { importeer: importeer, importeerTabel: importeerTabel, importeerEigenschappen: importeerEigenschappen, exportVanAppsScript: exportVanAppsScript, exportUitDemo: exportUitDemo };
+module.exports = { importeer: importeer, importeerTabel: importeerTabel, importeerEigenschappen: importeerEigenschappen, exportVanAppsScript: exportVanAppsScript, exportUitDemo: exportUitDemo, demoContext: demoContext };
 if (require.main === module) main().catch(function (e) { console.error('Migratie mislukt: ' + ((e && e.message) || e)); process.exit(1); });

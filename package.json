@@ -1,12 +1,17 @@
 {
   "name": "athena-assistent",
-  "version": "6.0.0",
+  "version": "6.2.0",
   "private": true,
   "description": "Athena Assistent: de app (index.html, zonder afhankelijkheden) en de server voor Vercel + Supabase (map api/ en server/). Zie server/README.md.",
   "license": "UNLICENSED",
   "engines": { "node": ">=20" },
   "scripts": {
     "test:server": "node server/test/server_test.js",
+    "test:security": "node server/test/security_test.js",
+    "test:fouten": "node server/test/fouten_test.js",
+    "dekking": "node server/dekking.js",
+    "vergelijk": "node server/vergelijk.js",
+    "checksums": "node server/checksums.js",
     "schema": "node server/schema.js --sql",
     "migratie": "node server/migratie.js"
   },
@@ -15,6 +20,7 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.10"
+    "@electric-sql/pglite": "^0.5.10",
+    "acorn": "^8.19.0"
   }
 }

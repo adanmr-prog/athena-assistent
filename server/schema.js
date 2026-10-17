@@ -77,19 +77,42 @@ function ddl() {
   return uit.join('\n') + '\n';
 }
 // Maakt ontbrekende tabellen en kolommen aan (idempotent). sql(tekst, params) → { rows }
-function zorgSchema(sql) {
-  var T = tabellen();
-  sql(ddl());
-  var bestaand = {};
+// v6.2: eerst kijken of er iets ontbreekt; alleen dan de DDL, onder een advisory lock. Elke nieuwe serverinstantie (koude start op
+// Vercel) doet dit bij zijn eerste verzoek; meerdere tegelijk gaven "deadlock detected" op de create index/enable row level
+// security-statements (server/test/fouten_test.js). In de regel ontbreekt er niets en kost de controle één query.
+var SCHEMA_LOCK = 7311;
+function ontbrekend(sql) {
+  var T = tabellen(), bestaand = {}, mist = [];
   sql("select table_name, column_name from information_schema.columns where table_schema = 'public'").rows.forEach(function (r) { (bestaand[r.table_name] = bestaand[r.table_name] || {})[r.column_name] = true; });
   Object.keys(T).forEach(function (tab) {
-    var t = tabelNaam(tab), kolommen = bestaand[t] || {};
-    T[tab].forEach(function (k) { if (!kolommen[kolomNaam(k)]) sql('alter table ' + q(t) + ' add column if not exists ' + q(kolomNaam(k)) + ' ' + kolomType(tab, k)); });
-    if (!kolommen.rij) sql('alter table ' + q(t) + ' add column if not exists rij bigserial');
+    var t = tabelNaam(tab), kolommen = bestaand[t];
+    if (!kolommen) { mist.push(t); return; }
+    T[tab].forEach(function (k) { if (!kolommen[kolomNaam(k)]) mist.push(t + '.' + kolomNaam(k)); });
+    if (!kolommen.rij) mist.push(t + '.rij');
   });
+  ['eigenschappen', 'cache'].forEach(function (t) { if (!bestaand[t]) mist.push(t); });
+  var indexen = {}; sql("select indexname from pg_indexes where schemaname = 'public'").rows.forEach(function (r) { indexen[r.indexname] = true; });
+  INDEXEN.forEach(function (ix) { var n = 'ix_' + tabelNaam(ix[0]) + '_' + kolomNaam(ix[1]); if (!indexen[n]) mist.push('index ' + n); });
+  return mist;
+}
+function zorgSchema(sql) {
+  if (!ontbrekend(sql).length) return;
+  var T = tabellen();
+  sql('select pg_advisory_lock($1)', [SCHEMA_LOCK]);
+  try {
+    if (!ontbrekend(sql).length) return;  // een andere instantie was net eerder
+    sql(ddl());
+    var bestaand = {};
+    sql("select table_name, column_name from information_schema.columns where table_schema = 'public'").rows.forEach(function (r) { (bestaand[r.table_name] = bestaand[r.table_name] || {})[r.column_name] = true; });
+    Object.keys(T).forEach(function (tab) {
+      var t = tabelNaam(tab), kolommen = bestaand[t] || {};
+      T[tab].forEach(function (k) { if (!kolommen[kolomNaam(k)]) sql('alter table ' + q(t) + ' add column if not exists ' + q(kolomNaam(k)) + ' ' + kolomType(tab, k)); });
+      if (!kolommen.rij) sql('alter table ' + q(t) + ' add column if not exists rij bigserial');
+    });
+  } finally { try { sql('select pg_advisory_unlock($1)', [SCHEMA_LOCK]); } catch (e) {} }
 }
 
-module.exports = { codeTekst: codeTekst, tabellen: tabellen, triggers: triggers, versie: versie, NUMERIEK: NUMERIEK, snake: snake, tabelNaam: tabelNaam, kolomNaam: kolomNaam, sleutelVan: sleutelVan, isNumeriek: isNumeriek, q: q, ddl: ddl, zorgSchema: zorgSchema, CODE_PAD: CODE_PAD };
+module.exports = { codeTekst: codeTekst, tabellen: tabellen, triggers: triggers, versie: versie, NUMERIEK: NUMERIEK, snake: snake, tabelNaam: tabelNaam, kolomNaam: kolomNaam, sleutelVan: sleutelVan, isNumeriek: isNumeriek, q: q, ddl: ddl, zorgSchema: zorgSchema, ontbrekend: ontbrekend, CODE_PAD: CODE_PAD };
 
 if (require.main === module) {
   if (process.argv.indexOf('--sql') >= 0) process.stdout.write(ddl());

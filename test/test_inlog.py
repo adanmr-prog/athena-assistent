@@ -10,7 +10,7 @@ POORT = 8767; BASIS = 'http://127.0.0.1:%d' % POORT
 exe = '/opt/pw-browsers/chromium' if os.path.isfile('/opt/pw-browsers/chromium') else '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 meldingen = []
 
-proc = subprocess.Popen([sys.executable, os.path.join(ROOT, 'test', 'mock_backend.py')], env=dict(os.environ, MOCK_GOOGLE='1', MOCK_POORT=str(POORT)), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+proc = subprocess.Popen([sys.executable, os.path.join(ROOT, 'test', 'mock_backend.py')], env=dict(os.environ, MOCK_GOOGLE='1', MOCK_CSP='1', MOCK_POORT=str(POORT)), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # v6.2: met de Content-Security-Policy uit vercel.json
 for _ in range(50):
     try: urllib.request.urlopen(BASIS + '/api/config', timeout=1); break
     except Exception: time.sleep(0.2)
