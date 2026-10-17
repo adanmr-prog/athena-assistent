@@ -71,6 +71,7 @@ Op je eigen computer, met de repo en `npm install` gedaan:
 ```
 DATABASE_URL='postgres://…' node server/migratie.js --bron https://script.google.com/macros/s/…/exec --code <koppelcode van de beheerder> --bewaar export.json
 ```
+`export.json` bevat alle gegevens uit de Sheet, ook de talentprofielen. Hij staat in `.gitignore`; bewaar hem niet in een gedeelde map en verwijder hem na de controle.
 Het script leest elk tabblad via `apiExportAlles` (nieuw in Code.gs 6.0: plak en implementeer Code.gs dus eerst als nieuwe versie), schrijft alles in Postgres (upsert op `id`: opnieuw draaien is veilig) en drukt per tabel de aantallen in de bron en in de database af. De scripteigenschappen gaan mee behalve `ANTHROPIC_API_KEY` en `CAPSULE_TOKEN`; koppelcodes (`SECRET`, `CODES`) blijven dus werken op de nieuwe server.
 Open daarna `https://<domein>/`, log in met Google en controleer Home, Contacten, Projecten en Talent tegen de Sheet.
 
