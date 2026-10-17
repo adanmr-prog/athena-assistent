@@ -51,9 +51,17 @@ function parseCsv(tekst, sep) {
 
 /* ----- Het tabbladmodel: dezelfde Range-API als in de demo, met vuil-markering voor flush() ----- */
 function maakBlad(naam, laadRijen) {
-  var rijen = null, vuil = false;
-  function R() { if (!rijen) rijen = laadRijen(); return rijen; }
+  var rijen = null, vuil = false, volledigGelezen = false;
+  function R() { if (!rijen) { rijen = laadRijen(); volledigGelezen = false; } return rijen; }
   function breedte() { return R().reduce(function (m, r) { return Math.max(m, r.length); }, 0); }
+  // v6.2: Code.gs leest een tabblad opnieuw na vergeet() ("vers uit de Sheet: een ander verzoek kan net geschreven hebben",
+  // controleerConflict). In Apps Script raakt dat de Sheet; hier dus Postgres: een tweede volledige lezing van een schoon tabblad
+  // laadt opnieuw, zodat de conflictcontrole de schrijfactie van een ander verzoek ziet. Een vuil tabblad (eigen wijzigingen) blijft.
+  function volledigeLezing(r, c, nr) {
+    if (r !== 1 || c !== 1 || nr < R().length) return;
+    if (volledigGelezen && !vuil) rijen = laadRijen();
+    volledigGelezen = true;
+  }
   var b = {
     getName: function () { return naam; },
     getLastRow: function () { return R().length; },
@@ -66,7 +74,7 @@ function maakBlad(naam, laadRijen) {
     getRange: function (r, c, nr, nc) {
       nr = nr || 1; nc = nc || 1;
       return {
-        getValues: function () { var o = [], rr = R(); for (var i = 0; i < nr; i++) { var rij = rr[r - 1 + i] || [], x = []; for (var j = 0; j < nc; j++) x.push(rij[c - 1 + j] === undefined ? '' : rij[c - 1 + j]); o.push(x); } return o; },
+        getValues: function () { volledigeLezing(r, c, nr); var o = [], rr = R(), tot = (r === 1 && c === 1 && nr >= rr.length) ? rr.length : nr; for (var i = 0; i < Math.max(nr, tot); i++) { var rij = rr[r - 1 + i] || [], x = []; for (var j = 0; j < nc; j++) x.push(rij[c - 1 + j] === undefined ? '' : rij[c - 1 + j]); o.push(x); } return o; },  // v6.2: na herladen ook de rijen die er intussen bij kwamen
         getValue: function () { var rij = R()[r - 1] || []; return rij[c - 1] === undefined ? '' : rij[c - 1]; },
         setValues: function (v) { var rr = R(); v.forEach(function (vr, i) { rr[r - 1 + i] = rr[r - 1 + i] || []; vr.forEach(function (x, j) { rr[r - 1 + i][c - 1 + j] = x; }); }); vuil = true; return this; },
         setValue: function (x) { var rr = R(); rr[r - 1] = rr[r - 1] || []; rr[r - 1][c - 1] = x; vuil = true; return this; },
@@ -176,17 +184,19 @@ function maakDiensten(opties) {
   // Eigenschappen: één keer laden, wijzigingen direct wegschrijven (zeldzaam)
   var props = null;
   function laadProps() { if (props) return props; zorgTabel('Scholen'); props = {}; brug.sql('select sleutel, waarde from eigenschappen').rows.forEach(function (r) { props[r.sleutel] = r.waarde == null ? '' : String(r.waarde); }); return props; }
+  var EIGEN_OMGEVING = { DB: true, GOOGLE_NEP: true, LOG: true, APP_URL: false };  // v6.2: ATHENA_DB, ATHENA_GOOGLE_NEP en ATHENA_LOG sturen de server zelf aan en zijn geen scripteigenschap (apiExportAlles('eigenschappen') liet ze zien)
+  function uitOmgeving(k) { var e = env['ATHENA_' + k]; return (!EIGEN_OMGEVING[k] && e !== undefined && e !== '') ? e : undefined; }
   var eigenschappen = {
     getProperty: function (k) {
       if (k === 'EIGENAAR_EMAIL' && env.EIGENAAR_EMAIL) return env.EIGENAAR_EMAIL;  // v6.0: wie via Google inlogt als eigenaar is de beheerder (gebruikerVanEmail in Code.gs)
-      var e = env['ATHENA_' + k]; if (e !== undefined && e !== '') return e;  // sleutels zoals ANTHROPIC_API_KEY horen in de omgeving, niet in de database
+      var e = uitOmgeving(k); if (e !== undefined) return e;  // sleutels zoals ANTHROPIC_API_KEY horen in de omgeving, niet in de database
       var pr = laadProps();
       if (Object.prototype.hasOwnProperty.call(pr, k)) return pr[k];
       return k === 'SHEET_ID' ? DB_ID : null;  // zonder gemigreerde eigenschappen is Postgres gewoon de Sheet (sheet() in Code.gs eist een id)
     },
     setProperty: function (k, v) { laadProps()[k] = String(v); brug.sql('insert into eigenschappen (sleutel, waarde) values ($1, $2) on conflict (sleutel) do update set waarde = excluded.waarde', [k, String(v)]); return this; },
     deleteProperty: function (k) { delete laadProps()[k]; brug.sql('delete from eigenschappen where sleutel = $1', [k]); return this; },
-    getProperties: function () { var uit = {}, pr = laadProps(); Object.keys(pr).forEach(function (k) { uit[k] = pr[k]; }); Object.keys(env).forEach(function (k) { if (k.indexOf('ATHENA_') === 0 && env[k] !== '') uit[k.slice(7)] = env[k]; }); return uit; }
+    getProperties: function () { var uit = {}, pr = laadProps(); Object.keys(pr).forEach(function (k) { uit[k] = pr[k]; }); Object.keys(env).forEach(function (k) { if (k.indexOf('ATHENA_') === 0 && uitOmgeving(k.slice(7)) !== undefined) uit[k.slice(7)] = env[k]; }); return uit; }
   };
   var PropertiesService = { getScriptProperties: function () { return eigenschappen; } };
 
@@ -200,10 +210,15 @@ function maakDiensten(opties) {
   var LOCK = 7310;  // hashtext('athena') zou ook kunnen; een vast getal is genoeg: één lock voor de hele backend
   var heeftLock = false;
   function probeerLock() { var r = brug.sql('select pg_try_advisory_lock($1) as ok', [LOCK]).rows[0]; heeftLock = !!(r && r.ok); return heeftLock; }
+  // v6.2: releaseLock() geeft de lock pas echt vrij in flush(), nadat de wijzigingen in Postgres staan. In Apps Script schrijft
+  // Code.gs direct in de Sheet, dus binnen de lock; hier schrijft flush() aan het eind van het verzoek. Zonder dit uitstel liepen
+  // de flushes van verschillende instanties door elkaar (deadlock detected in server/test/fouten_test.js). Eén lock per verzoek:
+  // een tweede metLock in hetzelfde verzoek krijgt dezelfde lock (pg_advisory_lock telt anders per aanroep en zou blijven hangen).
+  function echtVrijgeven() { if (heeftLock) { try { brug.sql('select pg_advisory_unlock($1)', [LOCK]); } catch (e) {} heeftLock = false; } }
   var lock = {
-    tryLock: function (ms) { var tot = Date.now() + (Number(ms) || 0); while (!probeerLock()) { if (Date.now() >= tot) return false; brug.sleep(150); } return true; },
+    tryLock: function (ms) { if (heeftLock) return true; var tot = Date.now() + (Number(ms) || 0); while (!probeerLock()) { if (Date.now() >= tot) return false; brug.sleep(150); } return true; },
     waitLock: function (ms) { if (!this.tryLock(ms)) throw new Error('Lock timeout'); },
-    releaseLock: function () { if (heeftLock) { try { brug.sql('select pg_advisory_unlock($1)', [LOCK]); } catch (e) {} heeftLock = false; } },
+    releaseLock: function () { /* uitgesteld tot flush() */ },
     hasLock: function () { return heeftLock; }
   };
   var LockService = { getScriptLock: function () { return lock; }, getDocumentLock: function () { return lock; }, getUserLock: function () { return lock; } };
@@ -240,12 +255,13 @@ function maakDiensten(opties) {
 
   function flush() {
     var stats = {}, vuil = Object.keys(bladen).filter(function (n) { return bladen[n]._geladen() && bladen[n]._vuil(); });
-    if (vuil.length) {
-      brug.sql('begin');
-      try { vuil.forEach(function (n) { stats[n] = schrijfTabel(n, bladen[n], snapshots[n] || {}, waarschuw); bladen[n]._schoon(); }); brug.sql('commit'); }
-      catch (e) { try { brug.sql('rollback'); } catch (e2) {} throw e; }
-    }
-    lock.releaseLock();
+    try {
+      if (vuil.length) {
+        brug.sql('begin');
+        try { vuil.forEach(function (n) { stats[n] = schrijfTabel(n, bladen[n], snapshots[n] || {}, waarschuw); bladen[n]._schoon(); }); brug.sql('commit'); }
+        catch (e) { try { brug.sql('rollback'); } catch (e2) {} throw e; }
+      }
+    } finally { echtVrijgeven(); }  // v6.2: ook na een mislukte flush de lock loslaten
     if (G.flush) G.flush();
     return stats;
   }

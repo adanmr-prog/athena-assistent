@@ -54,6 +54,7 @@ adapter die de Apps Script-diensten nabootst. Dit document is de installatie voo
    | `ATHENA_APP_URL` | `https://<domein>/` (de link in de dagstart- en herinneringsmails) |
    | `TZ` | `Europe/Amsterdam` |
    | `FORM_SHEET_ID` | optioneel: het id van de oude Google Sheet waarin het Google Form zijn antwoorden schrijft; de server leest nieuwe aanmeldingen daaruit zolang het formulier daar staat |
+   | `ATHENA_CORS_ORIGIN` | optioneel (v6.2): alleen zetten als de app ooit op een ander domein dan de API komt; zonder stuurt de server geen CORS-header |
    | `ATHENA_RAPPORT_EMAIL`, `ATHENA_NAAM`, `ATHENA_CLAUDE_MODEL`, … | optioneel, zoals de scripteigenschappen |
 
 3. Deploy. Controleer `https://<project>.vercel.app/api` (geeft `{ok:true, versie:"6.0"}`) en `https://<project>.vercel.app/api/config` (geeft de inlogconfiguratie).
@@ -64,7 +65,9 @@ adapter die de Apps Script-diensten nabootst. Dit document is de installatie voo
    { "path": "/api/cron/herinneringTrigger", "schedule": "*/15 * * * *" }
    ```
    Zonder Pro kun je een externe planner (bijv. cron-job.org) `GET https://<domein>/api/cron/herinneringTrigger` laten aanroepen met de header `Authorization: Bearer <CRON_SECRET>`.
-6. Functieduur: `vercel.json` vraagt 300 seconden (het inlezen van documenten en de talentrun werken met een budget van 4 minuten). Weigert Vercel dat op het Hobby-plan, zet `maxDuration` dan op 60 en draai het inlezen vaker (het pakt per run wat het haalt).
+6. Functieduur: `vercel.json` vraagt 300 seconden (het inlezen van documenten en de talentrun werken met een budget van 4 minuten). Volgens de Vercel-documentatie (augustus 2026) is 300 s op Hobby het standaard- en het maximum, op Pro tot 800 s.
+7. **Regio en beveiliging (v6.2):** `vercel.json` zet `regions: ["fra1"]` (Frankfurt, naast de Supabase-regio `eu-central-1`); zonder die regel draait de functie in Washington en kost elke query ±90 ms, zestien keer per Home-scherm. Dezelfde file stuurt een Content-Security-Policy mee (niet op `?demo=1`). De server geeft een 429 na 20 mislukte inlogpogingen per IP per 10 minuten, een 503 met een leesbare melding bij een databasestoring, en accepteert alleen Supabase-tokens met `aud authenticated` en de issuer van het project. Uploads van documenten zijn op de server 3 MB (Vercel neemt 4,5 MB per verzoek; de app toont die grens via `api/config`).
+8. **Plan van Supabase:** het Free-plan pauzeert een project na een week zonder verkeer en maakt geen back-ups; Pro ($25 per maand) doet dagelijkse back-ups (7 dagen) en pauzeert niet. Kies vóór de parallelle week, of regel een eigen dagelijkse `pg_dump` (zie 5.5).
 
 ### 4. Gegevens overzetten (herhaalbaar)
 Op je eigen computer, met de repo en `npm install` gedaan:
@@ -80,6 +83,19 @@ Open daarna `https://<domein>/`, log in met Google en controleer Home, Contacten
 2. **Overstap.** Kondig een moment aan. Draai de migratie een laatste keer. Zet in Apps Script de triggers uit (Triggers → verwijderen), zodat de dagstart en herinneringen niet dubbel komen. Stuur iedereen het nieuwe adres: inloggen met Google, geen koppelcode meer. Laat de Sheet staan als back-up (alleen lezen).
 3. **Google Form.** Het aanmeldformulier schrijft in de oude Sheet; met `FORM_SHEET_ID` leest de server die antwoorden elk uur in (zoals Apps Script deed). Later kan het formulier een eigen pagina op het domein worden.
 4. **GitHub Pages** kan daarna uit, of blijven staan voor de demo (`?demo=1`).
+5. **Go-live-criteria.** `docs/go-live-review-v6.md` bevat de review van de stack (17-10-2026) met de controles die je zelf op de echte omgeving draait, elk met de verwachte uitvoer: de golden master tegen Apps Script (`node server/vergelijk.js --bron … --code … --server …`), checksums na twee migratieruns en na een restore (`node server/checksums.js`), antwoordtijden vanaf `fra1` en `iad1` (`node server/meet.js`), de anon-sleutel tegen PostgREST (moet `[]` geven), de cron, een ZAP-baseline en de houdbaarheid van het Google-token. Pas overstappen als alle criteria daar waar zijn.
+   Dagelijkse back-up zonder Pro, als GitHub Action (secrets `DATABASE_URL` en een privé-opslag naar keuze):
+   ```yaml
+   name: backup
+   on: { schedule: [{ cron: '15 1 * * *' }], workflow_dispatch: {} }
+   jobs:
+     dump:
+       runs-on: ubuntu-latest
+       steps:
+         - run: sudo apt-get install -y postgresql-client
+         - run: pg_dump "${{ secrets.DATABASE_URL }}" --no-owner --no-privileges -Fc -f athena-$(date +%F).dump
+         - run: echo "upload athena-*.dump naar een privé-bucket (bijv. met rclone of de aws-cli); nooit als artifact van een publieke repo"
+   ```
 
 ## Lokaal draaien
 ```
@@ -88,16 +104,28 @@ node server/test/server_test.js                        # alle servertests, tegen
 ATHENA_DB=pglite:server/.pglite node server/migratie.js --demo                        # demogegevens in een lokale database
 ATHENA_DB=pglite:server/.pglite EIGENAAR_EMAIL=sophie@athena.example node server/lokaal.js   # http://localhost:3000, koppelcode demo-sophie
 ```
-`ATHENA_GOOGLE_NEP=1` laat de server Google, PDOK en Claude met vaste antwoorden beantwoorden (tests, zonder netwerk).
+`ATHENA_GOOGLE_NEP=1` laat de server Google, PDOK en Claude met vaste antwoorden beantwoorden (tests, zonder netwerk); `ATHENA_GOOGLE_NEP_FOUT=429` laat elke Google-aanroep met die status falen.
+
+Review- en controlescripts (v6.2, zie `docs/go-live-review-v6.md`):
+```
+node server/dekking.js [--demo]                        # welke Apps Script-aanroepen uit Code.gs de adapter dekt (AST); exitcode 1 bij een gat
+node server/vergelijk.js [--profiel] [--dekking]       # golden master: demo-backend tegen de adapter met dezelfde seed; --profiel telt queries per api
+node server/vergelijk.js --bron <exec> --code <code> --server https://<domein> [--codes am=…,talent=…]   # Apps Script tegen de server
+node server/test/security_test.js                      # JWT-negatieftests, koppelcode raden (429), CORS: ALLES GOED
+DATABASE_URL_TEST='postgres://…' node server/test/fouten_test.js   # lock, vijf schrijvers, koude starts, databasestoring, Google-fouten (echte PostgreSQL)
+DATABASE_URL='…' node server/checksums.js              # vingerafdruk per tabel (vergelijk twee runs met diff)
+node server/meet.js --server https://<domein> --code <code>   # p50/p95 per api zoals de app ze ziet
+```
+De browsertests sturen met `MOCK_CSP=1` de Content-Security-Policy uit `vercel.json` mee (`test/test_inlog.py` doet dat altijd; start de mock voor `test/test_app.py` met `MOCK_CSP=1`).
 
 ## Hoe het werkt
 - `api/index.js`, `api/config.js`, `api/cron/[taak].js`: de Vercel-functies; dunne schil om `server/handler.js`.
-- `server/handler.js`: routes, het controleren van het Supabase-token (`jose`; HS256 met het JWT secret of de JWKS van het project), de aanroep van `doPost` en daarna `flush()`. Met een geldig token gaat het e-mailadres als `SERVER_LOGIN` naar Code.gs; `wieIs()` zoekt de gebruiker dan via `gebruikerVanEmail` (de eigenaar via `EIGENAAR_EMAIL`, anderen in `Gebruikers`). Een onbekend adres geeft `fout: 'secret'`, en de app toont het inlogscherm.
+- `server/handler.js`: routes, het controleren van het Supabase-token (`jose`; HS256 met het JWT secret of de JWKS van het project; alleen `aud authenticated` en de issuer `<SUPABASE_URL>/auth/v1`), de aanroep van `doPost` en daarna `flush()`. Met een geldig token gaat het e-mailadres als `SERVER_LOGIN` naar Code.gs; `wieIs()` zoekt de gebruiker dan via `gebruikerVanEmail` (de eigenaar via `EIGENAAR_EMAIL`, anderen in `Gebruikers`). Een onbekend adres geeft `fout: 'secret'`, en de app toont het inlogscherm. v6.2: mislukte inlogpogingen worden per IP geteld in de cachetabel (20 per 10 minuten, daarna 429); een databasestoring geeft 503 met een leesbare melding; `api/config` noemt `maxBestand`.
 - `server/code.js`: compileert `backend/Code.gs` één keer als functie met de dienstnamen als parameters en maakt per verzoek een vers exemplaar (eigen `GEBRUIKER`, eigen caches). Binnen Code.gs wijst `globalThis` naar de functies van Code.gs, zodat `doPost` zijn `globalThis[fn]` kan blijven doen.
-- `server/apps-script.js`: de nagebootste diensten. `SpreadsheetApp` laadt een tabblad bij het eerste gebruik uit Postgres (als rijen onder de kop uit `TABELLEN`) en `flush()` schrijft per tabel alleen gewijzigde, nieuwe en verwijderde rijen weg (op `id`, in één transactie). `PropertiesService` → tabel `eigenschappen` (omgeving `ATHENA_<NAAM>` gaat voor), `CacheService` → tabel `cache`, `LockService` → advisory lock in Postgres, `Utilities.formatDate` rekent in Europe/Amsterdam, `ScriptApp.getProjectTriggers()` meldt de cron-taken als aanwezig.
-- `server/google.js`: Gmail, Agenda, Drive, Docs en Sheets via REST met het refresh-token van de eigenaar, in de vorm van `GmailApp`, `CalendarApp`, `DriveApp`, `Drive.Files`, `DocumentApp` en `SpreadsheetApp.openById` voor andere spreadsheets (XPS-export, het antwoordblad van het Google Form).
+- `server/apps-script.js`: de nagebootste diensten. `SpreadsheetApp` laadt een tabblad bij het eerste gebruik uit Postgres (als rijen onder de kop uit `TABELLEN`) en `flush()` schrijft per tabel alleen gewijzigde, nieuwe en verwijderde rijen weg (op `id`, in één transactie). `PropertiesService` → tabel `eigenschappen` (omgeving `ATHENA_<NAAM>` gaat voor; `ATHENA_DB`, `ATHENA_GOOGLE_NEP` en `ATHENA_LOG` zijn van de server zelf), `CacheService` → tabel `cache`, `LockService` → advisory lock in Postgres die pas na `flush()` vrijkomt (zo staan de wijzigingen in de database voordat een volgende instantie schrijft), `Utilities.formatDate` rekent in Europe/Amsterdam, `ScriptApp.getProjectTriggers()` meldt de cron-taken als aanwezig. Leest Code.gs een tabblad na `vergeet()` opnieuw, dan laadt de adapter het opnieuw uit Postgres (de conflictcontrole ziet zo de schrijfactie van een ander verzoek).
+- `server/google.js`: Gmail, Agenda, Drive, Docs en Sheets via REST met het refresh-token van de eigenaar, in de vorm van `GmailApp`, `CalendarApp`, `DriveApp`, `Drive.Files`, `DocumentApp` en `SpreadsheetApp.openById` voor andere spreadsheets (XPS-export, het antwoordblad van het Google Form; daarin komt de kolom Tijdstempel als `Date`, zoals in Apps Script).
 - `server/sync.js` + `server/sync-worker.js`: Code.gs is synchroon; een worker-thread doet Postgres en fetch, de hoofdthread wacht met `Atomics.wait`. Eén databaseverbinding per worker.
-- `server/schema.js`: het schema volgt `TABELLEN` in Code.gs (tabelnamen en kolommen in snake_case; getalkolommen `numeric`, de rest tekst, datums als tekst zoals Code.gs ze schrijft; elke tabel een kolom `rij` voor de volgorde). `node server/schema.js --sql` genereert `supabase/migrations/0001_init.sql`; de test bewaakt dat het bestand actueel is. Nieuwe kolommen in `TABELLEN` komen vanzelf (zoals `blad()` in de Sheet).
+- `server/schema.js`: het schema volgt `TABELLEN` in Code.gs (tabelnamen en kolommen in snake_case; getalkolommen `numeric`, de rest tekst, datums als tekst zoals Code.gs ze schrijft; elke tabel een kolom `rij` voor de volgorde). `node server/schema.js --sql` genereert `supabase/migrations/0001_init.sql`; de test bewaakt dat het bestand actueel is. Nieuwe kolommen in `TABELLEN` komen vanzelf (zoals `blad()` in de Sheet): elke nieuwe instantie kijkt bij haar eerste verzoek met één query of er iets ontbreekt en draait alleen dan de DDL, onder een advisory lock (anders liepen gelijktijdige koude starts vast op elkaar).
 - `server/migratie.js`: Sheet → Postgres via `apiExportAlles` (gepagineerd), of uit een JSON-bestand, of de demogegevens.
 
 ## Problemen oplossen
@@ -106,4 +134,7 @@ ATHENA_DB=pglite:server/.pglite EIGENAAR_EMAIL=sophie@athena.example node server
 - **"Lock timeout" of "Athena is al bezig"**: `DATABASE_URL` wijst naar de transaction pooler (6543); gebruik 5432.
 - **Cron geeft 401**: `CRON_SECRET` in Vercel ontbreekt of is net gewijzigd (opnieuw deployen).
 - **Een getal komt als tekst terug**: zet de kolom in `NUMERIEK` in `server/schema.js` en genereer het schema opnieuw.
+- **"Te veel mislukte inlogpogingen" (429)** terwijl de code klopt: iemand op hetzelfde IP (kantoor) heeft twintig keer mis getypt of een script probeert codes. Na tien minuten gaat het vanzelf weer; eerder: `delete from cache where sleutel like 'athena-auth-fout-%'`.
+- **"De database is even niet bereikbaar" (503)**: de technische oorzaak staat in de Vercel-logs (`[athena] databasestoring: …`); meestal de pooler, het wachtwoord of een gepauzeerd Free-project.
+- **"Het bestand is groter dan 3 MB"**: de grens van Vercel per verzoek; op Apps Script blijft het 8 MB.
 - Logboek van een verzoek: zet `ATHENA_LOG=1`; `Logger.log` uit Code.gs komt dan in de Vercel-logs.

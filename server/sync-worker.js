@@ -54,6 +54,12 @@ async function doeFetch(d) {
 function nepGoogle(d) {
   var u = d.url, m = (d.methode || 'GET').toUpperCase(), json = function (o, status) { return { status: status || 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify(o) }; };
   if (/oauth2\.googleapis\.com\/token/.test(u)) return json({ access_token: 'nep-token', expires_in: 3600 });
+  // v6.2 (tests): ATHENA_GOOGLE_NEP_FOUT=429|500|403 laat elke Google-API falen, om te zien hoe Code.gs daarop reageert
+  var fout = Number(process.env.ATHENA_GOOGLE_NEP_FOUT || 0); if (fout) return json({ error: { message: 'nep-fout ' + fout, status: 'NEP' } }, fout);
+  // v6.2 (tests): het antwoordblad van een Google Form (FORM_SHEET_ID=nep-form), met de tijdstempel als serieel getal zoals de Sheets-API hem geeft
+  if (/spreadsheets\/nep-form\/values\//.test(u) && m === 'GET') return json({ values: [['Tijdstempel', 'Voornaam', 'Achternaam', 'Mobiel', 'E-mailadres', 'Postcode', 'Functie', 'Sector', 'Beschikbaar', 'Toestemming'], [46266.5, 'Noor', 'Formulier', '0612345678', 'noor.formulier@voorbeeld.nl', '1234 AB', 'surveillant', 'vo', 'ma ochtend, di middag', 'Ja']] });
+  if (/spreadsheets\/nep-form\/values\//.test(u)) return json({ updatedCells: 1 });  // verwerkt/talentId terugschrijven
+  if (/spreadsheets\/nep-form\?/.test(u)) return json({ properties: { title: 'Nep-formulier' }, sheets: [{ properties: { title: 'Formulierreacties 1' } }] });
   if (/gmail\/v1\/users\/me\/threads\?/.test(u)) return json({ threads: [] });
   if (/gmail\/v1\/users\/me\/messages\/send/.test(u)) return json({ id: 'nep-bericht', threadId: 'nep-thread' });
   if (/gmail\/v1\/users\/me\/drafts/.test(u)) return json({ id: 'nep-concept', message: { id: 'nep-concept-bericht' } });
@@ -69,8 +75,8 @@ function nepGoogle(d) {
   if (/docs\/v1\/documents\/[^/:]+:batchUpdate/.test(u)) return json({ replies: [] });
   if (/docs\/v1\/documents\/[^/?]+/.test(u) && m === 'GET') return json({ documentId: 'nep-doc', title: 'Nep', body: { content: [{ paragraph: { elements: [{ textRun: { content: 'Neptekst {{hulpvraag}}\n' } }] } }] } });
   if (/docs\/v1\/documents/.test(u) && m === 'POST') return json({ documentId: 'nep-doc-' + Date.now() });
-  if (/sheets\/v4\/spreadsheets\/[^/]+\/values/.test(u)) return json({ values: [] });
-  if (/sheets\/v4\/spreadsheets\//.test(u)) return json({ sheets: [] });
+  if (/\/v4\/spreadsheets\/[^/]+\/values/.test(u)) return json({ values: [] });  // v6.2: de host is sheets.googleapis.com/v4/…, niet …/sheets/v4
+  if (/\/v4\/spreadsheets\//.test(u)) return json({ sheets: [] });
   return json({ error: { message: 'nep: onbekende Google-URL ' + u } }, 404);
 }
 async function afhandel(soort, d) {

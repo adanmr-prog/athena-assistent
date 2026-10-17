@@ -90,14 +90,22 @@ var SOPHIE = 'demo-sophie', FEMKE = 'demo-femke', IRIS = 'demo-iris';
 
   /* ---- export voor de migratie, status, cron ---- */
   var ex = await roep(SOPHIE, 'apiExportAlles', 'Acties', 0, 5), ex2 = await roep(SOPHIE, 'apiExportAlles', 'Acties', ex.volgende, 500), exE = await roep(SOPHIE, 'apiExportAlles', 'eigenschappen');
-  eis(ex.rijen.length === 5 && ex.volgende === 5 && ex2.volgende === null && ex.rijen.length + ex2.rijen.length === ex.totaal && !ex.rijen[0]._rij && exE.rijen.SECRET === 'demo-sophie' && !('ANTHROPIC_API_KEY' in exE.rijen), 'apiExportAlles pagineert en laat sleutels weg');
+  eis(ex.rijen.length === 5 && ex.volgende === 5 && ex2.volgende === null && ex.rijen.length + ex2.rijen.length === ex.totaal && !ex.rijen[0]._rij && exE.rijen.SECRET === 'demo-sophie' && !('ANTHROPIC_API_KEY' in exE.rijen) && !('DB' in exE.rijen) && !('GOOGLE_NEP' in exE.rijen), 'apiExportAlles pagineert en laat sleutels en de serverinstellingen (ATHENA_DB, ATHENA_GOOGLE_NEP) weg');  // v6.2
   eis(/management/i.test(await faalt(FEMKE, 'apiExportAlles', 'Acties')), 'alleen het management exporteert');
   var status = await roep(SOPHIE, 'apiStatus');
   eis(status.versie === '6.0' && status.herinneringTrigger === true && status.talentTrigger === true && status.gebruiker.naam === 'Sophie de Graaf', 'apiStatus ziet de triggers als cron');
   var g1 = await handler.verwerk({ methode: 'GET', pad: '/api', headers: {} }), g2 = await handler.verwerk({ methode: 'GET', pad: '/api/config', headers: {} });
   eis(g1.status === 200 && JSON.parse(g1.body).versie === '6.0' && g2.status === 404, 'GET /api geeft de versie; /api/config bestaat niet zonder Supabase-instellingen');
   var g3 = await handler.verwerk({ methode: 'GET', pad: '/api/config', headers: {}, env: Object.assign({}, process.env, { SUPABASE_URL: 'https://abc.supabase.co/', SUPABASE_ANON_KEY: 'anon' }) });
-  eis(g3.status === 200 && JSON.parse(g3.body).inloggen === 'google' && JSON.parse(g3.body).supabaseUrl === 'https://abc.supabase.co' && g3.headers['Access-Control-Allow-Origin'] === '*', '/api/config geeft de inlogconfiguratie');
+  eis(g3.status === 200 && JSON.parse(g3.body).inloggen === 'google' && JSON.parse(g3.body).supabaseUrl === 'https://abc.supabase.co' && JSON.parse(g3.body).maxBestand === 3 * 1024 * 1024 && !g3.headers['Access-Control-Allow-Origin'], '/api/config geeft de inlogconfiguratie en de bestandsgrens; geen CORS-header zonder ATHENA_CORS_ORIGIN');  // v6.2
+  var g4 = await handler.verwerk({ methode: 'GET', pad: '/api', headers: {}, env: Object.assign({}, process.env, { ATHENA_CORS_ORIGIN: 'https://crm.voorbeeld.nl' }) });
+  eis(g4.headers['Access-Control-Allow-Origin'] === 'https://crm.voorbeeld.nl' && g4.headers.Vary === 'Origin', 'met ATHENA_CORS_ORIGIN precies die ene origin');
+  /* ---- v6.2: het antwoordblad van het Google Form met de tijdstempel als Date (zoals in Apps Script) ---- */
+  process.env.FORM_SHEET_ID = 'nep-form';
+  var F = code.start({}), uitF = F.api.aanmeldingenVerwerken(); F.diensten.flush(); delete process.env.FORM_SHEET_ID;
+  var noor = brug.sql("select toestemming_datum, bewaren_tot, laatste_contact, status, bron from talenten where email = 'noor.formulier@voorbeeld.nl'").rows[0];
+  eis(uitF && uitF.nieuw >= 1 && noor && noor.toestemming_datum === '2026-09-01' && noor.laatste_contact === '2026-09-01' && noor.status === 'aangemeld' && noor.bron === 'website', 'een aanmelding uit het Google Form krijgt de datum van de tijdstempel (serieel getal → Date), niet de dag van verwerking');
+  eis(require('../google.js').serieelNaarDatum(46266.5).getHours() === 12 && A.formatDate(require('../google.js').serieelNaarDatum(46266.5), 'Europe/Amsterdam', 'yyyy-MM-dd HH:mm') === '2026-09-01 12:00', 'serieel 46266,5 is 1 september 2026 12:00 wandkloktijd');
   var c1 = await handler.verwerk({ methode: 'GET', pad: '/api/cron/herinneringTrigger', headers: {} }), c2 = await handler.verwerk({ methode: 'GET', pad: '/api/cron/herinneringTrigger', headers: { authorization: 'Bearer cron-geheim' } }), c3 = await handler.verwerk({ methode: 'GET', pad: '/api/cron/bestaatNiet', headers: { authorization: 'Bearer cron-geheim' } });
   eis(c1.status === 401 && c2.status === 200 && JSON.parse(c2.body).taak === 'herinneringTrigger' && c3.status === 400, 'cron: alleen met het geheim en alleen bekende triggers');
   var c4 = await handler.verwerk({ methode: 'GET', pad: '/api/cron/talentDagelijksTrigger', headers: { authorization: 'Bearer cron-geheim' } }), r4 = JSON.parse(c4.body);
@@ -107,7 +115,17 @@ var SOPHIE = 'demo-sophie', FEMKE = 'demo-femke', IRIS = 'demo-iris';
   eis(brug.sql("select count(*)::int as n from pg_locks where locktype = 'advisory'").rows[0].n === 0, 'na elk verzoek is de lock vrij');
   var S = code.start({}), lock = S.diensten.LockService.getScriptLock();
   eis(lock.tryLock(100) === true && lock.hasLock() && brug.sql("select count(*)::int as n from pg_locks where locktype = 'advisory'").rows[0].n === 1, 'metLock neemt een advisory lock in Postgres');
+  lock.releaseLock(); eis(lock.hasLock() && brug.sql("select count(*)::int as n from pg_locks where locktype = 'advisory'").rows[0].n === 1 && lock.tryLock(100) === true && brug.sql("select count(*)::int as n from pg_locks where locktype = 'advisory'").rows[0].n === 1, 'releaseLock wacht tot flush; een tweede metLock in hetzelfde verzoek stapelt niet');  // v6.2
   S.diensten.flush(); eis(brug.sql("select count(*)::int as n from pg_locks where locktype = 'advisory'").rows[0].n === 0, 'flush geeft de lock vrij');
+  /* ---- v6.2: vergeet() + lees() leest opnieuw uit Postgres (de conflictcontrole moet de schrijfactie van een ander verzoek zien) ---- */
+  var S2 = code.start({}), voor = S2.api.lees('Acties').filter(function (a) { return a.id === 'tk2'; })[0].tekst;
+  brug.sql("update acties set tekst = 'Door een ander verzoek gewijzigd' where id = 'tk2'");
+  var nogSteeds = S2.api.lees('Acties').filter(function (a) { return a.id === 'tk2'; })[0].tekst; S2.api.vergeet('Acties');
+  var vers = S2.api.lees('Acties').filter(function (a) { return a.id === 'tk2'; })[0].tekst;
+  eis(voor !== 'Door een ander verzoek gewijzigd' && nogSteeds === voor && vers === 'Door een ander verzoek gewijzigd', 'na vergeet() ziet lees() de wijziging van een ander verzoek (tweede volledige lezing laadt opnieuw)');
+  brug.sql("update acties set tekst = $1 where id = 'tk2'", [voor]); S2.diensten.flush();
+  var conflictNaAnder = await faalt(SOPHIE, 'apiTaakOpslaan', { id: 'tk2', tekst: 'Mijn versie', _oud: { tekst: 'Een oude tekst die niet klopt' } });
+  eis(/gewijzigd/i.test(conflictNaAnder), 'de conflictcontrole (_oud) werkt op Postgres');
 
   /* ---- de Vercel-laag ---- */
   var EventEmitter = require('events');

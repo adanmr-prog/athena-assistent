@@ -1024,6 +1024,15 @@
   /* ===== Backend: run()-RPC naar de Apps Script-web-app. URL en koppelcode staan in localStorage (koppelscherm). ===== */
   function apiUrl() { return DEMO ? 'demo' : SERVER ? 'api' : leesOpslag('aa_api'); }
   function secret() { return DEMO ? 'demo' : leesOpslag('aa_secret'); }
+  // v6.2: een antwoord dat geen JSON is (504 als de server te lang bezig is, 413 te groot, 429 te veel pogingen, een foutpagina) krijgt een leesbare melding in plaats van "Unexpected token"
+  function leesAntwoord(r) {
+    if (r.ok) return r.json();
+    return r.text().then(function (t) {  // de server stuurt bij 429 en 503 zelf een leesbare fout mee; Vercel-fouten (504, 413) hebben geen JSON
+      var d = null; try { d = JSON.parse(t); } catch (e) {}
+      throw new Error((d && d.fout) || (r.status === 504 ? 'de server deed er te lang over (504); probeer het opnieuw' : r.status === 413 ? 'het verzoek is te groot (413)' : 'serverfout ' + r.status));
+    });
+  }
+  function maxBestandMb() { return Math.round((((SERVER && Number(SERVER.maxBestand)) || 8 * 1024 * 1024)) / 1048576); }  // v6.2: de eigen server (Vercel) neemt 3 MB per bestand, Apps Script 8 MB
   function ingelogd() { return SERVER ? !!leesOpslag('aa_token') : !!(apiUrl() && secret()); }  // v6.1: op de eigen server telt het sessietoken, anders backend-URL + koppelcode
   // v6.0: de app op de eigen server (Vercel + Supabase). GET api/config zegt of hier met Google wordt ingelogd (Supabase Auth);
   // dan gaat het sessietoken mee in run() in plaats van de koppelcode. Op GitHub Pages bestaat api/config niet en blijft alles bij het oude.
@@ -1102,8 +1111,8 @@
   function run(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
     var verzoek = DEMO ? laadDemo().then(function (D) { return D.run(fn, args); })  // v4.3
-      : SERVER ? tokenVers().then(function (t) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }) }); }).then(function (r) { return r.json(); })  // v6.0: eigen server, sessietoken in plaats van koppelcode
-      : fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }) }).then(function (r) { return r.json(); });   // geen headers: geen CORS-preflight op Apps Script
+      : SERVER ? tokenVers().then(function (t) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }) }); }).then(leesAntwoord)  // v6.0: eigen server, sessietoken in plaats van koppelcode
+      : fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }) }).then(leesAntwoord);   // geen headers: geen CORS-preflight op Apps Script
     return verzoek
       .then(function (d) {
         if (d && d.ok) return d.result;
@@ -1885,7 +1894,7 @@
     var html = formHtml(doc ? 'Document bijwerken' : 'Document toevoegen', velden, w, 'Opslaan', function (f) {
       var inp = el('vf-bestand'), file = inp && inp.files && inp.files[0], obj = samen({ id: doc ? doc.id : '', talentId: d.talent.id }, f);
       if (!obj.afgifte && (f.soort || w.soort) === 'vog') { toast('Vul de afgiftedatum van de VOG in.'); return; }
-      if (file && file.size > 8 * 1024 * 1024) { toast('Het bestand is groter dan 8 MB.'); return; }
+      if (file && file.size > maxBestandMb() * 1048576) { toast('Het bestand is groter dan ' + maxBestandMb() + ' MB.'); return; }  // v6.2: de grens van de eigen server (Vercel: 4,5 MB per verzoek)
       var klaar = function (bestand) { return run('apiTalentDocumentOpslaan', obj, bestand).then(function () { sluitVenster(); toast(doc ? 'Document bijgewerkt.' : 'Document toegevoegd' + (bestand ? '; het bestand staat in de Drive-map Talent.' : '.')); herlaadDetail(); }); };
       if (!file) return klaar(null);
       return new Promise(function (ok, nee) {
@@ -1894,7 +1903,7 @@
         r.onerror = function () { nee(new Error('Het bestand kon niet gelezen worden.')); };
         r.readAsDataURL(file);
       }).then(klaar);
-    }, '<div class="velden-2"><div class="veld breed"><label for="vf-bestand">Scan of foto (pdf of afbeelding, hoogstens 8 MB; blijft in de Drive-map Talent)</label><input type="file" id="vf-bestand" accept="application/pdf,image/*"></div></div><div class="hint">Geen kopie van een identiteitsbewijs: die hoort bij de werkgever.</div>');
+    }, '<div class="velden-2"><div class="veld breed"><label for="vf-bestand">Scan of foto (pdf of afbeelding, hoogstens ' + maxBestandMb() + ' MB; blijft in de Drive-map Talent)</label><input type="file" id="vf-bestand" accept="application/pdf,image/*"></div></div><div class="hint">Geen kopie van een identiteitsbewijs: die hoort bij de werkgever.</div>');
     openVenster(html);  // het bestandsveld staat bovenaan: eerst kiezen (op iOS kan "Foto maken" de app herladen), dan de rest invullen
   }
   /* --- plaatsingen (Kandidaten-rijen) en uren uit XPS --- */
