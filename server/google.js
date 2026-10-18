@@ -267,9 +267,22 @@ function maak(h) {
 
   /* ----- Andere spreadsheets (XPS-export in Google Sheets, documenttekst, het antwoordblad van het Google Form) ----- */
   function a1Kolom(n) { var s = ''; while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
-  function remoteBlad(ssId, titel) {
+  // v6.2: een datum-tijd uit de Sheets-API als serieel getal (dagen sinds 30-12-1899, als wandkloktijd) naar een Date, zoals getValues() in Apps Script hem geeft
+  function serieelNaarDatum(n) { var dagen = Math.floor(n), ms = Math.round((n - dagen) * 86400000), u = new Date(Date.UTC(1899, 11, 30) + dagen * 86400000); return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), 0, 0, 0, ms); }
+  // metTijdstempel: de kolom(men) Tijdstempel/Timestamp komen als Date terug (het Google Form), zodat Code.gs ze leest zoals in Apps Script;
+  // andere bladen (XPS-export) houden de getoonde tekst voor datums, zoals voorheen
+  function remoteBlad(ssId, titel, metTijdstempel) {
     var waarden = null;
-    function W() { if (!waarden) { var d = api('GET', SHEETS + q(ssId) + '/values/' + q("'" + titel.replace(/'/g, "''") + "'") + '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING'); waarden = d.values || []; } return waarden; }
+    function W() {
+      if (!waarden) {
+        var d = api('GET', SHEETS + q(ssId) + '/values/' + q("'" + titel.replace(/'/g, "''") + "'") + '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=' + (metTijdstempel ? 'SERIAL_NUMBER' : 'FORMATTED_STRING')); waarden = d.values || [];
+        if (metTijdstempel && waarden.length) {
+          var kolommen = []; waarden[0].forEach(function (k, i) { if (/tijdstempel|timestamp/i.test(String(k))) kolommen.push(i); });
+          for (var r = 1; r < waarden.length; r++) kolommen.forEach(function (c) { if (typeof waarden[r][c] === 'number') waarden[r][c] = serieelNaarDatum(waarden[r][c]); });
+        }
+      }
+      return waarden;
+    }
     var b = {
       getName: function () { return titel; }, getLastRow: function () { return W().length; }, getLastColumn: function () { return W().reduce(function (m, r) { return Math.max(m, r.length); }, 0); },
       getDataRange: function () { return b.getRange(1, 1, W().length, b.getLastColumn()); },
@@ -288,13 +301,13 @@ function maak(h) {
     var titels = null;
     function T() { if (!titels) { var d = api('GET', SHEETS + q(id) + '?fields=properties.title,sheets.properties.title'); titels = (d.sheets || []).map(function (s) { return s.properties.title; }); } return titels; }
     return { getId: function () { return id; }, getName: function () { return api('GET', SHEETS + q(id) + '?fields=properties.title').properties.title; }, getUrl: function () { return 'https://docs.google.com/spreadsheets/d/' + id + '/edit'; },
-      getSheets: function () { return T().map(function (t) { return remoteBlad(id, t); }); }, getSheetByName: function (n) { return T().indexOf(n) >= 0 ? remoteBlad(id, n) : null; } };
+      getSheets: function () { return T().map(function (t) { return remoteBlad(id, t); }); }, getSheetByName: function (n) { return T().indexOf(n) >= 0 ? remoteBlad(id, n) : null; }, getSheetNames: T };
   }
   // Het Google Form schrijft in de oude Sheet (FORM_SHEET_ID); die antwoordbladen doen mee alsof ze in de database staan
   var formBladen = null;
   function formulierBladen() {
     if (!env.FORM_SHEET_ID) return [];
-    if (!formBladen) { try { formBladen = spreadsheet(env.FORM_SHEET_ID).getSheets().filter(function (b) { return /^(Formulierreacties|Form Responses)/i.test(b.getName()); }); } catch (e) { log('Formulierblad: ' + e.message); formBladen = []; } }
+    if (!formBladen) { try { formBladen = spreadsheet(env.FORM_SHEET_ID).getSheetNames().filter(function (t) { return /^(Formulierreacties|Form Responses)/i.test(t); }).map(function (t) { return remoteBlad(env.FORM_SHEET_ID, t, true); }); } catch (e) { log('Formulierblad: ' + e.message); formBladen = []; } }  // v6.2: met de tijdstempel als Date
     return formBladen;
   }
 
@@ -302,4 +315,4 @@ function maak(h) {
     formulierBlad: function (n) { return formulierBladen().filter(function (b) { return b.getName() === n; })[0] || null; }, gekoppeld: gekoppeld, flush: function () {} };
 }
 
-module.exports = { maak: maak, _token: TOKEN };
+module.exports = { maak: maak, _token: TOKEN, serieelNaarDatum: function (n) { var dagen = Math.floor(n), ms = Math.round((n - dagen) * 86400000), u = new Date(Date.UTC(1899, 11, 30) + dagen * 86400000); return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), 0, 0, 0, ms); } };

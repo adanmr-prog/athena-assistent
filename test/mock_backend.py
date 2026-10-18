@@ -752,7 +752,21 @@ def handle(fn, args):
     if fn == 'apiImporteer': return {'ingevoegd': len(args[1]), 'bijgewerkt': 0}
     return handle_crm(fn, args)
 
+# v6.2: met MOCK_CSP=1 gaat de Content-Security-Policy uit vercel.json mee met de app (zoals Vercel die stuurt), met de nep-Supabase
+# erbij in connect-src; de browsertests melden dan elke schending als console-fout. Niet op ?demo=1 (de demo draait Code.gs met eval).
+MOCK_CSP = os.environ.get('MOCK_CSP') == '1'
+def csp_waarde():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vercel.json')) as f: cfg = json.load(f)
+        for h in cfg.get('headers', []):
+            for kv in h.get('headers', []):
+                if kv.get('key') == 'Content-Security-Policy': return kv['value'].replace("connect-src 'self'", "connect-src 'self' http://127.0.0.1:%d" % SUPA_POORT)
+    except Exception: pass
+    return ''
+CSP = csp_waarde() if MOCK_CSP else ''
+
 class H(SimpleHTTPRequestHandler):
+    _csp = False
     def log_message(self, *a): pass
     def json(self, obj, status=200):
         data = json.dumps(obj).encode()
@@ -766,6 +780,7 @@ class H(SimpleHTTPRequestHandler):
         if pad == '/supa/auth/v1/authorize':
             terug = (qs.get('redirect_to') or ['/'])[0]
             self.send_response(302); self.send_header('Location', terug + '#access_token=testtoken-menno&expires_in=3600&expires_at=%d&refresh_token=refresh-1&token_type=bearer' % (int(time.time()) + 3600)); self.end_headers(); return
+        self._csp = bool(CSP) and pad in ('/', '/index.html') and 'demo' not in qs  # v6.2
         return super().do_GET()
     def do_POST(self):
         n = int(self.headers.get('Content-Length', 0)); ruw = self.rfile.read(n) or b'{}'
@@ -784,7 +799,9 @@ class H(SimpleHTTPRequestHandler):
     def do_OPTIONS(self):  # v6.0: de preflight van het tokenverzoek naar "Supabase" (andere origin, JSON-header)
         self.send_response(204); self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); self.send_header('Access-Control-Allow-Headers', 'Content-Type, apikey, Authorization'); self.end_headers()
     def end_headers(self):
-        self.send_header('Cache-Control', 'no-store'); self.send_header('Access-Control-Allow-Origin', '*'); super().end_headers()
+        self.send_header('Cache-Control', 'no-store'); self.send_header('Access-Control-Allow-Origin', '*')
+        if self._csp: self.send_header('Content-Security-Policy', CSP); self._csp = False  # v6.2
+        super().end_headers()
 
 _maak = partial(H, directory=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if MOCK_GOOGLE:
