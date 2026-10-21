@@ -289,7 +289,10 @@ with sync_playwright() as p:
     naar = [d for d in page.eval_on_selector_all('[data-sleepdoel^="kans:"]', "l => l.map(e => e.getAttribute('data-sleepdoel'))") if d != van][0]
     sleep_naar(page, '[data-sleep="%s"]' % kid, '[data-sleepdoel="%s"]' % naar)
     assert page.locator('[data-sleepdoel="%s"] [data-sleep="%s"]' % (naar, kid)).count() == 1 and page.locator('#crmDetailScherm .d-naam h2').count() == 0, 'v6.7: kans naar een andere mijlpaal slepen (opent de kans niet)'
-    page.wait_for_selector('#toast.aan:has-text("→")')
+    page.wait_for_selector('#toast.aan:has-text("→") [data-toastactie]'); page.click('#toast.aan [data-toastactie]'); page.wait_for_timeout(500)
+    assert page.locator('[data-sleepdoel="%s"] [data-sleep="%s"]' % (van, kid)).count() == 1, 'v6.8: slepen ongedaan maken'
+    page.locator('[data-sleep="%s"]' % kid).focus(); page.keyboard.press('ArrowRight' if page.eval_on_selector_all('[data-sleepdoel^="kans:"]', "l => l.map(e => e.getAttribute('data-sleepdoel'))").index(van) == 0 else 'ArrowLeft'); page.wait_for_timeout(500)
+    assert page.locator('[data-sleepdoel="%s"] [data-sleep="%s"]' % (van, kid)).count() == 0, 'v6.8: kaart met de pijltjestoetsen verplaatsen'
     page.screenshot(path=OUT + '/25_desk_pipeline.png')
     page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]'); page.wait_for_timeout(150)  # v4.0: bord per accountmanager
     page.select_option('.ftabel [data-pveld="verlenging"][data-pid="t2"]', 'verlengd'); page.wait_for_selector('.ftabel select.pill.p-verlengd[data-pid="t2"]')
