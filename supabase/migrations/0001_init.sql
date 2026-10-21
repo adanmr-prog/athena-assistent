@@ -26,6 +26,7 @@ create table if not exists "scholen" (
   "bijgewerkt_door" text,
   "lat" numeric,
   "lon" numeric,
+  "betaaltermijn" numeric,
   rij bigserial
 );
 create table if not exists "trajecten" (
@@ -63,6 +64,7 @@ create table if not exists "trajecten" (
   "taskforce" text,
   "xps_project" text,
   "talentscout" text,
+  "contractwaarde" numeric,
   rij bigserial
 );
 create table if not exists "kansen" (
@@ -272,6 +274,8 @@ create table if not exists "facturen" (
   "aangemaakt" text,
   "bijgewerkt" text,
   "door" text,
+  "verzonden" text,
+  "betaald" text,
   rij bigserial
 );
 create table if not exists "instellingen" (
@@ -454,6 +458,15 @@ create table if not exists "talent_uren_archief" (
   "geimporteerd" text,
   rij bigserial
 );
+create table if not exists "prognoses" (
+  "id" text primary key,
+  "gemaakt" text,
+  "traject_id" text,
+  "maand" text,
+  "prognose" numeric,
+  "kas" numeric,
+  rij bigserial
+);
 create table if not exists "aanmeldingen" (
   nr bigserial primary key,
   "tijdstempel" text,
@@ -512,6 +525,7 @@ alter table "beoordelingen" enable row level security;
 alter table "talent_school" enable row level security;
 alter table "talent_uren" enable row level security;
 alter table "talent_uren_archief" enable row level security;
+alter table "prognoses" enable row level security;
 alter table "aanmeldingen" enable row level security;
 alter table "eigenschappen" enable row level security;
 alter table "cache" enable row level security;

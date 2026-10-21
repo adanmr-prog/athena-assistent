@@ -5,20 +5,22 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '6.4.2';
+var VERSIE = '6.5';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
 var TABELLEN = {
   Scholen:      ['id', 'naam', 'plaats', 'type', 'contactpersoon', 'email', 'telefoon', 'status', 'am', 'notities', 'bijgewerkt',
                  'bestuur', 'adres', 'website', 'leerlingen', 'eigenaar', 'tags', 'velden', 'laatsteContact', 'capsuleId', 'aangemaakt', 'bijgewerktDoor',
-                 'lat', 'lon'],  // v5.0: ligging (PDOK) voor de reisafstand in de matching
+                 'lat', 'lon',  // v5.0: ligging (PDOK) voor de reisafstand in de matching
+                 'betaaltermijn'],  // v6.5: dagen tussen factuur en betaling (Financiën: wanneer komt het geld binnen); leeg = de standaard
   Trajecten:    ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'bijgewerkt',
                  'schoolId', 'capsuleId', 'bijgewerktDoor',
                  'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer',  // v3.8: project uit gewonnen kans + facturatie
                  'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging',  // v4.0: kolommen van het monday-bord
                  'taskforce', 'xpsProject',  // v4.1: overdracht van de taskforcemeeting (JSON) en het projectnummer in XPS
-                 'talentscout'],  // v6.4: de vaste talentscout van het project (krijgt de meldingen en taken van het talentteam)
+                 'talentscout',  // v6.4: de vaste talentscout van het project (krijgt de meldingen en taken van het talentteam)
+                 'contractwaarde'],  // v6.5: waarde van het getekende samenwerkingsvoorstel (Financiën); leeg = omzet
   Kansen:       ['id', 'school', 'traject', 'fase', 'waarde', 'volgendeActie', 'deadline', 'laatsteContact', 'eigenaar', 'notities', 'bijgewerkt',
                  'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt', 'bijgewerktDoor', 'am'],  // v3.8: am = accountmanager na winst
   Acties:       ['id', 'tekst', 'bron', 'prio', 'deadline', 'status', 'link', 'aangemaakt', 'afgerond',
@@ -38,7 +40,8 @@ var TABELLEN = {
   Tracks:       ['id', 'naam', 'omschrijving', 'stappen', 'bijgewerkt'],
   Gebruikers:   ['id', 'naam', 'email', 'rol', 'actief', 'bijgewerkt', 'team'],  // v4.0: team + rol (medewerker, teamlead, management)
   Doelen:       ['id', 'eigenaar', 'periode', 'metric', 'doel', 'bijgewerkt'],
-  Facturen:     ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden', 'exactId', 'aangemaakt', 'bijgewerkt', 'door'],  // v3.8: factuurtermijnen per project
+  Facturen:     ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden', 'exactId', 'aangemaakt', 'bijgewerkt', 'door',
+                 'verzonden', 'betaald'],  // v6.5: wanneer de factuur echt verstuurd en betaald is (Financiën); datum = de geplande termijndatum  // v3.8: factuurtermijnen per project
   Instellingen: ['sleutel', 'waarde'],  // v3.7: keuzelijsten en correcties die de beheerder zelf instelt (JSON)
   // v4.1: bezetting van projecten en meldingen in de app
   Vacatures:    ['id', 'trajectId', 'titel', 'aantal', 'dagen', 'urenPerWeek', 'start', 'eind', 'profiel', 'status', 'aangemaakt', 'door', 'bijgewerkt', 'bijgewerktDoor', 'ingevuld'],  // v4.2: ingevuld = datum (time-to-fill)
@@ -55,6 +58,7 @@ var TABELLEN = {
   TalentSchool: ['id', 'talentId', 'schoolId', 'status', 'richting', 'reden', 'door', 'datum'],
   TalentUren:   ['id', 'talentId', 'xpsId', 'xpsProject', 'trajectId', 'week', 'uren', 'diensten', 'noShows', 'lateAfmeldingen', 'geimporteerd'],
   TalentUren_archief: ['id', 'talentId', 'xpsId', 'xpsProject', 'trajectId', 'week', 'uren', 'diensten', 'noShows', 'lateAfmeldingen', 'geimporteerd'],
+  Prognoses:    ['id', 'gemaakt', 'trajectId', 'maand', 'prognose', 'kas'],  // v6.5: de prognose per project en maand zoals die op de eerste van maand 'gemaakt' was (bedragen in centen)
   Aanmeldingen: ['tijdstempel', 'voornaam', 'achternaam', 'telefoon', 'email', 'postcode', 'functies', 'sector', 'beschikbaarheid', 'toestemming', 'verwerkt', 'talentId']  // het Google Form schrijft in een eigen tabblad (Formulierreacties); dit tabblad is voor handmatige of geïmporteerde aanmeldingen
 };
 var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1, statusSinds: 1, gesprek: 1, gelezen: 1, ingevuld: 1, herinnerd: 1,  // v4.6: herinnerd
@@ -68,7 +72,7 @@ var PRIOS = ['hoog', 'midden', 'laag'];
 /* ===================== Eenmalige inrichting (draai vanuit de editor) ===================== */
 
 // v4.4.1: kies deze functie in de keuzelijst naast "Uitvoeren" (de editor onthoudt de laatste keuze); alleen lezen. v4.4.2: ook sleutels en ontbrekende triggers, en bestand tegen een onbereikbare Sheet.
-var TRIGGERS = ['nachtelijkeReviewTrigger', 'indexeerTrigger', 'crmSyncTrigger', 'archiveerTrigger', 'herinneringTrigger', 'talentDagelijksTrigger', 'talentUrenTrigger'];  // v4.6: herinneringsmail bij taken met een tijd; v5.0: talentnetwerk (dagelijks) en de weekexport uit XPS
+var TRIGGERS = ['nachtelijkeReviewTrigger', 'indexeerTrigger', 'crmSyncTrigger', 'archiveerTrigger', 'herinneringTrigger', 'talentDagelijksTrigger', 'talentUrenTrigger', 'financienTrigger'];  // v6.5: prognose bevriezen op de eerste van de maand  // v4.6: herinneringsmail bij taken met een tijd; v5.0: talentnetwerk (dagelijks) en de weekexport uit XPS
 function triggerNamen() { return ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }); }
 function controleer() {
   var regels = ['Athena Assistent, backend ' + VERSIE];
@@ -124,6 +128,7 @@ function installeerTriggers() {
   ScriptApp.newTrigger('herinneringTrigger').timeBased().everyMinutes(15).create();              // v4.6: herinneringsmail een kwartier vóór een taak met tijd
   ScriptApp.newTrigger('talentDagelijksTrigger').timeBased().everyDays(1).atHour(6).nearMinute(30).create();  // v5.0: VOG, peiling, slapend, bewaartermijn, geocoderen, aanmeldingen
   ScriptApp.newTrigger('talentUrenTrigger').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(6).create();  // v5.0: weekexport van XPS inlezen
+  ScriptApp.newTrigger('financienTrigger').timeBased().onMonthDay(1).atHour(2).create();          // v6.5: prognose van deze maand bevriezen
 }
 
 // Optioneel: fictieve voorbeelddata om de app meteen gevuld te zien. Verwijder de rijen daarna gewoon in de Sheet.
@@ -751,7 +756,7 @@ function apiTrajectOpslaan(obj) {
   obj = obj || {};
   var velden = ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'schoolId',
     'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer',  // v3.8
-    'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging', 'xpsProject', 'talentscout'], schoon = {};  // v4.0; v4.1: xpsProject; v6.4: talentscout
+    'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging', 'xpsProject', 'talentscout', 'contractwaarde'], schoon = {};  // v4.0; v4.1: xpsProject; v6.4: talentscout
   velden.forEach(function (k) { if (obj[k] !== undefined) schoon[k] = obj[k]; });
   if (schoon.schoolId) { var sch = vind('Scholen', schoon.schoolId); if (!sch) throw new Error('School niet gevonden.'); schoon.school = sch.naam; if (!schoon.plaats) schoon.plaats = sch.plaats || ''; }  // v3.7: project aan een CRM-school koppelen
   if (!String(schoon.school || '').trim() && !schoon.id) throw new Error('School is verplicht.');
@@ -767,6 +772,7 @@ function apiTrajectOpslaan(obj) {
     if (schoon[x[0]] && keuzelijst(x[1]).indexOf(schoon[x[0]]) < 0) throw new Error('Onbekende waarde voor ' + x[0] + '.');
   });
   if (!schoon.id && !schoon.schooljaar) schoon.schooljaar = huidigSchooljaar();
+  if (schoon.contractwaarde !== undefined && schoon.contractwaarde !== '') { schoon.contractwaarde = Number(String(schoon.contractwaarde).replace(',', '.')); if (!isFinite(schoon.contractwaarde) || schoon.contractwaarde < 0) throw new Error('Ongeldige contractwaarde.'); }  // v6.5
   if (schoon.talentscout !== undefined) { schoon.talentscout = String(schoon.talentscout || '').trim(); if (schoon.talentscout && teamNamen('talent').indexOf(schoon.talentscout) < 0) throw new Error('Kies een talentscout uit het talentteam.'); }  // v6.4
   var t = metLock(function () {
     controleerConflict('Trajecten', schoon.id, schoon, obj._oud);  // v3.3
@@ -791,7 +797,7 @@ function trajectUit(t) {
     urenPerWeek: Number(t.urenPerWeek) || 0, tarief: Number(t.tarief) || 0, omzet: Number(t.omzet) || 0, contactpersoon: t.contactpersoon, am: t.am, samenvatting: t.samenvatting, bijgewerkt: t.bijgewerkt,
     kansId: t.kansId || '', adviseur: t.adviseur || '', soortFacturatie: t.soortFacturatie || '', gefactureerd: t.gefactureerd || '', factuurDatum: t.factuurDatum || '', vakanties: t.vakanties || '',
     bijzonderheden: t.bijzonderheden || '', factuurnummer: t.factuurnummer || '',  // v3.8
-    contactgegevens: t.contactgegevens || '', voorstelUrl: t.voorstelUrl || '', documentenUrl: t.documentenUrl || '', xpsProject: t.xpsProject || '', verlenging: t.verlenging || '', talentscout: t.talentscout || '' };  // v4.0; v6.4: talentscout
+    contactgegevens: t.contactgegevens || '', voorstelUrl: t.voorstelUrl || '', documentenUrl: t.documentenUrl || '', xpsProject: t.xpsProject || '', verlenging: t.verlenging || '', talentscout: t.talentscout || '', contractwaarde: t.contractwaarde === '' || t.contractwaarde == null ? '' : Number(t.contractwaarde) || 0 };  // v4.0; v6.4: talentscout
 }
 
 /* ===================== 6. CRM: scholen, personen, kansen, taken, tracks, historie en rapportage (v2.0: vervangt Capsule) ===================== */
@@ -971,7 +977,7 @@ function controleerConflict(tab, id, nieuw, oud) {
 function schoolUit(s) {
   return { id: s.id, naam: s.naam, plaats: s.plaats, type: s.type, bestuur: s.bestuur, adres: s.adres, website: s.website, leerlingen: s.leerlingen, telefoon: s.telefoon, email: s.email,
     status: s.status, eigenaar: s.eigenaar || s.am || '', tags: tagsUit(s.tags), velden: veldenUit(s.velden), contactpersoon: s.contactpersoon, notities: s.notities,
-    laatsteContact: s.laatsteContact, aangemaakt: s.aangemaakt, bijgewerkt: s.bijgewerkt };
+    laatsteContact: s.laatsteContact, aangemaakt: s.aangemaakt, bijgewerkt: s.bijgewerkt, betaaltermijn: s.betaaltermijn === '' || s.betaaltermijn == null ? '' : Number(s.betaaltermijn) || '' };  // v6.5
 }
 function persoonUit(p, sMap) {
   var s = sMap ? sMap[String(p.schoolId)] : null;
@@ -1110,7 +1116,7 @@ function apiPersoon(id) {
     tijdlijn: tijdlijn(lees('Activiteiten').filter(function (a) { return String(a.persoonId) === String(id) && zicht(a); }), sMap, pMap, kMap)
   };
 }
-var SCHOOL_VELDEN = ['id', 'naam', 'plaats', 'type', 'bestuur', 'adres', 'website', 'leerlingen', 'telefoon', 'email', 'status', 'eigenaar', 'tags', 'velden', 'notities', 'contactpersoon'];
+var SCHOOL_VELDEN = ['id', 'naam', 'plaats', 'type', 'bestuur', 'adres', 'website', 'leerlingen', 'telefoon', 'email', 'status', 'eigenaar', 'tags', 'velden', 'notities', 'contactpersoon', 'betaaltermijn'];  // v6.5: betaaltermijn
 function apiSchoolOpslaan(obj) {
   eis('relaties', 'wijzigen');  // v4.0
   var o = schoon(obj || {}, SCHOOL_VELDEN), oud = o.id ? vind('Scholen', o.id) : null;
@@ -1122,6 +1128,7 @@ function apiSchoolOpslaan(obj) {
   if (o.tags !== undefined) o.tags = tagsIn(o.tags);
   if (o.velden !== undefined) o.velden = veldenUit(o.velden);
   if (o.email !== undefined) o.email = klein(o.email);
+  if (o.betaaltermijn !== undefined && o.betaaltermijn !== '') { o.betaaltermijn = Math.round(Number(o.betaaltermijn)); if (!(o.betaaltermijn >= 0 && o.betaaltermijn <= 365)) throw new Error('Betaaltermijn in dagen (0 tot 365).'); }  // v6.5
   if (!oud) { o.aangemaakt = nu(); o.eigenaar = o.eigenaar || ikNaam(); o.status = o.status || 'lead'; }
   return metLock(function () {
     controleerConflict('Scholen', o.id, o, obj && obj._oud);  // v3.3
@@ -2365,7 +2372,9 @@ var RECHTEN = {
   kandidaten: { consultancy: ['geen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['alles', 'alles'] },
   // v5.0: het talentnetwerk. 'eigen' = het talent is kandidaat in een project dat ik mag zien (de AM ziet dan een beperkt profiel en beoordeelt per plaatsing)
   talenten:      { consultancy: ['geen', 'geen'], accountmanagement: ['eigen', 'geen'], talent: ['alles', 'alles'] },
-  beoordelingen: { consultancy: ['geen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['alles', 'alles'] }
+  beoordelingen: { consultancy: ['geen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['alles', 'alles'] },
+  // v6.5: Financiën leest alleen (bewerken blijft in Facturatie): de AM zijn projecten, de consultant de projecten waar hij adviseur is, talent niets
+  financien:     { consultancy: ['eigen', 'geen'], accountmanagement: ['eigen', 'geen'], talent: ['geen', 'geen'] }
 };
 function niveau(onderdeel, actie) {
   if (isBeheerder()) return 'alles';
@@ -3090,7 +3099,7 @@ function apiProject(id) {
 function facturatieKeuzes() { return { soortFacturatie: keuzelijst('soortFacturatie'), gefactureerd: keuzelijst('gefactureerd'), vakanties: keuzelijst('vakanties'), factuurStatussen: keuzelijst('factuurStatussen'), trajectStatussen: trajectStatussen() }; }
 function factuurUit(f) {
   return { id: f.id, trajectId: f.trajectId, omschrijving: f.omschrijving, bedrag: Number(f.bedrag) || 0, datum: f.datum || '', status: f.status || 'nog te doen', factuurnummer: f.factuurnummer || '',
-    bijzonderheden: f.bijzonderheden || '', exactId: f.exactId || '', door: f.door || '' };
+    bijzonderheden: f.bijzonderheden || '', exactId: f.exactId || '', door: f.door || '', verzonden: datumIn(f.verzonden), betaald: datumIn(f.betaald) };  // v6.5
 }
 function facturenVan(trajectId, alle) {
   return (alle || lees('Facturen')).filter(function (f) { return String(f.trajectId) === String(trajectId); })
@@ -3107,7 +3116,7 @@ function apiFacturatie() {
     keuzes: facturatieKeuzes(), gebruikers: gebruikersNamen(), ik: ikUit()
   };
 }
-var FACTUUR_VELDEN = ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden'];
+var FACTUUR_VELDEN = ['id', 'trajectId', 'omschrijving', 'bedrag', 'datum', 'status', 'factuurnummer', 'bijzonderheden', 'verzonden', 'betaald'];  // v6.5: verzonden en betaald
 function apiFactuurOpslaan(obj) {
   obj = obj || {};
   var o = schoon(obj, FACTUUR_VELDEN), oud = o.id ? vind('Facturen', o.id) : null;
@@ -3120,6 +3129,15 @@ function apiFactuurOpslaan(obj) {
   if (o.omschrijving !== undefined) o.omschrijving = String(o.omschrijving).trim();
   if (!oud && !o.omschrijving) throw new Error('Geef de termijn een omschrijving.');
   if (!oud) { o.aangemaakt = nu(); o.door = ikNaam(); o.status = o.status || keuzelijst('factuurStatussen')[0]; }
+  // v6.5: verzend- en betaaldatum volgen de status (vandaag), tenzij ze zelf zijn ingevuld; terug naar een eerdere status wist ze
+  ['verzonden', 'betaald'].forEach(function (k) { if (o[k] !== undefined && o[k] !== '') { o[k] = datumIn(o[k]); if (!o[k]) throw new Error('Ongeldige datum bij ' + k + '.'); } });
+  if (o.status !== undefined && (!oud || o.status !== oud.status)) {
+    var vandaag = datumStr(new Date()), heeft = function (k) { return o[k] !== undefined ? o[k] : (oud ? oud[k] : ''); };
+    if ((o.status === 'verzonden' || o.status === 'betaald') && !heeft('verzonden')) o.verzonden = o.status === 'betaald' && oud && oud.datum && oud.datum < vandaag && oud.status !== 'verzonden' ? datumIn(oud.datum) : vandaag;
+    if (o.status === 'betaald' && !heeft('betaald')) o.betaald = vandaag;
+    if (o.status === 'verzonden' && o.betaald === undefined) o.betaald = '';
+    if (['nog te doen', 'aangemaakt'].indexOf(o.status) >= 0) { if (o.verzonden === undefined) o.verzonden = ''; if (o.betaald === undefined) o.betaald = ''; }
+  }
   var f = metLock(function () { controleerConflict('Facturen', o.id, o, obj._oud); return schrijf('Facturen', o); });
   return factuurUit(f);
 }
@@ -4404,6 +4422,197 @@ function heractivatieMail(t, token) {
 function bevestigingsMail(t, token) {
   talentMail(t, 'Welkom bij ' + huisstijl().bedrijf, 'aanmelding', 'Je aanmelding is binnen', 'Dank voor je aanmelding. Het talentteam neemt binnenkort contact met je op voor een kennismaking.\nWil je alvast je beschikbaarheid per dagdeel doorgeven? Dat helpt ons bij het plannen.',
     [{ tekst: 'Beschikbaarheid doorgeven', url: portaalLink(token, '') }]);
+}
+
+/* ===================== 14. Financiën (v6.5): prognose, gefactureerd, ontvangen en geleverd per schooljaar, school, project en maand ===================== */
+// Alle bedragen in centen (gehele getallen), zodat sommen exact kloppen; de app deelt door 100.
+// Prognose = contractwaarde verdeeld volgens de facturatieafspraak (de termijnen als die er zijn, anders start/eind, vooraf/achteraf en vakanties).
+// Gefactureerd = termijnen met een verzenddatum in de maand; ontvangen = met een betaaldatum in de maand; geleverd = uren uit XPS × tarief.
+// Termijnen van vóór v6.5 hebben geen verzend- of betaaldatum: dan telt de termijndatum als schatting (en zegt de app dat).
+var FIN_REEKSEN = ['prognose', 'prognoseKas', 'gefactureerd', 'ontvangen', 'geleverd'];
+var EXACT_KOLOMMEN = { factuurnummer: 'Factuurnummer', datum: 'Factuurdatum', bedrag: 'Bedrag', betaald: 'Betaaldatum' };
+// Laatste dag van elke maand van 'van' (eerste van een maand) t/m 'tot'; juli en augustus overslaan als de vakanties niet doorbetaald worden
+function maandEinden(van, tot, zomerVrij) {
+  var u = []; if (!van || !tot) return u;
+  for (var d = new Date(van.getFullYear(), van.getMonth(), 1); d <= tot && u.length < 36; d = new Date(d.getFullYear(), d.getMonth() + 1, 1))
+    if (!(zomerVrij && (d.getMonth() === 6 || d.getMonth() === 7))) u.push(datumStr(new Date(d.getFullYear(), d.getMonth() + 1, 0)));
+  return u;
+}
+function euroTekst(c) { return '€ ' + String(Math.round(c / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+function centen(x) { var n = Number(String(x == null ? '' : x).replace(',', '.')); return isFinite(n) ? Math.round(n * 100) : 0; }
+function maandVan(d) { return String(d || '').slice(0, 7); }
+function plusDagenVan(datum, n) { var d = parseDatum(datum); if (!d) return ''; d.setDate(d.getDate() + n); return datumStr(d); }
+function schooljaarMaanden(sj) { var j = Number(String(sj).slice(0, 4)), u = []; for (var i = 0; i < 12; i++) { var m = 7 + i; u.push((j + Math.floor(m / 12)) + '-' + ('0' + (m % 12 + 1)).slice(-2)); } return u; }  // augustus t/m juli
+function standaardBetaaltermijn() { var n = Number(instelling('betaaltermijnDagen')); return n > 0 ? n : 30; }
+// Verzend- en betaaldatum van een termijn; zonder datum (oude termijnen) de termijndatum als schatting
+function verzondenVan(f) { if (f.verzonden) return { datum: datumIn(f.verzonden), geschat: false }; return ['verzonden', 'betaald'].indexOf(f.status) >= 0 && f.datum ? { datum: datumIn(f.datum), geschat: true } : null; }
+function betaaldVan(f) { if (f.betaald) return { datum: datumIn(f.betaald), geschat: false }; if (f.status !== 'betaald') return null; var v = verzondenVan(f); return v ? { datum: v.datum, geschat: true } : null; }
+
+// De facturatieafspraak van één project als posten {datum, bedrag in centen}; de som is altijd precies de contractwaarde (rest op de laatste post).
+function prognoseVan(t, termijnen) {
+  var contract = centen(t.contractwaarde || t.omzet), som = 0, posten = [], signalen = [], ongepland = 0, bron;
+  if (termijnen.length) {
+    bron = 'termijnen';
+    termijnen.forEach(function (f) { var b = centen(f.bedrag); som += b; if (f.datum) posten.push({ datum: datumIn(f.datum), bedrag: b }); else ongepland += b; });
+    if (!contract) { contract = som; signalen.push('geen contractwaarde: de termijnen tellen als contract'); }
+    else if (som !== contract) {
+      var rest = contract - som;
+      posten.sort(function (a, b) { return a.datum.localeCompare(b.datum); });
+      // te weinig ingepland: het restant over de maanden na de laatste termijn tot het einde van het project (zoals de afspraak), anders op de laatste termijn
+      var na = rest > 0 && posten.length ? maandEinden(new Date(Number(posten[posten.length - 1].datum.slice(0, 4)), Number(posten[posten.length - 1].datum.slice(5, 7)), 1), parseDatum(t.eind), t.vakanties === 'niet doorbetaald') : [];
+      if (na.length) { var stuk = Math.floor(rest / na.length); na.forEach(function (m, i) { posten.push({ datum: m, bedrag: i === na.length - 1 ? rest - stuk * (na.length - 1) : stuk }); }); }
+      else if (posten.length) posten[posten.length - 1].bedrag += rest; else ongepland += rest;
+      signalen.push(rest > 0 ? euroTekst(rest) + ' van het contract staat nog niet in termijnen' + (na.length ? '; verdeeld over de maanden tot het einde van het project' : '') : 'termijnen zijn ' + euroTekst(-rest) + ' hoger dan het contract (meerwerk?)');
+    }
+  } else if (contract) {
+    bron = 'afspraak';
+    var start = parseDatum(t.start), eind = parseDatum(t.eind) || (t.schooljaar ? new Date(Number(String(t.schooljaar).slice(5, 9)), 6, 31) : null);
+    if (!start) { ongepland = contract; signalen.push('geen startdatum: de prognose is niet over maanden te verdelen'); }
+    else if (t.soortFacturatie === 'vooraf') posten.push({ datum: datumIn(t.factuurDatum) || datumStr(start), bedrag: contract });  // ⚠️ vooraf = één factuur aan het begin
+    else {
+      if (!eind || eind < start) eind = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+      var maanden = maandEinden(new Date(start.getFullYear(), start.getMonth(), 1), eind, t.vakanties === 'niet doorbetaald');
+      if (!maanden.length) maanden.push(datumStr(start));
+      var per = Math.floor(contract / maanden.length);
+      maanden.forEach(function (m, i) { posten.push({ datum: m, bedrag: i === maanden.length - 1 ? contract - per * (maanden.length - 1) : per }); });
+    }
+  } else bron = 'geen';
+  return { contract: contract, posten: posten, ongepland: ongepland, signalen: signalen, bron: bron };
+}
+// Uren uit XPS (TalentUren) × tarief, per maand (de maandag van de week bepaalt de maand)
+function maandagVanWeek(w) {
+  var m = /^(\d{4})-W(\d{2})$/.exec(String(w || '')); if (!m) return '';
+  var jan4 = new Date(Number(m[1]), 0, 4, 12), ma = new Date(jan4.getTime() - ((jan4.getDay() + 6) % 7) * 86400000);
+  return datumStr(new Date(ma.getTime() + (Number(m[2]) - 1) * 7 * 86400000));
+}
+function geleverdVan(t, uren) {
+  var tarief = centen(t.tarief), u = {}; if (!tarief) return u;
+  uren.forEach(function (r) { var m = maandVan(maandagVanWeek(r.week)); if (m) u[m] = (u[m] || 0) + Math.round((Number(r.uren) || 0) * tarief); });
+  return u;
+}
+function leegReeks() { var r = {}; FIN_REEKSEN.concat(['prognoseToen']).forEach(function (k) { r[k] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; }); return r; }
+function telBij(doel, bron) { Object.keys(bron).forEach(function (k) { if (doel[k]) for (var i = 0; i < 12; i++) doel[k][i] += bron[k][i]; }); }
+
+// Het hele financiële beeld van één project (alle schooljaren), los van rechten; apiFinancien en het bevriezen gebruiken het
+function financienProject(t, termijnen, uren, termijnDagen) {
+  var p = prognoseVan(t, termijnen), uit = { prognose: {}, prognoseKas: {}, gefactureerd: {}, ontvangen: {}, geleverd: geleverdVan(t, uren) };
+  var bij = function (reeks, datum, bedrag) { var m = maandVan(datum); if (m) uit[reeks][m] = (uit[reeks][m] || 0) + bedrag; };
+  p.posten.forEach(function (x) { bij('prognose', x.datum, x.bedrag); bij('prognoseKas', plusDagenVan(x.datum, termijnDagen), x.bedrag); });
+  var gef = 0, ontv = 0, geschat = false, ouderdom = { '0-30': 0, '31-60': 0, '60+': 0 }, betaaltijden = [], vandaag = datumStr(new Date());
+  termijnen.forEach(function (f) {
+    var v = verzondenVan(f), b = betaaldVan(f), bedrag = centen(f.bedrag);
+    if (v) { gef += bedrag; bij('gefactureerd', v.datum, bedrag); geschat = geschat || v.geschat; }
+    if (b) { ontv += bedrag; bij('ontvangen', b.datum, bedrag); geschat = geschat || b.geschat; if (v && !b.geschat && !v.geschat) { var dt = dagenTussen(v.datum, b.datum); if (dt !== null && dt >= 0) betaaltijden.push(dt); } }
+    if (v && !b) { var oud = dagenTussen(v.datum, vandaag) || 0; ouderdom[oud <= 30 ? '0-30' : oud <= 60 ? '31-60' : '60+'] += bedrag; }
+  });
+  return { per: uit, contract: p.contract, ongepland: p.ongepland, signalen: p.signalen, bron: p.bron, gefactureerd: gef, ontvangen: ontv, nogTeFactureren: p.contract - gef, openstaand: gef - ontv,
+    ouderdom: ouderdom, betaaltijden: betaaltijden, geschat: geschat, prognosePosten: p.posten };
+}
+function financienData() {
+  var fac = {}, uren = {};
+  lees('Facturen').forEach(function (f) { (fac[f.trajectId] = fac[f.trajectId] || []).push(f); });
+  lees('TalentUren').forEach(function (r) { if (r.trajectId) (uren[r.trajectId] = uren[r.trajectId] || []).push(r); });
+  return { fac: fac, uren: uren, scholen: perId(lees('Scholen')), standaardDagen: standaardBetaaltermijn() };
+}
+function termijnDagenVan(t, D) { var s = D.scholen[t.schoolId]; var n = s && Number(s.betaaltermijn); return n > 0 ? n : D.standaardDagen; }
+
+function apiFinancien(schooljaar) {
+  eis('financien', 'zien');
+  var sj = /^\d{4}-\d{4}$/.test(String(schooljaar || '')) ? schooljaar : huidigSchooljaar(), maanden = schooljaarMaanden(sj), D = financienData(), nuM = maandVan(datumStr(new Date()));
+  var bevroren = {}; lees('Prognoses').forEach(function (r) { if (r.gemaakt === r.maand) bevroren[r.trajectId + '|' + r.maand] = Number(r.kas) || 0; });  // de prognose zoals die op de eerste van die maand was
+  var sjs = {}, perSchool = {}, totaal = leegReeks(), tot = { contract: 0, gefactureerd: 0, ontvangen: 0, nogTeFactureren: 0, openstaand: 0, ouderdom: { '0-30': 0, '31-60': 0, '60+': 0 } }, betaaltijdenAlle = [], geschatAlle = false;
+  lees('Trajecten').filter(function (t) { return mag('financien', 'zien', t); }).forEach(function (t) {
+    if (t.schooljaar) sjs[t.schooljaar] = 1;
+    var F = financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], termijnDagenVan(t, D)), r = leegReeks(), iets = false;
+    maanden.forEach(function (m, i) {
+      FIN_REEKSEN.forEach(function (k) { if (F.per[k][m]) { r[k][i] = F.per[k][m]; iets = true; } });
+      if (m <= nuM && bevroren[t.id + '|' + m] !== undefined) r.prognoseToen[i] = bevroren[t.id + '|' + m];
+    });
+    if (!iets && t.schooljaar !== sj) return;
+    var sleutel = t.schoolId || ('naam:' + klein(t.school)), s = perSchool[sleutel];
+    if (!s) { var sc = D.scholen[t.schoolId]; s = perSchool[sleutel] = { schoolId: t.schoolId || '', naam: (sc && sc.naam) || t.school || '(zonder school)', betaaltermijn: termijnDagenVan(t, D), reeksen: leegReeks(), projecten: [],
+      contract: 0, gefactureerd: 0, ontvangen: 0, nogTeFactureren: 0, openstaand: 0, ouderdom: { '0-30': 0, '31-60': 0, '60+': 0 }, betaaltijden: [], geschat: false }; }
+    s.projecten.push({ id: t.id, traject: t.traject, schooljaar: t.schooljaar, status: t.status, am: t.am || '', adviseur: t.adviseur || '', soortFacturatie: t.soortFacturatie || '', bron: F.bron, reeksen: r,
+      contract: F.contract, ongepland: F.ongepland, gefactureerd: F.gefactureerd, ontvangen: F.ontvangen, nogTeFactureren: F.nogTeFactureren, openstaand: F.openstaand, ouderdom: F.ouderdom, signalen: F.signalen, geschat: F.geschat,
+      gemBetaaltijd: F.betaaltijden.length ? Math.round(F.betaaltijden.reduce(function (a, b) { return a + b; }, 0) / F.betaaltijden.length) : null });
+    telBij(s.reeksen, r); telBij(totaal, r);
+    ['contract', 'gefactureerd', 'ontvangen', 'nogTeFactureren', 'openstaand'].forEach(function (k) { s[k] += F[k]; tot[k] += F[k]; });
+    Object.keys(F.ouderdom).forEach(function (k) { s.ouderdom[k] += F.ouderdom[k]; tot.ouderdom[k] += F.ouderdom[k]; });
+    s.betaaltijden = s.betaaltijden.concat(F.betaaltijden); betaaltijdenAlle = betaaltijdenAlle.concat(F.betaaltijden); s.geschat = s.geschat || F.geschat; geschatAlle = geschatAlle || F.geschat;
+  });
+  var gem = function (l) { return l.length ? Math.round(l.reduce(function (a, b) { return a + b; }, 0) / l.length) : null; };
+  var scholen = Object.keys(perSchool).map(function (k) { var s = perSchool[k]; s.gemBetaaltijd = gem(s.betaaltijden); delete s.betaaltijden; s.projecten.sort(function (a, b) { return String(a.traject).localeCompare(String(b.traject)); }); return s; })
+    .sort(function (a, b) { return String(a.naam).localeCompare(String(b.naam)); });
+  sjs[sj] = 1; sjs[huidigSchooljaar()] = 1;
+  tot.gemBetaaltijd = gem(betaaltijdenAlle);
+  return { schooljaar: sj, schooljaren: Object.keys(sjs).sort().reverse(), maanden: maanden, huidigeMaand: nuM, scholen: scholen, reeksen: totaal, totalen: tot, geschat: geschatAlle,
+    standaardBetaaltermijn: D.standaardDagen, laatsteBevriezing: laatsteBevriezing(), exactKolommen: exactKolommen(), magImporteren: isBeheerder(), ik: ikUit() };
+}
+function laatsteBevriezing() { var l = ''; lees('Prognoses').forEach(function (r) { if (String(r.gemaakt) > l) l = String(r.gemaakt); }); return l; }
+
+// Op de eerste van de maand: de prognose van dit moment vastleggen, zodat later te zien is hoe goed hij was. Idempotent per maand.
+function financienBevriezen() {
+  var m = maandVan(datumStr(new Date()));
+  if (lees('Prognoses').some(function (r) { return r.gemaakt === m; })) return { maand: m, rijen: 0, al: true };
+  var D = financienData(), rijen = [];
+  lees('Trajecten').forEach(function (t) {
+    var F = financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], termijnDagenVan(t, D)), ms = {};
+    Object.keys(F.per.prognose).concat(Object.keys(F.per.prognoseKas)).forEach(function (x) { if (x >= m) ms[x] = 1; });
+    Object.keys(ms).forEach(function (x) { rijen.push({ gemaakt: m, trajectId: t.id, maand: x, prognose: F.per.prognose[x] || 0, kas: F.per.prognoseKas[x] || 0 }); });
+  });
+  if (!rijen.length) rijen.push({ gemaakt: m, trajectId: '', maand: m, prognose: 0, kas: 0 });  // ook een lege maand telt als bevroren
+  metLock(function () { schrijfVeel('Prognoses', rijen); });
+  return { maand: m, rijen: rijen.length, al: false };
+}
+function financienTrigger() { GEBRUIKER = null; try { financienBevriezen(); } catch (e) { Logger.log('Prognose bevriezen mislukt: ' + e); } }
+function apiFinancienBevriezen() { alleenBeheerder(); return financienBevriezen(); }
+
+// Afstemming met Exact Online: een export van verkoopfacturen (csv) koppelt op factuurnummer en zet de verzend- en betaaldatum.
+// Kolomnamen instelbaar (Instellingen exactKolommen), want het formaat van de export verschilt per administratie. ⚠️ Nog niet getest op een echte export.
+function exactKolommen() { var k = instelling('exactKolommen'), u = {}; Object.keys(EXACT_KOLOMMEN).forEach(function (x) { u[x] = (k && k[x]) || EXACT_KOLOMMEN[x]; }); return u; }
+function bedragIn(s) { s = String(s == null ? '' : s).replace(/[€\s]/g, ''); if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); else s = s.replace(/,/g, ''); var n = Number(s); return isFinite(n) ? Math.round(n * 100) : null; }
+function datumUitExport(s) { s = String(s || '').trim(); var d = parseDatum(s) || parseDatumNl(s.replace(/\//g, '-')); return d ? datumStr(d) : ''; }
+function apiExactImport(tekst, opties) {
+  alleenBeheerder(); opties = opties || {};
+  tekst = String(tekst || '').replace(/^﻿/, ''); if (!tekst.trim()) throw new Error('Het bestand is leeg.');
+  if (tekst.length > 3 * 1024 * 1024) throw new Error('Het bestand is groter dan 3 MB; exporteer een kortere periode.');
+  var kol = exactKolommen(); if (opties.kolommen && typeof opties.kolommen === 'object') Object.keys(EXACT_KOLOMMEN).forEach(function (x) { if (opties.kolommen[x]) kol[x] = String(opties.kolommen[x]).trim(); });
+  var rijen = Utilities.parseCsv(tekst, (tekst.split('\n')[0] || '').indexOf(';') >= 0 ? ';' : ','), kop = (rijen[0] || []).map(function (h) { return String(h).trim(); });
+  var idx = {}; Object.keys(kol).forEach(function (x) { idx[x] = kop.map(klein).indexOf(klein(kol[x])); });
+  var mist = ['factuurnummer', 'datum', 'bedrag'].filter(function (x) { return idx[x] < 0; });
+  if (mist.length) throw new Error('Kolom niet gevonden: ' + mist.map(function (x) { return kol[x]; }).join(', ') + '. Kolommen in het bestand: ' + kop.join(', ') + '. Pas de kolomnamen aan.');
+  var exact = {}, datums = [];
+  rijen.slice(1).forEach(function (r) {
+    var nr = String(r[idx.factuurnummer] || '').trim(); if (!nr) return;
+    var x = { nummer: nr, datum: datumUitExport(r[idx.datum]), bedrag: bedragIn(r[idx.bedrag]), betaald: idx.betaald >= 0 ? datumUitExport(r[idx.betaald]) : '' };
+    if (exact[nr]) { exact[nr].bedrag = (exact[nr].bedrag || 0) + (x.bedrag || 0); if (x.betaald > exact[nr].betaald) exact[nr].betaald = x.betaald; } else exact[nr] = x;  // meerdere regels per factuur: optellen
+    if (x.datum) datums.push(x.datum);
+  });
+  datums.sort();
+  var van = datums[0] || '', tot = datums[datums.length - 1] || '', tMap = perId(lees('Trajecten')), gezien = {}, uit = { gekoppeld: 0, bijgewerkt: [], afwijkend: [], alleenExact: [], alleenAthena: [], van: van, tot: tot, kolommen: kol, toegepast: !!opties.toepassen };
+  var wijz = [];
+  lees('Facturen').forEach(function (f) {
+    var nr = String(f.factuurnummer || '').trim(), t = tMap[f.trajectId] || {}, waar = (t.school || '') + ' · ' + (t.traject || '') + ' · ' + (f.omschrijving || '');
+    if (!nr) return;
+    var x = exact[nr];
+    if (!x) { var v = verzondenVan(f); if (v && (!van || (v.datum >= van && v.datum <= tot))) uit.alleenAthena.push({ nummer: nr, waar: waar, bedrag: centen(f.bedrag) }); return; }
+    gezien[nr] = 1; uit.gekoppeld++;
+    if (x.bedrag !== null && x.bedrag !== centen(f.bedrag)) uit.afwijkend.push({ nummer: nr, waar: waar, athena: centen(f.bedrag), exact: x.bedrag });
+    var nieuw = { id: f.id }, veranderd = [];
+    if (x.datum && datumIn(f.verzonden) !== x.datum) { nieuw.verzonden = x.datum; veranderd.push('verzonden ' + x.datum); }
+    if (x.betaald && datumIn(f.betaald) !== x.betaald) { nieuw.betaald = x.betaald; veranderd.push('betaald ' + x.betaald); }
+    var status = x.betaald ? 'betaald' : (['nog te doen', 'aangemaakt'].indexOf(f.status) >= 0 ? 'verzonden' : f.status);
+    if (status !== f.status) { nieuw.status = status; veranderd.push('status ' + status); }
+    if (veranderd.length) { wijz.push(nieuw); uit.bijgewerkt.push({ nummer: nr, waar: waar, wat: veranderd.join(', ') }); }
+  });
+  Object.keys(exact).forEach(function (nr) { if (!gezien[nr]) uit.alleenExact.push({ nummer: nr, datum: exact[nr].datum, bedrag: exact[nr].bedrag }); });
+  if (opties.toepassen) metLock(function () {
+    if (wijz.length) schrijfVeel('Facturen', wijz);
+    if (opties.kolommen) zetInstelling('exactKolommen', kol);
+    schrijf('Activiteiten', { type: 'notitie', datum: nu(), door: ikNaam(), bron: 'exact', aangemaakt: nu(), onderwerp: 'Exact-import: ' + uit.gekoppeld + ' gekoppeld, ' + wijz.length + ' bijgewerkt',
+      tekst: 'Periode ' + van + ' t/m ' + tot + '. Alleen in Exact: ' + uit.alleenExact.length + '. Alleen in Athena: ' + uit.alleenAthena.length + '. Bedrag wijkt af: ' + uit.afwijkend.length + '.' });
+  });
+  return uit;
 }
 
 /* ===================== Claude API (raw HTTP via UrlFetchApp; Apps Script heeft geen SDK) ===================== */

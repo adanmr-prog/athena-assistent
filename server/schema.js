@@ -28,14 +28,15 @@ function versie() { if (_versie === null) { var m = /var VERSIE = '([^']+)'/.exe
 
 // Getalkolommen: in een Sheet komen deze als getal terug, dus ook uit Postgres (numeric). Alle andere kolommen zijn tekst.
 var NUMERIEK = {
-  Scholen: ['leerlingen', 'lat', 'lon'],
-  Trajecten: ['ondersteuners', 'urenPerWeek', 'tarief', 'omzet'],
+  Scholen: ['leerlingen', 'lat', 'lon', 'betaaltermijn'],  // v6.5: betaaltermijn
+  Trajecten: ['ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contractwaarde'],
   Kansen: ['waarde', 'kans'],
   Documenten: ['woorden'],
   Activiteiten: ['duurMin'], Activiteiten_archief: ['duurMin'],
   Mijlpalen: ['volgorde', 'kans', 'dagenNorm'],
   Doelen: ['doel'],
   Facturen: ['bedrag'],
+  Prognoses: ['prognose', 'kas'],  // v6.5: bevroren prognose per maand (centen)
   Vacatures: ['aantal', 'urenPerWeek'],
   Kandidaten: ['urenPerWeek'],
   Talenten: ['lat', 'lon', 'reisafstandKm', 'maxUrenWeek'],

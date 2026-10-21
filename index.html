@@ -306,6 +306,27 @@
   body.desk .detail-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 32px; align-items: start; }
   body.desk .detail-grid .knoppenrij { margin: 14px 0 0; padding: 0; flex-wrap: wrap; overflow: visible; }
   .tabel-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* v6.5: Financiën — maanden als kolommen, eerste kolom blijft staan bij horizontaal scrollen */
+  .fin-scroll { border: 1px solid var(--lijn); border-radius: 14px; background: var(--wit); margin-top: 12px; }
+  table.fin { border-collapse: separate; border-spacing: 0; font-size: 12.5px; width: 100%; min-width: 980px; font-variant-numeric: tabular-nums; }
+  table.fin th, table.fin td { padding: 5px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--lijn); }
+  table.fin th { background: var(--vlak); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--inkt2); }
+  table.fin .fin-naam { text-align: left; position: sticky; left: 0; background: var(--wit); min-width: 170px; max-width: 220px; white-space: normal; z-index: 1; }
+  table.fin th.fin-naam { background: var(--vlak); z-index: 2; }
+  table.fin .fin-reeks { text-align: left; color: var(--inkt2); font-size: 11.5px; }
+  table.fin .fin-tot { font-weight: 800; background: var(--vlak); }
+  table.fin tr:not(.eerste) td { border-bottom-color: transparent; }
+  table.fin tbody tr:last-child td { border-bottom: 1px solid var(--lijn); }
+  table.fin td.nu, table.fin th.nu { background: var(--paars-l); }
+  table.fin td.later { color: transparent; }
+  table.fin tr.r-gefactureerd td:not(.fin-naam):not(.fin-reeks) { color: var(--paars); }
+  table.fin tr.r-ontvangen td:not(.fin-naam):not(.fin-reeks) { color: var(--groen); font-weight: 700; }
+  table.fin tr.r-prognoseToen td:not(.fin-naam) { color: var(--inkt2); font-style: italic; }
+  table.fin tr.project .fin-naam { padding-left: 22px; }
+  table.fin tbody.fin-totaal td { background: var(--vlak); font-weight: 700; }
+  .fin-open { background: none; border: 0; padding: 8px 0; font: inherit; font-weight: 800; color: var(--inkt); cursor: pointer; text-align: left; min-height: 44px; }
+  .fin-project .waarschuwing { font-size: 11px; margin-top: 4px; }
+  .fin-ouderdom .chip.rood { border-color: var(--rood); color: var(--rood); }
   .dtabel { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--wit); border: 1px solid var(--lijn); border-radius: 12px; overflow: hidden; font-size: 14px; margin-top: 10px; }
   .dtabel th { text-align: left; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--inkt2); background: var(--vlak); padding: 9px 12px; white-space: nowrap; }
   .dtabel th[data-sorteer], .dtabel th[data-taaksorteer] { cursor: pointer; user-select: none; }  /* v4.6: ook de takentabel */
@@ -636,6 +657,7 @@
   <button class="zb-item" data-desk="bezetting" data-recht="vacatures"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 9.5-4.9"/><path d="m16 19 2 2 4-4"/></svg>Bezetting</button>  <!-- v4.1 -->
   <button class="zb-item" data-desk="talent" data-recht="talenten"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/><path d="m9 13 3 3 3-3"/></svg>Talent</button>  <!-- v5.0: talentnetwerk -->
   <button class="zb-item" data-desk="facturatie" data-recht="facturatie"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h8"/></svg>Facturatie</button>
+  <button class="zb-item" data-desk="financien" data-recht="financien"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>Financiën</button>  <!-- v6.5 -->
   <button class="zb-item" data-desk="rapporten"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg>Rapporten</button>
   <button class="zb-item" data-desk="doelen"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Doelen</button>
   <div class="zb-kop">Athena</div>
@@ -752,6 +774,11 @@
     <div id="factBalk" class="tl-filters"></div>
     <div id="factInhoud"><div class="spinner">Laden</div></div>
   </div>
+  <div class="view" id="view-financien">  <!-- v6.5: Financiën, gelezen uit Facturatie -->
+    <div class="hero"><h2>Financiën</h2><p>Per schooljaar en maand: wat we verwachten (offerte), wat we gefactureerd hebben, wat er binnen is en wat er geleverd is. Klik een school open voor de projecten.</p></div>
+    <div id="finBalk" class="tl-filters"></div>
+    <div id="finInhoud"><div class="spinner">Laden</div></div>
+  </div>
   <div class="view" id="view-trajecten">
     <div class="hero"><h2 id="projectHeroKop">Elk project, per accountmanager.</h2><p id="projectHeroTekst">Lopende en afgelopen projecten, verlengingen en examentrainingen. Tik op een project voor de tijdlijn, taken en facturatie.</p></div>
     <div class="chips" id="projectWeergaven"></div>  <!-- v4.0: weergaven zoals in monday -->
@@ -760,7 +787,7 @@
     <div class="filters" id="projectFilters"><select id="fSchooljaar"><option value="">Alle schooljaren</option></select><select id="fTraject"><option value="">Alle trajecten</option></select><select id="fStatus"><option value="">Alle statussen</option></select></div>
     <div class="kop"><span id="trajectKop">Projecten</span> <small id="trajectTelling"></small></div>
     <div id="trajectLijst"><div class="spinner">Laden</div></div>
-    <div class="d-acties"><button class="knop licht klein" id="nieuwTraject" data-nieuwproject="1" data-recht="projecten:wijzigen">Nieuw project</button><button class="knop licht klein" data-naarfacturatie="1" data-recht="facturatie">Facturatie</button></div>  <!-- v3.8 -->
+    <div class="d-acties"><button class="knop licht klein" id="nieuwTraject" data-nieuwproject="1" data-recht="projecten:wijzigen">Nieuw project</button><button class="knop licht klein" data-naarfacturatie="1" data-recht="facturatie">Facturatie</button><button class="knop licht klein" data-naarfinancien="1" data-recht="financien">Financiën</button></div>  <!-- v3.8 -->
     </div>
   </div>
 
@@ -824,7 +851,7 @@
 <script>
   /* v1.0: Athena Assistent — vijf modules op één Apps Script-backend (zie backend/README.md). Conventies: ES5, run(), esc(), md(), alles door esc() vóór innerHTML. */
   var S = { data: null, kennis: null, huis: null, trajecten: null, pWeergave: 'am', pAm: null, pOpen: {}, details: {}, open: {}, docFilter: '', docZoek: '', chat: leesChat(), bezig: false, filters: { zoek: '', schooljaar: '', traject: '', status: '' } };
-  var TITELS = { vandaag: 'Vandaag', relaties: 'Relaties', brein: 'Assistent', review: 'Dagstart', huisstijl: 'Studio',  /* v3.9: nieuwe namen */ trajecten: 'Projecten', facturatie: 'Facturatie', home: 'Home', agenda: 'Agenda', doelen: 'Doelen', portaal: 'Beschikbaarheid' };  // v2.0: Relaties; v3.0: desktop-weergaven; v5.0: portaal
+  var TITELS = { vandaag: 'Vandaag', relaties: 'Relaties', brein: 'Assistent', review: 'Dagstart', huisstijl: 'Studio',  /* v3.9: nieuwe namen */ trajecten: 'Projecten', facturatie: 'Facturatie', financien: 'Financiën', home: 'Home', agenda: 'Agenda', doelen: 'Doelen', portaal: 'Beschikbaarheid' };  // v2.0: Relaties; v3.0: desktop-weergaven; v5.0: portaal
   var TYPE_LABEL = { contract: 'Contracten', werkwijze: 'Werkwijzen', schooldossier: 'Schooldossiers', voorstel: 'Voorstellen', prijslijst: 'Prijslijst', overig: 'Overig' };
   var TYPE_KORT = { contract: 'CTR', werkwijze: 'WW', schooldossier: 'DOS', voorstel: 'VST', prijslijst: 'PRS', overig: 'DOC' };
   // v4.0: teams en rollen (de rechten zelf staan in de backend: ik.rechten); mail en agenda zijn per gebruiker
@@ -1776,6 +1803,14 @@
     var x = ev.target.closest('[data-nieuwproject]');
     if (x) { var ik0 = ikBen(); bewerkTraject({ status: 'opstart', schooljaar: schooljaarNu(), am: ik0 && ik0.team === 'accountmanagement' ? ik0.naam : '' }, function (t) { crmVerouderd(); if (CRM.basis) laadCrmBasis(); openProjectVanuit('projecten', t.id); }); return; }
     if (ev.target.closest('[data-naarfacturatie]')) { if (isDesk()) deskNaar('facturatie'); else wisselView('facturatie'); return; }
+    if (ev.target.closest('[data-naarfinancien]')) { if (isDesk()) deskNaar('financien'); else wisselView('financien'); return; }  // v6.5
+    var fx;  // v6.5: Financiën
+    if ((fx = ev.target.closest('[data-finopen]'))) { var fk = fx.getAttribute('data-finopen'); FIN.open[fk] = !FIN.open[fk]; renderFinancien(); return; }
+    if ((fx = ev.target.closest('[data-finkas]'))) { FIN.kas = fx.getAttribute('data-finkas') === '1'; renderFinancien(); return; }
+    if (ev.target.closest('[data-finexact]')) { exactVenster(); return; }
+    if ((fx = ev.target.closest('[data-finbevries]'))) { fx.disabled = true; run('apiFinancienBevriezen').then(function (r) { toast(r.al ? 'Deze maand was al vastgelegd.' : 'Prognose van ' + r.maand + ' vastgelegd.'); laadFinancien(); }).catch(function () { fx.disabled = false; }); return; }
+    if ((fx = ev.target.closest('[data-exactcontrole]'))) { exactDraai(false, fx); return; }
+    if ((fx = ev.target.closest('[data-exacttoepassen]'))) { exactDraai(true, fx); return; }
     if ((x = ev.target.closest('[data-pweergave]'))) { S.pWeergave = x.getAttribute('data-pweergave'); S.pWeergaveGekozen = true; if (isDesk()) zetZijbalk(S.pWeergave === 'bezetting' ? 'bezetting' : S.pWeergave === 'talent' ? 'talent' : 'projecten'); renderTrajecten(); return; }  // v4.0; v5.0: talent
     if ((x = ev.target.closest('[data-pam]'))) { S.pAm = x.getAttribute('data-pam'); renderTrajecten(); return; }
     if ((x = ev.target.closest('[data-bopen]'))) { S.bOpen = x.getAttribute('data-bopen') === '1'; renderTrajecten(); return; }  // v4.1
@@ -2163,6 +2198,16 @@
   document.addEventListener('change', function (ev) {
     var t = ev.target, x;
     if (t.id === 'tFunctie') { TAL.functie = t.value; renderTrajecten(); return; }
+    if (t.id === 'finSj') { FIN.sj = t.value; FIN.data = null; laadFinancien(); return; }  // v6.5
+    if (t.id === 'vf-exactbestand') {  // v6.5: de Exact-export als tekst inlezen (UTF-8; een export in Windows-1252 geeft alleen bij namen rare tekens, niet bij nummers en bedragen)
+      var bestand = t.files && t.files[0], knopC = el('vensterInhoud').querySelector('[data-exactcontrole]'); FIN.exactTekst = ''; if (knopC) knopC.disabled = true; if (!bestand) return;
+      if (bestand.size > 3 * 1048576) { toast('Het bestand is groter dan 3 MB; exporteer een kortere periode.'); return; }
+      var lezer = new FileReader();
+      lezer.onload = function () { FIN.exactTekst = String(lezer.result || ''); FIN.exactNaam = bestand.name; if (knopC) knopC.disabled = !FIN.exactTekst; };
+      lezer.onerror = function () { toast('Kon het bestand niet lezen.'); };
+      lezer.readAsText(bestand);
+      return;
+    }
     if (t.id === 'tSector') { TAL.sector = t.value; renderTrajecten(); return; }
     if (t.id === 'tVog') { TAL.vog = t.value; renderTrajecten(); return; }
     if (t.closest('.vink-chips')) { var lab = t.closest('label'); if (lab) lab.classList.toggle('aan', t.checked); return; }
@@ -2249,7 +2294,7 @@
     s = s || {};
     return [{ naam: 'naam', label: 'Naam', breed: true }, { naam: 'plaats', label: 'Plaats' }, { naam: 'type', label: 'Type', plaats: 'PO, VO, MBO, ISK' },
       { naam: 'status', label: 'Status', type: 'select', opties: metHuidig(CRM.basis.statussen.slice(), s.status) }, { naam: 'eigenaar', label: 'Eigenaar', type: 'select', opties: optiesGebruikers(s.eigenaar) },
-      { naam: 'bestuur', label: 'Bestuur' }, { naam: 'leerlingen', label: 'Leerlingen', type: 'number' }, { naam: 'email', label: 'E-mail', type: 'email' }, { naam: 'telefoon', label: 'Telefoon', type: 'tel' },
+      { naam: 'bestuur', label: 'Bestuur' }, { naam: 'leerlingen', label: 'Leerlingen', type: 'number' }, { naam: 'betaaltermijn', label: 'Betaaltermijn (dagen)', type: 'number', plaats: 'leeg = standaard (30)' }, { naam: 'email', label: 'E-mail', type: 'email' }, { naam: 'telefoon', label: 'Telefoon', type: 'tel' },  // v6.5: betaaltermijn
       { naam: 'website', label: 'Website', breed: true, plaats: 'school.nl (voor het koppelen van mail)' }, { naam: 'adres', label: 'Adres', breed: true },
       { naam: 'tags', label: 'Tags (met komma\'s)', breed: true }, { naam: 'notities', label: 'Notities', type: 'textarea' }, { naam: 'velden', label: 'Eigen velden (veld: waarde, één per regel)', type: 'textarea' }]
       .concat(s.contactpersoon ? [{ naam: 'contactpersoon', label: 'Contactpersoon (oud veld; leegmaken als de persoon onder Personen staat)', breed: true }] : []);  // v3.7
@@ -3194,7 +3239,7 @@
     var ik = ikBen(); if (!ik) return;
     el('zbNaam').textContent = ik.naam + ' · ' + functieApp(ik);
     document.querySelectorAll('[data-recht]').forEach(function (x) { var r = x.getAttribute('data-recht').split(':'); x.style.display = magApp(r[0], r[1]) ? '' : 'none'; });
-    if (isDesk() && ((DESK.item === 'pipeline' && !magApp('pipeline')) || (DESK.item === 'facturatie' && !magApp('facturatie')) || (DESK.item === 'bezetting' && !magApp('vacatures')) || (DESK.item === 'talent' && !magApp('talenten')))) deskNaar('home');  // v5.0: talent
+    if (isDesk() && ((DESK.item === 'pipeline' && !magApp('pipeline')) || (DESK.item === 'facturatie' && !magApp('facturatie')) || (DESK.item === 'financien' && !magApp('financien')) || (DESK.item === 'bezetting' && !magApp('vacatures')) || (DESK.item === 'talent' && !magApp('talenten')))) deskNaar('home');  // v5.0: talent
   }
   function kopie(o) { var u = {}; Object.keys(o || {}).forEach(function (k) { u[k] = o[k]; }); return u; }
   // Alleen de gewijzigde velden, met _oud voor de conflictcontrole (v3.3). null = niets gewijzigd.
@@ -3371,7 +3416,7 @@
     return [{ naam: 'schoolId', label: 'School in het CRM', type: 'select', opties: optiesScholen(), breed: true }, { naam: 'school', label: 'Schoolnaam (alleen als de school niet in het CRM staat)', breed: true },
       { naam: 'traject', label: 'Traject', breed: true }, { naam: 'schooljaar', label: 'Schooljaar', plaats: '2026-2027' }, { naam: 'status', label: 'Status', type: 'select', opties: metHuidig(trajectStatussenApp().slice(), t.status) },
       { naam: 'start', label: 'Start', type: 'date' }, { naam: 'eind', label: 'Eind', type: 'date' }, { naam: 'ondersteuners', label: 'Ondersteuners', type: 'number' }, { naam: 'urenPerWeek', label: 'Uren per week', type: 'number' },
-      { naam: 'tarief', label: 'Tarief (€/u)', type: 'number' }, { naam: 'omzet', label: 'Omzet (€)', type: 'number' }, { naam: 'contactpersoon', label: 'Contactpersoon', breed: true },
+      { naam: 'tarief', label: 'Tarief (€/u)', type: 'number' }, { naam: 'omzet', label: 'Omzet (€)', type: 'number' }, { naam: 'contractwaarde', label: 'Contractwaarde (€, getekend voorstel)', type: 'number' }, { naam: 'contactpersoon', label: 'Contactpersoon', breed: true },  // v6.5: contractwaarde voor Financiën
       { naam: 'am', label: 'Accountmanager', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('accountmanagement', t.am)) }, { naam: 'adviseur', label: 'Onderwijsconsultant', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('consultancy', t.adviseur)) },
       { naam: 'talentscout', label: 'Talentscout', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('talent', t.talentscout)) },  // v6.4
       { naam: 'contactgegevens', label: 'Contactgegevens (naam, telefoon, e-mail)', type: 'textarea' }, { naam: 'voorstelUrl', label: 'Samenwerkingsvoorstel (link)', type: 'url', breed: true, plaats: 'https://docs.google.com/…' },
@@ -3684,10 +3729,100 @@
     alle.forEach(function (x) { x[veld] = veld === 'bedrag' ? (Number(String(waarde).replace(',', '.')) || 0) : waarde; });
     run('apiFactuurOpslaan', obj).catch(factFout);
   }
+  /* --- v6.5: Financiën. Per schooljaar (aug–jul), per school met de projecten eronder, per maand: prognose (offerte), gefactureerd, ontvangen en geleverd. Alleen lezen; bewerken blijft in Facturatie. Bedragen komen in centen. --- */
+  var FIN = { data: null, sj: '', open: {}, kas: false, exactTekst: '', exactNaam: '' };
+  var FIN_LABEL = { prognose: 'Prognose (offerte)', prognoseKas: 'Prognose (binnenkomst)', gefactureerd: 'Gefactureerd', ontvangen: 'Ontvangen', geleverd: 'Geleverd (uren)', prognoseToen: 'Prognose toen (binnenkomst)' };
+  function laadFinancien() {
+    if (!FIN.data) el('finInhoud').innerHTML = '<div class="spinner">Laden</div>';
+    run('apiFinancien', FIN.sj).then(function (d) { FIN.data = d; FIN.sj = d.schooljaar; if (el('view-financien').classList.contains('actief')) renderFinancien(); })
+      .catch(function () { if (!FIN.data) el('finInhoud').innerHTML = '<div class="leeg">Kon Financiën niet laden.</div>'; });
+  }
+  function finBedrag(c, nul) { c = Number(c) || 0; return c ? euro(c / 100) : (nul || ''); }
+  function finSom(l) { return (l || []).reduce(function (a, b) { return a + (Number(b) || 0); }, 0); }
+  function finMaandLabel(m) { var x = String(m).split('-'); return MAANDEN_KORT[Number(x[1]) - 1] + (x[1] === '01' || x[1] === '08' ? ' ’' + x[0].slice(2) : ''); }
+  // Welke reeksen een regel toont: de prognose (factuurmoment of binnenkomst), gefactureerd, ontvangen; geleverd en "prognose toen" alleen als er iets in staat
+  function finReeksen(r, metToen) {
+    var l = [FIN.kas ? 'prognoseKas' : 'prognose', 'gefactureerd', 'ontvangen'];
+    if (finSom(r.geleverd)) l.push('geleverd');
+    if (metToen && FIN.kas && finSom(r.prognoseToen)) l.push('prognoseToen');
+    return l;
+  }
+  function finRijen(r, maanden, nu, kop, klasse) {
+    return finReeksen(r, true).map(function (k, i) {
+      var toekomst = k === 'gefactureerd' || k === 'ontvangen' || k === 'geleverd' || k === 'prognoseToen';
+      return '<tr class="fin-r ' + (klasse || '') + (i === 0 ? ' eerste' : '') + ' r-' + k + '">' + (i === 0 ? kop : '<td class="fin-naam"></td>') + '<td class="fin-reeks">' + esc(FIN_LABEL[k]) + '</td>' +
+        maanden.map(function (m, j) { var v = r[k][j]; return '<td class="' + (m === nu ? 'nu' : '') + (toekomst && m > nu ? ' later' : '') + '">' + finBedrag(v) + '</td>'; }).join('') +
+        '<td class="fin-tot">' + finBedrag(finSom(r[k]), '—') + '</td></tr>';
+    }).join('');
+  }
+  function renderFinancien() {
+    var F = FIN.data; if (!F) return;
+    var T = F.totalen, R = F.reeksen, nu = F.huidigeMaand;
+    el('finBalk').innerHTML = '<select id="finSj" aria-label="Schooljaar">' + F.schooljaren.map(function (s) { return '<option' + (s === F.schooljaar ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
+      '<button class="chip' + (FIN.kas ? '' : ' aan') + '" data-finkas="0">Prognose op factuurmoment</button><button class="chip' + (FIN.kas ? ' aan' : '') + '" data-finkas="1">Prognose op binnenkomst</button>' +
+      (F.magImporteren ? '<button class="knop klein licht" data-finexact="1">Afstemmen met Exact</button>' + (String(F.laatsteBevriezing || '') < F.huidigeMaand ? '<button class="knop klein licht" data-finbevries="1">Prognose van deze maand vastleggen</button>' : '') : '');  // het vastleggen doet de trigger op de eerste van de maand; deze knop is voor de eerste keer
+    var ou = T.ouderdom || {};
+    var h = '<div class="tegels">' + tegel(finBedrag(finSom(R[FIN.kas ? 'prognoseKas' : 'prognose']), '€ 0'), 'Prognose ' + F.schooljaar) + tegel(finBedrag(finSom(R.gefactureerd), '€ 0'), 'Gefactureerd ' + F.schooljaar) +
+      tegel(finBedrag(finSom(R.ontvangen), '€ 0'), 'Ontvangen ' + F.schooljaar) + tegel(finBedrag(T.openstaand, '€ 0'), 'Openstaand nu', T.openstaand ? 'oranje' : '') + tegel(finBedrag(T.nogTeFactureren, '€ 0'), 'Nog te factureren (contract)') +
+      tegel(T.gemBetaaltijd === null || T.gemBetaaltijd === undefined ? '—' : T.gemBetaaltijd + ' d', 'Gemiddelde betaaltijd') + '</div>';
+    if (T.openstaand) h += '<div class="chips fin-ouderdom"><span class="chip">0–30 dagen ' + finBedrag(ou['0-30'], '€ 0') + '</span><span class="chip">31–60 dagen ' + finBedrag(ou['31-60'], '€ 0') + '</span><span class="chip' + (ou['60+'] ? ' rood' : '') + '">ouder dan 60 dagen ' + finBedrag(ou['60+'], '€ 0') + '</span></div>';
+    var hints = [];
+    if (F.geschat) hints.push('Bij oudere termijnen ontbreekt de verzend- of betaaldatum; daar telt de termijndatum als schatting. Een Exact-afstemming of het bijwerken van de termijn maakt het exact.');
+    if (FIN.kas) hints.push('Binnenkomst = factuurdatum plus de betaaltermijn van de school (standaard ' + esc(F.standaardBetaaltermijn) + ' dagen). "Prognose toen" is de prognose zoals die op de eerste van die maand was' + (F.laatsteBevriezing ? ' (laatst bevroren: ' + esc(F.laatsteBevriezing) + ')' : '') + '.');
+    h += hints.map(function (x) { return '<div class="hint">' + x + '</div>'; }).join('');
+    if (!F.scholen.length) { el('finInhoud').innerHTML = h + '<div class="leeg">Geen projecten met bedragen in schooljaar ' + esc(F.schooljaar) + '.</div>'; return; }
+    var kop = '<thead><tr><th class="fin-naam">School / project</th><th class="fin-reeks"></th>' + F.maanden.map(function (m) { return '<th class="' + (m === nu ? 'nu' : '') + '">' + esc(finMaandLabel(m)) + '</th>'; }).join('') + '<th class="fin-tot">Totaal</th></tr></thead>';
+    var body = F.scholen.map(function (s) {
+      var sleutel = s.schoolId || s.naam, open = !!FIN.open[sleutel];
+      var naam = '<td class="fin-naam"><button class="fin-open" data-finopen="' + esc(sleutel) + '" aria-expanded="' + open + '">' + (open ? '▾' : '▸') + ' ' + esc(s.naam) + '</button><div class="r-meta">' + esc(s.projecten.length + (s.projecten.length === 1 ? ' project' : ' projecten')) +
+        (s.openstaand ? ' · open ' + finBedrag(s.openstaand) : '') + (s.nogTeFactureren ? ' · nog te factureren ' + finBedrag(s.nogTeFactureren) : '') + (s.gemBetaaltijd != null ? ' · betaalt in ' + esc(s.gemBetaaltijd) + ' d' : '') + '</div></td>';
+      var rij = finRijen(s.reeksen, F.maanden, nu, naam, 'school');
+      if (open) rij += s.projecten.map(function (p) {
+        var pk = '<td class="fin-naam fin-project">' + crmLink('project', p.id, p.traject) + '<div class="r-meta">' + esc([p.schooljaar, p.am ? 'AM ' + p.am : '', p.soortFacturatie, p.bron === 'termijnen' ? 'volgens termijnen' : p.bron === 'afspraak' ? 'volgens afspraak' : 'geen contractwaarde'].filter(Boolean).join(' · ')) +
+          '<br>contract ' + finBedrag(p.contract, '€ 0') + (p.openstaand ? ' · open ' + finBedrag(p.openstaand) : '') + (p.ongepland ? ' · niet in te plannen ' + finBedrag(p.ongepland) : '') + '</div>' +
+          ((p.signalen || []).length ? '<div class="waarschuwing">' + p.signalen.map(esc).join('<br>') + '</div>' : '') + '</td>';
+        return finRijen(p.reeksen, F.maanden, nu, pk, 'project');
+      }).join('');
+      return '<tbody>' + rij + '</tbody>';
+    }).join('');
+    body += '<tbody class="fin-totaal">' + finRijen(R, F.maanden, nu, '<td class="fin-naam"><b>Totaal</b></td>', 'totaal') + '</tbody>';
+    el('finInhoud').innerHTML = h + '<div class="tabel-scroll fin-scroll"><table class="fin">' + kop + body + '</table></div>';
+  }
+  // Afstemmen met Exact: een csv-export van verkoopfacturen kiezen, eerst controleren, dan toepassen. Kolomnamen instelbaar.
+  function exactVenster() {
+    var F = FIN.data || {}, k = F.exactKolommen || {}, veld = function (n, l) { return '<div class="veld"><label for="vf-ek-' + n + '">' + esc(l) + '</label><input id="vf-ek-' + n + '" data-exactkol="' + n + '" value="' + esc(k[n] || '') + '"></div>'; };
+    formActie = null; FIN.exactTekst = ''; FIN.exactNaam = '';
+    openVenster('<div class="kop" style="margin-top:14px">Afstemmen met Exact</div><div class="hint">Kies een export van verkoopfacturen uit Exact Online (csv). Facturen worden op factuurnummer gekoppeld; de factuurdatum wordt de verzenddatum en een betaaldatum zet de termijn op betaald. Eerst controleren, dan pas toepassen.</div>' +
+      '<div class="veld breed"><label for="vf-exactbestand">Exportbestand (.csv)</label><input type="file" id="vf-exactbestand" accept=".csv,text/csv,text/plain"></div>' +
+      '<div class="kop">Kolomnamen in de export</div><div class="velden-2">' + veld('factuurnummer', 'Factuurnummer') + veld('datum', 'Factuurdatum') + veld('bedrag', 'Bedrag') + veld('betaald', 'Betaaldatum (optioneel)') + '</div>' +
+      '<div id="exactUit"></div><div class="balk"><button class="knop" data-exactcontrole="1" disabled>Controleren</button><button class="knop licht" data-exacttoepassen="1" disabled>Toepassen</button><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>');
+  }
+  function exactKolommenUitVenster() { var k = {}; document.querySelectorAll('#vensterInhoud [data-exactkol]').forEach(function (x) { if (x.value.trim()) k[x.getAttribute('data-exactkol')] = x.value.trim(); }); return k; }
+  function exactUitHtml(u) {
+    var lijst = function (titel, l, f) { return l.length ? '<details' + (l.length <= 5 ? ' open' : '') + '><summary>' + esc(titel) + ' (' + l.length + ')</summary>' + l.slice(0, 50).map(function (x) { return '<div class="rij"><div class="r-body"><div class="r-meta">' + f(x) + '</div></div></div>'; }).join('') + (l.length > 50 ? '<div class="hint">en ' + (l.length - 50) + ' meer</div>' : '') + '</details>' : ''; };
+    return '<div class="kaart" style="margin-top:12px"><div><b>' + esc(u.gekoppeld) + '</b> facturen gekoppeld' + (u.van ? ' (periode ' + esc(kortDatum(u.van)) + ' t/m ' + esc(kortDatum(u.tot)) + ')' : '') + (u.toegepast ? ', ' + esc(u.bijgewerkt.length) + ' bijgewerkt.' : '; ' + esc(u.bijgewerkt.length) + (u.bijgewerkt.length === 1 ? ' termijn krijgt' : ' termijnen krijgen') + ' een datum of status uit Exact.') + '</div>' +
+      lijst('Wordt bijgewerkt', u.bijgewerkt, function (x) { return esc(x.nummer + ' · ' + x.waar + ' · ' + x.wat); }) +
+      lijst('Bedrag wijkt af', u.afwijkend, function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · Athena ' + finBedrag(x.athena, '€ 0') + ', Exact ' + finBedrag(x.exact, '€ 0'); }) +
+      lijst('Alleen in Exact', u.alleenExact, function (x) { return esc(x.nummer + ' · ' + kortDatum(x.datum)) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
+      lijst('Alleen in Athena (in dezelfde periode)', u.alleenAthena, function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
+      (!u.afwijkend.length && !u.alleenExact.length && !u.alleenAthena.length ? '<div class="hint">Geen verschillen.</div>' : '') + '</div>';
+  }
+  function exactDraai(toepassen, knop) {
+    if (!FIN.exactTekst) { toast('Kies eerst het exportbestand.'); return; }
+    if (toepassen && !window.confirm('De termijnen bijwerken met de datums en statussen uit Exact?')) return;
+    knop.disabled = true;
+    run('apiExactImport', FIN.exactTekst, { kolommen: exactKolommenUitVenster(), toepassen: toepassen }).then(function (u) {
+      if (!el('exactUit')) return;
+      el('exactUit').innerHTML = exactUitHtml(u); knop.disabled = false;
+      var t = el('vensterInhoud').querySelector('[data-exacttoepassen]'); if (t) t.disabled = toepassen;
+      if (toepassen) { toast(u.bijgewerkt.length + ' termijnen bijgewerkt uit Exact.'); FIN.data = null; FACT.data = null; laadFinancien(); }
+    }).catch(function () { knop.disabled = false; });
+  }
   function termijnVenster(tid, fid) {
     var K = keuzesApp(), f = fid && fid !== 'nieuw' ? factuurLokaal(fid) : null, w = f ? kopie(f) : { status: (K.factuurStatussen || ['nog te doen'])[0] };
     openVenster(formHtml(f ? 'Termijn' : 'Nieuwe termijn', [{ naam: 'omschrijving', label: 'Omschrijving', breed: true, plaats: 'Factuur vooraf, September …' }, { naam: 'datum', label: 'Factuurdatum', type: 'date' }, { naam: 'bedrag', label: 'Bedrag (€)', type: 'number' },
-      { naam: 'status', label: 'Status', type: 'select', opties: metHuidig((K.factuurStatussen || []).slice(), w.status) }, { naam: 'factuurnummer', label: 'Factuurnummer' }, { naam: 'bijzonderheden', label: 'Bijzonderheden', type: 'textarea' }], w, 'Opslaan', function (v) {
+      { naam: 'status', label: 'Status', type: 'select', opties: metHuidig((K.factuurStatussen || []).slice(), w.status) }, { naam: 'factuurnummer', label: 'Factuurnummer' }, { naam: 'verzonden', label: 'Verstuurd op', type: 'date' }, { naam: 'betaald', label: 'Betaald op', type: 'date' },  // v6.5: Financiën rekent met deze datums
+      { naam: 'bijzonderheden', label: 'Bijzonderheden', type: 'textarea' }], w, 'Opslaan', function (v) {
       if (!v.omschrijving) { toast('Geef de termijn een omschrijving.'); return; }
       var obj = f ? bouwWijziging(f, w, v) : samen({ trajectId: tid }, v); if (!obj) { sluitVenster(); return; }
       return run('apiFactuurOpslaan', obj).then(function () { sluitVenster(); toast('Termijn opgeslagen.'); factFout(); });
@@ -3751,7 +3886,7 @@
   /* ===== v3.0: desktopweergave in Capsule-opbouw — zijbalk, brede tabellen, Home, Agenda, Doelen. Alleen actief met body.desk (vanaf 1024 px). ===== */
   var DESK = { item: 'home', sorteer: { veld: 'naam', op: 1 }, taakSorteer: { veld: '', op: 1 }, contacten: 'scholen', maand: null, start: null, gekozen: '', agenda: null, doelPreset: 'maand', basisBezig: null };  // v4.6: taakSorteer (leeg = volgorde van de backend)
   var DESK_ITEMS = { home: ['home', 'Home'], contacten: ['relaties', 'Contacten'], taken: ['relaties', 'Taken'], agenda: ['agenda', 'Agenda'], pipeline: ['relaties', 'Pipeline'], projecten: ['trajecten', 'Projecten'], bezetting: ['trajecten', 'Bezetting'], talent: ['trajecten', 'Talent'],  // v5.0: talent
-    facturatie: ['facturatie', 'Facturatie'], rapporten: ['relaties', 'Rapporten'], doelen: ['doelen', 'Doelen'], brein: ['brein', 'Assistent'], review: ['review', 'Dagstart'], huisstijl: ['huisstijl', 'Studio'] };
+    facturatie: ['facturatie', 'Facturatie'], financien: ['financien', 'Financiën'], rapporten: ['relaties', 'Rapporten'], doelen: ['doelen', 'Doelen'], brein: ['brein', 'Assistent'], review: ['review', 'Dagstart'], huisstijl: ['huisstijl', 'Studio'] };
   var DESK_TAB = { taken: 'taken', pipeline: 'pipeline', rapporten: 'rapport' };
   var DAGEN_KORT = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
   var MAANDEN_LANG = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
@@ -3791,7 +3926,7 @@
   // v4.5: een deeplink die binnenkomt terwijl de app al open is (adresbalk, geopende PWA) laadt de pagina niet opnieuw; replaceState in deskNaar vuurt dit niet
   window.addEventListener('hashchange', function () { if (ingelogd()) routeHash((location.hash || '').replace('#', '')); });  // v6.1: ook met een sessietoken (secret() is dan leeg)
   function deskNaar(item) {
-    if (!DESK_ITEMS[item] || ((item === 'pipeline' || item === 'facturatie') && !magApp(item)) || (item === 'bezetting' && !magApp('vacatures')) || (item === 'talent' && !magApp('talenten'))) item = 'home';  // v4.0: menu per rechten; v5.0: talent
+    if (!DESK_ITEMS[item] || ((item === 'pipeline' || item === 'facturatie' || item === 'financien') && !magApp(item)) || (item === 'bezetting' && !magApp('vacatures')) || (item === 'talent' && !magApp('talenten'))) item = 'home';  // v4.0: menu per rechten; v5.0: talent
     if (item === 'bezetting' || item === 'talent') { S.pWeergave = item; S.pWeergaveGekozen = true; } else if (item === 'projecten' && (S.pWeergave === 'bezetting' || S.pWeergave === 'talent')) S.pWeergave = 'am';  // v4.1; v5.0: talent
     DESK.item = item;
     if (item === 'contacten') CRM.tab = DESK.contacten;
@@ -3808,6 +3943,7 @@
     if (id === 'relaties') return CRM.tab === 'taken' ? 'taken' : CRM.tab === 'pipeline' ? 'pipeline' : CRM.tab === 'rapport' ? 'rapporten' : 'contacten';
     if (id === 'trajecten') return S.pWeergave === 'bezetting' ? 'bezetting' : S.pWeergave === 'talent' ? 'talent' : 'projecten';  // v5.0: talent
     if (id === 'facturatie') return 'facturatie';
+    if (id === 'financien') return 'financien';  // v6.5
     if (id === 'vandaag') return 'home';
     return DESK_ITEMS[id] ? id : 'home';
   }
@@ -4083,6 +4219,7 @@
     if (naam === 'trajecten') laadTrajecten();
     if (naam === 'relaties') laadRelaties();  // v2.0
     if (naam === 'facturatie') laadFacturatie();  // v3.8
+    if (naam === 'financien') laadFinancien();  // v6.5
     if (naam === 'home') laadHome();  // v3.0
     if (naam === 'agenda') laadAgenda();
     if (naam === 'doelen') laadDoelen();

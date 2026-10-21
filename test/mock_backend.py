@@ -127,14 +127,14 @@ FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'b
             {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
 KEUZES = {'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
 # v4.0: twee gebruikers. test123 = Menno (management), am123 = Joris (accountmanager): ziet geen pipeline, alleen zijn eigen projecten en facturatie
-ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen')}  # v5.0: talenten, beoordelingen
+ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen', 'financien')}  # v5.0: talenten, beoordelingen
 IKKEN = {'test123': {'naam': 'Menno', 'team': 'management', 'rol': 'management', 'beheer': True, 'gekoppeld': True, 'rechten': dict(ALLES, beheer=True, teamlead=False, doelen=True)},
          'am123': {'naam': 'Joris', 'team': 'accountmanagement', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'alles'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
                    'projecten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'facturatie': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'vacatures': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'kandidaten': {'zien': 'eigen', 'wijzigen': 'eigen'},
-                   'talenten': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beoordelingen': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},
+                   'talenten': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beoordelingen': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'financien': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},  # v6.5: financien
          # v4.1: talentscout Lotte (code talent123): bezetting, geen pipeline of facturatie; v5.0: het hele talentbestand
          'talent123': {'naam': 'Lotte', 'team': 'talent', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'geen'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
-                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'},
+                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'financien': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'},
                    'talenten': {'zien': 'alles', 'wijzigen': 'alles'}, 'beoordelingen': {'zien': 'alles', 'wijzigen': 'alles'}, 'beheer': False, 'teamlead': False, 'doelen': False}}}
 HUIDIG = ['test123']
 def ik(): return dict(IKKEN[HUIDIG[0]])
@@ -399,6 +399,20 @@ def handle_crm(fn, args):
                 'tijdlijn': tijdlijn(hoort), 'losseMails': [act_uit(a) for a in ACTIVITEITEN if s and a['type'] == 'mail' and not a.get('trajectId') and a['schoolId'] == s['id']],
                 'facturen': [f for f in FACTUREN if f['trajectId'] == t['id']] if ik()['team'] != 'talent' else None, 'keuzes': KEUZES,
                 'rechten': {'wijzigen': ik()['team'] != 'talent', 'facturatie': ik()['team'] != 'talent', 'facturatieWijzigen': ik()['team'] != 'talent'}, **project_bezetting(t)}
+    if fn == 'apiFinancien':  # v6.5: vaste vorm zoals de echte backend (bedragen in centen); de rekenregels test test/node_rooktest.js tegen Code.gs
+        if ik()['team'] == 'talent': geen_toegang()
+        sj = args[0] if args and args[0] else '2026-2027'; j = int(sj[:4]); maanden = [str(j + (7 + i) // 12) + '-' + str((7 + i) % 12 + 1).zfill(2) for i in range(12)]
+        def r(**k):
+            u = {x: [0] * 12 for x in ['prognose', 'prognoseKas', 'gefactureerd', 'ontvangen', 'geleverd', 'prognoseToen']}
+            for x, v in k.items(): u[x] = v
+            return u
+        pr = r(prognose=[0, 486000] + [486000] * 10, prognoseKas=[0, 0] + [486000] * 10, gefactureerd=[0, 486000, 486000] + [0] * 9, ontvangen=[0, 0, 486000] + [0] * 9, prognoseToen=[0, 0, 450000] + [0] * 9)
+        proj = {'id': 't1', 'traject': 'Onderwijsondersteuning', 'schooljaar': sj, 'status': 'bezig', 'am': 'Menno', 'adviseur': '', 'soortFacturatie': 'achteraf', 'bron': 'termijnen', 'reeksen': pr, 'contract': 5346000, 'ongepland': 0,
+                'gefactureerd': 972000, 'ontvangen': 486000, 'nogTeFactureren': 4374000, 'openstaand': 486000, 'ouderdom': {'0-30': 486000, '31-60': 0, '60+': 0}, 'signalen': ['€ 4.860 van het contract staat nog niet in termijnen'], 'geschat': False, 'gemBetaaltijd': 21}
+        school = dict({k: proj[k] for k in ['contract', 'gefactureerd', 'ontvangen', 'nogTeFactureren', 'openstaand', 'ouderdom', 'geschat', 'gemBetaaltijd']}, schoolId='s1', naam='Testschool Noord', betaaltermijn=30, reeksen=pr, projecten=[proj])
+        return {'schooljaar': sj, 'schooljaren': ['2026-2027', '2025-2026'], 'maanden': maanden, 'huidigeMaand': maanden[2], 'scholen': [school], 'reeksen': pr,
+                'totalen': dict({k: proj[k] for k in ['contract', 'gefactureerd', 'ontvangen', 'nogTeFactureren', 'openstaand', 'ouderdom', 'gemBetaaltijd']}), 'geschat': False, 'standaardBetaaltermijn': 30,
+                'laatsteBevriezing': maanden[2], 'exactKolommen': {'factuurnummer': 'Factuurnummer', 'datum': 'Factuurdatum', 'bedrag': 'Bedrag', 'betaald': 'Betaaldatum'}, 'magImporteren': beheer(), 'ik': ik()}
     if fn == 'apiFacturatie':
         return {'projecten': [dict(project_uit(t), magWijzigen=True) for t in sorted(TRAJECTEN, key=lambda t: (t['am'], t['school'])) if eigen_project(t)], 'keuzes': KEUZES, 'gebruikers': GEBRUIKERS_NAMEN, 'ik': ik()}
     if fn == 'apiFactuurOpslaan':

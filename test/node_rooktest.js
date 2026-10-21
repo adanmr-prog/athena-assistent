@@ -293,6 +293,64 @@ eis(roep(SEM, 'apiTrajecten').trajecten.some(function (t) { return t.id === p64.
 var won2 = roep(LARS, 'apiKansOpslaan', { id: 'k10', fase: 'gewonnen', _oud: { fase: 'voorstel' } });
 eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectId === won2.traject.id; }) && acties().some(function (a) { return a.trajectId === won2.traject.id && a.bron === 'talentscout'; }), 'zonder winformulier (Brein, import): project zonder conceptvacature, wel de toewijstaak');
 
+/* ---- v6.5: Financiën (prognose, gefactureerd, ontvangen, geleverd; bevriezen; Exact-import) ---- */
+(function () {
+  ctx.GEBRUIKER = null; ctx._LEES = {};
+  var D = ctx.financienData(), alleT = ctx.lees('Trajecten'), fout = [];
+  alleT.forEach(function (t) {
+    var F = ctx.financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], ctx.termijnDagenVan(t, D)), som = F.ongepland;
+    Object.keys(F.per.prognose).forEach(function (m) { som += F.per.prognose[m]; });
+    var somKas = F.ongepland; Object.keys(F.per.prognoseKas).forEach(function (m) { somKas += F.per.prognoseKas[m]; });
+    if (som !== F.contract || somKas !== F.contract) fout.push(t.id + ' prognose ' + som + '/' + somKas + ' ≠ contract ' + F.contract);
+    if (F.gefactureerd + F.nogTeFactureren !== F.contract) fout.push(t.id + ' gefactureerd + nog te factureren ≠ contract');
+    if (F.openstaand !== F.gefactureerd - F.ontvangen) fout.push(t.id + ' openstaand');
+  });
+  eis(!fout.length, 'invariant per project: som prognose (ook de kasvariant) = contract, gefactureerd + nog te factureren = contract' + (fout.length ? ': ' + fout.join('; ') : ''));
+  var t1 = ctx.financienProject(alleT.filter(function (t) { return t.id === 't1'; })[0], D.fac.t1, D.uren.t1 || [], 30);
+  eis(t1.contract === 4860000 && t1.signalen.some(function (x) { return /€ 28\.080 van het contract staat nog niet in termijnen; verdeeld/.test(x); }) && Object.keys(t1.per.prognose).length > 5, 'contractwaarde gaat voor omzet; termijnen die afwijken geven een signaal');
+  var F = roep(SOPHIE, 'apiFinancien'), idx = {}; F.maanden.forEach(function (m, i) { idx[m] = i; });
+  eis(F.maanden.length === 12 && /-08$/.test(F.maanden[0]) && /-07$/.test(F.maanden[11]), 'twaalf maanden, augustus t/m juli');
+  // onafhankelijk narekenen uit de ruwe termijnen: verzonden (of de termijndatum als schatting) en betaald
+  var gef = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], ontv = gef.slice(), zichtbaar = {};
+  F.scholen.forEach(function (s) { s.projecten.forEach(function (p) { zichtbaar[p.id] = 1; }); });
+  ctx.lees('Facturen').forEach(function (f) {
+    if (!zichtbaar[f.trajectId]) return;
+    var b = Math.round(Number(f.bedrag) * 100), v = f.verzonden || ((f.status === 'verzonden' || f.status === 'betaald') ? f.datum : ''), p = f.betaald || (f.status === 'betaald' ? v : '');
+    if (v && idx[String(v).slice(0, 7)] !== undefined) gef[idx[String(v).slice(0, 7)]] += b;
+    if (p && idx[String(p).slice(0, 7)] !== undefined) ontv[idx[String(p).slice(0, 7)]] += b;
+  });
+  eis(JSON.stringify(gef) === JSON.stringify(F.reeksen.gefactureerd) && JSON.stringify(ontv) === JSON.stringify(F.reeksen.ontvangen), 'gefactureerd en ontvangen per maand = som van de verzonden en betaalde termijnen in die maand');
+  var somScholen = 0; F.scholen.forEach(function (s) { somScholen += s.reeksen.prognose.reduce(function (a, b) { return a + b; }, 0); });
+  eis(somScholen === F.reeksen.prognose.reduce(function (a, b) { return a + b; }, 0) && F.reeksen.geleverd.some(function (x) { return x > 0; }), 'scholen tellen op tot het totaal; geleverd uit de XPS-uren is gevuld');
+  eis(F.reeksen.prognoseToen.some(function (x) { return x > 0; }) && F.totalen.ouderdom['0-30'] + F.totalen.ouderdom['31-60'] + F.totalen.ouderdom['60+'] === F.totalen.openstaand && F.totalen.gemBetaaltijd > 0, 'prognose van toen voor afgelopen maanden, ouderdom van openstaande facturen en gemiddelde betaaltijd');
+  var femke = roep(FEMKE, 'apiFinancien'), lars = roep(LARS, 'apiFinancien');
+  eis(femke.scholen.every(function (s) { return s.projecten.every(function (p) { return p.am === 'Femke de Wit'; }); }) && femke.scholen.length > 0, 'de AM ziet alleen zijn eigen projecten');
+  eis(lars.scholen.every(function (s) { return s.projecten.every(function (p) { return p.adviseur === 'Lars Visser'; }); }) && /toegang/.test(faalt(SEM, 'apiFinancien')), 'de consultant ziet zijn eigen projecten, talent niets');
+  eis(/management/i.test(faalt(FEMKE, 'apiExactImport', 'x')) && /management/i.test(faalt(FEMKE, 'apiFinancienBevriezen')), 'Exact-import en bevriezen alleen voor het management');
+  // termijnstatus zet de datums
+  var nt = ctx.lees('Facturen').filter(function (f) { return f.id === 'f6-1'; })[0];
+  var na = roep(BAS, 'apiFactuurOpslaan', { id: 'f6-1', status: 'verzonden', _oud: { status: nt.status } });
+  eis(na.verzonden === plusDagen(0) && !na.betaald, 'status verzonden zet de verzenddatum op vandaag');
+  na = roep(BAS, 'apiFactuurOpslaan', { id: 'f6-1', status: 'betaald', _oud: { status: 'verzonden' } });
+  eis(na.verzonden === plusDagen(0) && na.betaald === plusDagen(0), 'status betaald zet de betaaldatum');
+  // bevriezen: één keer per maand
+  var b0 = roep(SOPHIE, 'apiFinancienBevriezen'), pb = ctx._demoBladen.Prognoses.rijen, gi = pb[0].indexOf('gemaakt'), mNu = plusDagen(0).slice(0, 7);
+  for (var pi = pb.length - 1; pi > 0; pi--) if (pb[pi][gi] === mNu) pb.splice(pi, 1);  // de demo had deze maand al bevroren (ter plekke, de tabel houdt dezelfde array)
+  var b1 = roep(SOPHIE, 'apiFinancienBevriezen'), b2 = roep(SOPHIE, 'apiFinancienBevriezen');
+  eis(b0.al === true, 'de demo heeft de lopende maand al bevroren');
+  eis(b1.rijen > 0 && b2.al === true && b2.rijen === 0, 'bevriezen schrijft de prognose van deze maand één keer');
+  // Exact-import (fictieve export): 20261033 is nu betaald, 20261051 heeft een ander bedrag, 99990001 staat alleen in Exact, 20261052 ontbreekt in de export
+  var csv = 'Factuurnummer;Factuurdatum;Debiteur;Bedrag;Betaaldatum\n' + ['20261033;' + nt.datum.split('-').reverse().join('-') + ';Noorderhof;1.950,00;' + plusDagen(-1).split('-').reverse().join('-'),
+    '20261051;' + plusDagen(-5).split('-').reverse().join('-') + ';Esdoorn;1.100,00;', '99990001;' + plusDagen(-3).split('-').reverse().join('-') + ';Onbekend;500,00;'].join('\n');
+  var proef = roep(SOPHIE, 'apiExactImport', csv, {});
+  eis(proef.gekoppeld === 2 && proef.afwijkend.length === 1 && proef.afwijkend[0].nummer === '20261051' && proef.alleenExact.length === 1 && proef.alleenExact[0].nummer === '99990001' && proef.alleenAthena.some(function (x) { return x.nummer === '20261052'; }) && !proef.toegepast, 'Exact controleren: gekoppeld, bedrag wijkt af, alleen in Exact, alleen in Athena');
+  eis(ctx.lees('Facturen').filter(function (f) { return f.factuurnummer === '20261033'; })[0].status === 'verzonden', 'controleren verandert niets');
+  var toe = roep(SOPHIE, 'apiExactImport', csv, { toepassen: true }), f33 = ctx.lees('Facturen').filter(function (f) { return f.factuurnummer === '20261033'; })[0];
+  eis(toe.toegepast && f33.status === 'betaald' && ctx.datumIn(f33.betaald) === plusDagen(-1), 'toepassen zet de betaaldatum en de status uit Exact');
+  eis(/Kolom niet gevonden: Factuurnummer.*Nummer;?|Kolommen in het bestand: Nummer/.test(faalt(SOPHIE, 'apiExactImport', 'Nummer;Datum;Bedrag\n1;01-10-2026;10,00', {})) &&
+    roep(SOPHIE, 'apiExactImport', 'Nummer;Datum;Totaal\n20261033;01-10-2026;1950', { kolommen: { factuurnummer: 'Nummer', datum: 'Datum', bedrag: 'Totaal' } }).gekoppeld === 1, 'onbekende kolommen geven een duidelijke fout; kolomnamen zijn in te stellen');
+})();
+
 /* ---- bestaande schermen blijven werken ---- */
 ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });
 try { ctx.GEBRUIKER = null; ctx.nachtelijkeReview(); eis(true, 'nachtelijke review draait'); } catch (e) { eis(false, 'nachtelijke review draait: ' + e.message); }

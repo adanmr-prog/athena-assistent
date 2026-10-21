@@ -134,6 +134,27 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans` en sinds v4.5 `tijd, herhaling, bijgewerkt`.
 
+## Financiën (v6.5)
+
+Scherm Financiën (zijbalk, na Facturatie; op de telefoon via Projecten): per schooljaar (aug–jul), per school uitklapbaar naar projecten, per maand. Alleen lezen; bewerken blijft in Facturatie. Bedragen rekent de backend in centen.
+
+| Reeks | Bron |
+|---|---|
+| Prognose (factuurmoment) | `Trajecten.contractwaarde` (leeg → `omzet`) verdeeld volgens de termijnen; wat nog niet in termijnen staat over de maanden tot `eind`; zonder termijnen per maand (einde maand) van `start` tot `eind`, jul/aug overgeslagen bij vakanties "niet doorbetaald"; `vooraf` = één factuur bij de start ⚠️ |
+| Prognose (binnenkomst) | dezelfde posten + betaaltermijn (`Scholen.betaaltermijn`, leeg → instelling `betaaltermijnDagen`, standaard 30 ⚠️) |
+| Gefactureerd | `Facturen.verzonden` (oude termijnen zonder datum: de termijndatum, gemarkeerd als *geschat*) |
+| Ontvangen | `Facturen.betaald` (idem, geschat) |
+| Geleverd | `TalentUren` × `Trajecten.tarief`, als er uren zijn |
+| Prognose toen | de bevroren prognose van de eerste van de maand (tab `Prognoses`) |
+
+Per project en school ook: nog te factureren, openstaand met ouderdom 0–30/31–60/60+ dagen, gemiddelde betaaltijd en signalen (termijnen hoger of lager dan het contract, geen startdatum). Invarianten (rooktest): som prognose = contract; gefactureerd + nog te factureren = contract.
+
+- **Velden:** `Scholen.betaaltermijn` (0–365), `Trajecten.contractwaarde` (≥ 0), `Facturen.verzonden` en `Facturen.betaald` (yyyy-MM-dd). Zet je een termijn op verzonden of betaald, dan vult de backend vandaag in (tenzij je zelf een datum geeft); terug naar een eerdere status wist de datum.
+- **Rechten:** `financien` — management alles, AM eigen projecten, consultant projecten waar hij adviseur is, talent niets. Exact-afstemming en bevriezen: alleen management.
+- **Bevriezen:** `financienTrigger` (1e van de maand, 02:00) legt per project de prognose voor de lopende en latere maanden vast; idempotent per maand. Bestaande installatie: één keer `setup()` draaien onder het account van de eigenaar.
+- **Exact-afstemming:** exporteer in Exact Online de verkoopfacturen (Verkoop → Facturen → Overzicht, als csv) en kies in Financiën "Afstemmen met Exact". Koppelen op factuurnummer; meerdere regels per factuur tellen op; `;` of `,` en NL-bedragen/-datums worden herkend. Kolomnamen instelbaar (standaard `Factuurnummer`, `Factuurdatum`, `Bedrag`, `Betaaldatum`; ⚠️ de echte export is nog niet gezien, voorbeeld: `test/voorbeelden/exact_verkoopfacturen.csv`, fictief). Eerst *Controleren* (niets opgeslagen): gekoppeld, wat bijgewerkt zou worden, bedrag wijkt af, alleen in Exact, alleen in Athena (binnen de periode van de export). *Toepassen* zet verzend- en betaaldatum en status en bewaart de kolomnamen.
+- **Wat de boekhouder controleert (eenmalig, daarna per kwartaal):** één afgesloten maand naast het verkoopdagboek van Exact (Gefactureerd = som van de facturen met factuurdatum in die maand, excl./incl. btw zoals `Facturen.bedrag` is ingevoerd ⚠️) en naast de bankontvangsten (Ontvangen); de lijst "alleen in Exact" (facturen die niet in Athena staan) en "bedrag wijkt af"; en of de standaardbetaaltermijn van 30 dagen klopt met de debiteurenlijst.
+
 ## Op Vercel + Supabase (v6.0)
 
 Dezelfde `Code.gs` kan ook draaien op Vercel met Supabase Postgres als database en inloggen met Google; installatie en overstap staan in `server/README.md`. Wat Code.gs 6.0 daarvoor nieuw heeft:
