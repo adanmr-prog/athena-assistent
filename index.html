@@ -712,21 +712,23 @@
   .tl { min-width: 980px; }
   .tl-rij { display: flex; border-bottom: 1px solid var(--lijn); min-height: 44px; align-items: stretch; }
   .tl-rij:last-child { border-bottom: 0; }
-  .tl-naam { flex: 0 0 230px; padding: 8px 12px; font-size: 13px; position: sticky; left: 0; background: var(--wit); z-index: 2; border-right: 1px solid var(--lijn); }
+  .tl-naam { flex: 0 0 230px; padding: 8px 12px; font-size: 13px; position: sticky; left: 0; background: var(--wit); z-index: 4; border-right: 1px solid var(--lijn); }
   .tl-naam small { display: block; color: var(--gedempt); font-size: 11.5px; }
   .tl-baan { position: relative; flex: 1; }
   .tl-kop { background: var(--vlak); min-height: 34px; } .tl-kop .tl-naam { background: var(--vlak); }
   .tl-maand { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--lijn); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--inkt2); padding: 9px 6px; }
   .tl-nu { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--oranje); z-index: 1; }
   .tl-balk { position: absolute; top: 8px; bottom: 8px; border-radius: 8px; display: flex; align-items: center; overflow: hidden; cursor: pointer; font-size: 11.5px; padding: 0; z-index: 1; min-height: 0; }
-  .tl-balk.sleepbaar { cursor: grab; -webkit-user-select: none; user-select: none; touch-action: pan-y; }
+  .tl-balk.sleepbaar { cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-x pan-y; }
   .tl-balk.sleept-tl { box-shadow: 0 6px 16px rgba(36,26,40,.25); cursor: grabbing; z-index: 3; }
-  .tl-balk.pill { background-image: none; padding-right: 0; -webkit-appearance: none; appearance: none; }  /* geen keuzepijltje van de statuspil */
+  .tl-balk.pill { background-image: none; padding-right: 0; -webkit-appearance: none; appearance: none; min-width: 24px; }  /* niet de 108 px van .pill: de breedte is de duur */  /* geen keuzepijltje van de statuspil */
   .tl-tekst { flex: 1; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tl-greep { flex: 0 0 10px; align-self: stretch; cursor: ew-resize; background: rgba(255,255,255,.25); }
+  .tl-greep { position: relative; flex: 0 0 10px; align-self: stretch; cursor: ew-resize; background: rgba(255,255,255,.25); }
+  .tl-greep::after { content: ''; position: absolute; top: -6px; bottom: -6px; left: -7px; right: -7px; }  /* grijpvlak van 24 px */
   .tl-buiten { position: absolute; left: 8px; top: 12px; font-size: 12px; }
   .zb-pin { font-size: 13px; } .zb-ster { color: var(--oranje); width: 18px; display: inline-block; }
   #vandaagPins { margin-top: 0; }
+  #vandaagPins .chip, .recent-rij .chip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
   .zb-recent-kop { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .7; padding: 6px 10px 2px; } body.desk .p-acties { display: none; }  /* v6.6: op desktop staan ze in de kop en de zijbalk */  /* v6.6: op desktop staat '+ Taak/School/Persoon/Kans' al rechtsboven; niet twee knoppen voor hetzelfde */
   .t-chips a, a.p-updates { display: inline-flex; align-items: center; min-height: 24px; }
   body:not(.desk) .t-chips a { min-height: 36px; }
@@ -4243,7 +4245,7 @@
     var naarKol = doel.getAttribute('data-sleepdoel').slice(s.soort.length + 1);
     if (SELECTIE.soort === s.soort && SELECTIE.ids[s.id] && selectieAantal() > 1) {  // v6.9: alle geselecteerde kaarten gaan mee
       var ids = Object.keys(SELECTIE.ids); selectieWis();
-      bulkReeks(ids, function (id) { return sleepZet(s.soort, id, naarKol, true, true); }).then(function (r) { toast(r.ok + ' verplaatst naar ' + naarKol + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); }); return;
+      bulkReeks(ids, function (id) { return sleepZet(s.soort, id, naarKol, true, true); }).then(function (r) { toast(r.ok + ' verplaatst naar ' + naarKol + (r.over ? ' · ' + r.over + ' stond er al' : '') + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); }); return;
     }
     sleepZet(s.soort, s.id, naarKol);
   });
@@ -4269,7 +4271,7 @@
   }
   function sleepZet(soort, id, naar, terug, stil) {
     if (soort === 'kans') {
-      var P = CRM.pipeline, k = P && P.kansen.filter(function (x) { return x.id === id; })[0]; if (!k || k.fase === naar) return;
+      var P = CRM.pipeline, k = P && P.kansen.filter(function (x) { return x.id === id; })[0]; if (!k || k.fase === naar) return null;
       var oud = k.fase; k.fase = naar; metBordScroll(renderPipeline);
       return run('apiKansOpslaan', { id: id, fase: naar, _oud: { fase: oud } }, false).then(function (x) {
         if (x && x.kans) { for (var n in x.kans) if (x.kans.hasOwnProperty(n)) k[n] = x.kans[n]; }
@@ -4280,13 +4282,13 @@
       }).catch(function () { k.fase = oud; if (CRM.pipeline === P && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); return false; });
     }
     if (soort === 'project') {
-      var l = projectenLokaal(id); if (!l.length || l[0].status === naar) return;
+      var l = projectenLokaal(id); if (!l.length || l[0].status === naar) return null;
       var was = l[0].status; l.forEach(function (t) { t.status = naar; }); metBordScroll(renderTrajecten);
       return run('apiTrajectOpslaan', { id: id, status: naar, _oud: { status: was } }).then(function () { sleepMelding((l[0].school || 'Project') + ' → ' + naar, soort, id, was, terug, stil); return true; })
         .catch(function () { projectenLokaal(id).forEach(function (t) { t.status = was; }); metBordScroll(renderTrajecten); return false; });
     }
     if (soort === 'kandidaat') {
-      var kd = zoekKandidaat(id); if (!kd || kd.status === naar) return;
+      var kd = zoekKandidaat(id); if (!kd || kd.status === naar) return null;
       var obj = { id: id, status: naar, _oud: { status: kd.status } };
       if (/^(afgerond|gestopt)$/.test(naar) && !kd.eindReden) {  // de backend eist een reden (zoals bij een verloren kans)
         var reden = window.prompt('Waarom is de inzet van ' + kd.naam + ' ' + naar + '?', ''); if (reden === null || !reden.trim()) return;
@@ -4298,7 +4300,7 @@
     }
     if (soort === 'taak') {
       var t = zoekTaakOveral(id); if (!t) return;
-      if (t.deadline === naar) { if (!terug) toast(t.tekst + ' staat al op ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)) + '.'); return; }
+      if (t.deadline === naar) { if (stil) return null; if (!terug) toast(t.tekst + ' staat al op ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)) + '.'); return; }
       var dl = t.deadline || ''; t.deadline = naar; t.over = null; taakLokaal(id, t);
       return run('apiTaakOpslaan', { id: id, deadline: naar, _oud: { deadline: dl } }).then(function (x) { if (x && x.id) taakLokaal(id, x); sleepMelding(t.tekst + ' → ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)), soort, id, dl, terug, stil); })
         .then(function () { return true; }, function () { t.deadline = dl; taakLokaal(id, t); return false; });
@@ -4478,8 +4480,8 @@
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && selectieAantal() && !el('venster').classList.contains('aan')) selectieWis(); });
   function bulkKlaar(tekst) { selectieWis(); toast(tekst); }
   function bulkReeks(ids, fn) {  // na elkaar, zodat de backend-lock en de _oud-controle per rij gewoon werken
-    var ok = 0, fout = 0;
-    return ids.reduce(function (p, id) { return p.then(function () { return Promise.resolve(fn(id)).then(function (g) { if (g === false) fout++; else ok++; }, function () { fout++; }); }); }, Promise.resolve()).then(function () { return { ok: ok, fout: fout }; });
+    var ok = 0, fout = 0, over = 0;
+    return ids.reduce(function (p, id) { return p.then(function () { return Promise.resolve(fn(id)).then(function (g) { if (g === false) fout++; else if (g === null) over++; else ok++; }, function () { fout++; }); }); }, Promise.resolve()).then(function () { return { ok: ok, fout: fout, over: over }; });
   }
   document.addEventListener('click', function (ev) {
     var x = ev.target.closest('[data-bulk]'); if (!x) return;
@@ -4493,7 +4495,7 @@
     var x = ev.target.closest('[data-bulkveld]'); if (!x || !x.value) return;
     var veld = x.getAttribute('data-bulkveld'), waarde = x.value, ids = Object.keys(SELECTIE.ids), soort = SELECTIE.soort; x.disabled = true;
     if (veld === 'kolom') {
-      bulkReeks(ids, function (id) { return sleepZet(soort, id, waarde, true, true); }).then(function (r) { bulkKlaar(r.ok + ' verplaatst naar ' + waarde + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); });  // na elkaar, één samenvatting
+      bulkReeks(ids, function (id) { return sleepZet(soort, id, waarde, true, true); }).then(function (r) { bulkKlaar(r.ok + ' verplaatst naar ' + waarde + (r.over ? ' · ' + r.over + ' stond er al' : '') + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); });  // na elkaar, één samenvatting
       return;
     }
     bulkReeks(ids, function (id) {
