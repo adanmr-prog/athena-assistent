@@ -9,7 +9,8 @@
     { "path": "/api/cron/nachtelijkeReviewTrigger", "schedule": "0 3 * * *" },
     { "path": "/api/cron/archiveerTrigger", "schedule": "0 1 1 * *" },
     { "path": "/api/cron/talentDagelijksTrigger", "schedule": "30 4 * * *" },
-    { "path": "/api/cron/talentUrenTrigger", "schedule": "0 4 * * 1" }
+    { "path": "/api/cron/talentUrenTrigger", "schedule": "0 4 * * 1" },
+    { "path": "/api/cron/financienTrigger", "schedule": "15 1 1 * *" }
   ],
   "headers": [
     { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },

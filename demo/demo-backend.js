@@ -429,14 +429,15 @@ function demoVul() {
   var maand = function (m, y) { return y + '-' + _p2(m) + '-' + _p2(new Date(y, m, 0).getDate()); };
   var vandaag = d(0), termijnen = [];
   [[9, j1], [10, j1], [11, j1], [12, j1]].forEach(function (x, i) {
-    var datum = maand(x[0], x[1]), voorbij = datum < vandaag;
-    termijnen.push({ id: 'f1-' + i, trajectId: 't1', omschrijving: ['September', 'Oktober', 'November', 'December'][i] + ' ' + x[1], bedrag: 4860, datum: datum, status: voorbij ? 'betaald' : 'nog te doen', factuurnummer: voorbij ? '2026' + (1041 + i) : '', door: M.femke });
+    var datum = maand(x[0], x[1]), voorbij = datum < vandaag, betaalD = datumStr(new Date(new Date(datum + 'T12:00:00').getTime() + 21 * 86400000)), betaald = voorbij && betaalD <= vandaag;  // v6.5: verzend- en betaaldatum
+    termijnen.push({ id: 'f1-' + i, trajectId: 't1', omschrijving: ['September', 'Oktober', 'November', 'December'][i] + ' ' + x[1], bedrag: 4860, datum: datum, status: betaald ? 'betaald' : voorbij ? 'verzonden' : 'nog te doen', factuurnummer: voorbij ? '2026' + (1041 + i) : '',
+      verzonden: voorbij ? datum : '', betaald: betaald ? betaalD : '', door: M.femke });
   });
-  termijnen.push({ id: 'f2-0', trajectId: 't2', omschrijving: 'Factuur vooraf schooljaar', bedrag: 21000, datum: sjStart, status: 'betaald', factuurnummer: '20261012', door: M.ruben });
+  termijnen.push({ id: 'f2-0', trajectId: 't2', omschrijving: 'Factuur vooraf schooljaar', bedrag: 21000, datum: sjStart, status: 'betaald', factuurnummer: '20261012', verzonden: sjStart, betaald: datumStr(new Date(new Date(sjStart + 'T12:00:00').getTime() + 16 * 86400000)), door: M.ruben });
   termijnen.push({ id: 'f5-0', trajectId: 't5', omschrijving: 'Factuur vooraf schooljaar', bedrag: 14400, datum: d(-5), status: 'aangemaakt', factuurnummer: '', bijzonderheden: 'Wacht op inkoopnummer van de school', door: M.ruben });
-  termijnen.push({ id: 'f6-0', trajectId: 't6', omschrijving: 'September ' + j1, bedrag: 1950, datum: maand(9, j1), status: 'verzonden', factuurnummer: '20261033', door: M.bas });
-  termijnen.push({ id: 'f1-m', trajectId: 't1', omschrijving: 'Meerwerk september (extra ondersteuner)', bedrag: 1080, datum: d(-5), status: 'verzonden', factuurnummer: '20261051', door: M.femke });
-  termijnen.push({ id: 'f6-t', trajectId: 't6', omschrijving: 'Surveillance toetsweek', bedrag: 936, datum: d(-2), status: 'verzonden', factuurnummer: '20261052', door: M.bas });
+  termijnen.push({ id: 'f6-0', trajectId: 't6', omschrijving: 'September ' + j1, bedrag: 1950, datum: maand(9, j1), status: 'verzonden', factuurnummer: '20261033', verzonden: maand(9, j1), door: M.bas });  // v6.5: staat nog open (ouderdom)
+  termijnen.push({ id: 'f1-m', trajectId: 't1', omschrijving: 'Meerwerk september (extra ondersteuner)', bedrag: 1080, datum: d(-5), status: 'verzonden', factuurnummer: '20261051', verzonden: d(-5), door: M.femke });
+  termijnen.push({ id: 'f6-t', trajectId: 't6', omschrijving: 'Surveillance toetsweek', bedrag: 936, datum: d(-2), status: 'verzonden', factuurnummer: '20261052', verzonden: d(-2), door: M.bas });
   termijnen.push({ id: 'f6-1', trajectId: 't6', omschrijving: 'Oktober ' + j1, bedrag: 1950, datum: maand(10, j1), status: 'nog te doen', door: M.bas });
   schrijfVeel('Facturen', termijnen.map(function (f) { f.aangemaakt = dt(-40); return f; }));
 
@@ -521,10 +522,10 @@ function demoVul() {
   [['t8', M.ruben, 2167], ['t11', M.bas, 2417]].forEach(function (x) {
     for (var mm = 9; mm <= 18; mm++) {
       var jr = j1 - 1 + Math.floor((mm - 1) / 12), mo = ((mm - 1) % 12) + 1, eind0 = maand(mo, jr), laat = x[0] === 't8' && mo === 3;
-      oudeFact.push({ id: 'fh-' + x[0] + '-' + mm, trajectId: x[0], omschrijving: MAANDEN[mo - 1].charAt(0).toUpperCase() + MAANDEN[mo - 1].slice(1) + ' ' + jr, bedrag: x[2], datum: eind0, status: laat ? 'aangemaakt' : 'betaald', factuurnummer: laat ? '' : String(jr) + (900 + mm), bijzonderheden: laat ? 'Uren nog niet akkoord van de school' : '', door: x[1] });
+      oudeFact.push({ id: 'fh-' + x[0] + '-' + mm, trajectId: x[0], omschrijving: MAANDEN[mo - 1].charAt(0).toUpperCase() + MAANDEN[mo - 1].slice(1) + ' ' + jr, bedrag: x[2], datum: eind0, status: laat ? 'aangemaakt' : 'betaald', factuurnummer: laat ? '' : String(jr) + (900 + mm), verzonden: laat ? '' : eind0, betaald: laat ? '' : datumStr(new Date(new Date(eind0 + 'T12:00:00').getTime() + (18 + mm % 3 * 9) * 86400000)), bijzonderheden: laat ? 'Uren nog niet akkoord van de school' : '', door: x[1] });
     }
   });
-  oudeFact.push({ id: 'fh-t7', trajectId: 't7', omschrijving: 'Factuur vooraf examentraining', bedrag: 8800, datum: j1 + '-03-01', status: 'betaald', factuurnummer: j1 + '0311', door: M.femke });
+  oudeFact.push({ id: 'fh-t7', trajectId: 't7', omschrijving: 'Factuur vooraf examentraining', bedrag: 8800, datum: j1 + '-03-01', status: 'betaald', factuurnummer: j1 + '0311', verzonden: j1 + '-03-01', betaald: j1 + '-03-24', door: M.femke });
   schrijfVeel('Kansen', oudeKansen);
   schrijfVeel('Vacatures', oudeVac);
   schrijfVeel('Kandidaten', oudeKand);
@@ -617,6 +618,19 @@ function demoVul() {
     { id: 'ct2', datum: dt(-10, '11:00'), type: 'mail', onderwerp: 'Verlenging volgend schooljaar', tekst: 'Onderwerp: Verlenging volgend schooljaar\n\nBeste [naam],\n\nGraag bespreken we hoe we de ondersteuning volgend schooljaar voortzetten.\n\nMet vriendelijke groet,\nAthenaSchool', door: M.sophie }
   ]);
   _demoProps.LAATSTE_INDEX = dt(-1, '04:01');
+  // v6.5: Financiën: contractwaarde van t1 (de termijnen plus meerwerk wijken daarvan af), een school met 14 dagen betaaltermijn,
+  // en de prognose zoals die op de eerste van de afgelopen maanden van dit schooljaar was (iets anders dan nu, zoals in het echt)
+  schrijfVeel('Trajecten', [{ id: 't1', contractwaarde: 48600 }]);
+  schrijfVeel('Scholen', [{ id: 's6', betaaltermijn: 14 }]);
+  var nuM = d(0).slice(0, 7), prog = [], D = financienData();
+  lees('Trajecten').forEach(function (t, ti) {
+    var F = financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], termijnDagenVan(t, D));
+    Object.keys(F.per.prognoseKas).forEach(function (m) {
+      if (m > nuM || m < schooljaarMaanden(huidigSchooljaar())[0]) return;  // ook de lopende maand: die is op de eerste bevroren
+      prog.push({ id: 'pg-' + t.id + '-' + m, gemaakt: m, trajectId: t.id, maand: m, prognose: F.per.prognose[m] || 0, kas: Math.round(F.per.prognoseKas[m] * (0.85 + 0.3 * toeval(ti + m.length))) });
+    });
+  });
+  schrijfVeel('Prognoses', prog);
 }
 
 /* ----- Ingang vanuit de app ----- */

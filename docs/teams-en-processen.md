@@ -40,6 +40,7 @@ In de Sheet krijgt `Gebruikers` de kolommen `team` en `rol`. Zo gaan de huidige 
 | Academy, contract, VOG (v5.0: documenten en VOG per schooljaar) | — | VOG-stand van eigen kandidaten (badge) | **alles** (bestanden in Drive, inzage gelogd) | team | alles |
 | Beoordelingen (v5.0) | — | **eigen plaatsingen** geven en lezen (favoriet / goed / niet geschikt) | **alles**, ook los van een plaatsing en met wederhoor | team | alles; inzage-export en anonimiseren |
 | Facturatie | eigen projecten (lezen) | **eigen projecten** | — | team (AM-lead) | alles |
+| Financiën (v6.5: prognose, gefactureerd, ontvangen per maand; alleen lezen) | eigen projecten (adviseur) | **eigen projecten** | — | team (AM-lead) | alles, plus Exact-afstemming en prognose vastleggen |
 | Mail, agenda, dagstart | eigen | eigen | eigen | eigen | eigen |
 | Rapporten en doelen | eigen + teamtotaal | eigen + teamtotaal | eigen + teamtotaal | hele team | alles |
 | Bedrijfsdoelen | **iedereen ziet ze** | iedereen | iedereen | iedereen | zet ze |

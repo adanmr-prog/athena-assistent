@@ -59,7 +59,7 @@ adapter die de Apps Script-diensten nabootst. Dit document is de installatie voo
 
 3. Deploy. Controleer `https://<project>.vercel.app/api` (geeft `{ok:true, versie:"6.0"}`) en `https://<project>.vercel.app/api/config` (geeft de inlogconfiguratie).
 4. **Domein:** Settings → Domains → `crm.athenaschool.nl` (CNAME naar `cname.vercel-dns.com`). Pas daarna de Site URL en Redirect URLs in Supabase (1.5) en `APP_API_URL`/`ATHENA_APP_URL` aan.
-5. **Cron:** `vercel.json` plant de dagelijkse taken (index 04:00, dagstart 05:00, archief 1e van de maand, talentrun 06:30, XPS-uren maandag 06:00; tijden staan in UTC, dus een uur eerder in de winter en twee uur eerder in de zomer dan de Apps Script-tijden; pas ze aan als dat uitmaakt). De uurlijkse mail- en agendasync (`crmSyncTrigger`) en de herinneringsmail elk kwartier (`herinneringTrigger`) vragen het Pro-plan van Vercel: voeg dan toe aan `vercel.json`:
+5. **Cron:** `vercel.json` plant de dagelijkse taken (index 04:00, dagstart 05:00, archief 1e van de maand, talentrun 06:30, XPS-uren maandag 06:00, prognose bevriezen 1e van de maand 02:15 (v6.5); tijden staan in UTC, dus een uur eerder in de winter en twee uur eerder in de zomer dan de Apps Script-tijden; pas ze aan als dat uitmaakt). De uurlijkse mail- en agendasync (`crmSyncTrigger`) en de herinneringsmail elk kwartier (`herinneringTrigger`) vragen het Pro-plan van Vercel: voeg dan toe aan `vercel.json`:
    ```json
    { "path": "/api/cron/crmSyncTrigger", "schedule": "0 * * * *" },
    { "path": "/api/cron/herinneringTrigger", "schedule": "*/15 * * * *" }

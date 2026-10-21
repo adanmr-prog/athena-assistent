@@ -128,7 +128,7 @@ function plan(rol, basis, tabellen) {
   var crm = basis.apiCrm || {}, p = [];
   var scholen = idsUit(crm, 'scholen', 2), personen = idsUit(crm, 'personen', 2), projecten = idsUit(crm, 'projecten', 2), kansen = idsUit(basis.apiPipeline, 'kansen', 2);
   var taken = idsUit(basis.apiTaken, 'taken', 2), talenten = idsUit(basis.apiTalenten, 'talenten', 3), vacatures = idsUit(basis.apiBezetting, 'vacatures', 2);
-  ['apiOverzicht', 'apiHome', 'apiCrm', 'apiTaken', 'apiTrajecten', 'apiPipeline', 'apiBezetting', 'apiFacturatie', 'apiTalenten', 'apiMeldingen', 'apiDoelen', 'apiInstellingen', 'apiVelden', 'apiHuisstijl', 'apiKennisbank', 'apiReview', 'apiStatus', 'apiGebruikers', 'apiHomeMails'].forEach(function (fn) { p.push([fn, []]); });
+  ['apiOverzicht', 'apiHome', 'apiCrm', 'apiTaken', 'apiTrajecten', 'apiPipeline', 'apiBezetting', 'apiFacturatie', 'apiFinancien', 'apiTalenten', 'apiMeldingen', 'apiDoelen', 'apiInstellingen', 'apiVelden', 'apiHuisstijl', 'apiKennisbank', 'apiReview', 'apiStatus', 'apiGebruikers', 'apiHomeMails'].forEach(function (fn) { p.push([fn, []]); });
   p.push(['apiAgenda', [VAN, TOT]], ['apiRapport', ['maand', '', 0]], ['apiRapport', ['kwartaal', '', -1]], ['apiTeamRapport', ['maand', 'alle', '', 0]], ['apiTeamRapport', ['kwartaal', rol.team, '', 0]], ['apiTalentRapport', ['maand', 0]], ['apiActiviteiten', ['', VAN, TOT, '']]);
   scholen.forEach(function (id) { p.push(['apiSchool', [id]], ['apiArchiefTijdlijn', ['school', id]]); });
   personen.forEach(function (id) { p.push(['apiPersoon', [id]]); });

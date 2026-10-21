@@ -302,6 +302,12 @@ with sync_playwright() as p:
     page.click('[data-factopen="t1"]'); page.wait_for_selector('tr.f-sub [data-fstatus="f2"]'); page.select_option('[data-fstatus="f2"]', 'aangemaakt'); page.wait_for_timeout(300)
     page.fill('.ftabel [data-pveld="factuurnummer"][data-pid="t2"]', '20210010'); page.press('.ftabel [data-pveld="factuurnummer"][data-pid="t2"]', 'Tab'); page.wait_for_timeout(300)
     page.screenshot(path=OUT + '/29_desk_facturatie.png')
+    # v6.5: Financiën per schooljaar, school en project
+    page.click('.zb-item[data-desk="financien"]'); page.wait_for_selector('table.fin [data-finopen]')
+    page.click('table.fin [data-finopen]'); page.wait_for_selector('table.fin td.fin-project'); page.wait_for_timeout(150)
+    assert page.locator('[data-finexact]').is_visible(), 'financien: Exact-knop voor management'
+    page.click('[data-finkas="1"]'); page.wait_for_selector('[data-finkas="1"].aan')
+    page.screenshot(path=OUT + '/29b_desk_financien.png')
     page.click('.zb-item[data-desk="rapporten"]'); page.wait_for_selector('.tabel'); page.wait_for_timeout(150)
     page.click('.zb-item[data-desk="doelen"]'); page.wait_for_selector('#doelenInhoud .doel-rij'); page.wait_for_timeout(150)
     page.click('#doelenInhoud [data-doelteam="accountmanagement"]'); page.wait_for_selector('#doelenInhoud .hkaart:has-text("Joris") .doel-rij')  # v4.2: doelen per team
@@ -350,6 +356,7 @@ with sync_playwright() as p:
     am.click('.ftabel a[data-crm-open="project:t6"]'); am.wait_for_selector('.d-naam h2:has-text("Examentraining")'); am.locator('.d-links [data-crm-open^="kans:"]').first.click()
     am.wait_for_selector('.d-naam h2'); assert am.locator('.d-naam [data-composer="bewerk"]').count() == 0 and am.locator('[data-kansfase]').count() == 0, 'kans van eigen project alleen lezen'
     am.screenshot(path=OUT + '/41_am_kans_lezen.png')
+    am.click('.zb-item[data-desk="financien"]'); am.wait_for_selector('table.fin [data-finopen]'); assert not am.locator('[data-finexact]').is_visible(), 'am: geen Exact-import'
     # v5.0: de accountmanager beoordeelt zijn geplaatste kandidaat en ziet een beperkt profiel (geen documenten, geen adres)
     am.click('.zb-item[data-desk="projecten"]'); am.wait_for_selector('.ftabel [data-crm-open="project:t6"]'); am.click('.ftabel a[data-crm-open="project:t6"]'); am.wait_for_selector('.d-naam h2:has-text("Examentraining")')
     am.click('[data-dtab="bezetting"]'); am.wait_for_selector('#dTab .rij:has-text("Noor Bakker") [data-beoordeel]'); assert am.locator('#dTab .rij:has-text("Noor Bakker") .vog.oranje').count() == 1, 'VOG-badge op de kandidaatregel'
@@ -368,7 +375,7 @@ with sync_playwright() as p:
     tl.goto('http://127.0.0.1:8765/'); tl.wait_for_timeout(500)
     tl.fill('#apiInput', 'http://127.0.0.1:8765/api'); tl.fill('#codeInput', 'talent123'); tl.click('#codeOpslaan')
     tl.wait_for_selector('#zbNaam:has-text("Lotte · talentscout")')
-    assert tl.locator('.zb-item[data-desk="bezetting"]').is_visible() and not tl.locator('.zb-item[data-desk="pipeline"]').is_visible() and not tl.locator('.zb-item[data-desk="facturatie"]').is_visible(), 'menu talent'
+    assert tl.locator('.zb-item[data-desk="bezetting"]').is_visible() and not tl.locator('.zb-item[data-desk="pipeline"]').is_visible() and not tl.locator('.zb-item[data-desk="facturatie"]').is_visible() and not tl.locator('.zb-item[data-desk="financien"]').is_visible(), 'menu talent'
     # v6.4: op desktop wisselt de zijbalk van scherm; Projecten toont de projecten (ook voor talent), Bezetting het bord zonder projectchips
     tl.click('.zb-item[data-desk="projecten"]'); tl.wait_for_selector('#projectWeergaven .chip.aan[data-pweergave="am"]'); assert tl.locator('.vac-grid').count() == 0 and tl.locator('#projectWeergaven [data-pweergave="bezetting"]').count() == 0, 'talent: Projecten toont projecten, zonder Bezetting-chip'
     tl.click('.zb-item[data-desk="bezetting"]'); tl.wait_for_selector('.vac-grid .vac-kaart'); assert tl.locator('#projectWeergaven .chip').count() == 0 and tl.locator('.zb-item.aan[data-desk="bezetting"]').count() == 1, 'Bezetting via de zijbalk, zonder projectchips'
