@@ -4,6 +4,11 @@ from playwright.sync_api import sync_playwright
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shots'); os.makedirs(OUT, exist_ok=True)  # draai eerst: python3 test/mock_backend.py
 meldingen = []
 exe = '/opt/pw-browsers/chromium' if os.path.isfile('/opt/pw-browsers/chromium') else '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+def sleep_naar(pg, kaart, kolom):  # v6.7: kaart met de muis naar een andere kolom slepen
+    a = pg.locator(kaart).bounding_box(); b = pg.locator(kolom).bounding_box()
+    pg.mouse.move(a['x'] + 20, a['y'] + 15); pg.mouse.down(); pg.mouse.move(a['x'] + 40, a['y'] + 30, steps=4)
+    pg.mouse.move(b['x'] + b['width'] / 2, b['y'] + 80, steps=10); pg.mouse.up(); pg.wait_for_timeout(500)
+
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=exe, headless=True)
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
@@ -280,6 +285,11 @@ with sync_playwright() as p:
     page.click('[data-agnav="1"]'); page.wait_for_timeout(300); page.click('[data-agnav="0"]'); page.wait_for_selector('.maand .dag.vandaag')
     page.click('[data-agendaplan]'); page.wait_for_selector('#agendaForm #cf-schoolId'); page.select_option('#cf-schoolId', 's1'); page.fill('#cf-titel', 'Evaluatie'); page.click('#agendaForm [data-cf-opslaan]'); page.wait_for_timeout(500)
     page.click('.zb-item[data-desk="pipeline"]'); page.wait_for_selector('.kolom'); page.wait_for_timeout(150)
+    k = page.locator('[data-sleepdoel^="kans:"] .kaartje.sleepbaar').first; kid = k.get_attribute('data-sleep'); van = k.evaluate("e => e.closest('[data-sleepdoel]').getAttribute('data-sleepdoel')")
+    naar = [d for d in page.eval_on_selector_all('[data-sleepdoel^="kans:"]', "l => l.map(e => e.getAttribute('data-sleepdoel'))") if d != van][0]
+    sleep_naar(page, '[data-sleep="%s"]' % kid, '[data-sleepdoel="%s"]' % naar)
+    assert page.locator('[data-sleepdoel="%s"] [data-sleep="%s"]' % (naar, kid)).count() == 1 and page.locator('#crmDetailScherm .d-naam h2').count() == 0, 'v6.7: kans naar een andere mijlpaal slepen (opent de kans niet)'
+    page.wait_for_selector('#toast.aan:has-text("→")')
     page.screenshot(path=OUT + '/25_desk_pipeline.png')
     page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]'); page.wait_for_timeout(150)  # v4.0: bord per accountmanager
     page.select_option('.ftabel [data-pveld="verlenging"][data-pid="t2"]', 'verlengd'); page.wait_for_selector('.ftabel select.pill.p-verlengd[data-pid="t2"]')
@@ -294,6 +304,11 @@ with sync_playwright() as p:
     page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]')
     page.click('[data-pweergave="huidig"]'); page.wait_for_timeout(200); assert 'schooljaar 2027-2028' in page.inner_text('#trajectTelling'), 'ingesteld schooljaar wordt gebruikt'
     page.click('[data-pweergave="bord"]'); page.wait_for_selector('.kaartje[data-crm-open^="project:"]'); page.wait_for_timeout(150)
+    k = page.locator('.kaartje.sleepbaar[data-sleep^="project:"]').first; pid = k.get_attribute('data-sleep'); van = k.evaluate("e => e.closest('[data-sleepdoel]').getAttribute('data-sleepdoel')")
+    naar = [d for d in page.eval_on_selector_all('[data-sleepdoel^="project:"]', "l => l.map(e => e.getAttribute('data-sleepdoel'))") if d != van][0]
+    sleep_naar(page, '[data-sleep="%s"]' % pid, '[data-sleepdoel="%s"]' % naar)
+    assert page.locator('[data-sleepdoel="%s"] [data-sleep="%s"]' % (naar, pid)).count() == 1, 'v6.7: project naar een andere status slepen'
+    sleep_naar(page, '[data-sleep="%s"]' % pid, '[data-sleepdoel="%s"]' % van)  # terug, zodat de rest van de test dezelfde stand ziet
     page.screenshot(path=OUT + '/26a_desk_projecten_bord.png')
     page.click('.kaartje[data-crm-open="project:t1"]'); page.wait_for_selector('.d-naam h2:has-text("Onderwijsondersteuning")'); assert page.locator('.zb-item.aan[data-desk="projecten"]').count() == 1
     page.screenshot(path=OUT + '/26b_desk_project.png')

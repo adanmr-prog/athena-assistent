@@ -657,7 +657,16 @@
   [role=region]:focus:not(:focus-visible) { outline: none; }
   button, .chip, .vink, .rij { touch-action: manipulation; }  /* geen dubbeltik-zoom nu zoomen weer mag */
   body:not(.desk) #projectHeroTekst { display: none; }  /* v6.6: op de telefoon eerst de projecten; de kop zegt al wat dit scherm is */
-  .p-acties { margin: 0 0 12px; } body.desk .p-acties { display: none; }  /* v6.6: op desktop staan ze in de kop en de zijbalk */  /* v6.6: op desktop staat '+ Taak/School/Persoon/Kans' al rechtsboven; niet twee knoppen voor hetzelfde */
+  .p-acties { margin: 0 0 12px; }
+  /* v6.7: slepen op de borden */
+  .kaartje.sleepbaar { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body.desk .kaartje.sleepbaar { cursor: grab; }
+  .kaartje.vast { transition: transform .35s ease; transform: scale(.98); }
+  .kaartje.sleept { opacity: .35; }
+  .sleep-schaduw { position: fixed; z-index: 400; margin: 0; pointer-events: none; transform: rotate(2deg); box-shadow: 0 12px 28px rgba(36,26,40,.22); cursor: grabbing; }
+  .kolom.doel { outline: 2px dashed var(--paars); outline-offset: -2px; background: var(--paars-l); }
+  body.sleep-actief, body.sleep-actief * { cursor: grabbing !important; }
+  body.sleep-actief .bord { scroll-snap-type: none; } body.desk .p-acties { display: none; }  /* v6.6: op desktop staan ze in de kop en de zijbalk */  /* v6.6: op desktop staat '+ Taak/School/Persoon/Kans' al rechtsboven; niet twee knoppen voor hetzelfde */
   .t-chips a, a.p-updates { display: inline-flex; align-items: center; min-height: 24px; }
   body:not(.desk) .t-chips a { min-height: 36px; }
   body:not(.desk) .knop-mini, body:not(.desk) .knop.klein { min-height: 40px; }
@@ -2460,11 +2469,12 @@
     return m ? m.pipeline : P.pipelines[0];
   }
   function kaartje(k) {
-    return '<div class="kaartje" data-crm-open="kans:' + esc(k.id) + '"><b>' + esc(k.school || k.naam) + '</b><div class="r-meta">' + [k.school ? esc(k.naam) : '', euro(k.waarde), esc(k.eigenaar), k.stil ? '<b>' + esc(k.dagenStil) + ' d stil</b>' : ''].filter(Boolean).join(' · ') + '</div></div>';
+    var rw = recht('pipeline', 'wijzigen'), sleep = rw === 'alles' || rw === 'team' || (rw === 'eigen' && k.eigenaar === ikNaam());  // v6.7: alleen wat je mag wijzigen is sleepbaar (de backend controleert opnieuw)
+    return '<div class="kaartje' + (sleep ? ' sleepbaar" data-sleep="kans:' + esc(k.id) + '"' : '"') + ' data-crm-open="kans:' + esc(k.id) + '"><b>' + esc(k.school || k.naam) + '</b><div class="r-meta">' + [k.school ? esc(k.naam) : '', euro(k.waarde), esc(k.eigenaar), k.stil ? '<b>' + esc(k.dagenStil) + ' d stil</b>' : ''].filter(Boolean).join(' · ') + '</div></div>';
   }
-  function kolomHtml(titel, sub, ks) {
+  function kolomHtml(titel, sub, ks, doel) {
     ks.sort(function (a, b) { return b.waarde - a.waarde; });
-    return '<div class="kolom"><h3>' + esc(titel) + '</h3><div class="k-som">' + ks.length + ' · ' + euro(som(ks, 'waarde')) + ' · ' + esc(sub) + '</div>' + (ks.length ? ks.map(kaartje).join('') : '<div class="leeg" style="padding:8px 2px;font-size:13px">Leeg</div>') + '</div>';
+    return '<div class="kolom"' + (doel ? ' data-sleepdoel="kans:' + esc(doel) + '"' : '') + '><h3>' + esc(titel) + '</h3><div class="k-som">' + ks.length + ' · ' + euro(som(ks, 'waarde')) + ' · ' + esc(sub) + '</div>' + (ks.length ? ks.map(kaartje).join('') : '<div class="leeg" style="padding:8px 2px;font-size:13px">Leeg</div>') + '</div>';
   }
   function renderPipeline() {
     var P = CRM.pipeline, B = CRM.basis, q = CRM.zoek.toLowerCase();
@@ -2475,8 +2485,8 @@
     var open = ks.filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; }), overig = open.filter(function (k) { return namen.indexOf(k.fase) < 0; });
     var dicht = ks.filter(function (k) { return k.fase === 'gewonnen' || k.fase === 'verloren'; }).sort(function (a, b) { return String(b.gesloten).localeCompare(String(a.gesloten)); });
     el('crmInhoud').innerHTML = '<div class="tegels drie">' + tegel(open.length, 'Open kansen') + tegel(euro(som(open, 'waarde')), 'Pijplijn') + tegel(euro(som(open, 'gewogen')), 'Gewogen', 'oranje') + '</div>' +
-      '<div class="bord" tabindex="0" role="region" aria-label="Bord">' + ms.map(function (m) { return kolomHtml(m.mijlpaal, m.kans + '%', open.filter(function (k) { return k.fase === m.mijlpaal; })); }).join('') + (overig.length ? kolomHtml('Overig', 'mijlpaal onbekend', overig) : '') + '</div>' +
-      '<div class="hint">Tik op een kans om de mijlpaal te wijzigen. Rood = langer stil dan de norm van de mijlpaal.</div>' +
+      '<div class="bord" tabindex="0" role="region" aria-label="Bord">' + ms.map(function (m) { return kolomHtml(m.mijlpaal, m.kans + '%', open.filter(function (k) { return k.fase === m.mijlpaal; }), m.mijlpaal); }).join('') + (overig.length ? kolomHtml('Overig', 'mijlpaal onbekend', overig) : '') + '</div>' +
+      '<div class="hint">' + (magApp('pipeline', 'wijzigen') ? (isDesk() ? 'Sleep een kans naar een andere mijlpaal, of klik erop om hem te openen.' : 'Houd een kans even vast en sleep hem naar een andere mijlpaal; tik om te openen.') : 'Tik op een kans om hem te openen.') + ' Rood = langer stil dan de norm van de mijlpaal.</div>' +
       '<div class="kop">Gesloten <small>laatste 60 dagen</small></div>' + (dicht.length ? dicht.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Nog niets gesloten.</div>');
   }
   // v4.5: weergaven zoals Todoist (Vandaag, Komende met een kop per dag, Te laat, Zonder datum, Alles, Afgerond); de keuze blijft op dit toestel bewaard
@@ -4048,10 +4058,109 @@
   function projectBord(lijst) {
     return '<div class="bord" tabindex="0" role="region" aria-label="Bord">' + trajectStatussenApp().map(function (st) {  // v3.7: instelbaar
       var ts = lijst.filter(function (t) { return t.status === st; });
-      return '<div class="kolom"><h3>' + esc(st) + '</h3><div class="k-som">' + ts.length + ' · ' + euro(som(ts, 'omzet')) + '</div>' + (ts.length ? ts.slice(0, 80).map(function (t) {
-        return '<div class="kaartje" data-crm-open="project:' + esc(t.id) + '"><b>' + esc(t.school) + '</b><div class="r-meta">' + [t.traject, t.schooljaar].filter(Boolean).map(esc).join(' · ') + (t.omzet ? ' · ' + euro(t.omzet) : '') + '</div></div>';
+      return '<div class="kolom" data-sleepdoel="project:' + esc(st) + '"><h3>' + esc(st) + '</h3><div class="k-som">' + ts.length + ' · ' + euro(som(ts, 'omzet')) + '</div>' + (ts.length ? ts.slice(0, 80).map(function (t) {
+        return '<div class="kaartje' + (t.magWijzigen !== false ? ' sleepbaar" data-sleep="project:' + esc(t.id) + '"' : '"') + ' data-crm-open="project:' + esc(t.id) + '"><b>' + esc(t.school) + '</b><div class="r-meta">' + [t.traject, t.schooljaar].filter(Boolean).map(esc).join(' · ') + (t.omzet ? ' · ' + euro(t.omzet) : '') + '</div></div>';
       }).join('') : '<div class="leeg" style="padding:8px 2px;font-size:13px">Leeg</div>') + '</div>';
-    }).join('') + '</div>';
+    }).join('') + '</div>' + (lijst.some(function (t) { return t.magWijzigen !== false; }) ? '<div class="hint">' + (isDesk() ? 'Sleep een project naar een andere status.' : 'Houd een project even vast en sleep het naar een andere status.') + '</div>' : '');  // v6.7
+  }
+
+  /* --- v6.7: kaarten slepen tussen kolommen (Pipeline: mijlpaal van een kans; Projecten → Bord: status van een project).
+     Pointer events, zodat muis en vinger hetzelfde doen. Muis: slepen na 6 px. Vinger: eerst 350 ms vasthouden, anders is het
+     gewoon scrollen door het bord. Tijdens het slepen scrolt het bord mee aan de rand. De backend controleert de rechten; bij een
+     fout gaat de kaart terug. Zonder slepen blijft alles werken zoals voorheen (kans openen → mijlpaal, project → statuspil). --- */
+  var SLEEP = null, SLEEP_NEGEER_KLIK = 0;
+  function sleepStop(opruimen) {
+    if (!SLEEP) return;
+    clearTimeout(SLEEP.timer); cancelAnimationFrame(SLEEP.raf);
+    if (SLEEP.schaduw && SLEEP.schaduw.parentNode) SLEEP.schaduw.parentNode.removeChild(SLEEP.schaduw);
+    if (SLEEP.kaart) SLEEP.kaart.classList.remove('sleept', 'vast');
+    document.querySelectorAll('.kolom.doel').forEach(function (k) { k.classList.remove('doel'); });
+    document.body.classList.remove('sleep-actief');
+    if (opruimen !== false) SLEEP = null;
+  }
+  function sleepBegin() {
+    var k = SLEEP.kaart, r = k.getBoundingClientRect(), g = k.cloneNode(true);
+    g.className = 'kaartje sleep-schaduw'; g.removeAttribute('data-crm-open'); g.removeAttribute('data-sleep'); g.setAttribute('aria-hidden', 'true');
+    g.style.width = r.width + 'px'; g.style.left = r.left + 'px'; g.style.top = r.top + 'px';
+    SLEEP.dx = SLEEP.x - r.left; SLEEP.dy = SLEEP.y - r.top; SLEEP.schaduw = g; SLEEP.actief = true;
+    document.body.appendChild(g); k.classList.add('sleept'); document.body.classList.add('sleep-actief');
+    if (navigator.vibrate) { try { navigator.vibrate(10); } catch (e) {} }
+    sleepRandScroll();
+  }
+  function sleepDoelOnder(x, y) {
+    var e = document.elementFromPoint(x, y), kol = e && e.closest ? e.closest('[data-sleepdoel]') : null;
+    if (!kol) {  // tussen twee kolommen of in de rand van het bord: de dichtstbijzijnde kolom
+      var br = SLEEP.bord.getBoundingClientRect(), best = Infinity;
+      if (y >= br.top && y <= br.bottom) SLEEP.bord.querySelectorAll('[data-sleepdoel]').forEach(function (k) { var r = k.getBoundingClientRect(), d = Math.abs(x - (r.left + r.right) / 2); if (r.right > br.left && r.left < br.right && d < best) { best = d; kol = k; } });
+    }
+    return kol && kol.getAttribute('data-sleepdoel').split(':')[0] === SLEEP.soort ? kol : null;
+  }
+  function sleepRandScroll() {  // het bord schuift mee als je bij de linker- of rechterrand komt (telefoon: één kolom in beeld)
+    if (!SLEEP || !SLEEP.actief) return;
+    var b = SLEEP.bord, r = b.getBoundingClientRect(), rand = Math.min(60, r.width / 6), v = 0;
+    if (SLEEP.x < r.left + rand) v = -Math.ceil((r.left + rand - SLEEP.x) / 6); else if (SLEEP.x > r.right - rand) v = Math.ceil((SLEEP.x - (r.right - rand)) / 6);
+    if (v) { b.scrollLeft += v; sleepMarkeer(); }
+    SLEEP.raf = requestAnimationFrame(sleepRandScroll);
+  }
+  function sleepMarkeer() {
+    var kol = sleepDoelOnder(SLEEP.x, SLEEP.y);
+    document.querySelectorAll('.kolom.doel').forEach(function (k) { if (k !== kol) k.classList.remove('doel'); });
+    if (kol && kol !== SLEEP.vanKolom) kol.classList.add('doel');
+    SLEEP.doel = kol && kol !== SLEEP.vanKolom ? kol : null;
+  }
+  document.addEventListener('pointerdown', function (ev) {
+    if (ev.button > 0 || SLEEP) return;
+    var k = ev.target.closest && ev.target.closest('.kaartje[data-sleep]'); if (!k || ev.target.closest('a, button, select, input')) return;
+    var w = k.getAttribute('data-sleep'), i = w.indexOf(':'), kol = k.closest('[data-sleepdoel]'), bord = k.closest('.bord');
+    if (!kol || !bord) return;
+    SLEEP = { kaart: k, soort: w.slice(0, i), id: w.slice(i + 1), vanKolom: kol, bord: bord, x: ev.clientX, y: ev.clientY, x0: ev.clientX, y0: ev.clientY, aanraak: ev.pointerType !== 'mouse', actief: false, doel: null };
+    if (SLEEP.aanraak) { k.classList.add('vast'); SLEEP.timer = setTimeout(function () { if (SLEEP && !SLEEP.actief) sleepBegin(); }, 350); }
+  });
+  document.addEventListener('pointermove', function (ev) {
+    if (!SLEEP) return;
+    SLEEP.x = ev.clientX; SLEEP.y = ev.clientY;
+    if (!SLEEP.actief) {
+      var ver = Math.abs(ev.clientX - SLEEP.x0) + Math.abs(ev.clientY - SLEEP.y0);
+      if (SLEEP.aanraak) { if (ver > 10) sleepStop(); return; }  // vinger bewoog vóór het vasthouden: dat is scrollen
+      if (ver < 6) return;
+      sleepBegin();
+    }
+    ev.preventDefault();
+    SLEEP.schaduw.style.left = (ev.clientX - SLEEP.dx) + 'px'; SLEEP.schaduw.style.top = (ev.clientY - SLEEP.dy) + 'px';
+    sleepMarkeer();
+  });
+  // iOS: zolang er gesleept wordt, mag de pagina niet scrollen (een niet-passieve touchmove is de enige manier)
+  document.addEventListener('touchmove', function (ev) { if (SLEEP && SLEEP.actief) ev.preventDefault(); }, { passive: false });
+  document.addEventListener('contextmenu', function (ev) { if (SLEEP) ev.preventDefault(); });
+  document.addEventListener('pointercancel', function () { sleepStop(); });
+  document.addEventListener('pointerup', function () {
+    if (!SLEEP) return;
+    var s = SLEEP, actief = s.actief, doel = s.doel;
+    sleepStop();
+    if (!actief) return;
+    SLEEP_NEGEER_KLIK = Date.now();  // de klik die op het loslaten volgt opent de kaart niet
+    if (doel) sleepZet(s.soort, s.id, doel.getAttribute('data-sleepdoel').slice(s.soort.length + 1));
+  });
+  document.addEventListener('click', function (ev) {
+    if (SLEEP_NEGEER_KLIK && Date.now() - SLEEP_NEGEER_KLIK < 400) { SLEEP_NEGEER_KLIK = 0; ev.stopPropagation(); ev.preventDefault(); }
+  }, true);
+  function sleepZet(soort, id, naar) {
+    if (soort === 'kans') {
+      var P = CRM.pipeline, k = P && P.kansen.filter(function (x) { return x.id === id; })[0]; if (!k || k.fase === naar) return;
+      var oud = k.fase; k.fase = naar; renderPipeline();
+      run('apiKansOpslaan', { id: id, fase: naar, _oud: { fase: oud } }, false).then(function (x) {
+        if (x && x.kans) { for (var n in x.kans) if (x.kans.hasOwnProperty(n)) k[n] = x.kans[n]; }
+        if (CRM.pipeline === P && el('view-relaties').classList.contains('actief') && CRM.tab === 'pipeline' && !CRM.detail) renderPipeline();
+        toast((k.school || k.naam) + ' → ' + naar);
+      }).catch(function () { k.fase = oud; if (CRM.pipeline === P && CRM.tab === 'pipeline' && !CRM.detail) renderPipeline(); });
+      return;
+    }
+    if (soort === 'project') {
+      var l = projectenLokaal(id); if (!l.length || l[0].status === naar) return;
+      var was = l[0].status; l.forEach(function (t) { t.status = naar; }); renderTrajecten();
+      run('apiTrajectOpslaan', { id: id, status: naar, _oud: { status: was } }).then(function () { toast((l[0].school || 'Project') + ' → ' + naar); })
+        .catch(function () { projectenLokaal(id).forEach(function (t) { t.status = was; }); renderTrajecten(); });
+    }
   }
 
   /* --- Home --- */
