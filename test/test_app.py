@@ -58,7 +58,7 @@ with sync_playwright() as p:
     page.click('nav button[data-view="trajecten"]'); page.wait_for_selector('[data-crm-open="project:t1"]'); page.wait_for_timeout(200)  # v3.8: projectpagina
     # v4.0: projectenbord zoals monday — eigen bord, iedereen, verlenging, examentraining
     assert page.locator('#projectAms .chip.aan[data-pam="Menno"]').count() == 1, 'begint bij het eigen bord'
-    assert page.locator('.p-groep h3:has-text("Lopende trajecten")').count() == 1 and page.locator('[data-crm-open="project:t3"]').count() == 0, 'alleen eigen projecten'
+    assert page.locator('.p-groep h3:has-text("Lopende projecten")').count() == 1 and page.locator('[data-crm-open="project:t3"]').count() == 0, 'alleen eigen projecten'
     page.screenshot(path=OUT + '/07a_projecten_am.png', full_page=True)
     page.click('#projectAms [data-pam=""]'); page.wait_for_selector('[data-crm-open="project:t3"]')
     page.click('.p-groep h3:has-text("Afgelopen")'); page.wait_for_selector('[data-crm-open="project:t5"]')
