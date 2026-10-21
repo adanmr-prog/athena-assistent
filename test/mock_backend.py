@@ -140,7 +140,7 @@ HUIDIG = ['test123']
 def ik(): return dict(IKKEN[HUIDIG[0]])
 def beheer(): return ik()['beheer']
 def eigen_project(t):
-    if ik()['team'] == 'talent': return t.get('status') == 'opstart' or any(v['trajectId'] == t['id'] and v['status'] == 'open' for v in VACATURES)
+    if ik()['team'] == 'talent': return t.get('status') == 'opstart' or t.get('talentscout') == ik()['naam'] or any(v['trajectId'] == t['id'] and v['status'] == 'open' for v in VACATURES)  # v6.4: talentscout
     return beheer() or t.get('am') == ik()['naam']
 # v4.1: vacatures, kandidaten, taskforce en meldingen
 VACATURES = [{'id': 'v1', 'trajectId': 't4', 'titel': 'NT2-ondersteuner', 'aantal': 2, 'dagen': 'ma t/m do 9-15 uur', 'urenPerWeek': 16, 'start': '2026-11-02', 'eind': '2027-04-30', 'profiel': 'Ervaring met NT2, liefst pabo', 'status': 'open', 'door': 'Menno', 'aangemaakt': nu()},
@@ -168,8 +168,9 @@ def bezetting_van(tid):
 def project_bezetting(t):
     return {'trajectId': t['id'], 'projectStatus': t['status'], 'vacatures': [vac_uit(v) for v in VACATURES if v['trajectId'] == t['id']], 'bezetting': bezetting_van(t['id']),
             'taskforce': t.get('taskforce') or {}, 'taskforceVragen': VRAGEN, 'afspraken': [{'id': x['id'], 'tekst': x['tekst'], 'eigenaar': x['eigenaar'], 'deadline': x['deadline'], 'status': x['status']} for x in TAKEN if x.get('trajectId') == t['id'] and x.get('bron') == 'taskforce'],
-            'keuzesBezetting': {'kandidaatStatussen': KSTATUS, 'vacatureStatussen': ['open', 'ingevuld', 'gesloten'], 'bronnen': ['XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders']},
-            'rechtenBezetting': {'vacatures': ik()['team'] != 'consultancy', 'kandidatenZien': True, 'kandidaten': True, 'taskforce': True}}
+            'keuzesBezetting': {'kandidaatStatussen': KSTATUS, 'vacatureStatussen': ['concept', 'open', 'ingevuld', 'gesloten'], 'bronnen': ['XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders']},
+            'rechtenBezetting': {'vacatures': ik()['team'] != 'consultancy', 'kandidatenZien': True, 'kandidaten': True, 'taskforce': True, 'talentscout': ik()['team'] != 'talent', 'talentscoutZelf': ik()['team'] != 'talent' or not t.get('talentscout')},  # v6.4
+            'talentscout': t.get('talentscout', ''), 'talentscouts': ['Lotte'], 'taskforceGepland': (t.get('taskforce') or {}).get('gepland', '')}  # v6.4
 def meld(voor, tekst, link):
     if voor and voor != ik()['naam']: MELDINGEN.append({'id': 'm' + uuid.uuid4().hex[:5], 'voor': voor, 'tekst': tekst, 'link': link, 'datum': nu(), 'gelezen': '', 'door': ik()['naam']})
 # v5.0: het talentbestand (fictief). tl1 hangt aan kandidaat c1 (project van Menno), tl2 aan c2 (project van Joris, geplaatst → Beoordelen)
@@ -452,9 +453,15 @@ def handle_crm(fn, args):
             o['gesloten'] = d(0) if o['fase'] in ('gewonnen', 'verloren') else ''
             ACTIVITEITEN.append({'id': 'e' + uuid.uuid4().hex[:5], 'type': 'fase', 'datum': nu(), 'door': 'Menno', 'schoolId': oud['schoolId'], 'persoonId': oud['persoonId'], 'kansId': oud['id'], 'onderwerp': 'Mijlpaal: ' + oud['fase'] + ' → ' + o['fase'], 'tekst': o.get('verliesReden', ''), 'duurMin': 0, 'bron': 'app'})
         k = opslaan(CRMKANSEN, o, 'k'); traject = None
+        od = args[0].get('overdracht') if wissel and o['fase'] == 'gewonnen' else None  # v6.4: winformulier
+        if od is not None and (not od.get('startdatum') or int(od.get('aantal') or 0) < 1): raise ValueError('Vul het aantal ondersteuners en de gewenste startdatum in.')
         if wissel and k['fase'] == 'gewonnen' and not any(t.get('kansId') == k['id'] for t in TRAJECTEN):  # v3.8: altijd een project
             traject = {'id': 'p' + uuid.uuid4().hex[:5], 'schoolId': k['schoolId'], 'school': k['school'], 'plaats': '', 'traject': k['naam'], 'schooljaar': '2026-2027', 'start': '', 'eind': '', 'status': 'opstart', 'ondersteuners': 0, 'urenPerWeek': 0, 'tarief': 0, 'omzet': k['waarde'], 'contactpersoon': '', 'am': k.get('am', ''), 'adviseur': k['eigenaar'], 'kansId': k['id'], 'samenvatting': '', 'bijgewerkt': nu(),
                        'soortFacturatie': '', 'gefactureerd': '', 'factuurDatum': '', 'vakanties': '', 'bijzonderheden': '', 'factuurnummer': ''}
+            if od:  # v6.4: taskforce vooringevuld, conceptvacature voor het talentteam
+                traject['start'] = od['startdatum']; traject['taskforce'] = {'inzet': str(od['aantal']) + ' × ' + (od.get('rol') or 'Onderwijsondersteuner'), 'rooster': od.get('rooster', ''), 'startdatum': od['startdatum'], 'bijzonderheden': od.get('bijzonderheden', ''), 'door': k['eigenaar'], 'bron': 'winformulier'}
+                VACATURES.append({'id': 'v' + uuid.uuid4().hex[:5], 'trajectId': traject['id'], 'titel': od.get('rol') or 'Onderwijsondersteuner', 'aantal': int(od['aantal']), 'dagen': od.get('rooster', ''), 'urenPerWeek': '', 'start': od['startdatum'], 'eind': '', 'profiel': od.get('bijzonderheden', ''), 'status': 'concept', 'door': k['eigenaar'], 'aangemaakt': nu()})
+            meld('Lotte', 'Nieuw project: ' + k['naam'] + '. De conceptvacature staat op het bord Bezetting.', 'project:' + traject['id'])
             TRAJECTEN.insert(0, traject)
             ACTIVITEITEN.append({'id': 'e' + uuid.uuid4().hex[:5], 'type': 'notitie', 'datum': nu(), 'door': k['eigenaar'], 'schoolId': k['schoolId'], 'persoonId': k.get('persoonId', ''), 'kansId': k['id'], 'trajectId': traject['id'], 'onderwerp': 'Overdracht naar ' + (k.get('am') or 'de accountmanager'), 'tekst': 'Kans gewonnen.', 'duurMin': 0, 'bron': 'app'})
             TAKEN.append({'id': 'tk' + uuid.uuid4().hex[:5], 'tekst': 'Startgesprek plannen', 'bron': 'project', 'prio': 'hoog', 'deadline': d(3), 'link': '', 'over': -3, 'categorie': 'afspraak', 'eigenaar': k.get('am') or 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': k['schoolId'], 'persoonId': '', 'kansId': k['id'], 'trajectId': traject['id']})
@@ -511,15 +518,27 @@ def handle_crm(fn, args):
         for v in VACATURES:
             t = tm[v['trajectId']]
             if not (beheer() or ik()['team'] == 'talent' or t['am'] == ik()['naam']): continue
-            u = vac_uit(v); u['project'] = {'id': t['id'], 'school': t['school'], 'traject': t['traject'], 'schooljaar': t['schooljaar'], 'status': t['status'], 'am': t['am'], 'adviseur': t.get('adviseur', ''), 'start': t['start']}
+            u = vac_uit(v); u['project'] = {'id': t['id'], 'school': t['school'], 'traject': t['traject'], 'schooljaar': t['schooljaar'], 'status': t['status'], 'am': t['am'], 'adviseur': t.get('adviseur', ''), 'start': t['start'], 'talentscout': t.get('talentscout', '')}  # v6.4
             u['magWijzigen'] = True; u['magKandidaten'] = True; l.append(u)
-        tel = {'openVacatures': len([v for v in l if v['status'] == 'open']), 'openPlekken': sum(max(0, v['aantal'] - v['gevuld']) for v in l if v['status'] == 'open'), 'inProces': sum(v['inProces'] for v in l), 'klaar': sum(v['gevuld'] for v in l)}
+        tel = {'openVacatures': len([v for v in l if v['status'] == 'open']), 'openPlekken': sum(max(0, v['aantal'] - v['gevuld']) for v in l if v['status'] == 'open'), 'inProces': sum(v['inProces'] for v in l), 'klaar': sum(v['gevuld'] for v in l), 'concept': len([v for v in l if v['status'] == 'concept'])}  # v6.4
         return {'vacatures': l, 'tellingen': tel, 'keuzes': project_bezetting(TRAJECTEN[0])['keuzesBezetting'], 'ik': ik()}
     if fn == 'apiVacatureOpslaan':
         o = dict(args[0]); o.pop('_oud', None)
         if not o.get('id'): o.update({'status': 'open', 'door': ik()['naam'], 'aangemaakt': nu()}); o['aantal'] = int(o.get('aantal') or 1); [o.setdefault(k, '') for k in ['dagen', 'urenPerWeek', 'start', 'eind', 'profiel']]; meld('Lotte', 'Nieuwe vacature: ' + o.get('titel', ''), 'project:' + o['trajectId'])
         elif 'aantal' in o: o['aantal'] = int(o['aantal'] or 1)
+        if o.get('id') and o.get('status') == 'open' and per_id(VACATURES)[o['id']]['status'] == 'concept':  # v6.4: bevestigen na de taskforce
+            tb = per_id(TRAJECTEN)[per_id(VACATURES)[o['id']]['trajectId']]; meld(tb.get('talentscout') or 'Lotte', 'Vacature bevestigd: ' + per_id(VACATURES)[o['id']]['titel'], 'project:' + tb['id'])
         v = opslaan(VACATURES, o, 'v'); return project_bezetting(per_id(TRAJECTEN)[v['trajectId']])
+    if fn == 'apiTalentscoutToewijzen':  # v6.4
+        t = per_id(TRAJECTEN)[args[0]]
+        if ik()['team'] == 'talent' and (t.get('talentscout') or args[1] != ik()['naam']): geen_toegang()
+        t['talentscout'] = args[1]; meld(args[1], 'Je bent talentscout van ' + t['school'], 'project:' + t['id'])
+        ACTIVITEITEN.append({'id': uuid.uuid4().hex[:6], 'type': 'taak', 'datum': nu(), 'door': ik()['naam'], 'schoolId': t['schoolId'], 'persoonId': '', 'kansId': '', 'trajectId': t['id'], 'onderwerp': 'Talentscout: ' + args[1], 'tekst': '', 'duurMin': 0, 'bron': 'overdracht'})
+        return project_bezetting(t)
+    if fn == 'apiTaskforcePlannen':  # v6.4
+        t = per_id(TRAJECTEN)[args[0]]; o = args[1]; tf = dict(t.get('taskforce') or {}); tf['gepland'] = o['start'].replace('T', ' '); tf['datum'] = o['start'][:10]; t['taskforce'] = tf
+        ACTIVITEITEN.append({'id': uuid.uuid4().hex[:6], 'type': 'afspraak', 'datum': tf['gepland'], 'door': ik()['naam'], 'schoolId': t['schoolId'], 'persoonId': '', 'kansId': '', 'trajectId': t['id'], 'onderwerp': 'Taskforce ' + t['school'], 'tekst': '', 'duurMin': int(o.get('duurMin') or 45), 'bron': 'app'})
+        r = project_bezetting(t); r['zonderEmail'] = [] if t.get('talentscout') else []; return r
     if fn == 'apiKandidaatOpslaan':
         o = dict(args[0]); o.pop('_oud', None)
         tl = per_id(TALENTEN).get(o.get('talentId') or '')  # v5.0: uit het talentbestand → naam en contact van het profiel

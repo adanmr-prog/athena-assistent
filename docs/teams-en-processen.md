@@ -1,6 +1,6 @@
 # Voorstel: teams, rechten en het trajectproces (v4)
 
-Status: **v5.0 gebouwd** (16-10-2026): teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen; rapporten en doelen per team, plus bedrijfsdoelen; taken zoals Todoist; talentnetwerk fase 1 (talentbestand naast XPS, §6 en §9). ⚠️ = aanname die bevestigd moet worden.
+Status: **v6.4 gebouwd** (21-10-2026: winformulier, conceptvacature, vaste talentscout, taskforce in de agenda; v5.0 16-10-2026): teams, rollen en rechten; projectenbord; taskforce, vacatures, kandidaten, bezetting en meldingen; rapporten en doelen per team, plus bedrijfsdoelen; taken zoals Todoist; talentnetwerk fase 1 (talentbestand naast XPS, §6 en §9). ⚠️ = aanname die bevestigd moet worden.
 
 **Besluiten (oktober 2026):** rechtentabel akkoord. Consultants zien de facturatie van hun eigen projecten (alleen lezen). Een AM ziet de historie van de kans achter zijn project, en alleen die. Teamlead accountmanagers: Mees; teamlead onderwijsconsultants: Mariama; management: Anne-Maartje en Menno. XPS blijft voor diensten en roosters (export/API later). De academy is een eigen platform.
 
@@ -67,9 +67,11 @@ Wat het dashboard bij elke stap doet:
 
 | Stap | In het dashboard | Automatisch |
 |---|---|---|
-| Kans gewonnen | project (bestaat al, v3.8) | taak "Taskforcemeeting plannen" (consultant), agenda-uitnodiging voor AM en talentscout |
+| Kans gewonnen | v6.4: **winformulier** van de consultant (aantal en startdatum verplicht; rol, dagen en tijden, AM, bijzonderheden) → project voor de AM met vooringevulde taskforce, en een **conceptvacature** op het bord Bezetting | melding aan de AM en het hele talentteam; taak "Talentscout toewijzen" (teamlead talent); taak "Taskforcemeeting plannen" (consultant) |
+| Talentscout | v6.4: vast veld op het project; de teamlead (of AM, management) wijst toe, een scout pakt een project zonder scout zelf op | de scout krijgt voortaan de talentmeldingen van dat project; zonder scout gaan ze naar het hele team; filter "Mijn projecten" op het bord |
+| Taskforcemeeting | v6.4: knop "Taskforcemeeting inplannen" in de tab Taskforce | agenda-uitnodiging voor consultant, AM en talentscout met de link naar het project; de plantaak gaat af |
 | Taskforce | tab **Taskforce** in het project: vaste vragen (hulpvraag, inzet, rooster, startdatum, bijzonderheden, contactpersonen), afspraken en deadlines | deadlines worden taken bij de juiste persoon |
-| Vacature | tab **Bezetting**: vacatures per project | melding aan het talentteam: "nieuwe vacature" |
+| Vacature | tab **Bezetting**: vacatures per project; v6.4: de AM **bevestigt** de conceptvacature na de taskforce (of past hem eerst aan). Op een concept kan talent alvast matchen, nog niet voordragen | melding aan de talentscout (anders het team): "nieuwe vacature" of "vacature bevestigd"; elke stap staat als regel in de tijdlijn van het project |
 | Voordragen | kandidaatkaart per vacature: voorgesteld → gesprek → geselecteerd/afgewezen → academy → contract → VOG → klaar; v5.0: knop **Voorstellen** op de vacature toont de best passende talenten uit het bestand (score 0–100 met uitleg per onderdeel, harde uitsluitingen met reden), het talentteam kiest wie wordt voorgedragen | AM krijgt een taak "matchinggesprek" bij elke voordracht |
 | Academy, contract, VOG | statussen op de kandidaatkaart (talentscout); v5.0: VOG-stand per schooljaar als badge op de kandidaatregel en in het profiel | herinnering als een stap te lang open staat; v5.0: op 1 mei en 1 juni een mail aan wie volgend schooljaar een nieuwe VOG nodig heeft, plus één verzameltaak voor het talentteam |
 | Inzet loopt (v5.0) | kandidaat `geplaatst` (ook automatisch uit de XPS-weekexport); daarna `afgerond` of `gestopt` met reden | AM krijgt na zes weken en daarna elk kwartaal een taak "Beoordeel <naam> bij <school>" (favoriet / goed / niet geschikt + criteria); "niet geschikt" meldt het talentteam |

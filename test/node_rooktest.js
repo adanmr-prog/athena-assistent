@@ -248,6 +248,42 @@ eis(roep(IRIS, 'apiInstellingen').talentFuncties.length === 7 && roep(SOPHIE, 'a
 ctx.GEBRUIKER = null; var bl = ctx.kandidatenBlijvenLiggen(true);
 eis(bl.some(function (x) { return /VOG van Jesse Vos.*verlopen, nodig vóór de start/.test(x.tekst); }) && bl.some(function (x) { return /VOG van Eva de Wit.*oranje/.test(x.tekst); }), 'blijven liggen (dagstart): verlopen VOG bij een voordracht, oranje VOG bij een lopende inzet');
 
+/* ---- v6.4: samenwerking bij een gewonnen kans (winformulier, conceptvacature, talentscout, taskforce in de agenda) ---- */
+var BAS = 'demo-bas';
+eis(/startdatum/.test(faalt(LARS, 'apiKansOpslaan', { id: 'k7', fase: 'gewonnen', _oud: { fase: 'onderhandeling' }, overdracht: { aantal: 2, rol: 'Studentdocent wiskunde' } })) &&
+  ctx.lees('Kansen').filter(function (k) { return k.id === 'k7'; })[0].fase === 'onderhandeling', 'winformulier: zonder startdatum geweigerd, de kans blijft open');
+var mVoor = ctx.lees('Meldingen').length, start64 = plusDagen(21);
+var won = roep(LARS, 'apiKansOpslaan', { id: 'k7', fase: 'gewonnen', _oud: { fase: 'onderhandeling' }, overdracht: { aantal: 2, rol: 'Studentdocent wiskunde', rooster: 'di en do 8:30-12:30', startdatum: start64, bijzonderheden: 'Ervaring met havo 4' } });
+var p64 = won.traject, tr64 = ctx.lees('Trajecten').filter(function (t) { return t.id === p64.id; })[0], tf64 = JSON.parse(tr64.taskforce);
+eis(p64 && p64.am === 'Bas Meijer' && p64.start === start64 && tf64.inzet === '2 × Studentdocent wiskunde' && tf64.rooster === 'di en do 8:30-12:30' && tf64.bijzonderheden === 'Ervaring met havo 4', 'winformulier vult start en taskforce (inzet, rooster, bijzonderheden) voor');
+var vac64 = ctx.lees('Vacatures').filter(function (v) { return v.trajectId === p64.id; });
+eis(vac64.length === 1 && vac64[0].status === 'concept' && Number(vac64[0].aantal) === 2 && vac64[0].dagen === 'di en do 8:30-12:30' && vac64[0].start === start64, 'een conceptvacature met aantal, rooster en start');
+var m64 = ctx.lees('Meldingen').slice(mVoor);
+eis(m64.some(function (m) { return m.voor === 'Iris Mulder' && /conceptvacature/.test(m.tekst); }) && m64.some(function (m) { return m.voor === 'Sem de Boer'; }) && m64.some(function (m) { return m.voor === 'Bas Meijer'; }), 'melding aan het hele talentteam en aan de accountmanager');
+var taakTs = acties().filter(function (a) { return a.trajectId === p64.id && a.bron === 'talentscout'; });
+eis(taakTs.length === 1 && taakTs[0].eigenaar === 'Iris Mulder' && taakTs[0].status === 'open', 'taak "Talentscout toewijzen" voor de teamlead van talent');
+var bz64 = roep(SEM, 'apiBezetting'), opBord = bz64.vacatures.filter(function (v) { return v.id === vac64[0].id; })[0];
+eis(opBord && opBord.status === 'concept' && bz64.tellingen.concept >= 1 && bz64.tellingen.openVacatures === roep(SEM, 'apiBezetting').tellingen.openVacatures, 'de conceptvacature staat op het bord Bezetting en telt niet als open');
+eis(!faalt(SEM, 'apiMatch', vac64[0].id), 'talent kan op een concept al matchen');
+eis(/concept/.test(faalt(SEM, 'apiVoorstellen', vac64[0].id, ['tl1'])) && /concept/.test(faalt(SEM, 'apiKandidaatOpslaan', { vacatureId: vac64[0].id, naam: 'Test Kandidaat' })), 'voordragen op een concept wordt geweigerd');
+eis(/toegang/.test(faalt(SEM, 'apiTalentscoutToewijzen', p64.id, 'Iris Mulder')) && /talentteam/.test(faalt(IRIS, 'apiTalentscoutToewijzen', p64.id, 'Lars Visser')), 'een scout wijst geen ander toe; alleen iemand uit het talentteam kan scout zijn');
+var mV2 = ctx.lees('Meldingen').length, ts = roep(SEM, 'apiTalentscoutToewijzen', p64.id, 'Sem de Boer');
+eis(ts.talentscout === 'Sem de Boer' && acties().filter(function (a) { return a.id === taakTs[0].id; })[0].status === 'af', 'een scout pakt een project zonder scout zelf op; de toewijstaak gaat af');
+eis(/toegang/.test(faalt(SEM, 'apiTalentscoutToewijzen', p64.id, '')) && !faalt(IRIS, 'apiTalentscoutToewijzen', p64.id, 'Sem de Boer'), 'daarna wijzigt alleen de teamlead (of AM/management) de scout');
+eis(ctx.lees('Activiteiten').some(function (a) { return a.trajectId === p64.id && a.bron === 'overdracht' && /Talentscout: Sem/.test(a.onderwerp); }), 'overdrachtsregel in de tijdlijn bij het toewijzen');
+var agendaVoor = ctx._demoAgenda ? ctx._demoAgenda.length : 0;
+var gepl = roep(LARS, 'apiTaskforcePlannen', p64.id, { start: plusDagen(2) + 'T10:00', duurMin: 45 });
+eis(gepl.taskforceGepland && /10:00/.test(gepl.taskforceGepland) && acties().filter(function (a) { return a.trajectId === p64.id && a.bron === 'taskforceplannen'; }).every(function (a) { return a.status === 'af'; }), 'taskforcemeeting in de agenda; de plantaak van de consultant gaat af');
+eis(ctx.lees('Meldingen').slice(mV2).some(function (m) { return m.voor === 'Bas Meijer' && /Taskforcemeeting/.test(m.tekst); }) && ctx.lees('Meldingen').slice(mV2).some(function (m) { return m.voor === 'Sem de Boer' && /Taskforcemeeting/.test(m.tekst); }), 'AM en talentscout krijgen een melding van de meeting');
+eis(/concept/.test(faalt(BAS, 'apiVacatureOpslaan', { trajectId: p64.id, titel: 'X', status: 'concept' })), 'een nieuwe vacature kan geen concept zijn');
+var mV3 = ctx.lees('Meldingen').length;
+var bev = roep(BAS, 'apiVacatureOpslaan', { id: vac64[0].id, status: 'open', _oud: { status: 'concept' } });
+eis(bev.vacatures.filter(function (v) { return v.id === vac64[0].id; })[0].status === 'open' && ctx.lees('Meldingen').slice(mV3).filter(function (m) { return /bevestigd/.test(m.tekst); }).map(function (m) { return m.voor; }).join() === 'Sem de Boer', 'de AM bevestigt; alleen de talentscout krijgt de melding');
+eis(!faalt(SEM, 'apiVoorstellen', vac64[0].id, ['tl1']), 'na bevestigen kan talent voordragen');
+eis(roep(SEM, 'apiTrajecten').trajecten.some(function (t) { return t.id === p64.id && t.talentscout === 'Sem de Boer'; }), 'de talentscout ziet het project in zijn projectenlijst');
+var won2 = roep(LARS, 'apiKansOpslaan', { id: 'k10', fase: 'gewonnen', _oud: { fase: 'voorstel' } });
+eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectId === won2.traject.id; }) && acties().some(function (a) { return a.trajectId === won2.traject.id && a.bron === 'talentscout'; }), 'zonder winformulier (Brein, import): project zonder conceptvacature, wel de toewijstaak');
+
 /* ---- bestaande schermen blijven werken ---- */
 ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });
 try { ctx.GEBRUIKER = null; ctx.nachtelijkeReview(); eis(true, 'nachtelijke review draait'); } catch (e) { eis(false, 'nachtelijke review draait: ' + e.message); }

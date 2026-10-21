@@ -258,7 +258,8 @@ function demoVul() {
     ['k12', 's6', 'p8', 'NT2 voor nieuwkomers', 'lead', 12000, M.yara, '', -4, null, 75, 'Behoefte peilen', 7, -4],
     ['k16', 's1', 'p2', 'Examentraining voorjaar', 'gesprek', 9600, M.lars, '', -11, null, 50, 'Offerte opstellen', 5, -6],
     ['k13', 's12', 'p14', 'Onderwijsondersteuning', 'verloren', 26000, M.yara, '', -60, -25, null, '', null, -25, 'Te duur'],
-    ['k14', 's7', 'p9', 'Huiswerkklas', 'verloren', 7200, M.lars, '', -45, -8, null, '', null, -8, 'Eigen oplossing gevonden']
+    ['k14', 's7', 'p9', 'Huiswerkklas', 'verloren', 7200, M.lars, '', -45, -8, null, '', null, -8, 'Eigen oplossing gevonden'],
+    ['k17', 's8', 'p10', 'Surveillance toetsweken', 'gewonnen', 5600, M.noor, M.femke, -28, -1]  // v6.4: net gewonnen, met winformulier (conceptvacature, nog geen talentscout)
   ];
   schrijfVeel('Kansen', kansen.map(function (k) {
     return { id: k[0], schoolId: k[1], school: sn[k[1]], persoonId: k[2], naam: k[3], traject: k[3], fase: k[4], pipeline: 'Scholen', waarde: k[5], eigenaar: k[6], am: k[7], aangemaakt: dt(k[8], '09:30'),
@@ -282,15 +283,18 @@ function demoVul() {
     ['t10', 's6', 'Onderwijsondersteuning', sj, 'onduidelijk', 1, 8, 45, 12000, M.bas, M.yara, '', '', '', '', '', ''],
     ['t7', 's1', 'Examentraining', vorig, 'afgelopen', 2, 10, 44, 8800, M.femke, M.lars, '', 'verlengd', 'vooraf', 'ja', (j1) + '-03-01', j1 + '-05-15'],
     ['t8', 's12', 'Onderwijsondersteuning', vorig, 'afgelopen', 2, 24, 44, 26000, M.ruben, M.yara, '', 'stopt', 'achteraf', 'ja', (j1 - 1) + '-09-01', j1 + '-06-30'],
-    ['t11', 's4', 'NT2-ondersteuning', vorig, 'afgelopen', 2, 16, 45, 29000, M.bas, M.lars, '', 'verlengd', 'achteraf', 'ja', (j1 - 1) + '-09-01', j1 + '-06-30']
+    ['t11', 's4', 'NT2-ondersteuning', vorig, 'afgelopen', 2, 16, 45, 29000, M.bas, M.lars, '', 'verlengd', 'achteraf', 'ja', (j1 - 1) + '-09-01', j1 + '-06-30'],
+    ['t12', 's8', 'Surveillance toetsweken', sj, 'opstart', 3, 8, 39, 5600, M.femke, M.noor, 'k17', '', 'achteraf', 'nee', d(35), sjEind]  // v6.4
   ];
+  var tf12 = { inzet: '3 × Surveillant', rooster: 'Toetsweken, ma t/m vr 8:15-12:30', startdatum: d(35), bijzonderheden: 'Bekend met examenreglement; vaste gezichten waar het kan.', door: M.noor, bron: 'winformulier' };  // v6.4: uit het winformulier
+  var scouts = { t1: M.sem, t3: M.iris, t4: M.sem, t9: M.iris };  // v6.4: vaste talentscout per project
   var contact = { s1: 'Marieke Jansen\nTeamleider onderbouw\n06-21000000', s2: 'Anouk de Vries\nZorgcoördinator\n06-21002742', s3: 'Saskia Kramer\n06-21005484', s4: 'Hanneke Smit\nCoördinator NT2\n06-21006855', s6: 'Ingrid Peters\nConrector\n06-21009597', s10: 'Pieter de Boer\nExamensecretaris\n06-21015081', s12: 'Martin Vermeulen\nRector' };
   schrijfVeel('Trajecten', projecten.map(function (t, i) {
     return { id: t[0], schoolId: t[1], school: sn[t[1]], plaats: (scholen.filter(function (x) { return x[0] === t[1]; })[0] || [])[2], traject: t[2], schooljaar: t[3], status: t[4], ondersteuners: t[5], urenPerWeek: t[6], tarief: t[7], omzet: t[8],
       am: t[9], adviseur: t[10], kansId: t[11], verlenging: t[12], soortFacturatie: t[13], gefactureerd: t[14], start: t[15], eind: t[16], vakanties: t[13] === 'vooraf' ? 'doorbetaald' : 'niet doorbetaald',
       factuurDatum: t[14] === 'ja' ? (t[13] === 'vooraf' ? t[15] : datumStr(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0))) : '', bijzonderheden: { t1: 'Uren volgens rooster; meerwerk apart', t5: 'Inkoopnummer op de factuur', t6: 'Alleen toetsweken', t4: 'Start na kennismaking' }[t[0]] || '',
       contactpersoon: (contact[t[1]] || '').split('\n')[0], contactgegevens: contact[t[1]] || '', voorstelUrl: 'https://docs.google.com/document/d/demo-voorstel-' + t[0], documentenUrl: 'https://drive.google.com/drive/folders/demo-' + t[0],
-      xpsProject: t[4] === 'bezig' || t[4] === 'afgelopen' ? '10.' + (880 + i * 7) : '', taskforce: t[0] === 't4' ? j(tf4) : t[0] === 't3' ? j(tf3) : '',
+      xpsProject: t[4] === 'bezig' || t[4] === 'afgelopen' ? '10.' + (880 + i * 7) : '', taskforce: t[0] === 't4' ? j(tf4) : t[0] === 't3' ? j(tf3) : t[0] === 't12' ? j(tf12) : '', talentscout: scouts[t[0]] || '',
       samenvatting: t[4] === 'bezig' ? 'Vaste ondersteuners in de onderbouw; evaluatie aan het eind van elke periode.' : '', bijgewerkt: dt(-(i % 7) - 1) };
   }));
 
@@ -301,7 +305,8 @@ function demoVul() {
     { id: 'v2', trajectId: 't3', titel: 'Examentrainer wiskunde en Nederlands', aantal: 2, dagen: 'Woensdagmiddag en meivakantie', urenPerWeek: 10, start: (j1 + 1) + '-03-01', eind: (j1 + 1) + '-05-15', profiel: 'Vakkennis wiskunde A of Nederlands op havo/vwo-niveau', status: 'open', aangemaakt: dt(-8), door: M.femke },
     { id: 'v3', trajectId: 't4', titel: 'NT2-ondersteuner', aantal: 2, dagen: 'Ma t/m do 9:00-13:00', urenPerWeek: 16, start: d(21), eind: sjEind, profiel: 'Ervaring met anderstalige leerlingen', status: 'open', aangemaakt: dt(-14), door: M.bas },
     { id: 'v6', trajectId: 't5', titel: 'Studentdocent Duits (vervanging)', aantal: 1, dagen: 'Di en do', urenPerWeek: 16, start: d(-3), eind: sjEind, profiel: 'Tweedejaars lerarenopleiding Duits', status: 'ingevuld', aangemaakt: dt(-20), ingevuld: dt(-6), door: M.ruben },
-    { id: 'v4', trajectId: 't9', titel: 'Rekenondersteuner', aantal: 2, dagen: 'Ma, wo en vr 9:00-12:00', urenPerWeek: 10, start: d(28), eind: sjEind, profiel: 'Sterk in rekenen, geduldig met groepjes', status: 'open', aangemaakt: dt(-5), door: M.ruben }
+    { id: 'v4', trajectId: 't9', titel: 'Rekenondersteuner', aantal: 2, dagen: 'Ma, wo en vr 9:00-12:00', urenPerWeek: 10, start: d(28), eind: sjEind, profiel: 'Sterk in rekenen, geduldig met groepjes', status: 'open', aangemaakt: dt(-5), door: M.ruben },
+    { id: 'v7', trajectId: 't12', titel: 'Surveillant', aantal: 3, dagen: 'Toetsweken, ma t/m vr 8:15-12:30', start: d(35), eind: sjEind, profiel: 'Bekend met examenreglement; vaste gezichten waar het kan.', status: 'concept', aangemaakt: dt(-1), door: M.noor }  // v6.4: conceptvacature uit het winformulier
   ]);
   var kand = function (id, vac, tr, naam, door, status, hist, extra) {
     var h = {}, laatst = ''; Object.keys(hist).forEach(function (s) { h[s] = dt(hist[s], '11:00'); laatst = h[s]; });
@@ -461,6 +466,7 @@ function demoVul() {
   act('taak', -2, '11:00', M.sem, 's4', { trajectId: 't4' }, 'Kandidaat Fatima Aydin: vog → klaar voor start');
   act('taak', -3, '12:00', M.sem, 's3', { trajectId: 't3' }, 'Kandidaat Daan Kuipers: voorgesteld → gesprek');
   act('taak', -5, '09:00', M.ruben, 's2', { trajectId: 't9' }, 'Vacature geopend: Rekenondersteuner (2×)');
+  act('taak', -1, '16:10', M.noor, 's8', { trajectId: 't12', kansId: 'k17', bron: 'overdracht' }, 'Conceptvacature voor het talentteam: Surveillant (3×)');  // v6.4
   // v5.0: de tijdlijn van talenten (talentId): aanmelding, portaal, beoordeling, voordracht
   act('notitie', -2, '19:43', 'Formulier', '', { talentId: 'tl20', bron: 'formulier' }, 'Aangemeld via het formulier (toestemming: Ja, ik ga akkoord met de privacyverklaring)');
   act('notitie', -5, '08:10', 'Portaal', '', { talentId: 'tl2', bron: 'portaal' }, 'Beschikbaarheid bevestigd via mail');
@@ -540,6 +546,9 @@ function demoVul() {
     taak('tk19', 'Bellen met de administratie van het Kompas College', M.femke, 0, 'hoog', 'bellen', { schoolId: 's2', trajectId: 't2', tijd: (function () { var z = new Date(Date.now() + 10 * 60000); return ('0' + z.getHours()).slice(-2) + ':' + ('0' + z.getMinutes()).slice(-2); })(), tags: 'factuur' }),
     taak('tk7', 'Factuur Lyceum Valkenoord versturen', M.ruben, -2, 'hoog', 'overig', { schoolId: 's6', trajectId: 't5' }),
     taak('tk8', 'Matchinggesprek Thijs Brouwer (Kompas College, Rekenondersteuner)', M.ruben, 3, 'hoog', 'afspraak', { schoolId: 's2', trajectId: 't9' }),
+    // v6.4: net gewonnen (k17): talentscout toewijzen (teamlead talent) en de taskforcemeeting inplannen (consultant)
+    taak('tk21', 'Talentscout toewijzen: Surveillance toetsweken (' + sn.s8 + ')', M.iris, 1, 'hoog', 'opvolgen', { schoolId: 's8', kansId: 'k17', trajectId: 't12', bron: 'talentscout' }),
+    taak('tk22', 'Taskforcemeeting plannen met AM en talent: Surveillance toetsweken (' + sn.s8 + ')', M.noor, 2, 'hoog', 'afspraak', { schoolId: 's8', kansId: 'k17', trajectId: 't12', bron: 'taskforceplannen' }),
     taak('tk9', 'Kennismaking ondersteuners ISK Havenstad plannen', M.bas, 5, 'midden', 'afspraak', { schoolId: 's4', trajectId: 't4' }),
     taak('tk10', 'Afscheid surveillance Noorderhof voorbereiden', M.bas, 30, 'laag', 'overig', { schoolId: 's10', trajectId: 't6' }),
     taak('tk11', 'VOG Jesse Vos nabellen', M.sem, -1, 'hoog', 'bellen', { schoolId: 's4', trajectId: 't4', link: 'talent:tl9' }),
