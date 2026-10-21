@@ -686,7 +686,7 @@
   .recent-rij .zacht { font-size: 12px; font-weight: 700; flex-shrink: 0; }
   .recent-rij .chip { flex-shrink: 0; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; }
   /* v6.9: commandobalk, selectie, voorbeeld, vervolgstap */
-  .palet { position: fixed; inset: 0; z-index: 500; background: rgba(36,26,40,.35); display: none; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
+  .palet { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 500; background: rgba(36,26,40,.35); display: none; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
   .palet.aan { display: flex; }
   .palet-binnen { width: 100%; max-width: 620px; background: var(--wit); border-radius: 16px; box-shadow: 0 24px 60px rgba(36,26,40,.3); overflow: hidden; }
   #paletInvoer { width: 100%; border: 0; border-bottom: 1.5px solid var(--lijn); padding: 16px 18px; font-size: 16px; outline: none; }
@@ -707,6 +707,26 @@
   .vb-rij { display: flex; gap: 8px; margin-top: 4px; } .vb-rij span { color: var(--gedempt); min-width: 92px; }
   .vervolg { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--paars-l); border-radius: 12px; padding: 10px 12px; margin-top: 12px; font-size: 13.5px; }
   .vervolg span { flex: 1 1 220px; }
+  /* v7.0: projecttijdlijn en vastpinnen */
+  .tl-wrap { overflow-x: auto; margin-top: 12px; border: 1px solid var(--lijn); border-radius: 14px; background: var(--wit); }
+  .tl { min-width: 980px; }
+  .tl-rij { display: flex; border-bottom: 1px solid var(--lijn); min-height: 44px; align-items: stretch; }
+  .tl-rij:last-child { border-bottom: 0; }
+  .tl-naam { flex: 0 0 230px; padding: 8px 12px; font-size: 13px; position: sticky; left: 0; background: var(--wit); z-index: 2; border-right: 1px solid var(--lijn); }
+  .tl-naam small { display: block; color: var(--gedempt); font-size: 11.5px; }
+  .tl-baan { position: relative; flex: 1; }
+  .tl-kop { background: var(--vlak); min-height: 34px; } .tl-kop .tl-naam { background: var(--vlak); }
+  .tl-maand { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--lijn); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--inkt2); padding: 9px 6px; }
+  .tl-nu { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--oranje); z-index: 1; }
+  .tl-balk { position: absolute; top: 8px; bottom: 8px; border-radius: 8px; display: flex; align-items: center; overflow: hidden; cursor: pointer; font-size: 11.5px; padding: 0; z-index: 1; min-height: 0; }
+  .tl-balk.sleepbaar { cursor: grab; -webkit-user-select: none; user-select: none; touch-action: pan-y; }
+  .tl-balk.sleept-tl { box-shadow: 0 6px 16px rgba(36,26,40,.25); cursor: grabbing; z-index: 3; }
+  .tl-balk.pill { background-image: none; padding-right: 0; -webkit-appearance: none; appearance: none; }  /* geen keuzepijltje van de statuspil */
+  .tl-tekst { flex: 1; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-greep { flex: 0 0 10px; align-self: stretch; cursor: ew-resize; background: rgba(255,255,255,.25); }
+  .tl-buiten { position: absolute; left: 8px; top: 12px; font-size: 12px; }
+  .zb-pin { font-size: 13px; } .zb-ster { color: var(--oranje); width: 18px; display: inline-block; }
+  #vandaagPins { margin-top: 0; }
   .zb-recent-kop { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .7; padding: 6px 10px 2px; } body.desk .p-acties { display: none; }  /* v6.6: op desktop staan ze in de kop en de zijbalk */  /* v6.6: op desktop staat '+ Taak/School/Persoon/Kans' al rechtsboven; niet twee knoppen voor hetzelfde */
   .t-chips a, a.p-updates { display: inline-flex; align-items: center; min-height: 24px; }
   body:not(.desk) .t-chips a { min-height: 36px; }
@@ -732,6 +752,7 @@
   <button class="zb-item" data-desk="financien" data-recht="financien"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>Financiën</button>  <!-- v6.5 -->
   <button class="zb-item" data-desk="rapporten"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg>Rapporten</button>
   <button class="zb-item" data-desk="doelen"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Doelen</button>
+  <div id="zbPins"></div>  <!-- v7.0: vastgepind -->
   <div class="zb-kop">Athena</div>
   <button class="zb-item" data-desk="brein"><svg class="ic" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Assistent</button>
   <button class="zb-item" data-desk="review"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>Dagstart</button>
@@ -759,6 +780,7 @@
   <!-- 1. Operations-dashboard: alles op één plek, zodat je elke ochtend ziet waar je op moet handelen -->
   <div class="view actief" id="view-vandaag">
     <div class="hero"><h2 id="groet">Goedemorgen</h2><p>Dit vraagt vandaag je aandacht.</p></div>
+    <div class="recent-rij" id="vandaagPins" style="display:none"></div>  <!-- v7.0: vastgepind -->
     <div class="tegels" id="kpis" aria-busy="true"><div class="tegel"><div class="t-cijfer">&nbsp;</div><div class="t-label">&nbsp;</div></div><div class="tegel"><div class="t-cijfer">&nbsp;</div><div class="t-label">&nbsp;</div></div><div class="tegel"><div class="t-cijfer">&nbsp;</div><div class="t-label">&nbsp;</div></div><div class="tegel"><div class="t-cijfer">&nbsp;</div><div class="t-label">&nbsp;</div></div></div>  <!-- v6.6: lege tegels houden de plek vast, zodat de lijst niet verspringt -->
     <div class="kop">Focus nu</div>
     <div id="focusLijst"><div class="spinner">Laden</div></div>
@@ -1581,6 +1603,7 @@
     if (magApp('talenten')) w.push(['talent', 'Talent']);  // v5.0: het talentbestand (talentteam alles; de accountmanager zijn eigen kandidaten)
     w.push(['lijst', 'Lijst']);
     if (isDesk()) w.push(['bord', 'Bord']);
+    if (isDesk()) w.push(['tijdlijn', 'Tijdlijn']);  // v7.0
     return w;
   }
   // v6.3: op desktop wissel je van scherm via de zijbalk; de chiprij toont alleen de projectweergaven
@@ -1631,7 +1654,7 @@
     if (!S.pWeergaveGekozen && !isDesk() && T.ik && T.ik.team === 'talent' && magApp('vacatures')) w = S.pWeergave = 'bezetting';  // v4.1: talent begint bij de bezetting; v6.4: alleen op de telefoon (op desktop kies je in de zijbalk, en Projecten moet de projecten tonen)
     if (!ws.some(function (x) { return x[0] === w; })) w = S.pWeergave = 'am';
     if (S.pAm === null) S.pAm = T.ik && ams.indexOf(T.ik.naam) >= 0 ? T.ik.naam : '';  // een accountmanager begint bij zijn eigen bord
-    var eenvoudig = w === 'lijst' || w === 'bord', tl = w === 'talent';  // v5.0: talent
+    var eenvoudig = w === 'lijst' || w === 'bord' || w === 'tijdlijn', tl = w === 'talent';  // v5.0: talent
     el('projectWeergaven').innerHTML = isDesk() && (w === 'bezetting' || w === 'talent') ? '' : projectChips(ws).map(function (x) { return '<button class="chip' + (x[0] === w ? ' aan' : '') + '" data-pweergave="' + esc(x[0]) + '">' + esc(x[1]) + '</button>'; }).join('');
     el('projectAms').innerHTML = eenvoudig || tl || ams.length < 2 ? '' : ['<button class="chip' + (!S.pAm ? ' aan' : '') + '" data-pam="">Iedereen</button>'].concat(ams.map(function (a) { return '<button class="chip' + (S.pAm === a ? ' aan' : '') + '" data-pam="' + esc(a) + '">' + esc(a) + '</button>'; })).join('');
     el('projectFilters').style.display = eenvoudig ? '' : 'none';
@@ -1660,7 +1683,8 @@
     });
     el('trajectTelling').textContent = (vlSj ? 'schooljaar ' + vlSj + ' · ' : '') + lijst.length + ' van ' + T.trajecten.length + (lijst.length ? ' · ' + euro(lijst.reduce(function (s, t) { return s + (Number(t.omzet) || 0); }, 0)) : '');
     var leeg = '<div class="leeg">' + (T.trajecten.length ? 'Niets gevonden.' : 'Nog geen projecten. Een gewonnen kans wordt vanzelf een project.') + '</div>';
-    if (w === 'bord') { el('trajectLijst').innerHTML = projectBord(lijst); return; }  // v3.0
+    if (w === 'bord') { el('trajectLijst').innerHTML = projectBord(lijst); return; }
+    if (w === 'tijdlijn') { el('trajectLijst').innerHTML = projectTijdlijn(lijst); return; }  // v7.0  // v3.0
     if (w === 'lijst') { el('trajectLijst').innerHTML = lijst.length ? lijst.map(trajectRij).join('') : leeg; return; }
     var h;
     if (w === 'verlenging') {
@@ -2964,7 +2988,7 @@
     }).join('') : '<div class="leeg">Geen lopende track.</div>') + '</div>';
   }
   function linksKolom(o) {
-    return '<div class="d-naam"><span class="avatar">' + esc(initialen(o.avatar || o.naam)) + '</span><h2>' + esc(o.naam) + '</h2>' + (o.alleenLezen ? '' : '<button class="knop-mini" data-composer="bewerk">Bewerken</button>') + (CRM.detail ? '<button class="knop-mini" data-linkkopie="' + esc(CRM.detail.soort + ':' + CRM.detail.id) + '" aria-label="Link kopiëren" title="Link kopiëren">Link</button>' : '') + '</div>' +  // v6.9  // v4.0: zonder rechten geen Bewerken
+    return '<div class="d-naam"><span class="avatar">' + esc(initialen(o.avatar || o.naam)) + '</span><h2>' + esc(o.naam) + '</h2>' + (o.alleenLezen ? '' : '<button class="knop-mini" data-composer="bewerk">Bewerken</button>') + (CRM.detail ? '<button class="knop-mini" data-linkkopie="' + esc(CRM.detail.soort + ':' + CRM.detail.id) + '" aria-label="Link kopiëren" title="Link kopiëren">Link</button><button class="knop-mini" data-pin="' + esc(CRM.detail.soort + ':' + CRM.detail.id) + '" aria-pressed="' + isGepind(CRM.detail.soort, CRM.detail.id) + '">' + (isGepind(CRM.detail.soort, CRM.detail.id) ? '★ Vastgepind' : '☆ Vastpinnen') + '</button>' : '') + '</div>' +  // v6.9  // v4.0: zonder rechten geen Bewerken
       (o.sub ? '<div class="d-sub">' + o.sub + '</div>' : '') + (o.tags ? '<div class="tags" style="margin-top:6px">' + o.tags + '</div>' : '') +
       '<div class="d-acties">' + (o.mail ? '<a class="knop licht klein" href="mailto:' + esc(o.mail) + '" style="text-align:center;text-decoration:none">Mail sturen</a>' : '') + '<button class="knop klein" data-composer="' + (o.logSoort || 'notitie') + '">Activiteit loggen</button></div>' +
       (o.lijst ? '<div class="d-lijst">' + o.lijst + '</div>' : '') + (o.velden ? '<div class="d-velden">' + o.velden + '</div>' : '') + (o.extra || '');
@@ -4218,7 +4242,8 @@
     if (!doel) return;
     var naarKol = doel.getAttribute('data-sleepdoel').slice(s.soort.length + 1);
     if (SELECTIE.soort === s.soort && SELECTIE.ids[s.id] && selectieAantal() > 1) {  // v6.9: alle geselecteerde kaarten gaan mee
-      var ids = Object.keys(SELECTIE.ids); ids.forEach(function (id) { sleepZet(s.soort, id, naarKol, true, true); }); selectieWis(); toast(ids.length + ' verplaatst naar ' + naarKol + '.'); return;
+      var ids = Object.keys(SELECTIE.ids); selectieWis();
+      bulkReeks(ids, function (id) { return sleepZet(s.soort, id, naarKol, true, true); }).then(function (r) { toast(r.ok + ' verplaatst naar ' + naarKol + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); }); return;
     }
     sleepZet(s.soort, s.id, naarKol);
   });
@@ -4246,20 +4271,19 @@
     if (soort === 'kans') {
       var P = CRM.pipeline, k = P && P.kansen.filter(function (x) { return x.id === id; })[0]; if (!k || k.fase === naar) return;
       var oud = k.fase; k.fase = naar; metBordScroll(renderPipeline);
-      run('apiKansOpslaan', { id: id, fase: naar, _oud: { fase: oud } }, false).then(function (x) {
+      return run('apiKansOpslaan', { id: id, fase: naar, _oud: { fase: oud } }, false).then(function (x) {
         if (x && x.kans) { for (var n in x.kans) if (x.kans.hasOwnProperty(n)) k[n] = x.kans[n]; }
         if (CRM.pipeline === P && el('view-relaties').classList.contains('actief') && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline);
         sleepMelding((k.school || k.naam) + ' → ' + naar, soort, id, oud, terug, stil);
         if (!terug && !stil) { CRM.vervolg = vervolgVan(naar).length ? { id: id, fase: naar, naam: k.naam || k.school, school: k.school } : null; if (CRM.vervolg && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); }  // v6.9: vervolgstap
-      }).catch(function () { k.fase = oud; if (CRM.pipeline === P && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); });
-      return;
+        return true;
+      }).catch(function () { k.fase = oud; if (CRM.pipeline === P && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); return false; });
     }
     if (soort === 'project') {
       var l = projectenLokaal(id); if (!l.length || l[0].status === naar) return;
       var was = l[0].status; l.forEach(function (t) { t.status = naar; }); metBordScroll(renderTrajecten);
-      run('apiTrajectOpslaan', { id: id, status: naar, _oud: { status: was } }).then(function () { sleepMelding((l[0].school || 'Project') + ' → ' + naar, soort, id, was, terug, stil); })
-        .catch(function () { projectenLokaal(id).forEach(function (t) { t.status = was; }); metBordScroll(renderTrajecten); });
-      return;
+      return run('apiTrajectOpslaan', { id: id, status: naar, _oud: { status: was } }).then(function () { sleepMelding((l[0].school || 'Project') + ' → ' + naar, soort, id, was, terug, stil); return true; })
+        .catch(function () { projectenLokaal(id).forEach(function (t) { t.status = was; }); metBordScroll(renderTrajecten); return false; });
     }
     if (soort === 'kandidaat') {
       var kd = zoekKandidaat(id); if (!kd || kd.status === naar) return;
@@ -4269,16 +4293,15 @@
         obj.eindReden = reden.trim();
       }
       var vorig = kd.status; kd.status = naar; metBordScroll(renderBezetting);
-      run('apiKandidaatOpslaan', obj).then(function (b) { bezettingLokaal(b); sleepMelding(kd.naam + ' → ' + naar, soort, id, vorig, terug, stil); })
-        .catch(function () { var x = zoekKandidaat(id); if (x) x.status = vorig; metBordScroll(renderBezetting); });
-      return;
+      return run('apiKandidaatOpslaan', obj).then(function (b) { bezettingLokaal(b); sleepMelding(kd.naam + ' → ' + naar, soort, id, vorig, terug, stil); return true; })
+        .catch(function () { var x = zoekKandidaat(id); if (x) x.status = vorig; metBordScroll(renderBezetting); return false; });
     }
     if (soort === 'taak') {
       var t = zoekTaakOveral(id); if (!t) return;
       if (t.deadline === naar) { if (!terug) toast(t.tekst + ' staat al op ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)) + '.'); return; }
       var dl = t.deadline || ''; t.deadline = naar; t.over = null; taakLokaal(id, t);
-      run('apiTaakOpslaan', { id: id, deadline: naar, _oud: { deadline: dl } }).then(function (x) { if (x && x.id) taakLokaal(id, x); sleepMelding(t.tekst + ' → ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)), soort, id, dl, terug, stil); })
-        .catch(function () { t.deadline = dl; taakLokaal(id, t); });
+      return run('apiTaakOpslaan', { id: id, deadline: naar, _oud: { deadline: dl } }).then(function (x) { if (x && x.id) taakLokaal(id, x); sleepMelding(t.tekst + ' → ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)), soort, id, dl, terug, stil); })
+        .then(function () { return true; }, function () { t.deadline = dl; taakLokaal(id, t); return false; });
     }
   }
   // v6.8: toetsenbord — een kaart heeft de focus (Tab of klik): ← → zet hem een kolom (of bij een taak een dag) verder; Enter opent hem
@@ -4446,7 +4469,7 @@
   // de selectie overleeft het hertekenen van een lijst (de klassen komen terug), maar niet een ander scherm
   new MutationObserver(function () { if (selectieAantal() && !SELECTIE._bezig) { SELECTIE._bezig = true; requestAnimationFrame(function () { SELECTIE._bezig = false; var b = el('selectieBalk'); document.querySelectorAll('.gekozen').forEach(function (x) { x.classList.remove('gekozen'); }); Object.keys(SELECTIE.ids).forEach(function (id) { var sel = SELECTIE.soort === 'taakrij' ? 'tr[data-taakbewerk="' + id + '"]' : '[data-sleep="' + SELECTIE.soort + ':' + id + '"]'; document.querySelectorAll(sel).forEach(function (x) { x.classList.add('gekozen'); }); }); if (b) b.classList.toggle('aan', selectieAantal() > 0); }); } }).observe(document.body, { childList: true, subtree: true });
   document.addEventListener('click', function (ev) {
-    if (!(ev.shiftKey || ev.metaKey || ev.ctrlKey)) return;
+    if (!(ev.shiftKey || ev.metaKey || ev.ctrlKey) || !isDesk()) return;
     var k = ev.target.closest('[data-sleep]'), r = ev.target.closest('tr[data-taakbewerk]');
     if (ev.target.closest('a, button, select, input')) return;
     if (k) { var w = k.getAttribute('data-sleep'), i = w.indexOf(':'); ev.preventDefault(); ev.stopPropagation(); selectieWissel(w.slice(0, i), w.slice(i + 1)); return; }
@@ -4456,7 +4479,7 @@
   function bulkKlaar(tekst) { selectieWis(); toast(tekst); }
   function bulkReeks(ids, fn) {  // na elkaar, zodat de backend-lock en de _oud-controle per rij gewoon werken
     var ok = 0, fout = 0;
-    return ids.reduce(function (p, id) { return p.then(function () { return fn(id).then(function () { ok++; }, function () { fout++; }); }); }, Promise.resolve()).then(function () { return { ok: ok, fout: fout }; });
+    return ids.reduce(function (p, id) { return p.then(function () { return Promise.resolve(fn(id)).then(function (g) { if (g === false) fout++; else ok++; }, function () { fout++; }); }); }, Promise.resolve()).then(function () { return { ok: ok, fout: fout }; });
   }
   document.addEventListener('click', function (ev) {
     var x = ev.target.closest('[data-bulk]'); if (!x) return;
@@ -4470,8 +4493,8 @@
     var x = ev.target.closest('[data-bulkveld]'); if (!x || !x.value) return;
     var veld = x.getAttribute('data-bulkveld'), waarde = x.value, ids = Object.keys(SELECTIE.ids), soort = SELECTIE.soort; x.disabled = true;
     if (veld === 'kolom') {
-      ids.forEach(function (id) { sleepZet(soort, id, waarde, true, true); });
-      bulkKlaar(ids.length + ' verplaatst naar ' + waarde + '.'); return;
+      bulkReeks(ids, function (id) { return sleepZet(soort, id, waarde, true, true); }).then(function (r) { bulkKlaar(r.ok + ' verplaatst naar ' + waarde + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); });  // na elkaar, één samenvatting
+      return;
     }
     bulkReeks(ids, function (id) {
       var t = zoekTaakOveral(id), obj = { id: id, _oud: {} }; obj[veld] = waarde; obj._oud[veld] = t ? (t[veld] || '') : '';
@@ -4512,8 +4535,10 @@
     return '<b>' + esc(titel) + '</b>' + r.map(function (x) { return '<div class="vb-rij"><span>' + esc(x[0]) + '</span>' + esc(x[1]) + '</div>'; }).join('');
   }
   function voorbeeldWeg() { clearTimeout(VOORBEELD.timer); VOORBEELD.doel = null; var v = el('voorbeeld'); if (v) v.classList.remove('aan'); }
+  var LAATSTE_AANWIJZER = 'mouse';
+  document.addEventListener('pointerdown', function (ev) { LAATSTE_AANWIJZER = ev.pointerType; }, true);
   document.addEventListener('mouseover', function (ev) {
-    if (!isDesk() || SLEEP) return;
+    if (!isDesk() || SLEEP || LAATSTE_AANWIJZER === 'touch' || (window.matchMedia && !window.matchMedia('(hover: hover)').matches)) return;  // iPad: geen tooltip na een tik
     var a = ev.target.closest('[data-crm-open], [data-sleep]'); if (a === VOORBEELD.doel) return;
     voorbeeldWeg(); if (!a || a.closest('#voorbeeld, #palet, .zb-lijst, .d-naam')) return;
     var w = a.getAttribute('data-crm-open') || a.getAttribute('data-sleep'), i = w.indexOf(':'); if (i < 0) return;
@@ -4563,6 +4588,104 @@
     var klaar = function () { toast('Link gekopieerd. Wie hem opent en toegang heeft, komt direct hier.'); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(klaar, function () { window.prompt('Kopieer de link:', url); });
     else window.prompt('Kopieer de link:', url);
+  });
+
+  /* --- v7.0: handigheidjes golf 3 — projecttijdlijn met slepen (desktop) en vastpinnen --- */
+  // 12. Tijdlijn: elk project als balk van start tot eind in het schooljaar (aug–jul). Slepen verschuift beide datums,
+  //     de randen verlengen of verkorten; per dag. Opslaan met _oud, met Ongedaan maken. Klik op een balk opent het project.
+  var TL_DAG = 864e5;
+  function tlDatum(s) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) : null; }
+  function tlBereik() {
+    var sj = S.filters.schooljaar || schooljaarNu(), j = Number(String(sj).slice(0, 4)) || new Date().getFullYear();
+    return { van: new Date(j, 7, 1, 12), tot: new Date(j + 1, 6, 31, 12), sj: sj };
+  }
+  function projectTijdlijn(lijst) {
+    var R = tlBereik(), dagen = Math.round((R.tot - R.van) / TL_DAG) + 1, nu = new Date(), pct = function (d) { return Math.max(0, Math.min(100, (d - R.van) / TL_DAG / dagen * 100)); };
+    var maanden = '', d = new Date(R.van);
+    for (var i = 0; i < 12; i++) { var m = new Date(d.getFullYear(), d.getMonth() + i, 1, 12), m2 = new Date(d.getFullYear(), d.getMonth() + i + 1, 1, 12); maanden += '<div class="tl-maand" style="left:' + pct(m) + '%;width:' + (pct(m2) - pct(m)) + '%">' + esc(MAANDEN_KORT[m.getMonth()]) + '</div>'; }
+    var met = lijst.filter(function (t) { return tlDatum(t.start) && tlDatum(t.eind); }).sort(function (a, b) { return String(a.start).localeCompare(String(b.start)); }), zonder = lijst.length - met.length;
+    var vandaag = nu >= R.van && nu <= R.tot ? '<div class="tl-nu" style="left:' + pct(nu) + '%" title="vandaag"></div>' : '';
+    var rijen = met.map(function (t) {
+      var s = tlDatum(t.start), e = tlDatum(t.eind), l = pct(s), w = Math.max(0.6, pct(new Date(e.getTime() + TL_DAG)) - l), mag = t.magWijzigen !== false;
+      var buiten = e < R.van || s > R.tot;
+      return '<div class="tl-rij"><div class="tl-naam">' + crmLink('project', t.id, t.school || t.traject) + '<small>' + esc(t.traject || '') + (t.am ? ' · ' + esc(t.am) : '') + '</small></div><div class="tl-baan">' + vandaag +
+        (buiten ? '<span class="zacht tl-buiten">' + esc((e < R.van ? 'eerder: ' : 'later: ') + kortDatum(t.start) + ' – ' + kortDatum(t.eind)) + '</span>' :
+        '<div class="tl-balk pill ' + pillKlasse(t.status) + (mag ? ' sleepbaar' : '') + '" data-crm-open="project:' + esc(t.id) + '"' + (mag ? ' data-tlbalk="' + esc(t.id) + '"' : '') + ' style="left:' + l + '%;width:' + w + '%" title="' + esc(kortDatum(t.start) + ' – ' + kortDatum(t.eind) + ' · ' + t.status) + '">' +
+          (mag ? '<span class="tl-greep l" data-tlgreep="l"></span>' : '') + '<span class="tl-tekst">' + esc(kortDatum(t.start) + ' – ' + kortDatum(t.eind)) + '</span>' + (mag ? '<span class="tl-greep r" data-tlgreep="r"></span>' : '') + '</div>') + '</div></div>';
+    }).join('');
+    return '<div class="tl-wrap" tabindex="0" role="region" aria-label="Tijdlijn van de projecten"><div class="tl"><div class="tl-rij tl-kop"><div class="tl-naam"><b>Schooljaar ' + esc(R.sj) + '</b></div><div class="tl-baan tl-maanden">' + maanden + '</div></div>' +
+      (rijen || '<div class="leeg">Geen projecten met een start- en einddatum in deze selectie.</div>') + '</div></div>' +
+      '<div class="hint">Sleep een balk om het project te verschuiven, of trek aan de rand om het te verlengen of in te korten. Klik om te openen.' + (zonder ? ' ' + zonder + (zonder === 1 ? ' project heeft' : ' projecten hebben') + ' nog geen start- of einddatum.' : '') + '</div>';
+  }
+  var TLS = null;
+  document.addEventListener('pointerdown', function (ev) {
+    if (TLS || ev.button > 0) return;
+    var b = ev.target.closest && ev.target.closest('[data-tlbalk]'); if (!b) return;
+    var baan = b.parentNode, t = projectenLokaal(b.getAttribute('data-tlbalk'))[0]; if (!t) return;
+    var g = ev.target.closest('[data-tlgreep]');
+    TLS = { pid: ev.pointerId, balk: b, id: t.id, start: t.start, eind: t.eind, modus: g ? g.getAttribute('data-tlgreep') : 'm', x0: ev.clientX, breed: baan.getBoundingClientRect().width, aanraak: ev.pointerType !== 'mouse', actief: false, delta: 0 };
+    if (TLS.aanraak) TLS.timer = setTimeout(function () { if (TLS) { TLS.actief = true; b.classList.add('sleept-tl'); } }, 350);
+  });
+  document.addEventListener('pointermove', function (ev) {
+    if (!TLS || ev.pointerId !== TLS.pid) return;
+    var dx = ev.clientX - TLS.x0;
+    if (!TLS.actief) { if (TLS.aanraak) { if (Math.abs(dx) > 10) { clearTimeout(TLS.timer); TLS = null; } return; } if (Math.abs(dx) < 4) return; TLS.actief = true; TLS.balk.classList.add('sleept-tl'); try { TLS.balk.setPointerCapture(TLS.pid); } catch (e) {} }
+    ev.preventDefault();
+    var R = tlBereik(), dagen = Math.round((R.tot - R.van) / TL_DAG) + 1, delta = Math.round(dx / TLS.breed * dagen);
+    TLS.delta = delta;
+    var s = tlDatum(TLS.start), e = tlDatum(TLS.eind);
+    if (TLS.modus !== 'r') s = new Date(s.getTime() + delta * TL_DAG);
+    if (TLS.modus !== 'l') e = new Date(e.getTime() + delta * TL_DAG);
+    if (e < s) { if (TLS.modus === 'l') s = e; else e = s; }
+    var pct = function (d) { return (d - R.van) / TL_DAG / dagen * 100; };
+    TLS.balk.style.left = Math.max(0, pct(s)) + '%'; TLS.balk.style.width = Math.max(0.6, pct(new Date(e.getTime() + TL_DAG)) - Math.max(0, pct(s))) + '%';
+    TLS.nieuw = { start: ymd(s), eind: ymd(e) };
+    var tk = TLS.balk.querySelector('.tl-tekst'); if (tk) tk.textContent = kortDatum(TLS.nieuw.start) + ' – ' + kortDatum(TLS.nieuw.eind);
+  });
+  document.addEventListener('touchmove', function (ev) { if (TLS && TLS.actief) ev.preventDefault(); }, { passive: false });
+  function tlKlaar(ev) {
+    if (!TLS || ev.pointerId !== TLS.pid) return;
+    var s = TLS; TLS = null; clearTimeout(s.timer); s.balk.classList.remove('sleept-tl');
+    if (!s.actief) return;
+    SLEEP_NEGEER_KLIK = Date.now();
+    if (ev.type !== 'pointerup' || !s.nieuw || (s.nieuw.start === s.start && s.nieuw.eind === s.eind)) { renderTrajecten(); return; }
+    tlZet(s.id, s.nieuw, { start: s.start, eind: s.eind });
+  }
+  document.addEventListener('pointerup', tlKlaar);
+  document.addEventListener('pointercancel', tlKlaar);
+  function tlZet(id, nieuw, oud, terug) {
+    var obj = { id: id, _oud: {} }, l = projectenLokaal(id);
+    ['start', 'eind'].forEach(function (v) { if (nieuw[v] !== oud[v]) { obj[v] = nieuw[v]; obj._oud[v] = oud[v] || ''; } });
+    if (!obj.start && !obj.eind) return;
+    l.forEach(function (t) { t.start = nieuw.start; t.eind = nieuw.eind; }); renderTrajecten();
+    run('apiTrajectOpslaan', obj).then(function () {
+      var tekst = (l[0] && l[0].school || 'Project') + ' → ' + kortDatum(nieuw.start) + ' – ' + kortDatum(nieuw.eind);
+      if (terug) toast(tekst); else toastMetActie(tekst, 'Ongedaan maken', function () { tlZet(id, oud, nieuw, true); });
+    }).catch(function () { projectenLokaal(id).forEach(function (t) { t.start = oud.start; t.eind = oud.eind; }); renderTrajecten(); });
+  }
+
+  // 13. Vastpinnen: scholen, personen, kansen, projecten en talenten bovenaan zetten (zijbalk op desktop, bovenaan Vandaag op de telefoon), per toestel
+  function pinLijst() { try { var l = JSON.parse(leesOpslag('aa_pins') || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+  function isGepind(soort, id) { return pinLijst().some(function (x) { return x.soort === soort && x.id === id; }); }
+  function wisselPin(soort, id, naam) {
+    var l = pinLijst(), was = isGepind(soort, id);
+    l = l.filter(function (x) { return !(x.soort === soort && x.id === id); });
+    if (!was) { if (l.length >= 12) { toast('Je kunt 12 items vastpinnen; maak er eerst één los.'); return; } l.push({ soort: soort, id: id, naam: String(naam || '').slice(0, 80) }); }
+    zetOpslag('aa_pins', JSON.stringify(l)); tekenPins();
+    toast(was ? 'Losgemaakt.' : 'Vastgepind. Je vindt het ' + (isDesk() ? 'in de zijbalk.' : 'bovenaan Vandaag.'));
+    document.querySelectorAll('[data-pin="' + soort + ':' + id + '"]').forEach(function (b) { b.textContent = was ? '☆ Vastpinnen' : '★ Vastgepind'; b.setAttribute('aria-pressed', String(!was)); });
+  }
+  function tekenPins() {
+    var l = pinLijst(), z = el('zbPins'), v = el('vandaagPins');
+    if (z) z.innerHTML = l.length ? '<div class="zb-kop">Vastgepind</div>' + l.map(function (x) { return '<button class="zb-item zb-pin" data-crm-open="' + esc(x.soort + ':' + x.id) + '" title="' + esc(x.naam) + '"><span class="zb-ster">★</span>' + esc(x.naam) + '</button>'; }).join('') : '';
+    if (v) v.innerHTML = l.length ? '<span class="zacht">★ Vastgepind</span>' + l.map(function (x) { return '<a class="chip" tabindex="0" role="link" data-crm-open="' + esc(x.soort + ':' + x.id) + '">' + esc(x.naam) + '</a>'; }).join('') : '';
+    if (v) v.style.display = l.length ? '' : 'none';
+  }
+  tekenPins();
+  document.addEventListener('click', function (ev) {
+    var x = ev.target.closest('[data-pin]'); if (!x) return;
+    var w = x.getAttribute('data-pin'), i = w.indexOf(':'), kop = document.querySelector('#crmDetailScherm .d-naam h2');
+    wisselPin(w.slice(0, i), w.slice(i + 1), kop ? kop.textContent : '');
   });
 
   /* --- Home --- */
