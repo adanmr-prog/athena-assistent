@@ -675,7 +675,8 @@
   .rij.sleept, .ai.sleept { opacity: .35; }
   .rij.sleep-schaduw, .ai.sleep-schaduw { background: var(--wit); border-radius: 10px; padding: 8px 10px; }
   .weekblok.doel, .dag.doel { outline: 2px dashed var(--paars); outline-offset: -2px; background: var(--paars-l); border-radius: 10px; }
-  body:not(.desk) .rij { touch-action: pan-y; }
+  body:not(.desk) .rij.veegbaar { touch-action: pan-y; touch-action: pan-y pinch-zoom; }  /* alleen taakrijen; elders mag inzoomen */
+  .rij.vast { background: var(--paars-l); border-radius: 10px; }
   .rij.veegt { position: relative; z-index: 2; background: var(--wit); }
   .rij.veeg-af { background: var(--groen-l); box-shadow: inset 4px 0 0 var(--groen); }
   .rij.veeg-morgen { background: var(--oranje-l); box-shadow: inset -4px 0 0 var(--oranje); }
@@ -684,7 +685,29 @@
   .recent-rij { display: flex; gap: 6px; overflow-x: auto; align-items: center; margin: 10px 0 2px; padding-bottom: 4px; }
   .recent-rij .zacht { font-size: 12px; font-weight: 700; flex-shrink: 0; }
   .recent-rij .chip { flex-shrink: 0; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; }
-  .zb-kop { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .7; padding: 6px 10px 2px; } body.desk .p-acties { display: none; }  /* v6.6: op desktop staan ze in de kop en de zijbalk */  /* v6.6: op desktop staat '+ Taak/School/Persoon/Kans' al rechtsboven; niet twee knoppen voor hetzelfde */
+  /* v6.9: commandobalk, selectie, voorbeeld, vervolgstap */
+  .palet { position: fixed; inset: 0; z-index: 500; background: rgba(36,26,40,.35); display: none; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
+  .palet.aan { display: flex; }
+  .palet-binnen { width: 100%; max-width: 620px; background: var(--wit); border-radius: 16px; box-shadow: 0 24px 60px rgba(36,26,40,.3); overflow: hidden; }
+  #paletInvoer { width: 100%; border: 0; border-bottom: 1.5px solid var(--lijn); padding: 16px 18px; font-size: 16px; outline: none; }
+  #paletLijst { max-height: 50vh; overflow-y: auto; padding: 6px; }
+  .palet-rij { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer; min-height: 40px; }
+  .palet-rij.aan, .palet-rij:hover { background: var(--paars-l); }
+  .palet-soort { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--gedempt); min-width: 64px; }
+  .palet-hint { font-size: 12px; color: var(--gedempt); padding: 8px 18px 12px; }
+  .gekozen { outline: 2px solid var(--paars) !important; outline-offset: -2px; background: var(--paars-l) !important; }
+  tr.gekozen td { background: var(--paars-l); }
+  .selectie-balk { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 450; display: none; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--inkt); color: #fff; padding: 10px 14px; border-radius: 14px; box-shadow: 0 12px 30px rgba(36,26,40,.3); max-width: calc(100vw - 32px); }
+  .selectie-balk.aan { display: flex; }
+  .selectie-balk .knop.licht { background: transparent; color: #fff; border-color: rgba(255,255,255,.55); }
+  .selectie-balk label { display: flex; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 700; }
+  .selectie-balk select, .selectie-balk input { border-radius: 8px; border: 0; padding: 5px 6px; font-size: 13px; }
+  .voorbeeld { position: fixed; z-index: 420; max-width: 320px; background: var(--wit); border: 1px solid var(--lijn); border-radius: 12px; box-shadow: 0 14px 34px rgba(36,26,40,.18); padding: 10px 12px; font-size: 13px; display: none; pointer-events: none; }
+  .voorbeeld.aan { display: block; }
+  .vb-rij { display: flex; gap: 8px; margin-top: 4px; } .vb-rij span { color: var(--gedempt); min-width: 92px; }
+  .vervolg { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--paars-l); border-radius: 12px; padding: 10px 12px; margin-top: 12px; font-size: 13.5px; }
+  .vervolg span { flex: 1 1 220px; }
+  .zb-recent-kop { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .7; padding: 6px 10px 2px; } body.desk .p-acties { display: none; }  /* v6.6: op desktop staan ze in de kop en de zijbalk */  /* v6.6: op desktop staat '+ Taak/School/Persoon/Kans' al rechtsboven; niet twee knoppen voor hetzelfde */
   .t-chips a, a.p-updates { display: inline-flex; align-items: center; min-height: 24px; }
   body:not(.desk) .t-chips a { min-height: 36px; }
   body:not(.desk) .knop-mini, body:not(.desk) .knop.klein { min-height: 40px; }
@@ -694,7 +717,7 @@
 <!-- v3.0: zijbalk voor de desktopweergave (alleen zichtbaar met body.desk) -->
 <aside id="zijbalk">
   <div class="zb-logo"><img src="icon-192.png" alt=""><div>AthenaSchool<small>Dashboard &amp; assistent</small></div></div>
-  <div class="zb-zoek"><input id="zbZoek" placeholder="Zoek school of persoon" autocomplete="off"><div class="zb-lijst" id="zbResultaten"></div></div>
+  <div class="zb-zoek"><input id="zbZoek" placeholder="Zoek… (Ctrl K)" autocomplete="off"><div class="zb-lijst" id="zbResultaten"></div></div>
   <div class="zb-nieuw"><button id="zbNieuwKnop">+ Nieuw</button><div class="zb-lijst" id="zbNieuwMenu"><a data-desknieuw="school" data-recht="relaties:wijzigen">School</a><a data-desknieuw="persoon" data-recht="relaties:wijzigen">Persoon</a><a data-desknieuw="kans" data-recht="pipeline:wijzigen">Kans</a><a data-desknieuw="taak">Taak</a><a data-desknieuw="talent" data-recht="talenten:wijzigen">Talent</a></div></div>  <!-- v5.0: talent -->
   <div class="zb-kop">Dashboard</div>  <!-- v3.9: was CRM -->
   <button class="zb-item" data-desk="home"><svg class="ic" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z"/></svg>Home</button>
@@ -1219,7 +1242,7 @@
   function actieRij(a) {
     var meta = [esc(bronLabel(a.bron)), deadlineTekst(a), tijdMeta(a)].filter(Boolean).join(' · ');
     REG.taak[a.id] = a;  // v3.7: tik = bewerken
-    return '<div class="rij" tabindex="0" data-aid="' + esc(a.id) + '"><button class="vink" data-klaar="' + esc(a.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
+    return '<div class="rij veegbaar" tabindex="0" data-aid="' + esc(a.id) + '"><button class="vink" data-klaar="' + esc(a.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
       '<div class="r-body" data-taakbewerk="' + esc(a.id) + '"><div class="r-titel">' + esc(a.tekst) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
       (a.prio ? '<span class="tag ' + esc(a.prio) + '">' + esc(a.prio) + '</span>' : '') + '</div>';
   }
@@ -2475,7 +2498,7 @@
   function taakRij(t, metKoppeling, sub) {
     REG.taak[t.id] = t;
     var meta = [esc(t.categorie), esc(t.eigenaar), deadlineTekst(t), tijdMeta(t), subMeta(t, sub), metKoppeling ? koppelLinks(t) : '', tagsHtml(t.tags)].filter(Boolean).join(' · ');  // v4.5: tijd en herhaling; v4.6: subtaken en tags
-    return '<div class="rij' + (sub ? ' sub' : '') + '" tabindex="0"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
+    return '<div class="rij veegbaar' + (sub ? ' sub' : '') + '" tabindex="0"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
       '<div class="r-body" data-taakbewerk="' + esc(t.id) + '"><div class="r-titel">' + esc(t.tekst) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
       (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</div>';
   }
@@ -2522,9 +2545,9 @@
     var ks = P.kansen.filter(function (k) { return pipelineVan(k, P) === CRM.fPipeline && (!CRM.mijn || k.eigenaar === B.ik.naam) && zoekMatch(q, [k.naam, k.school, k.eigenaar, (k.tags || []).join(' ')]); });
     var open = ks.filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; }), overig = open.filter(function (k) { return namen.indexOf(k.fase) < 0; });
     var dicht = ks.filter(function (k) { return k.fase === 'gewonnen' || k.fase === 'verloren'; }).sort(function (a, b) { return String(b.gesloten).localeCompare(String(a.gesloten)); });
-    el('crmInhoud').innerHTML = '<div class="tegels drie">' + tegel(open.length, 'Open kansen') + tegel(euro(som(open, 'waarde')), 'Pijplijn') + tegel(euro(som(open, 'gewogen')), 'Gewogen', 'oranje') + '</div>' +
+    el('crmInhoud').innerHTML = vervolgBalk() + '<div class="tegels drie">' + tegel(open.length, 'Open kansen') + tegel(euro(som(open, 'waarde')), 'Pijplijn') + tegel(euro(som(open, 'gewogen')), 'Gewogen', 'oranje') + '</div>' +
       '<div class="bord" tabindex="0" role="region" aria-label="Bord">' + ms.map(function (m) { return kolomHtml(m.mijlpaal, m.kans + '%', open.filter(function (k) { return k.fase === m.mijlpaal; }), m.mijlpaal); }).join('') + (overig.length ? kolomHtml('Overig', 'mijlpaal onbekend', overig) : '') + '</div>' +
-      '<div class="hint">' + (magApp('pipeline', 'wijzigen') ? (isDesk() ? 'Sleep een kans naar een andere mijlpaal, of klik erop om hem te openen.' : 'Houd een kans even vast en sleep hem naar een andere mijlpaal; tik om te openen.') : 'Tik op een kans om hem te openen.') + ' Rood = langer stil dan de norm van de mijlpaal.</div>' +
+      '<div class="hint">' + (magApp('pipeline', 'wijzigen') ? (isDesk() ? 'Sleep een kans naar een andere mijlpaal (Shift-klik om er meer tegelijk te pakken), of klik erop om hem te openen.' : 'Houd een kans even vast en sleep hem naar een andere mijlpaal; tik om te openen.') : 'Tik op een kans om hem te openen.') + ' Rood = langer stil dan de norm van de mijlpaal.</div>' +
       '<div class="kop">Gesloten <small>laatste 60 dagen</small></div>' + (dicht.length ? dicht.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Nog niets gesloten.</div>');
   }
   // v4.5: weergaven zoals Todoist (Vandaag, Komende met een kop per dag, Te laat, Zonder datum, Alles, Afgerond); de keuze blijft op dit toestel bewaard
@@ -2941,7 +2964,7 @@
     }).join('') : '<div class="leeg">Geen lopende track.</div>') + '</div>';
   }
   function linksKolom(o) {
-    return '<div class="d-naam"><span class="avatar">' + esc(initialen(o.avatar || o.naam)) + '</span><h2>' + esc(o.naam) + '</h2>' + (o.alleenLezen ? '' : '<button class="knop-mini" data-composer="bewerk">Bewerken</button>') + '</div>' +  // v4.0: zonder rechten geen Bewerken
+    return '<div class="d-naam"><span class="avatar">' + esc(initialen(o.avatar || o.naam)) + '</span><h2>' + esc(o.naam) + '</h2>' + (o.alleenLezen ? '' : '<button class="knop-mini" data-composer="bewerk">Bewerken</button>') + (CRM.detail ? '<button class="knop-mini" data-linkkopie="' + esc(CRM.detail.soort + ':' + CRM.detail.id) + '" aria-label="Link kopiëren" title="Link kopiëren">Link</button>' : '') + '</div>' +  // v6.9  // v4.0: zonder rechten geen Bewerken
       (o.sub ? '<div class="d-sub">' + o.sub + '</div>' : '') + (o.tags ? '<div class="tags" style="margin-top:6px">' + o.tags + '</div>' : '') +
       '<div class="d-acties">' + (o.mail ? '<a class="knop licht klein" href="mailto:' + esc(o.mail) + '" style="text-align:center;text-decoration:none">Mail sturen</a>' : '') + '<button class="knop klein" data-composer="' + (o.logSoort || 'notitie') + '">Activiteit loggen</button></div>' +
       (o.lijst ? '<div class="d-lijst">' + o.lijst + '</div>' : '') + (o.velden ? '<div class="d-velden">' + o.velden + '</div>' : '') + (o.extra || '');
@@ -3666,7 +3689,7 @@
   document.addEventListener('click', function (ev) {
     var t = ev.target, x;
     if ((x = t.closest('[data-cf-annuleer]')) && x.closest('#venster')) { ev.stopPropagation(); sluitVenster(); return; }
-    if ((x = t.closest('[data-taakbewerk]')) && !t.closest('[data-crm-open], .vink, a, button')) { ev.stopPropagation(); bewerkTaak(x.getAttribute('data-taakbewerk')); return; }
+    if ((x = t.closest('[data-taakbewerk]')) && !t.closest('[data-crm-open], .vink, a, button') && !(isDesk() && (ev.shiftKey || ev.metaKey || ev.ctrlKey))) { ev.stopPropagation(); bewerkTaak(x.getAttribute('data-taakbewerk')); return; }  // v6.9: Shift/Ctrl/Cmd-klik = selecteren
     if ((x = t.closest('[data-actbewerk]'))) { ev.stopPropagation(); bewerkActiviteit(x.getAttribute('data-actbewerk')); return; }
     if ((x = t.closest('[data-actweg]'))) { verwijderActiviteit(x.getAttribute('data-actweg')); return; }
     if ((x = t.closest('[data-taakweg]'))) {
@@ -4100,7 +4123,7 @@
       return '<div class="kolom" data-sleepdoel="project:' + esc(st) + '"><h3>' + esc(st) + '</h3><div class="k-som">' + ts.length + ' · ' + euro(som(ts, 'omzet')) + '</div>' + (ts.length ? ts.slice(0, 80).map(function (t) {
         return '<div class="kaartje' + (t.magWijzigen !== false ? ' sleepbaar" tabindex="0" data-sleep="project:' + esc(t.id) + '"' : '"') + ' data-crm-open="project:' + esc(t.id) + '"><b>' + esc(t.school) + '</b><div class="r-meta">' + [t.traject, t.schooljaar].filter(Boolean).map(esc).join(' · ') + (t.omzet ? ' · ' + euro(t.omzet) : '') + '</div></div>';
       }).join('') : '<div class="leeg" style="padding:8px 2px;font-size:13px">Leeg</div>') + '</div>';
-    }).join('') + '</div>' + (lijst.some(function (t) { return t.magWijzigen !== false; }) ? '<div class="hint">' + (isDesk() ? 'Sleep een project naar een andere status.' : 'Houd een project even vast en sleep het naar een andere status.') + '</div>' : '');  // v6.7
+    }).join('') + '</div>' + (lijst.some(function (t) { return t.magWijzigen !== false; }) ? '<div class="hint">' + (isDesk() ? 'Sleep een project naar een andere status (Shift-klik om er meer tegelijk te pakken).' : 'Houd een project even vast en sleep het naar een andere status.') + '</div>' : '');  // v6.7
   }
 
   /* --- v6.7: kaarten slepen tussen kolommen (Pipeline: mijlpaal van een kans; Projecten → Bord: status van een project).
@@ -4192,7 +4215,12 @@
     sleepStop();
     if (!actief) return;
     SLEEP_NEGEER_KLIK = Date.now();  // de klik die op het loslaten volgt opent de kaart niet
-    if (doel) sleepZet(s.soort, s.id, doel.getAttribute('data-sleepdoel').slice(s.soort.length + 1));
+    if (!doel) return;
+    var naarKol = doel.getAttribute('data-sleepdoel').slice(s.soort.length + 1);
+    if (SELECTIE.soort === s.soort && SELECTIE.ids[s.id] && selectieAantal() > 1) {  // v6.9: alle geselecteerde kaarten gaan mee
+      var ids = Object.keys(SELECTIE.ids); ids.forEach(function (id) { sleepZet(s.soort, id, naarKol, true, true); }); selectieWis(); toast(ids.length + ' verplaatst naar ' + naarKol + '.'); return;
+    }
+    sleepZet(s.soort, s.id, naarKol);
   });
   document.addEventListener('click', function (ev) {
     if (SLEEP_NEGEER_KLIK && Date.now() - SLEEP_NEGEER_KLIK < 400) { SLEEP_NEGEER_KLIK = 0; ev.stopPropagation(); ev.preventDefault(); }
@@ -4202,7 +4230,9 @@
     var n = document.querySelector('.view.actief .bord'); if (n) n.scrollLeft = x;
   }
   // v6.8: na elke verplaatsing een toast met "Ongedaan maken"; ongedaan maken zet het oude veld terug (zonder nieuwe toast-knop)
-  function sleepMelding(tekst, soort, id, oud, terug) {
+  function morgenStr() { var n = new Date(); return ymd(new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1, 12)); }  // ook rond de zomertijdwissel
+  function sleepMelding(tekst, soort, id, oud, terug, stil) {
+    if (stil) return;
     if (terug) { toast(tekst); return; }
     toastMetActie(tekst, 'Ongedaan maken', function () { sleepZet(soort, id, oud, true); });
   }
@@ -4212,21 +4242,22 @@
     lijsten.forEach(function (l) { (l || []).forEach(function (x) { if (x.id === id) t = t || x; }); });
     return t;
   }
-  function sleepZet(soort, id, naar, terug) {
+  function sleepZet(soort, id, naar, terug, stil) {
     if (soort === 'kans') {
       var P = CRM.pipeline, k = P && P.kansen.filter(function (x) { return x.id === id; })[0]; if (!k || k.fase === naar) return;
       var oud = k.fase; k.fase = naar; metBordScroll(renderPipeline);
       run('apiKansOpslaan', { id: id, fase: naar, _oud: { fase: oud } }, false).then(function (x) {
         if (x && x.kans) { for (var n in x.kans) if (x.kans.hasOwnProperty(n)) k[n] = x.kans[n]; }
         if (CRM.pipeline === P && el('view-relaties').classList.contains('actief') && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline);
-        sleepMelding((k.school || k.naam) + ' → ' + naar, soort, id, oud, terug);
+        sleepMelding((k.school || k.naam) + ' → ' + naar, soort, id, oud, terug, stil);
+        if (!terug && !stil) { CRM.vervolg = vervolgVan(naar).length ? { id: id, fase: naar, naam: k.naam || k.school, school: k.school } : null; if (CRM.vervolg && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); }  // v6.9: vervolgstap
       }).catch(function () { k.fase = oud; if (CRM.pipeline === P && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); });
       return;
     }
     if (soort === 'project') {
       var l = projectenLokaal(id); if (!l.length || l[0].status === naar) return;
       var was = l[0].status; l.forEach(function (t) { t.status = naar; }); metBordScroll(renderTrajecten);
-      run('apiTrajectOpslaan', { id: id, status: naar, _oud: { status: was } }).then(function () { sleepMelding((l[0].school || 'Project') + ' → ' + naar, soort, id, was, terug); })
+      run('apiTrajectOpslaan', { id: id, status: naar, _oud: { status: was } }).then(function () { sleepMelding((l[0].school || 'Project') + ' → ' + naar, soort, id, was, terug, stil); })
         .catch(function () { projectenLokaal(id).forEach(function (t) { t.status = was; }); metBordScroll(renderTrajecten); });
       return;
     }
@@ -4238,22 +4269,22 @@
         obj.eindReden = reden.trim();
       }
       var vorig = kd.status; kd.status = naar; metBordScroll(renderBezetting);
-      run('apiKandidaatOpslaan', obj).then(function (b) { bezettingLokaal(b); sleepMelding(kd.naam + ' → ' + naar, soort, id, vorig, terug); })
+      run('apiKandidaatOpslaan', obj).then(function (b) { bezettingLokaal(b); sleepMelding(kd.naam + ' → ' + naar, soort, id, vorig, terug, stil); })
         .catch(function () { var x = zoekKandidaat(id); if (x) x.status = vorig; metBordScroll(renderBezetting); });
       return;
     }
     if (soort === 'taak') {
       var t = zoekTaakOveral(id); if (!t) return;
-      if (t.deadline === naar) { if (!terug) toast(t.tekst + ' staat al op ' + (naar === ymd(new Date(Date.now() + 864e5)) ? 'morgen' : kortDatum(naar)) + '.'); return; }
+      if (t.deadline === naar) { if (!terug) toast(t.tekst + ' staat al op ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)) + '.'); return; }
       var dl = t.deadline || ''; t.deadline = naar; t.over = null; taakLokaal(id, t);
-      run('apiTaakOpslaan', { id: id, deadline: naar, _oud: { deadline: dl } }).then(function (x) { if (x && x.id) taakLokaal(id, x); sleepMelding(t.tekst + ' → ' + (naar === ymd(new Date(Date.now() + 864e5)) ? 'morgen' : kortDatum(naar)), soort, id, dl, terug); })
+      run('apiTaakOpslaan', { id: id, deadline: naar, _oud: { deadline: dl } }).then(function (x) { if (x && x.id) taakLokaal(id, x); sleepMelding(t.tekst + ' → ' + (naar === morgenStr() ? 'morgen' : kortDatum(naar)), soort, id, dl, terug, stil); })
         .catch(function () { t.deadline = dl; taakLokaal(id, t); });
     }
   }
   // v6.8: toetsenbord — een kaart heeft de focus (Tab of klik): ← → zet hem een kolom (of bij een taak een dag) verder; Enter opent hem
   document.addEventListener('keydown', function (ev) {
     var k = document.activeElement; if (!k || !k.getAttribute || !k.getAttribute('data-sleep') || ev.altKey || ev.ctrlKey || ev.metaKey) return;
-    if (ev.key === 'Enter') { ev.preventDefault(); k.click(); return; }
+    if (ev.key === 'Enter') { ev.preventDefault(); (k.querySelector('[data-taakbewerk]') || k).click(); return; }
     if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
     var w = k.getAttribute('data-sleep'), i = w.indexOf(':'), soort = w.slice(0, i), id = w.slice(i + 1), stap = ev.key === 'ArrowLeft' ? -1 : 1, kol = k.closest('[data-sleepdoel]'); if (!kol) return;
     ev.preventDefault();
@@ -4271,7 +4302,7 @@
   var VEEG = null;
   document.addEventListener('pointerdown', function (ev) {
     if (isDesk() || ev.pointerType === 'mouse' || VEEG) return;
-    var r = ev.target.closest && ev.target.closest('.rij'); if (!r || ev.target.closest('a, button, select, input, textarea')) return;
+    var r = ev.target.closest && ev.target.closest('.rij.veegbaar'); if (!r || ev.target.closest('a, button, select, input, textarea')) return;
     var v = r.querySelector('[data-taakklaar], [data-klaar]'); if (!v) return;
     VEEG = { pid: ev.pointerId, rij: r, vink: v, id: v.getAttribute('data-taakklaar') || v.getAttribute('data-klaar'), x0: ev.clientX, y0: ev.clientY, dx: 0, actief: false };
   });
@@ -4291,7 +4322,7 @@
     var v = VEEG; VEEG = null; if (!v.actief) return;
     v.rij.classList.remove('veegt', 'veeg-af', 'veeg-morgen'); v.rij.style.transform = '';
     if (ev.type === 'pointerup' && v.dx > 90) v.vink.click();  // eerst de eigen klik, daarna pas de klik van het loslaten blokkeren
-    else if (ev.type === 'pointerup' && v.dx < -90) sleepZet('taak', v.id, ymd(new Date(Date.now() + 864e5)));
+    else if (ev.type === 'pointerup' && v.dx < -90) sleepZet('taak', v.id, morgenStr());
     SLEEP_NEGEER_KLIK = Date.now();
   }
   document.addEventListener('pointerup', veegKlaar);
@@ -4306,8 +4337,233 @@
   var RECENT_SOORT = { school: 'school', persoon: 'persoon', kans: 'kans', project: 'project', talent: 'talent' };
   function recentHtml(link) {
     var l = recentLijst(); if (!l.length) return '';
-    return l.map(function (x) { return '<a data-crm-open="' + esc(x.soort + ':' + x.id) + '"' + (link ? ' data-zbsluit="1"' : ' class="chip"') + '>' + esc(x.naam) + (link ? ' <small>· ' + esc(RECENT_SOORT[x.soort] || x.soort) + '</small>' : '') + '</a>'; }).join('');
+    return l.map(function (x) { return '<a data-crm-open="' + esc(x.soort + ':' + x.id) + '"' + (link ? ' data-zbsluit="1"' : ' class="chip"') + ' tabindex="0" role="link">' + esc(x.naam) + (link ? ' <small>· ' + esc(RECENT_SOORT[x.soort] || x.soort) + '</small>' : '') + '</a>'; }).join('');
   }
+
+  /* --- v6.9: handigheidjes golf 2 — commandobalk (Ctrl/Cmd+K), meerdere tegelijk, voorbeeld bij aanwijzen, vervolgstap na een
+     mijlpaal en link kopiëren. Alles gebruikt bestaande api's; de backend controleert de rechten zoals altijd. --- */
+  document.addEventListener('keydown', function (ev) {  // Enter op een link zonder href (recent bekeken, kaarten zonder slepen) opent hem
+    var a = document.activeElement; if (ev.key !== 'Enter' || !a || !a.getAttribute || !a.getAttribute('data-crm-open') || a.getAttribute('data-sleep') || a.tagName === 'BUTTON' || a.getAttribute('href')) return;
+    ev.preventDefault(); a.click();
+  });
+  // 7. Commandobalk: één vak om te zoeken, naar een scherm te gaan, iets nieuws te maken of direct een taak in te typen
+  var PALET = { items: [], keus: 0 };
+  function paletOpen() {
+    if (!el('palet')) {
+      var d = document.createElement('div'); d.id = 'palet'; d.className = 'palet'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Commandobalk');
+      d.innerHTML = '<div class="palet-binnen"><input id="paletInvoer" placeholder="Zoek of typ een opdracht… bijv. esdoorn, financiën, nieuwe kans, taak bel Marieke morgen 14:00" autocomplete="off" aria-label="Zoek of typ een opdracht"><div id="paletLijst" role="listbox"></div><div class="palet-hint">↑↓ kiezen · Enter uitvoeren · Esc sluiten</div></div>';
+      document.body.appendChild(d);
+      d.addEventListener('click', function (ev) { if (ev.target === d) paletDicht(); var r = ev.target.closest('[data-palet]'); if (r) { PALET.keus = Number(r.getAttribute('data-palet')); paletKies(); } });
+      el('paletInvoer').addEventListener('input', function () { PALET.keus = 0; paletVul(); });
+      el('paletInvoer').addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') { ev.preventDefault(); paletDicht(); }
+        else if (ev.key === 'ArrowDown') { ev.preventDefault(); PALET.keus = Math.min(PALET.items.length - 1, PALET.keus + 1); paletTeken(); }
+        else if (ev.key === 'ArrowUp') { ev.preventDefault(); PALET.keus = Math.max(0, PALET.keus - 1); paletTeken(); }
+        else if (ev.key === 'Enter') { ev.preventDefault(); paletKies(); }
+      });
+    }
+    el('palet').classList.add('aan'); el('paletInvoer').value = ''; PALET.keus = 0; paletVul(); el('paletInvoer').focus();
+    basisKlaar().then(function () { if (el('palet').classList.contains('aan')) paletVul(); }).catch(function () {});
+  }
+  function paletDicht() { if (el('palet')) el('palet').classList.remove('aan'); }
+  function paletVul() {
+    var q = el('paletInvoer').value.trim(), ql = q.toLowerCase(), B = CRM.basis, L = [];
+    var taakZin = /^(taak|t)\s+(.+)$/i.exec(q);
+    if (taakZin) L.push({ soort: 'Taak', label: 'Taak toevoegen: ' + taakZin[2], doe: function () { paletTaak(taakZin[2]); } });
+    var nieuw = [['taak', '+ Taak', true], ['kans', '+ Kans', magApp('pipeline', 'wijzigen')], ['school', '+ School', magApp('relaties', 'wijzigen')], ['persoon', '+ Persoon', magApp('relaties', 'wijzigen')], ['project', '+ Project', magApp('projecten', 'wijzigen')], ['talent', '+ Talent', magApp('talenten', 'wijzigen')]];
+    nieuw.forEach(function (n) { if (n[2] && (!ql || zoekMatch(ql.replace(/^nieuwe?\s*/, ''), [n[0], n[1]]) || /^nieuwe?\b/.test(ql) && zoekMatch(ql.replace(/^nieuwe?\s*/, ''), [n[0]]))) L.push({ soort: 'Nieuw', label: n[1], doe: function () { paletNieuw(n[0]); } }); });
+    document.querySelectorAll('.zb-item[data-desk]').forEach(function (z) {
+      if (z.style.display === 'none') return; var naam = z.textContent.trim();
+      if (!ql || zoekMatch(ql.replace(/^(ga naar|naar)\s*/, ''), [naam])) L.push({ soort: 'Ga naar', label: naam, doe: function () { deskNaar(z.getAttribute('data-desk')); } });
+    });
+    if (B && ql.length >= 2) {
+      var zoek = function (lijst, soort, velden, label, max) { lijst.filter(function (x) { return zoekMatch(ql, velden(x)); }).slice(0, max).forEach(function (x) { L.push({ soort: soort, label: label(x), open: soort.toLowerCase() + ':' + x.id }); }); };
+      zoek(B.scholen || [], 'School', function (s) { return [s.naam, s.plaats]; }, function (s) { return s.naam + (s.plaats ? ' · ' + s.plaats : ''); }, 6);
+      zoek(B.personen || [], 'Persoon', function (p) { return [p.naam, p.school]; }, function (p) { return p.naam + (p.school ? ' · ' + p.school : ''); }, 5);
+      if (magApp('pipeline')) zoek(B.kansenKort || [], 'Kans', function (k) { return [k.naam, k.school]; }, function (k) { return (k.school ? k.school + ' · ' : '') + k.naam; }, 5);
+      zoek(B.projecten || [], 'Project', function (t) { return [t.naam, t.school]; }, function (t) { return (t.school ? t.school + ' · ' : '') + t.naam; }, 5);
+    }
+    if (!ql) recentLijst().forEach(function (r) { L.push({ soort: 'Recent', label: r.naam, open: r.soort + ':' + r.id }); });
+    PALET.items = L.slice(0, 40); paletTeken();
+  }
+  function paletTeken() {
+    el('paletLijst').innerHTML = PALET.items.length ? PALET.items.map(function (x, i) {
+      return '<div class="palet-rij' + (i === PALET.keus ? ' aan' : '') + '" role="option" aria-selected="' + (i === PALET.keus) + '" data-palet="' + i + '"><span class="palet-soort">' + esc(x.soort) + '</span>' + esc(x.label) + '</div>';
+    }).join('') : '<div class="leeg">Niets gevonden. Begin met "taak " om direct een taak toe te voegen.</div>';
+    var a = el('paletLijst').querySelector('.aan'); if (a) a.scrollIntoView({ block: 'nearest' });
+  }
+  function paletKies() {
+    var x = PALET.items[PALET.keus]; if (!x) return; paletDicht();
+    if (x.open) { var i = x.open.indexOf(':'); routeHash(x.open.slice(0, i) + ':' + x.open.slice(i + 1)); return; }
+    if (x.doe) x.doe();
+  }
+  function paletNieuw(soort) {
+    if (soort === 'project') { var k = el('nieuwTraject'); if (k) k.click(); return; }
+    if (isDesk()) deskNieuw(soort); else { wisselView('relaties'); basisKlaar().then(function () { nieuwVanuitLijst(soort); }); }
+  }
+  function paletTaak(zin) {  // dezelfde snelinvoer als het taakveld (ontleedTaak), zonder dat je eerst naar Taken hoeft
+    var inp = document.createElement('input'); inp.value = zin; inp.setAttribute('data-snel', 'paletGeenChip');  // geen element met dit id: snelToevoegen tekent dan geen chip
+    basisKlaar().then(function () { snelToevoegen(inp); });
+  }
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) { ev.preventDefault(); if (el('palet') && el('palet').classList.contains('aan')) paletDicht(); else paletOpen(); }
+  });
+
+  // 8. Meerdere tegelijk: Shift- of Ctrl/Cmd-klik selecteert kaarten (Pipeline, Bord, Per status) of taakrijen (desktoptabel).
+  //    Slepen van een geselecteerde kaart verplaatst ze allemaal; de balk onderin doet de rest.
+  var SELECTIE = { soort: '', ids: {} };
+  function selectieAantal() { return Object.keys(SELECTIE.ids).length; }
+  function selectieWis() { SELECTIE = { soort: '', ids: {} }; selectieTeken(); }
+  function selectieWissel(soort, id) {
+    if (SELECTIE.soort && SELECTIE.soort !== soort) SELECTIE = { soort: '', ids: {} };
+    SELECTIE.soort = soort; if (SELECTIE.ids[id]) delete SELECTIE.ids[id]; else SELECTIE.ids[id] = true;
+    if (!selectieAantal()) SELECTIE.soort = '';
+    selectieTeken();
+  }
+  function selectieTeken() {
+    document.querySelectorAll('.gekozen').forEach(function (x) { x.classList.remove('gekozen'); });
+    Object.keys(SELECTIE.ids).forEach(function (id) {
+      var sel = SELECTIE.soort === 'taakrij' ? '[data-taakbewerk="' + id + '"]' : '[data-sleep="' + SELECTIE.soort + ':' + id + '"]';
+      document.querySelectorAll(sel).forEach(function (x) { if (x.tagName === 'TR' || x.hasAttribute('data-sleep')) x.classList.add('gekozen'); });
+    });
+    var n = selectieAantal(), b = el('selectieBalk');
+    if (!n) { if (b) b.classList.remove('aan'); return; }
+    if (!b) { b = document.createElement('div'); b.id = 'selectieBalk'; b.className = 'selectie-balk'; b.setAttribute('role', 'toolbar'); document.body.appendChild(b); }
+    var acties = '';
+    if (SELECTIE.soort === 'taakrij') {
+      var B = CRM.basis || {};
+      acties = '<button class="knop klein" data-bulk="af">Afvinken</button>' +
+        '<label>Deadline <input type="date" data-bulkveld="deadline"></label>' +
+        '<label>Prio <select data-bulkveld="prio"><option value="">—</option><option>hoog</option><option>midden</option><option>laag</option></select></label>' +
+        ((B.gebruikers || []).length ? '<label>Voor <select data-bulkveld="eigenaar"><option value="">—</option>' + B.gebruikers.map(function (g) { return '<option>' + esc(g) + '</option>'; }).join('') + '</select></label>' : '');
+    } else {
+      var kols = []; document.querySelectorAll('[data-sleepdoel^="' + SELECTIE.soort + ':"]').forEach(function (k) { var w = k.getAttribute('data-sleepdoel').slice(SELECTIE.soort.length + 1); if (kols.indexOf(w) < 0) kols.push(w); });
+      acties = kols.length ? '<label>Verplaats naar <select data-bulkveld="kolom"><option value="">—</option>' + kols.map(function (k) { return '<option>' + esc(k) + '</option>'; }).join('') + '</select></label>' : '';
+    }
+    b.innerHTML = '<b>' + n + ' geselecteerd</b>' + acties + '<button class="knop klein licht" data-bulk="wis">Wissen</button>';
+    b.classList.add('aan');
+  }
+  // de selectie overleeft het hertekenen van een lijst (de klassen komen terug), maar niet een ander scherm
+  new MutationObserver(function () { if (selectieAantal() && !SELECTIE._bezig) { SELECTIE._bezig = true; requestAnimationFrame(function () { SELECTIE._bezig = false; var b = el('selectieBalk'); document.querySelectorAll('.gekozen').forEach(function (x) { x.classList.remove('gekozen'); }); Object.keys(SELECTIE.ids).forEach(function (id) { var sel = SELECTIE.soort === 'taakrij' ? 'tr[data-taakbewerk="' + id + '"]' : '[data-sleep="' + SELECTIE.soort + ':' + id + '"]'; document.querySelectorAll(sel).forEach(function (x) { x.classList.add('gekozen'); }); }); if (b) b.classList.toggle('aan', selectieAantal() > 0); }); } }).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('click', function (ev) {
+    if (!(ev.shiftKey || ev.metaKey || ev.ctrlKey)) return;
+    var k = ev.target.closest('[data-sleep]'), r = ev.target.closest('tr[data-taakbewerk]');
+    if (ev.target.closest('a, button, select, input')) return;
+    if (k) { var w = k.getAttribute('data-sleep'), i = w.indexOf(':'); ev.preventDefault(); ev.stopPropagation(); selectieWissel(w.slice(0, i), w.slice(i + 1)); return; }
+    if (r && isDesk()) { ev.preventDefault(); ev.stopPropagation(); selectieWissel('taakrij', r.getAttribute('data-taakbewerk')); }
+  }, true);
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && selectieAantal() && !el('venster').classList.contains('aan')) selectieWis(); });
+  function bulkKlaar(tekst) { selectieWis(); toast(tekst); }
+  function bulkReeks(ids, fn) {  // na elkaar, zodat de backend-lock en de _oud-controle per rij gewoon werken
+    var ok = 0, fout = 0;
+    return ids.reduce(function (p, id) { return p.then(function () { return fn(id).then(function () { ok++; }, function () { fout++; }); }); }, Promise.resolve()).then(function () { return { ok: ok, fout: fout }; });
+  }
+  document.addEventListener('click', function (ev) {
+    var x = ev.target.closest('[data-bulk]'); if (!x) return;
+    if (x.getAttribute('data-bulk') === 'wis') { selectieWis(); return; }
+    if (x.getAttribute('data-bulk') === 'af') {
+      var ids = Object.keys(SELECTIE.ids); x.disabled = true;
+      bulkReeks(ids, function (id) { return run('apiActieKlaar', id).then(function () { taakLokaal(id, null); }); }).then(function (r) { bulkKlaar(r.ok + (r.ok === 1 ? ' taak' : ' taken') + ' afgevinkt' + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); });
+    }
+  });
+  document.addEventListener('change', function (ev) {
+    var x = ev.target.closest('[data-bulkveld]'); if (!x || !x.value) return;
+    var veld = x.getAttribute('data-bulkveld'), waarde = x.value, ids = Object.keys(SELECTIE.ids), soort = SELECTIE.soort; x.disabled = true;
+    if (veld === 'kolom') {
+      ids.forEach(function (id) { sleepZet(soort, id, waarde, true, true); });
+      bulkKlaar(ids.length + ' verplaatst naar ' + waarde + '.'); return;
+    }
+    bulkReeks(ids, function (id) {
+      var t = zoekTaakOveral(id), obj = { id: id, _oud: {} }; obj[veld] = waarde; obj._oud[veld] = t ? (t[veld] || '') : '';
+      return run('apiTaakOpslaan', obj).then(function (n) { if (n && n.id) taakLokaal(id, n); });
+    }).then(function (r) { bulkKlaar(r.ok + (r.ok === 1 ? ' taak' : ' taken') + ' bijgewerkt' + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') + '.'); });
+  });
+
+  // 9. Voorbeeld bij aanwijzen (desktop): even op een kaart of link blijven staan toont de kern, uit gegevens die de app al heeft
+  var VOORBEELD = { timer: null, doel: null };
+  function voorbeeldHtml(soort, id) {
+    var B = CRM.basis || {}, r = [];
+    var vind = function (l) { return (l || []).filter(function (x) { return x.id === id; })[0]; };
+    if (soort === 'kans') {
+      var k = (CRM.pipeline && vind(CRM.pipeline.kansen)) || vind(B.kansenKort); if (!k) return '';
+      r = [['Mijlpaal', k.fase], ['Waarde', k.waarde ? euro(k.waarde) : ''], ['Eigenaar', k.eigenaar], ['Stil', k.stil ? k.dagenStil + ' dagen' : ''], ['Sluiting', k.sluiting ? kortDatum(k.sluiting) : '']];
+      return voorbeeldKaart((k.school ? k.school + ' · ' : '') + (k.naam || ''), r);
+    }
+    if (soort === 'project') {
+      var t = (S.trajecten && vind(S.trajecten.trajecten)) || vind(B.projecten); if (!t) return '';
+      r = [['Status', t.status], ['AM', t.am], ['Adviseur', t.adviseur], ['Talentscout', t.talentscout], ['Periode', t.start ? kortDatum(t.start) + ' – ' + kortDatum(t.eind) : ''], ['Bezetting', t.bezetting && t.bezetting.nodig ? t.bezetting.gevuld + '/' + t.bezetting.nodig : ''], ['Contact', t.contactpersoon], ['Omzet', t.omzet ? euro(t.omzet) : '']];
+      return voorbeeldKaart((t.school ? t.school + ' · ' : '') + (t.traject || t.naam || ''), r);
+    }
+    if (soort === 'school') {
+      var s = vind(B.scholen); if (!s) return '';
+      var ps = (B.personen || []).filter(function (p) { return p.schoolId === id; }).slice(0, 3).map(function (p) { return p.naam + (p.functie ? ' (' + p.functie + ')' : ''); }).join(', ');
+      r = [['Status', s.status], ['Plaats', s.plaats], ['Eigenaar', s.eigenaar], ['Contact', ps], ['Laatste contact', s.laatsteContact ? kortDatum(s.laatsteContact) : '']];
+      return voorbeeldKaart(s.naam, r);
+    }
+    if (soort === 'persoon') {
+      var p = vind(B.personen); if (!p) return '';
+      r = [['Functie', p.functie], ['School', p.school], ['E-mail', p.email], ['Telefoon', p.telefoon]];
+      return voorbeeldKaart(p.naam, r);
+    }
+    return '';
+  }
+  function voorbeeldKaart(titel, rijen) {
+    var r = rijen.filter(function (x) { return x[1]; }); if (!r.length) return '';
+    return '<b>' + esc(titel) + '</b>' + r.map(function (x) { return '<div class="vb-rij"><span>' + esc(x[0]) + '</span>' + esc(x[1]) + '</div>'; }).join('');
+  }
+  function voorbeeldWeg() { clearTimeout(VOORBEELD.timer); VOORBEELD.doel = null; var v = el('voorbeeld'); if (v) v.classList.remove('aan'); }
+  document.addEventListener('mouseover', function (ev) {
+    if (!isDesk() || SLEEP) return;
+    var a = ev.target.closest('[data-crm-open], [data-sleep]'); if (a === VOORBEELD.doel) return;
+    voorbeeldWeg(); if (!a || a.closest('#voorbeeld, #palet, .zb-lijst, .d-naam')) return;
+    var w = a.getAttribute('data-crm-open') || a.getAttribute('data-sleep'), i = w.indexOf(':'); if (i < 0) return;
+    VOORBEELD.doel = a;
+    VOORBEELD.timer = setTimeout(function () {
+      var h = voorbeeldHtml(w.slice(0, i), w.slice(i + 1)); if (!h || VOORBEELD.doel !== a) return;
+      var v = el('voorbeeld'); if (!v) { v = document.createElement('div'); v.id = 'voorbeeld'; v.className = 'voorbeeld'; v.setAttribute('role', 'tooltip'); document.body.appendChild(v); }
+      v.innerHTML = h; v.classList.add('aan');
+      var r = a.getBoundingClientRect(), vw = v.offsetWidth, vh = v.offsetHeight;
+      var x = Math.min(window.innerWidth - vw - 12, Math.max(12, r.left)), y = r.bottom + 8 + vh > window.innerHeight ? r.top - vh - 8 : r.bottom + 8;
+      v.style.left = x + 'px'; v.style.top = Math.max(8, y) + 'px';
+    }, 550);
+  });
+  document.addEventListener('scroll', voorbeeldWeg, true);
+  document.addEventListener('pointerdown', voorbeeldWeg, true);
+
+  // 10. Vervolgstap na een mijlpaal: een balk boven de pipeline met één klik naar de logische volgende stap (pas na bevestiging uitvoeren)
+  function vervolgVan(fase) {
+    var f = String(fase || '').toLowerCase();
+    if (/gesprek|afspraak|kennismaking/.test(f)) return [['afspraak', 'Afspraak plannen'], ['taak', 'Taak maken']];
+    if (/voorstel|offerte/.test(f)) return [['offerte', 'Offerte laten klaarzetten'], ['taak', 'Opvolgtaak maken']];
+    if (/onderhandel/.test(f)) return [['taak', 'Opvolgtaak maken']];
+    return [];
+  }
+  function vervolgBalk() {
+    var v = CRM.vervolg; if (!v) return '';
+    var st = vervolgVan(v.fase); if (!st.length) return '';
+    return '<div class="vervolg"><span><b>' + esc(v.naam) + '</b> staat op ' + esc(v.fase) + '. Volgende stap?</span>' + st.map(function (s) { return '<button class="knop klein" data-vervolg="' + s[0] + '">' + esc(s[1]) + '</button>'; }).join('') + '<button class="knop klein licht" data-vervolg="weg" aria-label="Sluiten">×</button></div>';
+  }
+  document.addEventListener('click', function (ev) {
+    var x = ev.target.closest('[data-vervolg]'); if (!x) return;
+    var v = CRM.vervolg, wat = x.getAttribute('data-vervolg'); CRM.vervolg = null;
+    if (wat === 'weg' || !v) { if (CRM.tab === 'pipeline' && CRM.pipeline) metBordScroll(renderPipeline); return; }
+    if (wat === 'offerte') {
+      if (isDesk()) deskNaar('brein'); else wisselView('brein');
+      var vi = el('vraagInput'); vi.value = 'Schrijf een offerte voor ' + v.naam + (v.school ? ' (' + v.school + ')' : '') + ' op basis van de kans en eerdere voorstellen.'; vi.focus();
+      toast('Controleer de vraag en druk op verzenden; de assistent stelt de offerte voor, jij bevestigt.'); return;
+    }
+    var p = openDetail('kans', v.id, true); if (isDesk()) zetZijbalk('pipeline');
+    if (p && p.then) p.then(function () { openComposer(wat === 'afspraak' ? 'afspraak' : 'taak'); });
+  });
+
+  // 11. Link kopiëren: een deeplink (#school:id, #kans:id, …) die in de app direct het item opent
+  document.addEventListener('click', function (ev) {
+    var x = ev.target.closest('[data-linkkopie]'); if (!x) return;
+    var url = location.origin + location.pathname + '#' + x.getAttribute('data-linkkopie');
+    var klaar = function () { toast('Link gekopieerd. Wie hem opent en toegang heeft, komt direct hier.'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(klaar, function () { window.prompt('Kopieer de link:', url); });
+    else window.prompt('Kopieer de link:', url);
+  });
 
   /* --- Home --- */
   function hkaart(titel, inhoud, item) { return '<div class="hkaart"><div class="kop">' + esc(titel) + (item ? ' <small><a data-desk="' + item + '">Alles</a></small>' : '') + '</div>' + inhoud + '</div>'; }
@@ -4378,7 +4634,7 @@
       (DESK.agenda.gekoppeld === false ? '<div class="hint">' + GMAIL_HINT + ' Tot die tijd zie je hier je taken en de CRM-afspraken.</div>' : '') +  // v3.3
       '<div class="legenda"><span><span class="ai ev">agenda</span>Google Agenda</span><span><span class="ai crm">CRM</span>afspraak met een school</span><span><span class="ai taak">taak</span>deadline</span></div>' +
       '<div class="agenda-wrap"><div class="maand">' + DAGEN_KORT.map(function (x) { return '<div class="mkop">' + x + '</div>'; }).join('') + cellen + '</div>' +
-      '<div class="hkaart"><div class="kop">' + esc(DAGEN_KORT[(gd.getDay() + 6) % 7] + ' ' + kortDatum(DESK.gekozen)) + '</div>' + (lijst || '<div class="leeg">Niets op deze dag.</div>') + '</div></div>';
+      '<div class="hkaart" data-sleepdoel="taak:' + esc(DESK.gekozen) + '"><div class="kop">' + esc(DAGEN_KORT[(gd.getDay() + 6) % 7] + ' ' + kortDatum(DESK.gekozen)) + '</div>' + (lijst || '<div class="leeg">Niets op deze dag.</div>') + '</div></div>';
   }
   function afspraakFormulier() {
     basisKlaar().then(function () {
@@ -4417,7 +4673,7 @@
   /* --- events --- */
   el('zbZoek').addEventListener('input', function () {
     var q = el('zbZoek').value.trim().toLowerCase(), r = el('zbResultaten');
-    if (q.length < 2) { var h = !q ? recentHtml(true) : ''; r.innerHTML = h ? '<div class="zb-kop">Recent bekeken</div>' + h : ''; r.classList.toggle('aan', !!h); return; }  // v6.8
+    if (q.length < 2) { var h = !q ? recentHtml(true) : ''; r.innerHTML = h ? '<div class="zb-recent-kop">Recent bekeken</div>' + h : ''; r.classList.toggle('aan', !!h); return; }  // v6.8
     basisKlaar().then(function (B) {
       if (el('zbZoek').value.trim().toLowerCase() !== q) return;
       var sch = B.scholen.filter(function (s) { return zoekMatch(q, [s.naam, s.plaats, (s.tags || []).join(' ')]); }).slice(0, 8);
@@ -4430,7 +4686,7 @@
   el('zbZoek').addEventListener('keydown', function (e) { if (e.key === 'Escape') sluitZoek(); });
   el('zbZoek').addEventListener('focus', function () {  // v6.8: leeg zoekvak = recent bekeken
     var r = el('zbResultaten'), h = recentHtml(true); if (el('zbZoek').value.trim() || !h) return;
-    r.innerHTML = '<div class="zb-kop">Recent bekeken</div>' + h; r.classList.add('aan');
+    r.innerHTML = '<div class="zb-recent-kop">Recent bekeken</div>' + h; r.classList.add('aan');
   });
   el('zbNieuwKnop').addEventListener('click', function (e) { e.stopPropagation(); el('zbNieuwMenu').classList.toggle('aan'); });
   el('zbInstellingen').addEventListener('click', function () { el('instellingenKnop').click(); });
@@ -4489,6 +4745,7 @@
 
   /* ===== Navigatie, instellingen, koppelen ===== */
   function wisselView(naam) {
+    if (selectieAantal()) selectieWis(); paletDicht(); voorbeeldWeg();  // v6.9
     document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('actief'); });
     el('view-' + naam).classList.add('actief');
     document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('actief', b.dataset.view === naam); });
