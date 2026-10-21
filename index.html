@@ -1719,9 +1719,9 @@
   }
   // v6.4: de taskforcemeeting in de agenda: consultant, accountmanager en talentscout krijgen een uitnodiging met de link naar het project
   function taskforcePlannenVenster() {
-    var d = CRM.detail.data, t = d.project, w = { duurMin: 45, start: vandaagStr() + 'T10:00' };
+    var d = CRM.detail.data, t = d.project, w = { duurMin: 45, start: morgenNegen() };  // v6.4: nooit een tijdstip dat al voorbij is
     var wie = [t.adviseur, t.am, d.talentscout].filter(Boolean);
-    openVenster(formHtml('Taskforcemeeting inplannen', [{ naam: 'start', label: 'Datum en tijd', type: 'datetime-local' }, { naam: 'duurMin', label: 'Duur (minuten)', type: 'number' }, { naam: 'locatie', label: 'Locatie of link', breed: true, plaats: 'Teams, kantoor of op school' }], w, 'Inplannen', function (f) {
+    openVenster(formHtml('Taskforcemeeting inplannen', [{ naam: 'start', label: 'Datum en tijd', type: 'datetime-local', breed: true }, { naam: 'duurMin', label: 'Duur (minuten)', type: 'number' }, { naam: 'locatie', label: 'Locatie of link', breed: true, plaats: 'Teams, kantoor of op school' }], w, 'Inplannen', function (f) {
       if (!f.start) { toast('Kies een datum en tijd.'); return; }
       return run('apiTaskforcePlannen', CRM.detail.id, f).then(function (b) { sluitVenster(); toast('Taskforcemeeting staat in de agenda' + (b.zonderEmail && b.zonderEmail.length ? '; geen e-mailadres voor ' + b.zonderEmail.join(', ') : '; iedereen heeft een uitnodiging') + '.'); herlaadDetail(); });
     }, '<div class="hint">Uitnodiging voor ' + esc(wie.length ? wie.join(', ') : 'jezelf') + (d.talentscout ? '' : ' (nog geen talentscout: wijs er eerst een toe, of nodig het talentteam later uit)') + '.</div>'));
@@ -1741,7 +1741,7 @@
   // v6.4: het winformulier: wat de consultant bij "gewonnen" al weet, gaat direct naar de AM (project) en het talentteam (conceptvacature)
   function winVenster(obj, s) {
     var k = (CRM.detail && CRM.detail.data && CRM.detail.data.kans) || {}, w = { rol: 'Onderwijsondersteuner', aantal: '', rooster: '', startdatum: '', bijzonderheden: '', am: k.am || '' };
-    openVenster(formHtml('Kans gewonnen: overdracht', [{ naam: 'aantal', label: 'Aantal ondersteuners *', type: 'number' }, { naam: 'startdatum', label: 'Gewenste startdatum *', type: 'date' },
+    openVenster(formHtml('Kans gewonnen: overdracht', [{ naam: 'aantal', label: 'Aantal ondersteuners *', type: 'number' }, { naam: 'startdatum', label: 'Gewenste startdatum *', type: 'date', breed: true },  // iOS: een leeg datumveld staat anders scheef naast het getalveld
       { naam: 'rol', label: 'Rol', breed: true, plaats: 'Onderwijsondersteuner, studentdocent, examentrainer' }, { naam: 'rooster', label: 'Dagen en tijden', breed: true, plaats: 'ma t/m do 9-13 uur' },
       { naam: 'am', label: 'Accountmanager', type: 'select', breed: true, opties: [{ waarde: '', label: '— later kiezen' }].concat(optiesTeam('accountmanagement', k.am)) },
       { naam: 'bijzonderheden', label: 'Bijzonderheden', type: 'textarea', plaats: 'Vakken, niveau, wensen van de school' }], w, 'Gewonnen', function (f) {
@@ -3152,7 +3152,7 @@
     if (obj.fase === 'verloren') { var r = window.prompt('Waarom is deze kans verloren?', ''); if (r === null) { herlaadDetail(); return; } obj.verliesReden = r.trim(); }
     // v3.8: gewonnen = altijd een project voor de accountmanager (backend); v6.4: eerst het winformulier (aantal en startdatum), zodat AM en talent direct verder kunnen
     s.disabled = true;
-    if (obj.fase === 'gewonnen' && !/^(gewonnen)$/.test(obj._oud.fase)) { winVenster(obj, s); return; }
+    if (obj.fase === 'gewonnen' && obj._oud.fase !== 'gewonnen') { winVenster(obj, s); return; }
     var wasGesloten = /^(gewonnen|verloren)$/.test(obj._oud.fase);
     run('apiKansOpslaan', obj, maakTraject).then(function (x) { toast('Mijlpaal: ' + x.kans.fase + (x.traject ? ' · project aangemaakt voor ' + (x.traject.am || 'de accountmanager (nog kiezen)') : '') + (wasGesloten && !/^(gewonnen|verloren)$/.test(x.kans.fase) ? ' · heropend (een project in Historie blijft bestaan)' : '')); crmVerouderd(); herlaadDetail(); }).catch(herlaadDetail);  // v3.7
   });
@@ -3171,7 +3171,7 @@
   // Het venster heeft een eigen opslaan-actie en eigen veld-id's (vf-), zodat een open formulier op de pagina blijft werken.
   var VENSTER = { actie: null };
   function openVenster(html) {
-    VENSTER.annuleer = null;  // v6.4
+    var na = VENSTER.annuleer; VENSTER.annuleer = null; if (na) na();  // v6.4: een vorig venster dat zonder opslaan wordt vervangen, herstelt eerst zijn scherm
     VENSTER.actie = formActie; formActie = INLINE.actie;  // formHtml zette formActie voor het venster; die van de pagina terugzetten
     el('vensterInhoud').innerHTML = String(html).replace(/(id|for)="cf-/g, '$1="vf-'); el('venster').classList.add('aan'); document.body.classList.add('venster-open');
     el('vensterInhoud').scrollTop = 0; pasVensterAan();
