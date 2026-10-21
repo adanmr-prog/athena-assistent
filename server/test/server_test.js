@@ -7,6 +7,7 @@ process.env.SUPABASE_JWT_SECRET = 'test-geheim-van-minstens-32-tekens-lang!'; pr
 process.env.GOOGLE_CLIENT_ID = 'nep'; process.env.GOOGLE_CLIENT_SECRET = 'nep'; process.env.GOOGLE_REFRESH_TOKEN = 'nep';  // de worker beantwoordt Google zelf (ATHENA_GOOGLE_NEP)
 delete process.env.SUPABASE_URL; delete process.env.SUPABASE_ANON_KEY;
 var fs = require('fs'), path = require('path'), R = path.join(__dirname, '..', '..');
+var VERSIE_CODE = /var VERSIE = '([^']+)'/.exec(fs.readFileSync(path.join(R, 'backend', 'Code.gs'), 'utf8'))[1];  // v6.4.2: versie uit Code.gs, zodat een release deze test niet breekt
 var schema = require('../schema.js'), brug = require('../sync.js'), A = require('../apps-script.js'), migratie = require('../migratie.js'), handler = require('../handler.js'), vercel = require('../vercel.js'), code = require('../code.js');
 
 var fouten = 0;
@@ -93,9 +94,9 @@ var SOPHIE = 'demo-sophie', FEMKE = 'demo-femke', IRIS = 'demo-iris';
   eis(ex.rijen.length === 5 && ex.volgende === 5 && ex2.volgende === null && ex.rijen.length + ex2.rijen.length === ex.totaal && !ex.rijen[0]._rij && exE.rijen.SECRET === 'demo-sophie' && !('ANTHROPIC_API_KEY' in exE.rijen) && !('DB' in exE.rijen) && !('GOOGLE_NEP' in exE.rijen), 'apiExportAlles pagineert en laat sleutels en de serverinstellingen (ATHENA_DB, ATHENA_GOOGLE_NEP) weg');  // v6.2
   eis(/management/i.test(await faalt(FEMKE, 'apiExportAlles', 'Acties')), 'alleen het management exporteert');
   var status = await roep(SOPHIE, 'apiStatus');
-  eis(status.versie === '6.4' && status.herinneringTrigger === true && status.talentTrigger === true && status.gebruiker.naam === 'Sophie de Graaf', 'apiStatus ziet de triggers als cron');
+  eis(status.versie === VERSIE_CODE && status.herinneringTrigger === true && status.talentTrigger === true && status.gebruiker.naam === 'Sophie de Graaf', 'apiStatus ziet de triggers als cron');
   var g1 = await handler.verwerk({ methode: 'GET', pad: '/api', headers: {} }), g2 = await handler.verwerk({ methode: 'GET', pad: '/api/config', headers: {} });
-  eis(g1.status === 200 && JSON.parse(g1.body).versie === '6.4' && g2.status === 404, 'GET /api geeft de versie; /api/config bestaat niet zonder Supabase-instellingen');
+  eis(g1.status === 200 && JSON.parse(g1.body).versie === VERSIE_CODE && g2.status === 404, 'GET /api geeft de versie; /api/config bestaat niet zonder Supabase-instellingen');
   var g3 = await handler.verwerk({ methode: 'GET', pad: '/api/config', headers: {}, env: Object.assign({}, process.env, { SUPABASE_URL: 'https://abc.supabase.co/', SUPABASE_ANON_KEY: 'anon' }) });
   eis(g3.status === 200 && JSON.parse(g3.body).inloggen === 'google' && JSON.parse(g3.body).supabaseUrl === 'https://abc.supabase.co' && JSON.parse(g3.body).maxBestand === 3 * 1024 * 1024 && !g3.headers['Access-Control-Allow-Origin'], '/api/config geeft de inlogconfiguratie en de bestandsgrens; geen CORS-header zonder ATHENA_CORS_ORIGIN');  // v6.2
   var g4 = await handler.verwerk({ methode: 'GET', pad: '/api', headers: {}, env: Object.assign({}, process.env, { ATHENA_CORS_ORIGIN: 'https://crm.voorbeeld.nl' }) });

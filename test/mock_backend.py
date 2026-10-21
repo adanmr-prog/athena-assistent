@@ -166,7 +166,7 @@ def bezetting_van(tid):
     vs = [vac_uit(v, False) for v in VACATURES if v['trajectId'] == tid and v['status'] != 'gesloten']
     return {'nodig': sum(v['aantal'] for v in vs), 'gevuld': sum(min(v['gevuld'], v['aantal']) for v in vs), 'inProces': sum(v['inProces'] for v in vs), 'openVacatures': len([v for v in vs if v['status'] == 'open'])}
 def project_bezetting(t):
-    return {'trajectId': t['id'], 'projectStatus': t['status'], 'vacatures': [vac_uit(v) for v in VACATURES if v['trajectId'] == t['id']], 'bezetting': bezetting_van(t['id']),
+    return {'trajectId': t['id'], 'projectStatus': t['status'], 'vacatures': [dict(vac_uit(v), magBevestigen=ik()['team'] != 'talent') for v in VACATURES if v['trajectId'] == t['id']], 'bezetting': bezetting_van(t['id']),  # v6.4.2: magBevestigen
             'taskforce': t.get('taskforce') or {}, 'taskforceVragen': VRAGEN, 'afspraken': [{'id': x['id'], 'tekst': x['tekst'], 'eigenaar': x['eigenaar'], 'deadline': x['deadline'], 'status': x['status']} for x in TAKEN if x.get('trajectId') == t['id'] and x.get('bron') == 'taskforce'],
             'keuzesBezetting': {'kandidaatStatussen': KSTATUS, 'vacatureStatussen': ['concept', 'open', 'ingevuld', 'gesloten'], 'bronnen': ['XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders']},
             'rechtenBezetting': {'vacatures': ik()['team'] != 'consultancy', 'kandidatenZien': True, 'kandidaten': True, 'taskforce': True, 'talentscout': ik()['team'] != 'talent', 'talentscoutZelf': ik()['team'] != 'talent' or not t.get('talentscout')},  # v6.4
@@ -519,7 +519,7 @@ def handle_crm(fn, args):
             t = tm[v['trajectId']]
             if not (beheer() or ik()['team'] == 'talent' or t['am'] == ik()['naam']): continue
             u = vac_uit(v); u['project'] = {'id': t['id'], 'school': t['school'], 'traject': t['traject'], 'schooljaar': t['schooljaar'], 'status': t['status'], 'am': t['am'], 'adviseur': t.get('adviseur', ''), 'start': t['start'], 'talentscout': t.get('talentscout', '')}  # v6.4
-            u['magWijzigen'] = True; u['magKandidaten'] = True; l.append(u)
+            u['magWijzigen'] = True; u['magKandidaten'] = True; u['magBevestigen'] = ik()['team'] != 'talent'; l.append(u)  # v6.4.2
         tel = {'openVacatures': len([v for v in l if v['status'] == 'open']), 'openPlekken': sum(max(0, v['aantal'] - v['gevuld']) for v in l if v['status'] == 'open'), 'inProces': sum(v['inProces'] for v in l), 'klaar': sum(v['gevuld'] for v in l), 'concept': len([v for v in l if v['status'] == 'concept'])}  # v6.4
         return {'vacatures': l, 'tellingen': tel, 'keuzes': project_bezetting(TRAJECTEN[0])['keuzesBezetting'], 'ik': ik()}
     if fn == 'apiVacatureOpslaan':

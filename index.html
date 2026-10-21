@@ -1604,7 +1604,7 @@
     var kands = !zienK ? (v.inProces ? '<div class="hint">' + esc(v.inProces) + ' kandidaat' + (v.inProces === 1 ? '' : 'en') + ' in proces</div>' : '')
       : ((v.kandidaten || []).map(function (k) { return kandidaatRij(k, wijzigK, K); }).join('') || '<div class="leeg" style="padding:8px 0">Nog geen kandidaten voorgedragen.</div>');
     var knoppen = (wijzigK ? (talentAlles() && (v.status === 'open' || concept) ? '<button class="knop-mini" data-voorstellen="' + esc(v.id) + '">' + (concept ? 'Alvast matchen' : 'Voorstellen uit talentbestand') + '</button>' : '') + (concept ? '' : '<button class="knop-mini" data-kandidaat="nieuw" data-vid="' + esc(v.id) + '">+ Kandidaat</button>') : '') +
-      (wijzigV && concept ? '<button class="knop-mini" data-vacbevestig="' + esc(v.id) + '">Bevestigen na taskforce</button>' : '') + (wijzigV ? '<button class="knop-mini" data-vacature="' + esc(v.id) + '" data-tid="' + esc(v.trajectId) + '">Vacature bewerken</button>' : '');  // v5.0: voorstellen met matchscore (talentteam); v6.4: concept
+      (v.magBevestigen && concept ? '<button class="knop-mini" data-vacbevestig="' + esc(v.id) + '">Bevestigen na taskforce</button>' : '') + (wijzigV ? '<button class="knop-mini" data-vacature="' + esc(v.id) + '" data-tid="' + esc(v.trajectId) + '">Vacature bewerken</button>' : '');  // v5.0: voorstellen met matchscore (talentteam); v6.4: concept
     var uitleg = concept ? '<div class="hint">Uit het winformulier van de consultant. Talent kan alvast zoeken; voordragen kan zodra de accountmanager hem na de taskforce bevestigt.</div>' : '';
     return '<div class="kaart vac-kaart">' + kop + prof + uitleg + kands + (knoppen ? '<div class="d-acties">' + knoppen + '</div>' : '') + '</div>';
   }
@@ -1630,7 +1630,7 @@
     }
     if (S.bezetting) {
       var nieuw = {}; (b.vacatures || []).forEach(function (v) { nieuw[v.id] = v; });
-      S.bezetting.vacatures = S.bezetting.vacatures.map(function (v) { var n = nieuw[v.id]; if (!n) return v; delete nieuw[v.id]; n.project = v.project; n.magWijzigen = v.magWijzigen; n.magKandidaten = v.magKandidaten; if (b.projectStatus) n.project.status = b.projectStatus; return n; });
+      S.bezetting.vacatures = S.bezetting.vacatures.map(function (v) { var n = nieuw[v.id]; if (!n) return v; delete nieuw[v.id]; n.project = v.project; n.magWijzigen = v.magWijzigen; n.magKandidaten = v.magKandidaten; if (n.magBevestigen === undefined) n.magBevestigen = v.magBevestigen; if (b.projectStatus) n.project.status = b.projectStatus; return n; });
       if (Object.keys(nieuw).length) S.bezetting = null;
       else { var tel = { openVacatures: 0, openPlekken: 0, inProces: 0, klaar: 0, concept: 0 };  // v6.4: concept
         S.bezetting.vacatures.forEach(function (v) { if (v.status === 'open') { tel.openVacatures++; tel.openPlekken += Math.max(0, v.aantal - v.gevuld); } if (v.status === 'concept') tel.concept++; if (v.status !== 'gesloten') { tel.inProces += v.inProces; tel.klaar += v.gevuld; } });
