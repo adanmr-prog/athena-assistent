@@ -91,7 +91,7 @@ with sync_playwright() as p:
     page.wait_for_selector('.vac-kaart:has-text("Taalcoach")'); page.locator('.vac-kaart:has-text("Taalcoach") [data-kandidaat="nieuw"]').click(); page.wait_for_selector('#venster.aan #vf-naam')
     page.fill('#vf-naam', 'Ali Bakker'); page.select_option('#vf-bron', 'LinkedIn'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.vac-kaart:has-text("Ali Bakker")')
     ali = page.locator('.vac-kaart:has-text("Taalcoach") [data-kstatus]'); ali.select_option('klaar voor start'); page.wait_for_selector('.vac-kaart:has-text("Taalcoach") .vac-teller.vol')
-    assert '1/3' in page.inner_text('[data-dtab="bezetting"]'), 'tab telt de bezetting'
+    page.wait_for_timeout(300); assert '1/3' in page.inner_text('[data-dtab="bezetting"]'), 'tab telt de bezetting: ' + page.inner_text('[data-dtab="bezetting"]')
     page.locator('.vac-kaart:has-text("Taalcoach") [data-kandidaat]:not([data-kandidaat="nieuw"])').first.click(); page.wait_for_selector('#venster.aan [data-kopieerxps]'); page.click('#venster [data-cf-annuleer]')
     page.screenshot(path=OUT + '/07f_project_bezetting.png', full_page=True)
     assert page.locator('[data-kopieerxpsproject]').count() == 1, 'knop Kopieer voor XPS op het project'  # v4.1

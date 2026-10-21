@@ -276,8 +276,17 @@ var gepl = roep(LARS, 'apiTaskforcePlannen', p64.id, { start: plusDagen(2) + 'T1
 eis(gepl.taskforceGepland && /10:00/.test(gepl.taskforceGepland) && acties().filter(function (a) { return a.trajectId === p64.id && a.bron === 'taskforceplannen'; }).every(function (a) { return a.status === 'af'; }), 'taskforcemeeting in de agenda; de plantaak van de consultant gaat af');
 eis(ctx.lees('Meldingen').slice(mV2).some(function (m) { return m.voor === 'Bas Meijer' && /Taskforcemeeting/.test(m.tekst); }) && ctx.lees('Meldingen').slice(mV2).some(function (m) { return m.voor === 'Sem de Boer' && /Taskforcemeeting/.test(m.tekst); }), 'AM en talentscout krijgen een melding van de meeting');
 eis(/concept/.test(faalt(BAS, 'apiVacatureOpslaan', { trajectId: p64.id, titel: 'X', status: 'concept' })), 'een nieuwe vacature kan geen concept zijn');
-var mV3 = ctx.lees('Meldingen').length;
+// v6.4.2: bevindingen uit de review
+eis(/accountmanager bevestigt/.test(faalt(SEM, 'apiVacatureOpslaan', { id: vac64[0].id, status: 'open', _oud: { status: 'concept' } })) && ctx.lees('Vacatures').filter(function (v) { return v.id === vac64[0].id; })[0].status === 'concept', 'talent kan een conceptvacature niet zelf bevestigen');
+var tBezig = ctx.lees('Trajecten').filter(function (t) { return t.status === 'bezig' && !t.talentscout && !ctx.lees('Vacatures').some(function (v) { return v.trajectId === t.id && v.status === 'open'; }); })[0];
+eis(tBezig && /toegang/.test(faalt(SEM, 'apiTalentscoutToewijzen', tBezig.id, 'Sem de Boer')) && /toegang/.test(faalt(IRIS, 'apiTalentscoutToewijzen', tBezig.id, 'Sem de Boer')), 'scout worden van een project dat talent niet ziet kan niet (geen inzage via een omweg)');
+roep(BAS, 'apiTaskforceOpslaan', p64.id, { hulpvraag: 'Twee vaste studentdocenten voor havo 4' });
+eis(JSON.parse(ctx.lees('Trajecten').filter(function (t) { return t.id === p64.id; })[0].taskforce).gepland === gepl.taskforceGepland, 'taskforce bijwerken bewaart het tijdstip van de ingeplande meeting');
+var losP = roep(SOPHIE, 'apiTrajectOpslaan', { school: 'Testschool zonder scout', traject: 'Proef', talentscout: '' });
+eis(!ctx.lees('Activiteiten').some(function (a) { return a.trajectId === losP.id && a.bron === 'overdracht'; }), 'een nieuw project zonder scout krijgt geen loze tijdlijnregel');
+var mV3 = ctx.lees('Meldingen').length, aangemaaktVoor = ctx.lees('Vacatures').filter(function (v) { return v.id === vac64[0].id; })[0].aangemaakt;
 var bev = roep(BAS, 'apiVacatureOpslaan', { id: vac64[0].id, status: 'open', _oud: { status: 'concept' } });
+eis(String(ctx.lees('Vacatures').filter(function (v) { return v.id === vac64[0].id; })[0].aangemaakt) >= String(aangemaaktVoor), 'time-to-fill telt vanaf bevestigen');
 eis(bev.vacatures.filter(function (v) { return v.id === vac64[0].id; })[0].status === 'open' && ctx.lees('Meldingen').slice(mV3).filter(function (m) { return /bevestigd/.test(m.tekst); }).map(function (m) { return m.voor; }).join() === 'Sem de Boer', 'de AM bevestigt; alleen de talentscout krijgt de melding');
 eis(!faalt(SEM, 'apiVoorstellen', vac64[0].id, ['tl1']), 'na bevestigen kan talent voordragen');
 eis(roep(SEM, 'apiTrajecten').trajecten.some(function (t) { return t.id === p64.id && t.talentscout === 'Sem de Boer'; }), 'de talentscout ziet het project in zijn projectenlijst');
