@@ -1481,6 +1481,11 @@
     if (isDesk()) w.push(['bord', 'Bord']);
     return w;
   }
+  // v6.3: op desktop wissel je van scherm via de zijbalk; de chiprij toont alleen de projectweergaven
+  function projectChips(ws) {
+    if (!isDesk()) return ws;
+    return ws.filter(function (x) { return x[0] !== 'bezetting' && x[0] !== 'talent'; });
+  }
   function projectAms(T) {
     var ams = (T.am || []).slice(); T.trajecten.forEach(function (t) { if (t.am && ams.indexOf(t.am) < 0) ams.push(t.am); });
     return ams.sort();
@@ -1525,7 +1530,7 @@
     if (!ws.some(function (x) { return x[0] === w; })) w = S.pWeergave = 'am';
     if (S.pAm === null) S.pAm = T.ik && ams.indexOf(T.ik.naam) >= 0 ? T.ik.naam : '';  // een accountmanager begint bij zijn eigen bord
     var eenvoudig = w === 'lijst' || w === 'bord', tl = w === 'talent';  // v5.0: talent
-    el('projectWeergaven').innerHTML = ws.map(function (x) { return '<button class="chip' + (x[0] === w ? ' aan' : '') + '" data-pweergave="' + esc(x[0]) + '">' + esc(x[1]) + '</button>'; }).join('');
+    el('projectWeergaven').innerHTML = isDesk() && (w === 'bezetting' || w === 'talent') ? '' : projectChips(ws).map(function (x) { return '<button class="chip' + (x[0] === w ? ' aan' : '') + '" data-pweergave="' + esc(x[0]) + '">' + esc(x[1]) + '</button>'; }).join('');
     el('projectAms').innerHTML = eenvoudig || tl || ams.length < 2 ? '' : ['<button class="chip' + (!S.pAm ? ' aan' : '') + '" data-pam="">Iedereen</button>'].concat(ams.map(function (a) { return '<button class="chip' + (S.pAm === a ? ' aan' : '') + '" data-pam="' + esc(a) + '">' + esc(a) + '</button>'; })).join('');
     el('projectFilters').style.display = eenvoudig ? '' : 'none';
     var bz = w === 'bezetting';  // v4.1: kop en uitleg passen zich aan de weergave aan
