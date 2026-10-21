@@ -231,8 +231,20 @@ with sync_playwright() as p:
     page.click('[data-beheer="capsule"]'); page.wait_for_selector('#crmBeheer:has-text("klaar")', timeout=8000)
     page.click('[data-crmtab="scholen"]'); page.click('[data-crmnieuw="school"]'); page.fill('#cf-naam', 'Testschool Noord'); page.fill('#cf-plaats', 'Groningen'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.d-naam h2:has-text("Testschool Noord")')
     page.click('[data-composer="kans"]'); page.fill('#cf-naam', 'Studentdocenten'); page.fill('#cf-waarde', '8000'); page.click('[data-cf-opslaan]'); page.wait_for_selector('[data-kansfase]')
-    page.select_option('[data-kansfase]', 'gewonnen'); page.wait_for_selector('.t-item:has-text("→ gewonnen")'); page.wait_for_timeout(150)
+    # v6.4: gewonnen opent eerst het winformulier (aantal en startdatum verplicht); annuleren laat de kans staan
+    page.select_option('[data-kansfase]', 'gewonnen'); page.wait_for_selector('#venster.aan #vf-aantal')
+    page.click('#venster [data-cf-annuleer]'); page.wait_for_timeout(400); assert page.locator('.t-item:has-text("→ gewonnen")').count() == 0, 'annuleren wint de kans niet'
+    page.wait_for_selector('[data-kansfase]'); page.select_option('[data-kansfase]', 'gewonnen'); page.wait_for_selector('#venster.aan #vf-aantal')
+    page.click('#venster [data-cf-opslaan]'); page.wait_for_timeout(200); assert page.locator('#venster.aan #vf-aantal').count() == 1, 'zonder aantal en startdatum blijft het formulier open'
+    page.fill('#vf-aantal', '2'); page.fill('#vf-startdatum', '2026-11-16'); page.fill('#vf-rooster', 'di en do 9-13 uur'); page.click('#venster [data-cf-opslaan]')
+    page.wait_for_selector('.t-item:has-text("→ gewonnen")'); page.wait_for_timeout(150)
     page.wait_for_selector('.d-links [data-crm-open^="project:"]'); page.click('.d-links [data-crm-open^="project:"]'); page.wait_for_selector('.t-item:has-text("Overdracht")')  # v3.8: gewonnen = project met overdracht
+    page.click('[data-dtab="taskforce"]'); page.wait_for_selector('#dTab .hint:has-text("winformulier")'); assert 'di en do 9-13 uur' in page.inner_text('#dTab'), 'taskforce vooringevuld uit het winformulier'
+    page.click('[data-tfplannen]'); page.wait_for_selector('#venster.aan #vf-start'); page.fill('#vf-start', '2026-10-28T10:00'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#dTab .hint:has-text("Gepland")')
+    page.click('[data-dtab="bezetting"]'); page.wait_for_selector('#dTab .vac-kaart .tag.concept'); assert page.locator('#dTab [data-kandidaat="nieuw"]').count() == 0, 'op een concept geen + Kandidaat'
+    page.click('#dTab [data-vacbevestig]'); page.wait_for_selector('#dTab .vac-kaart .tag.open')
+    page.click('[data-tscout="kies"]'); page.wait_for_selector('#venster.aan #vf-talentscout'); page.select_option('#vf-talentscout', 'Lotte'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.d-links:has-text("Lotte")')
+    page.screenshot(path=OUT + '/18b_project_na_winst.png', full_page=True)
     page.go_back(); page.wait_for_selector('[data-kansfase]')
     page.screenshot(path=OUT + '/18_kans_gewonnen.png', full_page=True)
     page.click('nav button[data-view="vandaag"]'); page.wait_for_selector('#kansenLijst [data-crm-open]'); page.click('#kansenLijst [data-crm-open="kans:k2"]'); page.wait_for_selector('[data-kansfase]'); page.wait_for_timeout(150)
@@ -357,7 +369,10 @@ with sync_playwright() as p:
     tl.fill('#apiInput', 'http://127.0.0.1:8765/api'); tl.fill('#codeInput', 'talent123'); tl.click('#codeOpslaan')
     tl.wait_for_selector('#zbNaam:has-text("Lotte · talentscout")')
     assert tl.locator('.zb-item[data-desk="bezetting"]').is_visible() and not tl.locator('.zb-item[data-desk="pipeline"]').is_visible() and not tl.locator('.zb-item[data-desk="facturatie"]').is_visible(), 'menu talent'
-    tl.click('.zb-item[data-desk="projecten"]'); tl.wait_for_selector('.vac-grid .vac-kaart'); assert tl.locator('#projectWeergaven .chip.aan[data-pweergave="bezetting"]').count() == 1, 'talent begint bij bezetting'
+    # v6.4: op desktop wisselt de zijbalk van scherm; Projecten toont de projecten (ook voor talent), Bezetting het bord zonder projectchips
+    tl.click('.zb-item[data-desk="projecten"]'); tl.wait_for_selector('#projectWeergaven .chip.aan[data-pweergave="am"]'); assert tl.locator('.vac-grid').count() == 0 and tl.locator('#projectWeergaven [data-pweergave="bezetting"]').count() == 0, 'talent: Projecten toont projecten, zonder Bezetting-chip'
+    tl.click('.zb-item[data-desk="bezetting"]'); tl.wait_for_selector('.vac-grid .vac-kaart'); assert tl.locator('#projectWeergaven .chip').count() == 0 and tl.locator('.zb-item.aan[data-desk="bezetting"]').count() == 1, 'Bezetting via de zijbalk, zonder projectchips'
+    tl.click('[data-bmijn]'); tl.wait_for_timeout(200); assert tl.locator('.vac-kaart').count() == 0 or 'TS Lotte' in tl.inner_text('#trajectLijst'), 'filter Mijn projecten'; tl.click('[data-bmijn]'); tl.wait_for_selector('.vac-grid .vac-kaart')
     tl.locator('.vac-kaart a[data-crm-open="project:t4"]').first.click(); tl.wait_for_selector('#dTab .vac-kaart'); assert tl.locator('[data-dtab="bezetting"].aan').count() == 1, 'project opent bij de bezetting'
     assert tl.locator('.d-links .kop:has-text("Facturatie")').count() == 0, 'talent ziet geen facturatie'
     tl.screenshot(path=OUT + '/43_talent_project.png')

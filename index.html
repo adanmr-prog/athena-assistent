@@ -478,6 +478,7 @@
   .pill.p-voorgesteld { background-color: #579BFC; } .pill.p-gesprek { background-color: #FDAB3D; } .pill.p-geselecteerd { background-color: #A25DDC; }
   .pill.p-academy { background-color: #784BD1; } .pill.p-contract { background-color: #0086C0; } .pill.p-vog { background-color: #037F4C; } .pill.p-klaar-voor-start { background-color: #00C875; } .pill.p-reserve { background-color: #9AA0A6; } .pill.p-afgewezen { background-color: #DF2F4A; }
   .tag.open { background: var(--oranje-l); color: #B86E00; } .tag.ingevuld { background: var(--groen-l); color: var(--groen); } .tag.gesloten { background: var(--vlak); color: var(--inkt2); }
+  .tag.concept { background: var(--paars-l); color: var(--paars); }  /* v6.4: conceptvacature uit het winformulier */
   .vac-kaart { margin: 10px 0; }
   .vac-kop { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
   .vac-kop b { font-size: 15px; }
@@ -1504,7 +1505,7 @@
   function projectKaart(t, T) {
     var periode = [t.start ? kortDatum(t.start) : '', t.eind ? kortDatum(t.eind) : ''].filter(Boolean).join(' – ');
     return '<div class="rij p-rij"><div class="r-body klik" data-crm-open="project:' + esc(t.id) + '"><div class="r-titel">' + esc(t.school) + ' <span class="zacht">· ' + esc(t.traject) + '</span></div><div class="r-meta">' +
-      [t.am || 'geen AM', periode, bezettingTekst(t, false), (t.updates || 0) + ' updates', t.verlenging ? 'verlenging: ' + t.verlenging : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
+      [t.am || 'geen AM', t.talentscout ? 'TS ' + t.talentscout : '', periode, bezettingTekst(t, false), (t.updates || 0) + ' updates', t.verlenging ? 'verlenging: ' + t.verlenging : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
       '<div class="r-rechts">' + projectPill(t, 'status', T.filters.statussen) + '</div></div>';
   }
   // v4.1: bezetting x/y zodra er vacatures zijn, anders het aantal ondersteuners
@@ -1526,7 +1527,7 @@
   function renderTrajecten() {
     var T = S.trajecten; if (!T) return;
     var ws = projectWeergaven(), w = S.pWeergave, ams = projectAms(T);
-    if (!S.pWeergaveGekozen && T.ik && T.ik.team === 'talent' && magApp('vacatures')) w = S.pWeergave = 'bezetting';  // v4.1: talent begint bij de bezetting
+    if (!S.pWeergaveGekozen && !isDesk() && T.ik && T.ik.team === 'talent' && magApp('vacatures')) w = S.pWeergave = 'bezetting';  // v4.1: talent begint bij de bezetting; v6.4: alleen op de telefoon (op desktop kies je in de zijbalk, en Projecten moet de projecten tonen)
     if (!ws.some(function (x) { return x[0] === w; })) w = S.pWeergave = 'am';
     if (S.pAm === null) S.pAm = T.ik && ams.indexOf(T.ik.naam) >= 0 ? T.ik.naam : '';  // een accountmanager begint bij zijn eigen bord
     var eenvoudig = w === 'lijst' || w === 'bord', tl = w === 'talent';  // v5.0: talent
@@ -1579,28 +1580,33 @@
   function renderBezetting() {
     var B = S.bezetting;
     if (!B) { el('trajectTelling').textContent = ''; el('trajectLijst').innerHTML = '<div class="spinner">Laden</div>'; laadBezetting(); return; }
-    var q = S.filters.zoek.toLowerCase(), alleen = S.bOpen !== false, T = B.tellingen;
+    var q = S.filters.zoek.toLowerCase(), alleen = S.bOpen !== false, T = B.tellingen, ik = ikBen() || {}, mijn = !!S.bMijn && ik.team === 'talent';
     var lijst = B.vacatures.filter(function (v) {
-      if (alleen && v.status !== 'open') return false;
+      if (alleen && v.status !== 'open' && v.status !== 'concept') return false;  // v6.4: concepten horen bij wat er aankomt
+      if (mijn && v.project.talentscout !== ik.naam) return false;  // v6.4: mijn projecten als talentscout
       if (S.pAm && v.project.am !== S.pAm) return false;
       return !q || [v.titel, v.project.school, v.project.traject, v.dagen, v.profiel].concat((v.kandidaten || []).map(function (k) { return k.naam; })).join(' ').toLowerCase().indexOf(q) >= 0;
     });
     el('trajectTelling').textContent = lijst.length + (lijst.length === 1 ? ' vacature' : ' vacatures');
-    el('trajectLijst').innerHTML = '<div class="tegels">' + tegel(T.openVacatures, 'Open vacatures') + tegel(T.openPlekken, 'Plekken nog open', 'oranje') + tegel(T.inProces, 'Kandidaten in proces') + tegel(T.klaar, 'Klaar voor start') + '</div>' +
-      '<div class="chips"><button class="chip' + (alleen ? ' aan' : '') + '" data-bopen="1">Open vacatures</button><button class="chip' + (alleen ? '' : ' aan') + '" data-bopen="0">Alle vacatures</button></div>' +
+    el('trajectLijst').innerHTML = '<div class="tegels">' + tegel(T.openVacatures, 'Open vacatures') + tegel(T.openPlekken, 'Plekken nog open', 'oranje') + tegel(T.concept || 0, 'Concept (na winst)') + tegel(T.inProces, 'Kandidaten in proces') + tegel(T.klaar, 'Klaar voor start') + '</div>' +
+      '<div class="chips"><button class="chip' + (alleen ? ' aan' : '') + '" data-bopen="1">Open en concept</button><button class="chip' + (alleen ? '' : ' aan') + '" data-bopen="0">Alle vacatures</button>' +
+      (ik.team === 'talent' ? '<button class="chip' + (mijn ? ' aan' : '') + '" data-bmijn="1">Mijn projecten</button>' : '') + '</div>' +  // v6.4
       (lijst.length ? '<div class="vac-grid">' + lijst.map(function (v) { return vacatureKaart(v, !!v.kandidaten, v.magKandidaten, v.magWijzigen, B.keuzes, v.project); }).join('') + '</div>'
         : '<div class="leeg">' + (B.vacatures.length ? 'Geen vacatures in deze selectie.' : 'Nog geen vacatures. Een accountmanager opent ze op de projectpagina (tab Bezetting).') + '</div>');
   }
   function vacatureKaart(v, zienK, wijzigK, wijzigV, K, project) {
-    var kop = '<div class="vac-kop"><div><b>' + esc(v.titel) + '</b> <span class="tag ' + esc(v.status) + '">' + esc(v.status) + '</span>' +
-      (project ? '<div class="r-meta"><a data-crm-open="project:' + esc(project.id) + '" style="cursor:pointer;font-weight:700;display:inline-block;padding:8px 0">' + esc(project.school) + ' · ' + esc(project.traject) + '</a>' + (project.am ? ' · AM ' + esc(project.am) : '') + '</div>' : '') +
+    var concept = v.status === 'concept';  // v6.4: uit het winformulier; matchen kan, voordragen pas na bevestigen door de AM
+    var kop = '<div class="vac-kop"><div><b>' + esc(v.titel) + '</b> <span class="tag ' + esc(v.status) + '">' + esc(concept ? 'concept · nog niet bevestigd' : v.status) + '</span>' +
+      (project ? '<div class="r-meta"><a data-crm-open="project:' + esc(project.id) + '" style="cursor:pointer;font-weight:700;display:inline-block;padding:8px 0">' + esc(project.school) + ' · ' + esc(project.traject) + '</a>' + (project.am ? ' · AM ' + esc(project.am) : '') + ' · ' + (project.talentscout ? 'TS ' + esc(project.talentscout) : '<span style="color:var(--rood)">geen talentscout</span>') + '</div>' : '') +
       '<div class="r-meta">' + [v.aantal + '×', v.dagen, v.urenPerWeek ? v.urenPerWeek + ' u/wk' : '', v.start ? 'start ' + kortDatum(v.start) : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
       '<div class="vac-teller' + (v.gevuld >= v.aantal ? ' vol' : '') + '" title="gevuld van nodig">' + esc(v.gevuld) + '/' + esc(v.aantal) + '</div></div>';
     var prof = v.profiel ? '<div class="t-tekst" style="white-space:pre-wrap;margin-top:6px">' + esc(v.profiel) + '</div>' : '';
     var kands = !zienK ? (v.inProces ? '<div class="hint">' + esc(v.inProces) + ' kandidaat' + (v.inProces === 1 ? '' : 'en') + ' in proces</div>' : '')
       : ((v.kandidaten || []).map(function (k) { return kandidaatRij(k, wijzigK, K); }).join('') || '<div class="leeg" style="padding:8px 0">Nog geen kandidaten voorgedragen.</div>');
-    var knoppen = (wijzigK ? (talentAlles() && v.status === 'open' ? '<button class="knop-mini" data-voorstellen="' + esc(v.id) + '">Voorstellen uit talentbestand</button>' : '') + '<button class="knop-mini" data-kandidaat="nieuw" data-vid="' + esc(v.id) + '">+ Kandidaat</button>' : '') + (wijzigV ? '<button class="knop-mini" data-vacature="' + esc(v.id) + '" data-tid="' + esc(v.trajectId) + '">Vacature bewerken</button>' : '');  // v5.0: voorstellen met matchscore (talentteam)
-    return '<div class="kaart vac-kaart">' + kop + prof + kands + (knoppen ? '<div class="d-acties">' + knoppen + '</div>' : '') + '</div>';
+    var knoppen = (wijzigK ? (talentAlles() && (v.status === 'open' || concept) ? '<button class="knop-mini" data-voorstellen="' + esc(v.id) + '">' + (concept ? 'Alvast matchen' : 'Voorstellen uit talentbestand') + '</button>' : '') + (concept ? '' : '<button class="knop-mini" data-kandidaat="nieuw" data-vid="' + esc(v.id) + '">+ Kandidaat</button>') : '') +
+      (wijzigV && concept ? '<button class="knop-mini" data-vacbevestig="' + esc(v.id) + '">Bevestigen na taskforce</button>' : '') + (wijzigV ? '<button class="knop-mini" data-vacature="' + esc(v.id) + '" data-tid="' + esc(v.trajectId) + '">Vacature bewerken</button>' : '');  // v5.0: voorstellen met matchscore (talentteam); v6.4: concept
+    var uitleg = concept ? '<div class="hint">Uit het winformulier van de consultant. Talent kan alvast zoeken; voordragen kan zodra de accountmanager hem na de taskforce bevestigt.</div>' : '';
+    return '<div class="kaart vac-kaart">' + kop + prof + uitleg + kands + (knoppen ? '<div class="d-acties">' + knoppen + '</div>' : '') + '</div>';
   }
   function kandidaatRij(k, wijzig, K) {
     var meta = [k.bron, k.functie, k.start ? 'start ' + kortDatum(k.start) : '', k.dagenInStatus === null || k.dagenInStatus === undefined ? '' : (k.dagenInStatus === 0 ? 'sinds vandaag' : k.dagenInStatus + ' d op deze status'), k.gesprek ? 'gesprek ' + datumTijdKort(k.gesprek) : ''];
@@ -1626,8 +1632,8 @@
       var nieuw = {}; (b.vacatures || []).forEach(function (v) { nieuw[v.id] = v; });
       S.bezetting.vacatures = S.bezetting.vacatures.map(function (v) { var n = nieuw[v.id]; if (!n) return v; delete nieuw[v.id]; n.project = v.project; n.magWijzigen = v.magWijzigen; n.magKandidaten = v.magKandidaten; if (b.projectStatus) n.project.status = b.projectStatus; return n; });
       if (Object.keys(nieuw).length) S.bezetting = null;
-      else { var tel = { openVacatures: 0, openPlekken: 0, inProces: 0, klaar: 0 };
-        S.bezetting.vacatures.forEach(function (v) { if (v.status === 'open') { tel.openVacatures++; tel.openPlekken += Math.max(0, v.aantal - v.gevuld); } if (v.status !== 'gesloten') { tel.inProces += v.inProces; tel.klaar += v.gevuld; } });
+      else { var tel = { openVacatures: 0, openPlekken: 0, inProces: 0, klaar: 0, concept: 0 };  // v6.4: concept
+        S.bezetting.vacatures.forEach(function (v) { if (v.status === 'open') { tel.openVacatures++; tel.openPlekken += Math.max(0, v.aantal - v.gevuld); } if (v.status === 'concept') tel.concept++; if (v.status !== 'gesloten') { tel.inProces += v.inProces; tel.klaar += v.gevuld; } });
         S.bezetting.tellingen = tel; }
       if (S.pWeergave === 'bezetting' && el('view-trajecten').classList.contains('actief')) renderBezetting();  // v5.0: S.trajecten is net gewist; het bord zelf heeft genoeg aan S.bezetting (renderTrajecten zou stil stoppen)
     }
@@ -1638,7 +1644,7 @@
     var velden = [{ naam: 'titel', label: 'Functie', breed: true, plaats: 'Onderwijsondersteuner rekenen' }, { naam: 'aantal', label: 'Aantal plekken', type: 'number' }, { naam: 'urenPerWeek', label: 'Uren per week', type: 'number' },
       { naam: 'dagen', label: 'Dagen en tijden', breed: true, plaats: 'ma t/m do 9-15 uur' }, { naam: 'start', label: 'Start', type: 'date' }, { naam: 'eind', label: 'Eind', type: 'date' },
       { naam: 'profiel', label: 'Profiel (opleiding, ervaring, vakken)', type: 'textarea' }];
-    if (v) velden.push({ naam: 'status', label: 'Status', type: 'select', opties: metHuidig((K.vacatureStatussen || ['open', 'ingevuld', 'gesloten']).slice(), v.status) });
+    if (v) velden.push({ naam: 'status', label: 'Status', type: 'select', opties: metHuidig((K.vacatureStatussen || ['open', 'ingevuld', 'gesloten']).filter(function (x) { return x !== 'concept'; }), v.status) });  // v6.4: concept komt alleen uit het winformulier
     openVenster(formHtml(v ? 'Vacature bewerken' : 'Nieuwe vacature', velden, w, 'Opslaan', function (f) {
       var obj = v ? bouwWijziging(v, w, f) : samen({ trajectId: tid }, f); if (!obj) { sluitVenster(); return; }
       return run('apiVacatureOpslaan', obj).then(function (b) { sluitVenster(); toast(v ? 'Vacature opgeslagen.' : 'Vacature geopend; het talentteam krijgt een melding.'); bezettingLokaal(b); });
@@ -1679,7 +1685,9 @@
   function taskforceTab(d) {
     var tf = d.taskforce || {}, rb = d.rechtenBezetting || {}, vragen = d.taskforceVragen || [], af = d.afspraken || [];
     var ingevuld = vragen.some(function (v) { return tf[v.naam]; });
-    var h = '<div class="d-acties">' + (rb.taskforce ? '<button class="knop-mini" data-taskforce="1">' + (ingevuld ? 'Taskforce bijwerken' : 'Taskforce invullen') + '</button>' : '') + '<button class="knop-mini" data-composer="afspraak">Taskforcemeeting plannen</button></div>';
+    var h = '<div class="d-acties">' + (rb.taskforce ? '<button class="knop-mini" data-taskforce="1">' + (ingevuld ? 'Taskforce bijwerken' : 'Taskforce invullen') + '</button><button class="knop-mini" data-tfplannen="1">' + (d.taskforceGepland ? 'Nog een meeting plannen' : 'Taskforcemeeting inplannen') + '</button>' : '') + '</div>' +  // v6.4: in de agenda met AM, consultant en talentscout
+      (d.taskforceGepland ? '<div class="hint">Gepland: ' + esc(datumTijdKort(d.taskforceGepland)) + ' (uitnodiging verstuurd).</div>' : '') +
+      (tf.bron === 'winformulier' && !tf.bijgewerkt ? '<div class="hint">Vooringevuld uit het winformulier van ' + esc(tf.door || 'de consultant') + '; vul aan tijdens de meeting.</div>' : '');
     h += ingevuld ? '<div class="kaart">' + (tf.datum || tf.deelnemers ? '<div class="tf-vraag"><span>Meeting</span><div>' + esc([tf.datum ? kortDatum(tf.datum) : '', tf.deelnemers].filter(Boolean).join(' · ')) + '</div></div>' : '') +
         vragen.map(function (v) { return tf[v.naam] ? '<div class="tf-vraag"><span>' + esc(v.label) + '</span><div>' + esc(v.naam === 'startdatum' ? kortDatum(tf[v.naam]) : tf[v.naam]) + '</div></div>' : ''; }).join('') + '</div>'
       : '<div class="leeg">Nog geen taskforce vastgelegd. Plan de taskforcemeeting met de accountmanager en talent en leg daarna de overdracht vast: hulpvraag, inzet, rooster, startdatum, bijzonderheden en contactpersonen.</div>';
@@ -1709,6 +1717,44 @@
     var i = html.lastIndexOf('<div class="balk"><button class="knop" data-cf-opslaan');
     openVenster(html.slice(0, i) + afspraken + html.slice(i));
   }
+  // v6.4: de taskforcemeeting in de agenda: consultant, accountmanager en talentscout krijgen een uitnodiging met de link naar het project
+  function taskforcePlannenVenster() {
+    var d = CRM.detail.data, t = d.project, w = { duurMin: 45, start: vandaagStr() + 'T10:00' };
+    var wie = [t.adviseur, t.am, d.talentscout].filter(Boolean);
+    openVenster(formHtml('Taskforcemeeting inplannen', [{ naam: 'start', label: 'Datum en tijd', type: 'datetime-local' }, { naam: 'duurMin', label: 'Duur (minuten)', type: 'number' }, { naam: 'locatie', label: 'Locatie of link', breed: true, plaats: 'Teams, kantoor of op school' }], w, 'Inplannen', function (f) {
+      if (!f.start) { toast('Kies een datum en tijd.'); return; }
+      return run('apiTaskforcePlannen', CRM.detail.id, f).then(function (b) { sluitVenster(); toast('Taskforcemeeting staat in de agenda' + (b.zonderEmail && b.zonderEmail.length ? '; geen e-mailadres voor ' + b.zonderEmail.join(', ') : '; iedereen heeft een uitnodiging') + '.'); herlaadDetail(); });
+    }, '<div class="hint">Uitnodiging voor ' + esc(wie.length ? wie.join(', ') : 'jezelf') + (d.talentscout ? '' : ' (nog geen talentscout: wijs er eerst een toe, of nodig het talentteam later uit)') + '.</div>'));
+  }
+  // v6.4: talentscout van het project toewijzen (teamlead talent, AM, management) of zelf oppakken (talentscout)
+  function talentscoutVenster() {
+    var d = CRM.detail.data, rb = d.rechtenBezetting || {}, w = { talentscout: d.talentscout || '' };
+    openVenster(formHtml('Talentscout', [{ naam: 'talentscout', label: 'Talentscout van dit project', type: 'select', breed: true, opties: [{ waarde: '', label: '— geen' }].concat(metHuidig((d.talentscouts || []).slice(), d.talentscout)) }], w, 'Opslaan', function (f) {
+      return run('apiTalentscoutToewijzen', CRM.detail.id, f.talentscout).then(function () { sluitVenster(); toast(f.talentscout ? f.talentscout + ' krijgt een melding.' : 'Geen talentscout meer.'); S.bezetting = null; herlaadDetail(); });
+    }, '<div class="hint">De talentscout krijgt de meldingen van dit project (nieuwe en bevestigde vacatures, geselecteerde kandidaten). Zonder talentscout gaan die naar het hele talentteam.</div>'));
+  }
+  function talentscoutVeld(d) {
+    var rb = d.rechtenBezetting || {}, ik = ikBen() || {};
+    var knop = rb.talentscout ? ' <button class="knop-mini" data-tscout="kies">' + (d.talentscout ? 'Wijzigen' : 'Toewijzen') + '</button>' : rb.talentscoutZelf && !d.talentscout ? ' <button class="knop-mini" data-tscout="zelf">Ik pak dit op</button>' : '';
+    return '<div><span>Talentscout</span>' + (d.talentscout ? esc(d.talentscout) + (d.talentscout === ik.naam ? ' (jij)' : '') : '<b style="color:var(--rood)">nog niet toegewezen</b>') + knop + '</div>';
+  }
+  // v6.4: het winformulier: wat de consultant bij "gewonnen" al weet, gaat direct naar de AM (project) en het talentteam (conceptvacature)
+  function winVenster(obj, s) {
+    var k = (CRM.detail && CRM.detail.data && CRM.detail.data.kans) || {}, w = { rol: 'Onderwijsondersteuner', aantal: '', rooster: '', startdatum: '', bijzonderheden: '', am: k.am || '' };
+    openVenster(formHtml('Kans gewonnen: overdracht', [{ naam: 'aantal', label: 'Aantal ondersteuners *', type: 'number' }, { naam: 'startdatum', label: 'Gewenste startdatum *', type: 'date' },
+      { naam: 'rol', label: 'Rol', breed: true, plaats: 'Onderwijsondersteuner, studentdocent, examentrainer' }, { naam: 'rooster', label: 'Dagen en tijden', breed: true, plaats: 'ma t/m do 9-13 uur' },
+      { naam: 'am', label: 'Accountmanager', type: 'select', breed: true, opties: [{ waarde: '', label: '— later kiezen' }].concat(optiesTeam('accountmanagement', k.am)) },
+      { naam: 'bijzonderheden', label: 'Bijzonderheden', type: 'textarea', plaats: 'Vakken, niveau, wensen van de school' }], w, 'Gewonnen', function (f) {
+      if (!(Number(f.aantal) >= 1)) { toast('Vul het aantal ondersteuners in.'); return; }
+      if (!f.startdatum) { toast('Vul de gewenste startdatum in.'); return; }
+      obj.overdracht = { aantal: Number(f.aantal), startdatum: f.startdatum, rol: f.rol, rooster: f.rooster, bijzonderheden: f.bijzonderheden };
+      if (f.am !== (k.am || '')) { obj.am = f.am; obj._oud.am = k.am || ''; }
+      return run('apiKansOpslaan', obj).then(function (x) {
+        VENSTER.annuleer = null; sluitVenster(); toast('Gewonnen · project voor ' + ((x.traject && x.traject.am) || 'de accountmanager (nog kiezen)') + ' · conceptvacature voor het talentteam'); crmVerouderd(); S.bezetting = null; herlaadDetail();
+      });
+    }, '<div class="hint">Er komt een project voor de accountmanager en een conceptvacature op het bord van het talentteam. De taskforce staat vooringevuld; de AM bevestigt de vacature na de meeting.</div>'));
+    VENSTER.annuleer = function () { if (s) s.disabled = false; herlaadDetail(); };
+  }
   /* --- v4.1: meldingen (de bel) --- */
   function zetMeldingen(n) { ['meldTeller', 'zbMeldTeller'].forEach(function (id) { var x = el(id); if (!x) return; x.textContent = n > 9 ? '9+' : String(n || ''); x.hidden = !n; }); }
   function toonMeldingen() {
@@ -1736,6 +1782,15 @@
     if ((x = ev.target.closest('[data-vacature]'))) { vacatureVenster(x.getAttribute('data-vacature'), x.getAttribute('data-tid')); return; }
     if ((x = ev.target.closest('[data-kandidaat]')) && !ev.target.closest('[data-crm-open]')) { kandidaatVenster(x.getAttribute('data-kandidaat'), x.getAttribute('data-vid')); return; }  // v5.0: de naam in de regel linkt naar het talentprofiel
     if ((x = ev.target.closest('[data-taskforce]'))) { taskforceVenster(); return; }
+    if ((x = ev.target.closest('[data-tfplannen]'))) { taskforcePlannenVenster(); return; }  // v6.4
+    if ((x = ev.target.closest('[data-tscout]'))) { if (x.getAttribute('data-tscout') === 'zelf') { x.disabled = true; run('apiTalentscoutToewijzen', CRM.detail.id, (ikBen() || {}).naam).then(function () { toast('Je bent talentscout van dit project.'); S.bezetting = null; herlaadDetail(); }).catch(function () { x.disabled = false; }); } else talentscoutVenster(); return; }  // v6.4
+    if ((x = ev.target.closest('[data-bmijn]'))) { S.bMijn = !S.bMijn; renderTrajecten(); return; }  // v6.4
+    if ((x = ev.target.closest('[data-vacbevestig]'))) {  // v6.4: de AM bevestigt de conceptvacature na de taskforce
+      var vb = zoekVacature(x.getAttribute('data-vacbevestig')); if (!vb) return;
+      if (!window.confirm('Vacature bevestigen? Het talentteam kan dan voordragen. Pas hem eerst aan via "Vacature bewerken" als de taskforce iets anders afsprak.')) return;
+      x.disabled = true; run('apiVacatureOpslaan', { id: vb.id, status: 'open', _oud: { status: 'concept' } }).then(function (b) { toast('Vacature bevestigd; ' + (vb.project && vb.project.talentscout ? vb.project.talentscout : 'het talentteam') + ' krijgt een melding.'); bezettingLokaal(b); }).catch(function () { x.disabled = false; });
+      return;
+    }
     if ((x = ev.target.closest('[data-kopieerxpsproject]')) && CRM.detail && CRM.detail.data) { kopieer(xpsProjectTekst(CRM.detail.data), x); return; }  // v4.1
     if ((x = ev.target.closest('[data-kopieerxps]'))) { var kx = zoekKandidaat(x.getAttribute('data-kopieerxps')); if (kx) kopieer(xpsTekst(kx), x); return; }
     if ((x = ev.target.closest('[data-vacatureweg]'))) {
@@ -1993,7 +2048,8 @@
     return kop + '<div id="matchLijst">' + lijst + '</div>' + uit + (M.totaal > M.kandidaten.length ? '<div class="hint">De ' + esc(M.kandidaten.length) + ' hoogste van ' + esc(M.totaal) + '.</div>' : '') +
       '<div class="veld breed" style="margin-top:12px"><label for="vf-mnotitie">Notitie bij de voordracht (optioneel)</label><textarea id="vf-mnotitie" placeholder="Bijv. kan per direct, ervaring met NT2"></textarea></div>' +
       '<div class="hint">De score is een hulpmiddel: jij kiest wie je voordraagt. De accountmanager krijgt één melding en per kandidaat een taak voor het matchinggesprek.</div>' +
-      '<div class="balk"><button class="knop" data-voordragen="1" disabled>Voordragen</button><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>';
+      (v.status === 'concept' ? '<div class="waarschuwing">Deze vacature is nog een concept. Je kunt alvast kijken wie past; voordragen kan zodra de accountmanager hem na de taskforce bevestigt.</div><div class="balk"><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>'  // v6.4
+        : '<div class="balk"><button class="knop" data-voordragen="1" disabled>Voordragen</button><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>');
   }
   function matchRij(k) {
     var al = k.alVoorgedragen;
@@ -2844,7 +2900,7 @@
       t.magWijzigen = pr.wijzigen;
       links = linksKolom({ naam: t.traject + (t.schooljaar ? ' ' + t.schooljaar : ''), avatar: t.school, alleenLezen: !pr.wijzigen, sub: [d.school ? crmLink('school', d.school.id, d.school.naam) : esc(t.school), d.kans ? crmLink('kans', d.kans.id, 'kans: ' + d.kans.naam) : ''].filter(Boolean).join(' · '),
         tags: '<span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span>', mail: d.school && d.school.email, logSoort: 'notitie',
-        velden: veld('Accountmanager', esc(t.am) || '<b style="color:var(--rood)">nog niet toegewezen</b>') + veld('Adviseur', esc(t.adviseur)) + veld('Periode', [t.start ? esc(kortDatum(t.start)) : '', t.eind ? esc(kortDatum(t.eind)) : ''].filter(Boolean).join(' – ')) +
+        velden: veld('Accountmanager', esc(t.am) || '<b style="color:var(--rood)">nog niet toegewezen</b>') + veld('Adviseur', esc(t.adviseur)) + talentscoutVeld(d) + veld('Periode', [t.start ? esc(kortDatum(t.start)) : '', t.eind ? esc(kortDatum(t.eind)) : ''].filter(Boolean).join(' – ')) +
           veld('Inzet', [t.ondersteuners ? esc(t.ondersteuners) + ' ondersteuner' + (Number(t.ondersteuners) === 1 ? '' : 's') : '', t.urenPerWeek ? esc(t.urenPerWeek) + ' u/wk' : ''].filter(Boolean).join(' · ')) + veld('Tarief', t.tarief ? euro(t.tarief) + '/u' : '') + veld('Omzet', t.omzet ? euro(t.omzet) : '') + veld('Bezetting', (d.bezetting || {}).nodig ? esc(d.bezetting.gevuld + ' van ' + d.bezetting.nodig + ' plekken gevuld') : '') + veld('Contactpersoon', esc(t.contactpersoon)) +
           veld('Contactgegevens', t.contactgegevens ? '<span style="white-space:pre-wrap">' + esc(t.contactgegevens) + '</span>' : '') + veld('Samenwerkingsvoorstel', t.voorstelUrl ? webLink(t.voorstelUrl, 'Openen') : '') + veld('Documenten', t.documentenUrl ? webLink(t.documentenUrl, 'Map openen') : '') + veld('XPS-project', esc(t.xpsProject)) +  // v4.0
           '<div><span></span><button class="knop-mini" data-kopieerxpsproject="1">Kopieer voor XPS</button></div>',  // v4.1
@@ -3094,8 +3150,9 @@
     var s = t.closest('[data-kansfase]'); if (!s) return;
     var obj = { id: s.dataset.kansfase, fase: s.value, _oud: { fase: CRM.detail && CRM.detail.data ? CRM.detail.data.kans.fase : '' } }, maakTraject = false;  // v3.3
     if (obj.fase === 'verloren') { var r = window.prompt('Waarom is deze kans verloren?', ''); if (r === null) { herlaadDetail(); return; } obj.verliesReden = r.trim(); }
-    // v3.8: gewonnen = altijd een project voor de accountmanager (backend), zonder vraag
+    // v3.8: gewonnen = altijd een project voor de accountmanager (backend); v6.4: eerst het winformulier (aantal en startdatum), zodat AM en talent direct verder kunnen
     s.disabled = true;
+    if (obj.fase === 'gewonnen' && !/^(gewonnen)$/.test(obj._oud.fase)) { winVenster(obj, s); return; }
     var wasGesloten = /^(gewonnen|verloren)$/.test(obj._oud.fase);
     run('apiKansOpslaan', obj, maakTraject).then(function (x) { toast('Mijlpaal: ' + x.kans.fase + (x.traject ? ' · project aangemaakt voor ' + (x.traject.am || 'de accountmanager (nog kiezen)') : '') + (wasGesloten && !/^(gewonnen|verloren)$/.test(x.kans.fase) ? ' · heropend (een project in Historie blijft bestaan)' : '')); crmVerouderd(); herlaadDetail(); }).catch(herlaadDetail);  // v3.7
   });
@@ -3114,11 +3171,12 @@
   // Het venster heeft een eigen opslaan-actie en eigen veld-id's (vf-), zodat een open formulier op de pagina blijft werken.
   var VENSTER = { actie: null };
   function openVenster(html) {
+    VENSTER.annuleer = null;  // v6.4
     VENSTER.actie = formActie; formActie = INLINE.actie;  // formHtml zette formActie voor het venster; die van de pagina terugzetten
     el('vensterInhoud').innerHTML = String(html).replace(/(id|for)="cf-/g, '$1="vf-'); el('venster').classList.add('aan'); document.body.classList.add('venster-open');
     el('vensterInhoud').scrollTop = 0; pasVensterAan();
   }
-  function sluitVenster() { el('venster').classList.remove('aan'); el('vensterInhoud').innerHTML = ''; document.body.classList.remove('venster-open'); VENSTER.actie = null; }
+  function sluitVenster() { var na = VENSTER.annuleer; VENSTER.annuleer = null; el('venster').classList.remove('aan'); el('vensterInhoud').innerHTML = ''; document.body.classList.remove('venster-open'); VENSTER.actie = null; if (na) na(); }  // v6.4: annuleer = herstel na sluiten zonder opslaan
   // iOS: het toetsenbord verkleint vh niet; het venster volgt de zichtbare viewport, zodat Opslaan bereikbaar blijft
   function pasVensterAan() {
     var v = el('venster'), vv = window.visualViewport;
@@ -3315,6 +3373,7 @@
       { naam: 'start', label: 'Start', type: 'date' }, { naam: 'eind', label: 'Eind', type: 'date' }, { naam: 'ondersteuners', label: 'Ondersteuners', type: 'number' }, { naam: 'urenPerWeek', label: 'Uren per week', type: 'number' },
       { naam: 'tarief', label: 'Tarief (€/u)', type: 'number' }, { naam: 'omzet', label: 'Omzet (€)', type: 'number' }, { naam: 'contactpersoon', label: 'Contactpersoon', breed: true },
       { naam: 'am', label: 'Accountmanager', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('accountmanagement', t.am)) }, { naam: 'adviseur', label: 'Onderwijsconsultant', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('consultancy', t.adviseur)) },
+      { naam: 'talentscout', label: 'Talentscout', type: 'select', opties: [{ waarde: '', label: '—' }].concat(optiesTeam('talent', t.talentscout)) },  // v6.4
       { naam: 'contactgegevens', label: 'Contactgegevens (naam, telefoon, e-mail)', type: 'textarea' }, { naam: 'voorstelUrl', label: 'Samenwerkingsvoorstel (link)', type: 'url', breed: true, plaats: 'https://docs.google.com/…' },
       { naam: 'documentenUrl', label: 'Belangrijke documenten (link naar map)', type: 'url', breed: true, plaats: 'https://drive.google.com/…' }, kies('verlenging', 'Verlenging', K.verlenging),  // v4.0
       { naam: 'xpsProject', label: 'Projectnummer in XPS', plaats: '10.912' },  // v4.1: koppeling met het project in XPS

@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '6.0';
+var VERSIE = '6.4';
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -17,7 +17,8 @@ var TABELLEN = {
                  'schoolId', 'capsuleId', 'bijgewerktDoor',
                  'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer',  // v3.8: project uit gewonnen kans + facturatie
                  'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging',  // v4.0: kolommen van het monday-bord
-                 'taskforce', 'xpsProject'],  // v4.1: overdracht van de taskforcemeeting (JSON) en het projectnummer in XPS
+                 'taskforce', 'xpsProject',  // v4.1: overdracht van de taskforcemeeting (JSON) en het projectnummer in XPS
+                 'talentscout'],  // v6.4: de vaste talentscout van het project (krijgt de meldingen en taken van het talentteam)
   Kansen:       ['id', 'school', 'traject', 'fase', 'waarde', 'volgendeActie', 'deadline', 'laatsteContact', 'eigenaar', 'notities', 'bijgewerkt',
                  'naam', 'schoolId', 'persoonId', 'pipeline', 'kans', 'verwachteSluiting', 'gesloten', 'verliesReden', 'tags', 'velden', 'capsuleId', 'aangemaakt', 'bijgewerktDoor', 'am'],  // v3.8: am = accountmanager na winst
   Acties:       ['id', 'tekst', 'bron', 'prio', 'deadline', 'status', 'link', 'aangemaakt', 'afgerond',
@@ -750,7 +751,7 @@ function apiTrajectOpslaan(obj) {
   obj = obj || {};
   var velden = ['id', 'school', 'plaats', 'traject', 'schooljaar', 'start', 'eind', 'status', 'ondersteuners', 'urenPerWeek', 'tarief', 'omzet', 'contactpersoon', 'am', 'samenvatting', 'schoolId',
     'kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer',  // v3.8
-    'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging', 'xpsProject'], schoon = {};  // v4.0; v4.1: xpsProject
+    'contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging', 'xpsProject', 'talentscout'], schoon = {};  // v4.0; v4.1: xpsProject; v6.4: talentscout
   velden.forEach(function (k) { if (obj[k] !== undefined) schoon[k] = obj[k]; });
   if (schoon.schoolId) { var sch = vind('Scholen', schoon.schoolId); if (!sch) throw new Error('School niet gevonden.'); schoon.school = sch.naam; if (!schoon.plaats) schoon.plaats = sch.plaats || ''; }  // v3.7: project aan een CRM-school koppelen
   if (!String(schoon.school || '').trim() && !schoon.id) throw new Error('School is verplicht.');
@@ -766,7 +767,15 @@ function apiTrajectOpslaan(obj) {
     if (schoon[x[0]] && keuzelijst(x[1]).indexOf(schoon[x[0]]) < 0) throw new Error('Onbekende waarde voor ' + x[0] + '.');
   });
   if (!schoon.id && !schoon.schooljaar) schoon.schooljaar = huidigSchooljaar();
-  var t = metLock(function () { controleerConflict('Trajecten', schoon.id, schoon, obj._oud); return schrijf('Trajecten', schoon); });  // v3.3
+  if (schoon.talentscout !== undefined) { schoon.talentscout = String(schoon.talentscout || '').trim(); if (schoon.talentscout && teamNamen('talent').indexOf(schoon.talentscout) < 0) throw new Error('Kies een talentscout uit het talentteam.'); }  // v6.4
+  var t = metLock(function () {
+    controleerConflict('Trajecten', schoon.id, schoon, obj._oud);  // v3.3
+    var scout = schoon.talentscout !== undefined && (!oudT || schoon.talentscout !== (oudT.talentscout || '')) ? schoon.talentscout : null;
+    if (scout !== null) delete schoon.talentscout;
+    var nieuw = schrijf('Trajecten', schoon);
+    if (scout !== null) nieuw = talentscoutZetten(nieuw, scout);  // v6.4: melding, taak en tijdlijn
+    return nieuw;
+  });
   return trajectUit(t);
 }
 function apiNotitieToevoegen(trajectId, tekst) {
@@ -782,7 +791,7 @@ function trajectUit(t) {
     urenPerWeek: Number(t.urenPerWeek) || 0, tarief: Number(t.tarief) || 0, omzet: Number(t.omzet) || 0, contactpersoon: t.contactpersoon, am: t.am, samenvatting: t.samenvatting, bijgewerkt: t.bijgewerkt,
     kansId: t.kansId || '', adviseur: t.adviseur || '', soortFacturatie: t.soortFacturatie || '', gefactureerd: t.gefactureerd || '', factuurDatum: t.factuurDatum || '', vakanties: t.vakanties || '',
     bijzonderheden: t.bijzonderheden || '', factuurnummer: t.factuurnummer || '',  // v3.8
-    contactgegevens: t.contactgegevens || '', voorstelUrl: t.voorstelUrl || '', documentenUrl: t.documentenUrl || '', xpsProject: t.xpsProject || '', verlenging: t.verlenging || '' };  // v4.0
+    contactgegevens: t.contactgegevens || '', voorstelUrl: t.voorstelUrl || '', documentenUrl: t.documentenUrl || '', xpsProject: t.xpsProject || '', verlenging: t.verlenging || '', talentscout: t.talentscout || '' };  // v4.0; v6.4: talentscout
 }
 
 /* ===================== 6. CRM: scholen, personen, kansen, taken, tracks, historie en rapportage (v2.0: vervangt Capsule) ===================== */
@@ -1261,6 +1270,7 @@ function apiKansOpslaan(obj, maakTraject) {
   ['waarde', 'kans'].forEach(function (k) { if (o[k] !== undefined && o[k] !== '') o[k] = Number(String(o[k]).replace(',', '.')) || 0; });
   if (o.tags !== undefined) o.tags = tagsIn(o.tags);
   if (o.velden !== undefined) o.velden = veldenUit(o.velden);
+  var overdracht = fase === 'gewonnen' && (faseWissel || !oud) ? overdrachtIn(obj && obj.overdracht) : null;  // v6.4: het winformulier van de consultant (optioneel voor andere aanroepers)
   return metLock(function () {
     controleerConflict('Kansen', o.id, o, obj && obj._oud);  // v3.3
     var k = schrijf('Kansen', o), traject = null;
@@ -1269,7 +1279,7 @@ function apiKansOpslaan(obj, maakTraject) {
         onderwerp: oud ? 'Mijlpaal: ' + oud.fase + ' → ' + k.fase : 'Kans aangemaakt: ' + (k.naam || k.traject) + ' (' + k.fase + ')', tekst: k.fase === 'verloren' && k.verliesReden ? 'Reden: ' + k.verliesReden : '' });
     }
     // v3.8: een gewonnen kans wordt altijd een project voor de accountmanager (maakTraject wordt niet meer gebruikt)
-    if (k.fase === 'gewonnen' && (faseWissel || !oud)) traject = projectUitKans(k, school);
+    if (k.fase === 'gewonnen' && (faseWissel || !oud)) traject = projectUitKans(k, school, overdracht);
     return { kans: kansUit(k, mp), traject: traject ? trajectUit(traject) : null };
   });
 }
@@ -2383,7 +2393,7 @@ function mag(onderdeel, actie, rij) {
   if (n === 'geen') return false;
   if (!rij) return true;
   if (onderdeel === 'talenten' || onderdeel === 'beoordelingen') return !!talentenViaProject()[String(rij.talentId || rij.id)];  // v5.0: via een kandidaat in een project dat ik mag zien (teamlead: zijn team)
-  if (n === 'opstart') return rij.status === 'opstart' || !!openVacatures()[rij.id];  // v4.1: ook projecten met een open vacature
+  if (n === 'opstart') return rij.status === 'opstart' || !!openVacatures()[rij.id] || (!!rij.talentscout && rij.talentscout === ikNaam());  // v4.1: ook projecten met een open vacature; v6.4: en waar ik de talentscout ben
   var e = String(eigenaarVan(onderdeel, rij) || '');
   if (e && e === ikNaam()) return true;
   return n === 'team' && !!e && teamNamen(GEBRUIKER.team).indexOf(e) >= 0;
@@ -2472,7 +2482,7 @@ var KANDIDAAT_STATUSSEN = ['voorgesteld', 'gesprek', 'geselecteerd', 'academy', 
 var KANDIDAAT_KLAAR = 'klaar voor start';
 var KANDIDAAT_GEVULD = ['klaar voor start', 'geplaatst'];  // v5.0: telt als gevulde plek
 var KANDIDAAT_VOORBIJ = ['afgerond', 'gestopt'];
-var VACATURE_STATUSSEN = ['open', 'ingevuld', 'gesloten'];
+var VACATURE_STATUSSEN = ['concept', 'open', 'ingevuld', 'gesloten'];  // v6.4: concept = uit het winformulier, nog niet bevestigd na de taskforce (wel matchen, nog niet voordragen)
 var TASKFORCE_VRAGEN = [['hulpvraag', 'Hulpvraag van de school'], ['inzet', 'Inzet (aantal ondersteuners, rol)'], ['rooster', 'Rooster (dagen en tijden)'],
   ['startdatum', 'Gewenste startdatum'], ['bijzonderheden', 'Bijzonderheden'], ['contactpersonen', 'Contactpersonen op school']];
 var VACATURE_VELDEN = ['id', 'trajectId', 'titel', 'aantal', 'dagen', 'urenPerWeek', 'start', 'eind', 'profiel', 'status'];
@@ -2542,9 +2552,101 @@ function projectBezetting(t) {
     afspraken: lees('Acties').filter(function (a) { return String(a.trajectId) === String(t.id) && a.bron === 'taskforce'; }).sort(sorteerActies)
       .map(function (a) { return { id: a.id, tekst: a.tekst, eigenaar: a.eigenaar, deadline: a.deadline, status: a.status }; }),
     keuzesBezetting: { kandidaatStatussen: KANDIDAAT_STATUSSEN, vacatureStatussen: VACATURE_STATUSSEN, bronnen: keuzelijst('kandidaatBronnen') },
-    rechtenBezetting: { vacatures: mag('vacatures', 'wijzigen', t), kandidatenZien: zienK, kandidaten: mag('kandidaten', 'wijzigen', t), taskforce: magTaskforce(t) }
+    rechtenBezetting: { vacatures: mag('vacatures', 'wijzigen', t), kandidatenZien: zienK, kandidaten: mag('kandidaten', 'wijzigen', t), taskforce: magTaskforce(t),
+      talentscout: magTalentscout(t, ''), talentscoutZelf: magTalentscout(t, ikNaam()) },  // v6.4
+    talentscout: t.talentscout || '', talentscouts: teamNamen('talent'), taskforceGepland: taskforceGepland(t)  // v6.4
   };
 }
+
+/* ----- v6.4: samenwerking consultancy, accountmanagement en talent ----- */
+var CONCEPT_FOUT = 'Deze vacature is nog een concept: voordragen kan zodra de accountmanager hem na de taskforce bevestigt. Matchen met "Voorstellen" kan al.';
+// Het winformulier van de consultant bij "gewonnen": aantal en startdatum verplicht, de rest optioneel. Afwezig = geen formulier (Brein, import, oudere app).
+function overdrachtIn(x) {
+  if (!x || typeof x !== 'object') return null;
+  var od = { rol: String(x.rol || '').trim().slice(0, 120) || 'Onderwijsondersteuner', aantal: Math.round(Number(x.aantal) || 0), rooster: String(x.rooster || '').trim().slice(0, 300),
+    startdatum: datumIn(x.startdatum), bijzonderheden: String(x.bijzonderheden || '').trim().slice(0, 2000) };
+  if (od.aantal < 1 || od.aantal > 99) throw new Error('Vul het aantal ondersteuners in (1 tot 99).');
+  if (!od.startdatum) throw new Error('Vul de gewenste startdatum in.');
+  return od;
+}
+// De talentscout krijgt de meldingen van zijn project; zonder talentscout het hele talentteam
+function talentOntvangers(t) { return t && t.talentscout ? [t.talentscout] : teamNamen('talent'); }
+// Wie verdeelt het werk in het talentteam: de eerste actieve teamlead, anders de eigenaar van het script
+function talentTeamlead() {
+  var g = lees('Gebruikers').filter(function (x) { return actief(x) && profielVan(x).team === 'talent' && profielVan(x).rol === 'teamlead'; })[0];
+  return g ? g.naam : (P.getProperty('NAAM') || 'Menno');
+}
+// Toewijzen: management, wie het project mag wijzigen (de AM) en de teamlead van talent kiezen iedereen uit het talentteam; een talentscout pakt een project zonder scout zelf op.
+function magTalentscout(t, naam) {
+  if (isBeheerder() || mag('projecten', 'wijzigen', t)) return true;
+  if (!GEBRUIKER || GEBRUIKER.team !== 'talent') return false;
+  if (isTeamlead()) return true;
+  return naam === ikNaam() && !t.talentscout;
+}
+// Een regel in de tijdlijn van het project, zodat elk team ziet waar het staat (altijd binnen metLock)
+function overdrachtRegel(t, onderwerp, tekst) {
+  schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', kansId: t.kansId || '', trajectId: t.id, bron: 'overdracht', aangemaakt: nu(), onderwerp: onderwerp, tekst: tekst || '' });
+}
+// Open taken van dit project met deze bron afvinken (bijv. "Talentscout toewijzen" zodra er een is); altijd binnen metLock
+function rondTakenAf(t, bron) {
+  var open = lees('Acties').filter(function (a) { return String(a.trajectId) === String(t.id) && a.bron === bron && a.status !== 'af'; });
+  if (open.length) schrijfVeel('Acties', open.map(function (a) { return { id: a.id, status: 'af', afgerond: nu() }; }));
+}
+// Altijd binnen metLock: zet de talentscout en laat het weten
+function talentscoutZetten(t, naam) {
+  var oud = t.talentscout || '';
+  t = schrijf('Trajecten', { id: t.id, talentscout: naam });
+  if (naam) {
+    overdrachtRegel(t, 'Talentscout: ' + naam, oud ? 'Was ' + oud + '.' : 'Toegewezen door ' + ikNaam() + '.');
+    meld(naam, 'Je bent talentscout van ' + t.school + ' (' + t.traject + '). Je krijgt de meldingen van dit project.', 'project:' + t.id);
+    rondTakenAf(t, 'talentscout');
+  } else overdrachtRegel(t, 'Geen talentscout meer', oud ? oud + ' is geen talentscout meer van dit project.' : '');
+  if (oud && oud !== naam) meld(oud, (naam ? naam + ' is nu' : 'Er is geen') + ' talentscout van ' + t.school + ' (' + t.traject + ').', 'project:' + t.id);
+  return t;
+}
+function apiTalentscoutToewijzen(trajectId, naam) {
+  var t = vind('Trajecten', trajectId); if (!t) throw new Error('Project niet gevonden.');
+  naam = String(naam || '').trim();
+  if (naam && teamNamen('talent').indexOf(naam) < 0) throw new Error('Kies een talentscout uit het talentteam.');
+  if (!magTalentscout(t, naam)) throw new Error('Daar heb je geen toegang toe.');
+  if (naam !== (t.talentscout || '')) metLock(function () { talentscoutZetten(vind('Trajecten', trajectId), naam); });
+  return projectBezetting(vind('Trajecten', trajectId));
+}
+// E-mailadres van een collega (voor de agenda-uitnodiging)
+function emailVanNaam(naam) {
+  if (!naam) return '';
+  var g = lees('Gebruikers').filter(function (x) { return x.naam === naam && actief(x); })[0];
+  if (g && g.email) return String(g.email).trim();
+  return naam === (P.getProperty('NAAM') || 'Menno') ? Session.getEffectiveUser().getEmail() : '';
+}
+function taskforceGepland(t) { return taskforceUit(t).gepland || ''; }
+// De taskforcemeeting in de agenda, met de consultant, de AM en de talentscout als genodigden en de link naar het project
+function apiTaskforcePlannen(trajectId, obj) {
+  obj = obj || {};
+  var t = vind('Trajecten', trajectId); if (!t) throw new Error('Project niet gevonden.');
+  if (!magTaskforce(t)) throw new Error('Daar heb je geen toegang toe.');
+  if (!/\d{2}:\d{2}/.test(String(obj.start || ''))) throw new Error('Kies een datum en tijd.');
+  var start = parseDatum(String(obj.start).replace('T', ' ')); if (!start) throw new Error('Ongeldige datum.');
+  var duur = Math.min(240, Math.max(15, Number(obj.duurMin) || 45)), eind = new Date(start.getTime() + duur * 60000);
+  var namen = uniek([t.adviseur, t.am, t.talentscout, ikNaam()].filter(Boolean)), zonder = [];
+  var gasten = uniek(namen.map(function (n) { var e = emailVanNaam(n); if (!e) zonder.push(n); return klein(e); }).filter(Boolean));
+  var url = P.getProperty('APP_URL'), titel = 'Taskforce ' + t.school + ' · ' + t.traject;
+  var omschrijving = ['Taskforcemeeting: overdracht van consultancy naar accountmanagement en talent.', 'Deelnemers: ' + namen.join(', ') + '.', url ? 'Project: ' + url + '#project:' + t.id : '',
+    'Leg na afloop de afspraken vast in de tab Taskforce; de accountmanager bevestigt daarna de vacature in de tab Bezetting.'].filter(Boolean).join('\n');
+  var ev = CalendarApp.getDefaultCalendar().createEvent(titel, start, eind, { description: omschrijving, location: String(obj.locatie || '').slice(0, 200), guests: gasten.join(','), sendInvites: gasten.length > 0 });
+  var wanneer = datumTijdStr(start);
+  metLock(function () {
+    var tf = taskforceUit(vind('Trajecten', t.id)); tf.datum = datumStr(start); tf.deelnemers = tf.deelnemers || namen.join(', '); tf.gepland = wanneer;
+    schrijf('Trajecten', { id: t.id, taskforce: tf });
+    schrijf('Activiteiten', { type: 'afspraak', datum: wanneer, duurMin: duur, door: ikNaam(), schoolId: t.schoolId || '', kansId: t.kansId || '', trajectId: t.id,
+      onderwerp: titel, tekst: omschrijving, agendaId: agendaSleutel(ev), bron: 'app', aangemaakt: nu() });
+    meld(namen, 'Taskforcemeeting ' + t.school + ' (' + t.traject + ') op ' + String(wanneer).slice(0, 16) + '. De uitnodiging staat in je agenda.', 'project:' + t.id);
+    rondTakenAf(t, 'taskforceplannen');
+  });
+  var uit = projectBezetting(vind('Trajecten', t.id)); uit.zonderEmail = zonder;
+  return uit;
+}
+
 // De taskforce (consultant, AM en talentscout) legt de overdracht samen vast: wie het project mag zien, mag hem invullen; talent alleen bij opstart en open vacatures.
 function magTaskforce(t) { return mag('projecten', 'zien', t); }
 
@@ -2585,6 +2687,8 @@ function apiVacatureOpslaan(obj) {
   if (!oud && !o.titel) o.titel = 'Onderwijsondersteuner';
   if (o.aantal !== undefined) { o.aantal = Math.max(1, Math.round(Number(o.aantal) || 1)); }
   if (o.status !== undefined && VACATURE_STATUSSEN.indexOf(o.status) < 0) throw new Error('Onbekende status.');
+  if (o.status === 'concept' && (!oud || oud.status !== 'concept')) throw new Error('Een vacature wordt alleen concept vanuit het winformulier; zet hem op gesloten als hij niet doorgaat.');  // v6.4
+  var bevestigd = !!oud && oud.status === 'concept' && o.status !== undefined && o.status !== 'concept';  // v6.4: de AM bevestigt de conceptvacature na de taskforce
   ['start', 'eind'].forEach(function (k) { if (o[k] !== undefined) o[k] = datumIn(o[k]); });
   if (!oud) { o.status = 'open'; o.aangemaakt = nu(); o.door = ikNaam(); o.aantal = o.aantal || 1; }
   if (oud && o.status === 'ingevuld' && oud.status !== 'ingevuld' && !oud.ingevuld) o.ingevuld = nu();  // v4.2: met de hand op ingevuld gezet
@@ -2595,7 +2699,11 @@ function apiVacatureOpslaan(obj) {
     if (!oud) {
       schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', trajectId: t.id, bron: 'app', aangemaakt: nu(),
         onderwerp: 'Vacature geopend: ' + v.titel + ' (' + v.aantal + '×' + (v.start ? ', start ' + v.start : '') + ')' });
-      meld(teamNamen('talent'), 'Nieuwe vacature: ' + v.titel + ' (' + v.aantal + '×) bij ' + t.school + (v.dagen ? ', ' + v.dagen : '') + (v.start ? ', start ' + v.start : ''), 'project:' + t.id);
+      meld(talentOntvangers(t), 'Nieuwe vacature: ' + v.titel + ' (' + v.aantal + '×) bij ' + t.school + (v.dagen ? ', ' + v.dagen : '') + (v.start ? ', start ' + v.start : ''), 'project:' + t.id);  // v6.4: de talentscout, anders het hele team
+    }
+    if (bevestigd && v.status === 'open') {
+      overdrachtRegel(t, 'Vacature bevestigd: ' + v.titel + ' (' + v.aantal + '×' + (v.start ? ', start ' + v.start : '') + ')', 'Na de taskforce door ' + ikNaam() + '. Talent kan nu voordragen.');
+      meld(talentOntvangers(t), 'Vacature bevestigd: ' + v.titel + ' (' + v.aantal + '×) bij ' + t.school + '. Je kunt nu voordragen.', 'project:' + t.id);
     }
   });
   return projectBezetting(vind('Trajecten', t.id));
@@ -2608,6 +2716,7 @@ function apiKandidaatOpslaan(obj) {
   var v = vind('Vacatures', o.vacatureId || (oud && oud.vacatureId)); if (!v) throw new Error('Vacature niet gevonden.');
   var t = vind('Trajecten', v.trajectId); if (!t) throw new Error('Project niet gevonden.');
   eis('kandidaten', 'wijzigen', t);
+  if (v.status === 'concept' && (!oud || String(oud.vacatureId) !== String(v.id))) throw new Error(CONCEPT_FOUT);  // v6.4
   if (oud && o.vacatureId && String(o.vacatureId) !== String(oud.vacatureId)) { var vOud = vind('Vacatures', oud.vacatureId); if (vOud && String(vOud.trajectId) !== String(v.trajectId)) eis('kandidaten', 'wijzigen', vind('Trajecten', vOud.trajectId) || {}); }
   ['naam', 'telefoon', 'xpsId', 'afasNummer', 'notitie', 'functie', 'dagen', 'xpsPlaatsingId', 'eindReden'].forEach(function (k) { if (o[k] !== undefined) o[k] = String(o[k]).trim(); });
   if (o.email !== undefined) o.email = klein(o.email);
@@ -2646,7 +2755,7 @@ function kandidaatSchrijven(o, oud, v, t, nieuwStatus, stil) {
       status: 'open', bron: 'bezetting', aangemaakt: nu(), schoolId: t.schoolId || '', kansId: t.kansId || '', trajectId: t.id, link: k.talentId ? 'talent:' + k.talentId : '' });
   } else if (nieuwStatus) {
     schrijf('Activiteiten', { type: 'taak', datum: nu(), door: ikNaam(), schoolId: t.schoolId || '', trajectId: t.id, talentId: k.talentId || '', bron: 'app', aangemaakt: nu(), onderwerp: 'Kandidaat ' + naam + ': ' + oud.status + ' → ' + nieuwStatus });
-    if (nieuwStatus === 'geselecteerd') meld([k.door].concat(teamNamen('talent').indexOf(k.door) >= 0 ? [] : teamNamen('talent')), naam + ' is geselecteerd voor ' + waar + '. Start academy, contract en VOG.', link);
+    if (nieuwStatus === 'geselecteerd') meld([k.door].concat(teamNamen('talent').indexOf(k.door) >= 0 ? [] : talentOntvangers(t)), naam + ' is geselecteerd voor ' + waar + '. Start academy, contract en VOG.', link);
     if (nieuwStatus === KANDIDAAT_KLAAR) meld(t.am, naam + ' is klaar voor start bij ' + t.school + '.', link);
     if (nieuwStatus === 'afgewezen') meld(k.door, naam + ' is afgewezen voor ' + waar + '.', link);
   }
@@ -2675,15 +2784,16 @@ function werkBezettingBij(t, v) {
 // Het bezettingsbord: alle vacatures die ik mag zien, met project en (als ik ze mag zien) kandidaten.
 function apiBezetting() {
   eis('vacatures', 'zien');
-  var tMap = perId(lees('Trajecten')), kands = lees('Kandidaten'), tel = { openVacatures: 0, openPlekken: 0, inProces: 0, klaar: 0 };
+  var tMap = perId(lees('Trajecten')), kands = lees('Kandidaten'), tel = { openVacatures: 0, openPlekken: 0, inProces: 0, klaar: 0, concept: 0 };  // v6.4: concept
   var lijst = lees('Vacatures').filter(function (v) { var t = tMap[v.trajectId]; return t && mag('vacatures', 'zien', t); }).map(function (v) {
     var t = tMap[v.trajectId], u = vacatureUit(v, kands, mag('kandidaten', 'zien', t));
-    u.project = { id: t.id, school: t.school, traject: t.traject, schooljaar: t.schooljaar, status: t.status, am: t.am || '', adviseur: t.adviseur || '', start: t.start || '' };
+    u.project = { id: t.id, school: t.school, traject: t.traject, schooljaar: t.schooljaar, status: t.status, am: t.am || '', adviseur: t.adviseur || '', start: t.start || '', talentscout: t.talentscout || '' };  // v6.4: talentscout
     u.magWijzigen = mag('vacatures', 'wijzigen', t); u.magKandidaten = mag('kandidaten', 'wijzigen', t);
     if (u.status === 'open') { tel.openVacatures++; tel.openPlekken += Math.max(0, u.aantal - u.gevuld); }
+    if (u.status === 'concept') tel.concept++;
     if (u.status !== 'gesloten') { tel.inProces += u.inProces; tel.klaar += u.gevuld; }
     return u;
-  }).sort(function (a, b) { return (a.status === 'open' ? 0 : 1) - (b.status === 'open' ? 0 : 1) || String(a.start || a.project.start || '9999').localeCompare(String(b.start || b.project.start || '9999')); });
+  }).sort(function (a, b) { var r = { open: 0, concept: 1 }; return (r[a.status] === undefined ? 2 : r[a.status]) - (r[b.status] === undefined ? 2 : r[b.status]) || String(a.start || a.project.start || '9999').localeCompare(String(b.start || b.project.start || '9999')); });
   return { vacatures: lijst, tellingen: tel, keuzes: { kandidaatStatussen: KANDIDAAT_STATUSSEN, vacatureStatussen: VACATURE_STATUSSEN, bronnen: keuzelijst('kandidaatBronnen') }, ik: ikUit() };
 }
 
@@ -2900,14 +3010,22 @@ function apiTeamRapport(preset, team, eigenaar, stap) {
 
 // Een gewonnen kans wordt een project voor de accountmanager, met alles wat de adviseur wist (altijd binnen metLock).
 // Bestaat er al een project bij deze kans (bijv. na heropenen en opnieuw winnen), dan blijft het bij dat project.
-function projectUitKans(k, school) {
+// v6.4: overdracht = het winformulier ({rol, aantal, rooster, startdatum, bijzonderheden}): vult de taskforce voor en maakt een conceptvacature voor het talentteam.
+function projectUitKans(k, school, overdracht) {
   var bestaand = lees('Trajecten').filter(function (t) { return String(t.kansId) === String(k.id); })[0];
   if (bestaand) return bestaand;
   var s = school || vind('Scholen', k.schoolId) || {}, p = k.persoonId ? vind('Personen', k.persoonId) : null;
-  var am = k.am || '', adviseur = k.eigenaar || ikNaam();
-  var t = schrijf('Trajecten', { schoolId: k.schoolId, school: k.school || s.naam || '', plaats: s.plaats || '', traject: k.traject || k.naam, schooljaar: huidigSchooljaar(), status: 'opstart',
-    omzet: Number(k.waarde) || 0, am: am, adviseur: adviseur, kansId: k.id, contactpersoon: p ? persoonNaam(p) + (p.email ? ' <' + p.email + '>' : '') : '', samenvatting: String(k.notities || '').trim() });
+  var am = k.am || '', adviseur = k.eigenaar || ikNaam(), od = overdracht || null, naamK = (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + ')';
+  var nieuwT = { schoolId: k.schoolId, school: k.school || s.naam || '', plaats: s.plaats || '', traject: k.traject || k.naam, schooljaar: huidigSchooljaar(), status: 'opstart',
+    omzet: Number(k.waarde) || 0, am: am, adviseur: adviseur, kansId: k.id, contactpersoon: p ? persoonNaam(p) + (p.email ? ' <' + p.email + '>' : '') : '', samenvatting: String(k.notities || '').trim() };
+  if (od) {
+    nieuwT.taskforce = { inzet: od.aantal + ' × ' + od.rol, rooster: od.rooster, startdatum: od.startdatum, bijzonderheden: od.bijzonderheden, door: adviseur, bron: 'winformulier' };
+    if (od.startdatum) nieuwT.start = od.startdatum;
+    nieuwT.ondersteuners = od.aantal;
+  }
+  var t = schrijf('Trajecten', nieuwT);
   var regels = ['Kans gewonnen door ' + adviseur + ': ' + (k.naam || k.traject) + '.'];
+  if (od) regels.push('Gevraagde inzet: ' + od.aantal + ' × ' + od.rol + (od.rooster ? ', ' + od.rooster : '') + (od.startdatum ? ', start ' + od.startdatum : '') + '.' + (od.bijzonderheden ? '\nBijzonderheden: ' + od.bijzonderheden : ''));
   if (Number(k.waarde)) regels.push('Waarde: € ' + Math.round(Number(k.waarde)) + '.');
   if (p) regels.push('Contactpersoon: ' + persoonNaam(p) + [p.functie, p.email, p.telefoon].filter(Boolean).map(function (x) { return ', ' + x; }).join('') + '.');
   if (k.volgendeActie) regels.push('Afgesproken vervolg: ' + k.volgendeActie + (k.deadline ? ' (' + k.deadline + ')' : '') + '.');
@@ -2917,8 +3035,16 @@ function projectUitKans(k, school) {
     onderwerp: 'Overdracht naar ' + (am || 'de accountmanager'), tekst: regels.join('\n') });
   var voor = am || (P.getProperty('NAAM') || 'Menno'), basis = { status: 'open', bron: 'project', aangemaakt: nu(), eigenaar: voor, schoolId: k.schoolId, persoonId: k.persoonId || '', kansId: k.id, trajectId: t.id };
   var taken = am ? [] : [{ tekst: 'Accountmanager toewijzen aan ' + (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + ')', categorie: 'opvolgen', prio: 'hoog', deadline: datumStr(plusDagen(1)) }];
-  taken.push({ tekst: 'Taskforcemeeting plannen met AM en talent: ' + (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + ')', categorie: 'afspraak', prio: 'hoog', deadline: datumStr(plusDagen(2)), eigenaar: adviseur });  // v4.1: de consultant
-  meld(am, 'Nieuw project voor jou: ' + (k.naam || k.traject) + ' (' + (k.school || s.naam || '') + '). ' + adviseur + ' plant de taskforcemeeting.', 'project:' + t.id);
+  taken.push({ tekst: 'Taskforcemeeting plannen met AM en talent: ' + naamK, categorie: 'afspraak', prio: 'hoog', deadline: datumStr(plusDagen(2)), eigenaar: adviseur, bron: 'taskforceplannen' });  // v4.1: de consultant; v6.4: vinkt zichzelf af zodra de meeting via de tab Taskforce in de agenda staat
+  meld(am, 'Nieuw project voor jou: ' + naamK + '. ' + adviseur + ' plant de taskforcemeeting.', 'project:' + t.id);
+  // v6.4: het talentteam weet het meteen: melding, een conceptvacature op het bord Bezetting en een taak om een talentscout toe te wijzen
+  if (od) {
+    var v = schrijf('Vacatures', { trajectId: t.id, titel: od.rol, aantal: od.aantal, dagen: od.rooster, start: od.startdatum, profiel: od.bijzonderheden, status: 'concept', aangemaakt: nu(), door: adviseur });
+    overdrachtRegel(t, 'Conceptvacature voor het talentteam: ' + v.titel + ' (' + v.aantal + '×' + (v.start ? ', start ' + v.start : '') + ')', 'Uit het winformulier. De accountmanager bevestigt hem na de taskforcemeeting; tot dan kan talent al zoeken, maar nog niet voordragen.');
+  }
+  meld(teamNamen('talent'), 'Nieuw project: ' + naamK + (od ? ', ' + od.aantal + ' × ' + od.rol + (od.startdatum ? ', start ' + od.startdatum : '') + '. De conceptvacature staat op het bord Bezetting.' : '. De vacature volgt na de taskforce.'), 'project:' + t.id);
+  schrijf('Acties', { tekst: 'Talentscout toewijzen: ' + naamK, eigenaar: talentTeamlead(), deadline: datumStr(plusDagen(1)), prio: 'hoog', categorie: 'opvolgen', status: 'open', bron: 'talentscout', aangemaakt: nu(),
+    schoolId: k.schoolId, persoonId: k.persoonId || '', kansId: k.id, trajectId: t.id });
   taken = taken.concat([
     { tekst: 'Startgesprek plannen met ' + (p ? persoonNaam(p) : (k.school || s.naam || 'de school')), categorie: 'afspraak', prio: 'hoog', deadline: datumStr(plusDagen(3)) },
     { tekst: 'Facturatie instellen voor ' + (k.naam || k.traject), categorie: 'overig', prio: 'midden', deadline: datumStr(plusDagen(5)) }]);
@@ -3880,6 +4006,7 @@ function apiVoorstellen(vacatureId, talentIds, notitie) {
   var t = vind('Trajecten', v.trajectId); if (!t) throw new Error('Project niet gevonden.');
   eis('kandidaten', 'wijzigen', t);
   if (niveau('talenten', 'zien') !== 'alles') throw new Error('Voorstellen uit het talentbestand doet het talentteam.');
+  if (v.status === 'concept') throw new Error(CONCEPT_FOUT);  // v6.4: matchen mag al, voordragen pas na bevestiging
   var ids = uniek([].concat(talentIds || []).map(String)); if (!ids.length) throw new Error('Kies minstens één talent.');
   var al = {}; lees('Kandidaten').forEach(function (k) { if (String(k.vacatureId) === String(v.id) && k.talentId) al[String(k.talentId)] = true; });
   var talenten = ids.map(function (id) { var tl = vind('Talenten', id); if (!tl) throw new Error('Talent niet gevonden.'); return tl; }).filter(function (tl) { return !al[String(tl.id)]; });

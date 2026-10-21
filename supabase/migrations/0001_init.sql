@@ -62,6 +62,7 @@ create table if not exists "trajecten" (
   "verlenging" text,
   "taskforce" text,
   "xps_project" text,
+  "talentscout" text,
   rij bigserial
 );
 create table if not exists "kansen" (
