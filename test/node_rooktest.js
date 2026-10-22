@@ -2,7 +2,7 @@
 // Gebruik: node test/node_rooktest.js  → "ALLES GOED" of een lijst FOUT-regels (exitcode 1).
 var vm = require('vm'), fs = require('fs'), path = require('path'), R = path.join(__dirname, '..');
 var ctx = { console: console }; ctx.globalThis = ctx; vm.createContext(ctx);  // alleen console van buiten: JSON, Date en Array moeten uit de context zelf komen (instanceof)
-vm.runInContext(fs.readFileSync(path.join(R, 'demo/demo-backend.js'), 'utf8') + '\n;\n' + fs.readFileSync(path.join(R, 'backend/Code.gs'), 'utf8'), ctx, { filename: 'demo.js' });
+vm.runInContext(fs.readFileSync(path.join(R, 'demo/demo-backend.js'), 'utf8') + '\n;\n' + fs.readFileSync(process.env.CODE_GS || path.join(R, 'backend/Code.gs'), 'utf8'), ctx, { filename: 'demo.js' });  // v7.2: CODE_GS wijst naar een (gemuteerde) kopie van Code.gs voor test/mutatie_test.js
 ctx.demoStart('');
 
 var fouten = 0;
