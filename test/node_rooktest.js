@@ -351,6 +351,39 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
     roep(SOPHIE, 'apiExactImport', 'Nummer;Datum;Totaal\n20261033;01-10-2026;1950', { kolommen: { factuurnummer: 'Nummer', datum: 'Datum', bedrag: 'Totaal' } }).gekoppeld === 1, 'onbekende kolommen geven een duidelijke fout; kolomnamen zijn in te stellen');
 })();
 
+/* ---- v7.1: soort contactmoment (vorm) naast het type; de tellingen blijven gelijk ---- */
+(function () {
+  var voor = roep(SOPHIE, 'apiActiviteiten', '', '', '', '');
+  var somType = Object.keys(voor.perType).reduce(function (n, k) { return n + voor.perType[k]; }, 0), somVorm = Object.keys(voor.perVorm).reduce(function (n, k) { return n + voor.perVorm[k]; }, 0);
+  eis(somType === voor.totaal && somVorm === voor.totaal, 'per soort en per vorm tellen samen precies alle contactmomenten (' + voor.totaal + ')');
+  eis((voor.perType.gesprek || 0) === (voor.perVorm.call || 0) + (voor.perVorm.whatsapp || 0) && (voor.perType.afspraak || 0) === ['afspraak-online', 'afspraak-fysiek', 'evaluatie-online', 'evaluatie-fysiek'].reduce(function (n, k) { return n + (voor.perVorm[k] || 0); }, 0),
+    'oude regels krijgen bij het lezen de vorm van hun type: gesprekken = call + whatsapp, afspraken = afspraak + evaluatie');
+  eis(voor.tijdlijn.every(function (a) { return a.vorm || a.type === 'fase' || a.type === 'taak'; }), 'elke tijdlijnregel heeft een vorm (behalve mijlpaal en taak)');
+  var school = ctx.lees('Scholen').filter(function (x) { return x.eigenaar === 'Lars Visser'; })[0];
+  var wa = roep(LARS, 'apiActiviteitToevoegen', { vorm: 'whatsapp', schoolId: school.id, onderwerp: 'Rooster afgestemd', tekst: 'via WhatsApp' });
+  var ev = roep(LARS, 'apiActiviteitToevoegen', { vorm: 'evaluatie-online', schoolId: school.id, onderwerp: 'Evaluatie periode 1' });
+  var rijWa = ctx.vind('Activiteiten', wa.id);
+  eis(wa.type === 'gesprek' && wa.vorm === 'whatsapp' && rijWa.vorm === 'whatsapp' && ev.type === 'afspraak' && ev.vorm === 'evaluatie-online', 'WhatsApp telt als gesprek, een evaluatiegesprek als afspraak; de vorm staat in de Sheet');
+  var oud = roep(LARS, 'apiActiviteitToevoegen', { type: 'gesprek', schoolId: school.id, onderwerp: 'Oude aanroep met alleen type' });
+  eis(oud.vorm === 'call', 'een aanroep met alleen type (oude app, assistent) krijgt de vorm van het type');
+  var na = roep(SOPHIE, 'apiActiviteiten', '', '', '', '');
+  eis(na.totaal === voor.totaal + 3 && (na.perType.gesprek || 0) === (voor.perType.gesprek || 0) + 2 && (na.perType.afspraak || 0) === (voor.perType.afspraak || 0) + 1, 'de rapporttelling per type telt de nieuwe soorten mee in de bestaande cijfers');
+  var gew = roep(LARS, 'apiActiviteitOpslaan', { id: wa.id, vorm: 'afspraak-fysiek', _oud: { vorm: 'whatsapp' } });
+  eis(gew.vorm === 'afspraak-fysiek' && ctx.vind('Activiteiten', wa.id).type === 'afspraak', 'de soort wijzigen zet ook het type');
+  eis(/Onbekend soort/.test(faalt(LARS, 'apiActiviteitOpslaan', { id: wa.id, vorm: 'telegram' })), 'een onbekende vorm wordt geweigerd');
+  var fase = ctx.lees('Activiteiten').filter(function (a) { return a.type === 'fase'; })[0];
+  if (fase) eis(/geen ander soort/.test(faalt(SOPHIE, 'apiActiviteitOpslaan', { id: fase.id, vorm: 'call' })), 'een mijlpaalregel krijgt geen vorm');
+  eis(ctx.vormVanAfspraak('Evaluatie Esdoorn', 'https://meet.google.com/abc-defg', '') === 'evaluatie-online' && ctx.vormVanAfspraak('Kennismaking', 'Schoolstraat 3, Utrecht', '') === 'afspraak-fysiek' &&
+    ctx.vormVanAfspraak('Overleg', '', 'Deelnemen via Microsoft Teams: https://teams.microsoft.com/l/meetup') === 'afspraak-online', 'agenda-afspraken: online aan de videolink, evaluatie aan de titel');
+  eis(roep(SOPHIE, 'apiCrm').activiteitVormen.length === 8, 'apiCrm geeft de acht soorten');
+  // Home: kerncijfers per functie
+  var hF = roep(FEMKE, 'apiHome').kerncijfers, hS = roep('demo-sem', 'apiHome').kerncijfers, hL = roep(LARS, 'apiHome').kerncijfers, hM = roep(SOPHIE, 'apiHome').kerncijfers;
+  eis(typeof hF.lopendeProjecten === 'number' && typeof hF.teFactureren === 'number' && hF.openVacatures === undefined, 'Home van de accountmanager: lopende projecten en nog te factureren');
+  eis(typeof hS.openVacatures === 'number' && typeof hS.teBezetten === 'number' && hS.teFactureren === undefined, 'Home van talent: open vacatures en te bezetten plekken');
+  eis(hL.teFactureren === undefined && typeof hL.lopendeProjecten === 'number', 'Home van de consultant: geen facturatiecijfer');
+  eis(hM.lopendeProjecten >= hF.lopendeProjecten && hM.lopendeProjecten === ctx.lees('Trajecten').filter(ctx.projectLopend).length, 'management ziet alle lopende projecten');
+})();
+
 /* ---- bestaande schermen blijven werken ---- */
 ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });
 try { ctx.GEBRUIKER = null; ctx.nachtelijkeReview(); eis(true, 'nachtelijke review draait'); } catch (e) { eis(false, 'nachtelijke review draait: ' + e.message); }
