@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" media="print" onload="this.media='all'"><!-- v1.0: niet render-blokkerend; bij trage verbinding eerst systeemfont -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,800;1,400&display=swap" media="print" onload="this.media='all'"><!-- v1.0: niet render-blokkerend; bij trage verbinding eerst systeemfont -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -663,7 +663,7 @@
   body.desk button, body.desk select, body.desk .chip { min-height: 24px; }
   body.desk #crmBalk [data-crmnieuw] { display: none; }
   [role=region]:focus:not(:focus-visible) { outline: none; }
-  button, .chip, .vink, .rij { touch-action: manipulation; }  /* geen dubbeltik-zoom nu zoomen weer mag */
+  button, .chip, .vink, .rij, .knop-ic { touch-action: manipulation; }  /* geen dubbeltik-zoom nu zoomen weer mag */
   body:not(.desk) #projectHeroTekst { display: none; }  /* v6.6: op de telefoon eerst de projecten; de kop zegt al wat dit scherm is */
   .p-acties { margin: 0 0 12px; }
   [data-sleep]:focus:not(:focus-visible) { outline: none; } [data-sleep]:focus-visible { outline: 2px solid var(--paars); outline-offset: 2px; }  /* v6.8 */
@@ -762,7 +762,7 @@
   .tag, body.desk .tag, .t-chips a, .tabs button small { font-size: var(--fs-klein); }
   .tegels { gap: 12px; }
   .tegel { text-align: left; font: inherit; color: inherit; width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; }
-  button.tegel { cursor: pointer; } button.tegel:hover { border-color: var(--paars); }
+  button.tegel { cursor: pointer; } @media (hover: hover) { button.tegel:hover { border-color: var(--paars); } }  /* geen blijvende hover na een tik (iPad) */
   .tegel .t-cijfer, body.desk .tegel .t-cijfer { display: block; font-size: var(--fs-groot); }
   .tegel .t-label { display: block; font-size: var(--fs-zacht); color: var(--inkt2); }
   #homeGroet, .hero h2 { font-size: var(--fs-groot); }
@@ -785,7 +785,7 @@
   .d-knoppen a.knop-mini { text-decoration: none; display: inline-flex; align-items: center; }
   .knop-ic { background: none; border: 1.5px solid var(--lijn); border-radius: 8px; color: var(--inkt2); width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
   .knop-ic svg.ic { width: 16px; height: 16px; }
-  .knop-ic:hover { color: var(--paars); border-color: var(--paars); }
+  @media (hover: hover) { .knop-ic:hover { color: var(--paars); border-color: var(--paars); } }
   .knop-ic.aan { color: var(--oranje-t); border-color: var(--oranje); }
   .knop-ic.aan svg.ic { fill: var(--oranje); stroke: var(--oranje-t); }
   body:not(.desk) .knop-ic { width: 44px; height: 44px; }
@@ -804,6 +804,8 @@
   .cijfer span { font-size: var(--fs-klein); }
   .samenvatting { font-size: var(--fs-zacht); }
   body.desk:has(.view.actief .detail-3) #deskActies .knop:not(.licht) { background: none; color: var(--paars); }  /* in een detailscherm is Activiteit loggen de enige gevulde knop */
+  body:not(.desk) .tegels.drie { gap: 10px; } body:not(.desk) .tegels.drie .tegel { padding: 12px 10px; } body:not(.desk) .tegels.drie .t-cijfer { font-size: var(--fs-kop); }  /* Pipeline: drie tegels passen op 375 px, ook bij miljoenen */
+  body:not(.desk) .d-knoppen .knop-mini, body:not(.desk) .blok-kop .knop-mini, body:not(.desk) .kop .knop-mini, body:not(.desk) .blok-kop [data-samenvatting] { min-height: 44px; }
   .fin-sub { margin-top: 10px; font-size: var(--fs-zacht); color: var(--inkt2); } .fin-sub b { color: var(--inkt); }
   .d-links .k-rij { display: flex; align-items: center; gap: 8px; } .d-links .k-rij > span:first-child { flex-shrink: 0; } .d-links .k-rij select { min-width: 0; max-width: 100%; flex: 1 1 auto; }
 </style>
@@ -3096,7 +3098,7 @@
       (o.sub ? '<div class="d-sub">' + o.sub + '</div>' : '') + (o.tags ? '<div class="tags" style="margin-top:6px">' + o.tags + '</div>' : '') +
       '<div class="d-knoppen">' + (o.alleenLezen ? '' : '<button class="knop-mini" data-composer="bewerk">Bewerken</button>') + (o.mail ? '<a class="knop-ic" href="mailto:' + esc(o.mail) + '" aria-label="Mail sturen" title="Mail sturen"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></a>' : '') +
       (D0 ? '<button class="knop-ic" data-linkkopie="' + esc(D0.soort + ':' + D0.id) + '" aria-label="Link kopiëren" title="Link kopiëren"><svg class="ic" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>' +
-        '<button class="knop-ic' + (gepind ? ' aan' : '') + '" data-pin="' + esc(D0.soort + ':' + D0.id) + '" aria-pressed="' + gepind + '" aria-label="' + (gepind ? 'Vastgepind' : 'Vastpinnen') + '" title="' + (gepind ? 'Vastgepind, klik om los te maken' : 'Vastpinnen') + '">' + PIN_SVG + '</button>' : '') + '</div>' +
+        '<button class="knop-ic' + (gepind ? ' aan' : '') + '" data-pin="' + esc(D0.soort + ':' + D0.id) + '" aria-pressed="' + gepind + '" aria-label="Vastpinnen" title="' + (gepind ? 'Vastgepind, klik om los te maken' : 'Vastpinnen') + '">' + PIN_SVG + '</button>' : '') + '</div>' +
       (o.lijst ? '<div class="d-lijst">' + o.lijst + '</div>' : '') + (o.velden ? '<div class="d-velden">' + o.velden + '</div>' : '') + (o.extra || '');
   }
   function veld(label, waarde) { return waarde === '' || waarde === undefined || waarde === null ? '' : '<div><span>' + esc(label) + '</span>' + waarde + '</div>'; }
@@ -3114,7 +3116,7 @@
   }
   document.addEventListener('change', function (ev) {  // v7.1: Activiteit loggen → het formulier van die soort
     var lv = ev.target.closest && ev.target.closest('[data-logvorm]');
-    if (lv) { var v = lv.value; lv.value = ''; if (v && CRM.detail && CRM.detail.data) openComposer('log:' + v); }
+    if (lv) { var v = lv.value; lv.value = ''; lv.blur(); if (v && CRM.detail && CRM.detail.data) openComposer('log:' + v); }  // blur: anders geeft dezelfde keuze in WebKit geen tweede change
   });
   var PIN_SVG = '<svg class="ic" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>';  // v7.1
   function knoppenRij(lijst) { return '<div class="d-acties">' + lijst.filter(function (k) { return k === 'kans' ? magApp('pipeline', 'wijzigen') : k === 'persoon' ? magApp('relaties', 'wijzigen') : true; }).map(function (k) { return '<button class="knop-mini" data-composer="' + k + '">' + esc(KNOP_LABEL[k]) + '</button>'; }).join('') + '</div>'; }  // v4.0: kans en persoon alleen met rechten
@@ -4795,7 +4797,7 @@
     if (!was) { if (l.length >= 12) { toast('Je kunt 12 items vastpinnen; maak er eerst één los.'); return; } l.push({ soort: soort, id: id, naam: String(naam || '').slice(0, 80) }); }
     zetOpslag('aa_pins', JSON.stringify(l)); tekenPins();
     toast(was ? 'Losgemaakt.' : 'Vastgepind. Je vindt het ' + (isDesk() ? 'in de zijbalk.' : 'bovenaan Vandaag.'));
-    document.querySelectorAll('[data-pin="' + soort + ':' + id + '"]').forEach(function (b) { b.classList.toggle('aan', !was); b.setAttribute('aria-pressed', String(!was)); b.setAttribute('aria-label', was ? 'Vastpinnen' : 'Vastgepind'); b.title = was ? 'Vastpinnen' : 'Vastgepind, klik om los te maken'; });  // v7.1: icoonknop
+    document.querySelectorAll('[data-pin="' + soort + ':' + id + '"]').forEach(function (b) { b.classList.toggle('aan', !was); b.setAttribute('aria-pressed', String(!was)); b.title = was ? 'Vastpinnen' : 'Vastgepind, klik om los te maken'; });  // v7.1: icoonknop
   }
   function tekenPins() {
     var l = pinLijst(), z = el('zbPins'), v = el('vandaagPins');

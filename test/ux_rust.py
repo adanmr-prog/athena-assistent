@@ -50,7 +50,7 @@ METING = r"""(function () {
     if (m && (m[4] === undefined || Number(m[4]) > .5)) { var r = +m[1], g = +m[2], b = +m[3], licht = (r * 299 + g * 587 + b * 114) / 1000; if (licht < 140 && !e.classList.contains('pill')) gevuld.push((e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24)); }
   });
   Array.prototype.forEach.call(wortel.querySelectorAll('.chip, .tag, .pill'), function (e) { if (zichtbaar(e)) chips++; });
-  return { maten: maten, gewichten: gewichten, combi: combi, hoofdletters: hoofd, knoppen: knoppen, gevuld: gevuld, chips: chips, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+  return { maten: maten, gewichten: gewichten, combi: combi, hoofdletters: hoofd, knoppen: knoppen, gevuld: gevuld, chips: chips, overflow: document.documentElement.scrollWidth > innerWidth + 1 || (function (m) { return !!m && m.scrollWidth > m.clientWidth + 1; })(document.querySelector('main')) };  // main is de scroller (body: overflow hidden)
 })()"""
 
 def wacht(page, ms=600):

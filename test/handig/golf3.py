@@ -44,7 +44,7 @@ with sync_playwright() as p:
     def t13():
         pg.evaluate("routeHash('school:s1')"); pg.wait_for_selector('#crmDetailScherm [data-pin]')
         pg.click('#crmDetailScherm [data-pin]'); pg.wait_for_timeout(400)
-        ok('13 knop wordt Vastgepind', pg.get_attribute('#crmDetailScherm [data-pin]', 'aria-pressed') == 'true' and pg.get_attribute('#crmDetailScherm [data-pin]', 'aria-label') == 'Vastgepind')  # v7.1: icoonknop
+        ok('13 knop wordt Vastgepind', pg.get_attribute('#crmDetailScherm [data-pin]', 'aria-pressed') == 'true' and 'Vastgepind' in pg.get_attribute('#crmDetailScherm [data-pin]', 'title'))  # v7.1: icoonknop
         ok('13 in de zijbalk', pg.locator('#zbPins .zb-pin[data-crm-open="school:s1"]').count()==1)
         pg.click('.zb-item[data-desk="home"]'); pg.wait_for_timeout(500); pg.click('#zbPins .zb-pin'); pg.wait_for_selector('.d-naam h2'); ok('13 zijbalk-pin opent school', 'Esdoorn' in pg.inner_text('.d-naam h2'))
         pg.click('#crmDetailScherm [data-pin]'); pg.wait_for_timeout(300); ok('13 losmaken', pg.locator('#zbPins .zb-pin').count()==0)
