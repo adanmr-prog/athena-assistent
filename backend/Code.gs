@@ -34,8 +34,8 @@ var TABELLEN = {
   Notities:     ['id', 'trajectId', 'datum', 'tekst'],
   // v2.0: CRM
   Personen:     ['id', 'voornaam', 'achternaam', 'functie', 'schoolId', 'email', 'telefoon', 'linkedin', 'eigenaar', 'tags', 'velden', 'laatsteContact', 'capsuleId', 'aangemaakt', 'bijgewerkt', 'bijgewerktDoor'],
-  Activiteiten: ['id', 'type', 'datum', 'door', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'onderwerp', 'duurMin', 'gmailId', 'agendaId', 'bron', 'aangemaakt', 'tekst', 'talentId'],  // v5.0: talentId (tijdlijn van een talent)
-  Activiteiten_archief: ['id', 'type', 'datum', 'door', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'onderwerp', 'duurMin', 'gmailId', 'agendaId', 'bron', 'aangemaakt', 'tekst', 'talentId'],  // v3.3: ouder dan 12 maanden
+  Activiteiten: ['id', 'type', 'datum', 'door', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'onderwerp', 'duurMin', 'gmailId', 'agendaId', 'bron', 'aangemaakt', 'tekst', 'talentId', 'vorm'],  // v5.0: talentId (tijdlijn van een talent); v7.1: vorm
+  Activiteiten_archief: ['id', 'type', 'datum', 'door', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'onderwerp', 'duurMin', 'gmailId', 'agendaId', 'bron', 'aangemaakt', 'tekst', 'talentId', 'vorm'],  // v3.3: ouder dan 12 maanden
   Mijlpalen:    ['id', 'pipeline', 'mijlpaal', 'volgorde', 'kans', 'dagenNorm'],
   Tracks:       ['id', 'naam', 'omschrijving', 'stappen', 'bijgewerkt'],
   Gebruikers:   ['id', 'naam', 'email', 'rol', 'actief', 'bijgewerkt', 'team'],  // v4.0: team + rol (medewerker, teamlead, management)
@@ -804,6 +804,18 @@ function trajectUit(t) {
 
 var SCHOOL_STATUSSEN = ['lead', 'prospect', 'klant', 'oud-klant'];
 var ACTIVITEIT_TYPES = ['notitie', 'gesprek', 'mail', 'afspraak'];   // handmatig te loggen; 'fase' en 'taak' schrijft de backend zelf
+// v7.1: de vorm van een contactmoment (wat de gebruiker kiest bij "Activiteit loggen"). Het type blijft de grove soort waarop de
+// rapporten tellen (gesprekken, mails, afspraken), zodat cijfers en oude regels gelijk blijven. Oude regels zonder vorm krijgen bij
+// het lezen de vorm van hun type; een oude afspraak telt als fysiek.
+var ACTIVITEIT_VORMEN = ['notitie', 'call', 'mail', 'whatsapp', 'afspraak-online', 'afspraak-fysiek', 'evaluatie-online', 'evaluatie-fysiek'];
+var TYPE_VAN_VORM = { notitie: 'notitie', call: 'gesprek', mail: 'mail', whatsapp: 'gesprek', 'afspraak-online': 'afspraak', 'afspraak-fysiek': 'afspraak', 'evaluatie-online': 'afspraak', 'evaluatie-fysiek': 'afspraak' };
+var VORM_VAN_TYPE = { notitie: 'notitie', gesprek: 'call', mail: 'mail', afspraak: 'afspraak-fysiek' };
+function vormVan(a) { return TYPE_VAN_VORM.hasOwnProperty(a.vorm) ? a.vorm : (VORM_VAN_TYPE[a.type] || ''); }
+// Een agenda-afspraak met een videolink of "online" in de locatie is online; "evaluatie" in de titel maakt er een evaluatiegesprek van
+function vormVanAfspraak(titel, locatie, omschrijving) {
+  var online = /meet\.google|teams\.microsoft|teams\.live|zoom\.us|whereby|webex|\bonline\b|videobellen/i.test(String(locatie || '') + ' ' + String(omschrijving || ''));
+  return (/evaluat/i.test(String(titel || '')) ? 'evaluatie-' : 'afspraak-') + (online ? 'online' : 'fysiek');
+}
 var TAAK_CATEGORIEEN = ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'];
 var DOEL_PERIODES = ['week', 'maand', 'kwartaal', 'halfjaar', 'jaar', 'schooljaar'];  // v4.2: schooljaar (bedrijfsdoelen); v4.4: half jaar en jaar
 var STANDAARD_MIJLPALEN = [
@@ -1014,7 +1026,7 @@ var _TRAJECTNAMEN = null;
 function trajectNamen() { if (!_TRAJECTNAMEN) { _TRAJECTNAMEN = {}; lees('Trajecten').forEach(function (t) { _TRAJECTNAMEN[t.id] = t.traject + (t.schooljaar ? ' ' + t.schooljaar : ''); }); } return _TRAJECTNAMEN; }
 function activiteitUit(a, sMap, pMap, kMap) {
   var s = sMap && sMap[String(a.schoolId)], p = pMap && pMap[String(a.persoonId)], k = kMap && kMap[String(a.kansId)];
-  return { id: a.id, type: a.type, datum: a.datum, door: a.door, onderwerp: a.onderwerp, tekst: String(a.tekst || '').slice(0, 3000), duurMin: Number(a.duurMin) || 0, bron: a.bron,
+  return { id: a.id, type: a.type, vorm: vormVan(a), datum: a.datum, door: a.door, onderwerp: a.onderwerp, tekst: String(a.tekst || '').slice(0, 3000), duurMin: Number(a.duurMin) || 0, bron: a.bron,
     schoolId: a.schoolId || '', persoonId: a.persoonId || '', kansId: a.kansId || '', school: s ? s.naam : '', persoon: p ? persoonNaam(p) : '', kans: k ? (k.naam || k.traject) : '',
     gepland: String(a.datum) > nu(), agenda: !!a.agendaId, trajectId: a.trajectId || '', project: a.trajectId ? (trajectNamen()[a.trajectId] || '') : '',  // v3.7: agenda = staat ook in Google Agenda
     talentId: a.talentId || '', talent: a.talentId ? talentNaamVan(a.talentId) : '' };  // v5.0
@@ -1070,7 +1082,7 @@ function apiCrm() {
   var tags = [];
   scholen.concat(personen).forEach(function (x) { tags = tags.concat(tagsUit(x.tags)); });
   return {
-    ik: ikUit(), gebruikers: gebruikersNamen(), statussen: schoolStatussen(), trajectStatussen: trajectStatussen(), mijlpalen: mijlpalen(), categorieen: taakCategorieen(), activiteitTypes: ACTIVITEIT_TYPES, tracks: tracks(),
+    ik: ikUit(), gebruikers: gebruikersNamen(), statussen: schoolStatussen(), trajectStatussen: trajectStatussen(), mijlpalen: mijlpalen(), categorieen: taakCategorieen(), activiteitTypes: ACTIVITEIT_TYPES, activiteitVormen: ACTIVITEIT_VORMEN, tracks: tracks(),
     tags: uniek(tags.map(function (t) { return t.toLowerCase(); })).sort(),
     scholen: scholen.map(function (s) { var u = schoolUit(s), x = per[s.id]; u.personen = x.personen; u.openKansen = x.open; u.openWaarde = x.waarde; delete u.velden; return u; }),
     personen: personen.map(function (p) { var u = persoonUit(p, sMap); delete u.velden; return u; }),
@@ -1197,13 +1209,14 @@ function apiVerwijder(soort, id, opties) {
 
 function apiActiviteitToevoegen(obj) {
   obj = obj || {};
-  var type = ACTIVITEIT_TYPES.indexOf(obj.type) >= 0 ? obj.type : 'notitie';
+  var vorm = TYPE_VAN_VORM.hasOwnProperty(obj.vorm) ? obj.vorm : '';  // v7.1
+  var type = vorm ? TYPE_VAN_VORM[vorm] : ACTIVITEIT_TYPES.indexOf(obj.type) >= 0 ? obj.type : 'notitie';
   var a = schoon(obj, ['schoolId', 'persoonId', 'kansId', 'trajectId', 'talentId']);  // v5.0: ook op de tijdlijn van een talent
   a.tekst = String(obj.tekst || '').trim(); a.onderwerp = String(obj.onderwerp || '').trim();
   if (!a.tekst && !a.onderwerp) throw new Error('Geen tekst.');
   if (!a.schoolId && !a.persoonId && !a.kansId && !a.trajectId && !a.talentId) throw new Error('Koppel de activiteit aan een school, persoon, kans of talent.');
   eisKoppeling(a);  // v4.0
-  a.type = type; a.datum = datumTijdIn(obj.datum) || nu(); a.duurMin = Number(obj.duurMin) || ''; a.door = ikNaam(); a.bron = 'app'; a.aangemaakt = nu();
+  a.type = type; a.vorm = vorm || VORM_VAN_TYPE[type]; a.datum = datumTijdIn(obj.datum) || nu(); a.duurMin = Number(obj.duurMin) || ''; a.door = ikNaam(); a.bron = 'app'; a.aangemaakt = nu();
   vulKoppeling(a);
   var r = metLock(function () { var x = schrijf('Activiteiten', a); zetLaatsteContact([x]); if (x.talentId && ['gesprek', 'mail', 'afspraak'].indexOf(x.type) >= 0) zetTalentContact(x.talentId, x.datum); return x; });
   return activiteitUit(r);
@@ -1573,6 +1586,7 @@ function crmSync() {
       var rij = { type: 'afspraak', datum: datumTijdStr(ev.getStartTime()), duurMin: Math.round((ev.getEndTime().getTime() - ev.getStartTime().getTime()) / 60000), onderwerp: ev.getTitle(), agendaId: sleutel };
       if (oud) { if (oud.datum !== rij.datum || oud.onderwerp !== rij.onderwerp) { rij.id = oud.id; nieuw.push(rij); stats.bijgewerkt++; } return; }
       var k = koppel(gasten); if (!k) return;
+      rij.vorm = vormVanAfspraak(ev.getTitle(), ev.getLocation(), ev.getDescription());  // v7.1
       rij.schoolId = k.schoolId; rij.persoonId = k.persoonId; rij.door = collega[adresZonderPlus(ev.getCreators()[0] || '')] || collega[mij]; rij.bron = 'agenda'; rij.aangemaakt = nu();
       nieuw.push(rij); stats.afspraken++;
     });
@@ -1609,6 +1623,7 @@ function apiHome() {
     pipeline: { open: open.length, waarde: som('waarde'), gewogen: som('gewogen'), stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 8) },
     recent: recent.map(function (a) { return activiteitUit(a, sMap, pMap, kMap); }),
     afgerondWeek: afgerondDezeWeek(mijnAf), streak: werkdagenStreak(mijnAf),  // v4.6
+    kerncijfers: homeKerncijfers(),  // v7.1: tegels per functie
     mails: []  // v3.2: Gmail is traag; de app haalt de mails apart op met apiHomeMails
   };
 }
@@ -1623,6 +1638,24 @@ function werkdagenStreak(af) {
     d = new Date(d.getTime() - 86400000);
   }
   return n;
+}
+// v7.1: kerncijfers voor de tegels op Home. De app kiest per functie hoogstens vier tegels; hier alleen wat die functie nodig heeft.
+// Lopende projecten: management en teamleads alles wat ze mogen zien, anderen hun eigen (AM of adviseur). Nog te factureren: termijnen
+// met status "nog te doen" (of leeg) van die projecten, als je facturatie mag zien. Bezetting: open vacatures en lege plekken (talent).
+function homeKerncijfers() {
+  var team = GEBRUIKER ? GEBRUIKER.team : 'management', ik = ikNaam(), breed = isBeheerder() || isTeamlead();
+  var lopend = lees('Trajecten').filter(function (t) { return projectLopend(t) && mag('projecten', 'zien', t); });
+  var mijn = lopend.filter(function (t) { return breed || t.am === ik || t.adviseur === ik; }), uit = { lopendeProjecten: mijn.length };
+  if (team === 'accountmanagement' || team === 'management') {
+    var ids = {}; mijn.forEach(function (t) { if (mag('facturatie', 'zien', t)) ids[t.id] = true; });
+    uit.teFactureren = lees('Facturen').filter(function (f) { return ids[f.trajectId] && (!f.status || f.status === 'nog te doen'); }).reduce(function (n, f) { return n + (Number(f.bedrag) || 0); }, 0);
+  }
+  if (team === 'talent' || team === 'management') {
+    var vacs = lees('Vacatures'), kands = lees('Kandidaten'), open = 0, leeg = 0;
+    lopend.forEach(function (t) { var b = bezettingVan(t.id, vacs, kands); open += b.openVacatures; leeg += Math.max(0, b.nodig - b.gevuld); });
+    uit.openVacatures = open; uit.teBezetten = leeg;
+  }
+  return uit;
 }
 function apiHomeMails() { return mailsOnbeantwoord(5); }
 // van, tot: 'yyyy-MM-dd' (tot en met). Maximaal 62 dagen.
@@ -1756,13 +1789,13 @@ function apiActiviteiten(door, van, tot, team) {
   var mensen = zichtbareMensen();
   if (!isBeheerder() && mensen.indexOf(door) < 0) door = isTeamlead() ? '' : ikNaam();
   if (!door && RAPPORT_TEAMS.indexOf(team) >= 0) { var leden = teamNamen(team); mensen = isBeheerder() ? leden : mensen.filter(function (n) { return leden.indexOf(n) >= 0; }); }  // v4.4: alleen de activiteit van dat team
-  var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kMap = perId(lees('Kansen')), perType = {}, zicht = zichtbaarFilter();
+  var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kMap = perId(lees('Kansen')), perType = {}, perVorm = {}, zicht = zichtbaarFilter();
   var lijst = lees('Activiteiten').filter(function (a) {
     var d = String(a.datum).slice(0, 10);
     return (door ? a.door === door : (isBeheerder() && RAPPORT_TEAMS.indexOf(team) < 0) || mensen.indexOf(a.door) >= 0) && (!van || d >= van) && (!tot || d <= tot) && String(a.datum) <= nu() && zicht(a);
   });
-  lijst.forEach(function (a) { perType[a.type] = (perType[a.type] || 0) + 1; });
-  return { door: door, totaal: lijst.length, perType: perType, tijdlijn: tijdlijn(lijst, sMap, pMap, kMap), gebruikers: mensen };
+  lijst.forEach(function (a) { perType[a.type] = (perType[a.type] || 0) + 1; var v = vormVan(a) || a.type; perVorm[v] = (perVorm[v] || 0) + 1; });  // v7.1: ook per vorm
+  return { door: door, totaal: lijst.length, perType: perType, perVorm: perVorm, tijdlijn: tijdlijn(lijst, sMap, pMap, kMap), gebruikers: mensen };
 }
 // Oudere activiteit van één school, persoon of kans uit het archief (op verzoek, zodat gewone schermen snel blijven)
 function apiArchiefTijdlijn(soort, id) {
@@ -2202,7 +2235,7 @@ function hernoemGebruiker(oud, nieuw) {
 
 /* ----- Tijdlijn: activiteit wijzigen, afspraak verplaatsen ----- */
 
-var ACTIVITEIT_VELDEN = ['id', 'type', 'datum', 'onderwerp', 'tekst', 'duurMin', 'schoolId', 'persoonId', 'kansId', 'trajectId'];
+var ACTIVITEIT_VELDEN = ['id', 'type', 'datum', 'onderwerp', 'tekst', 'duurMin', 'schoolId', 'persoonId', 'kansId', 'trajectId', 'vorm'];  // v7.1: vorm
 function apiActiviteitOpslaan(obj) {
   obj = obj || {};
   if (!obj.id) return apiActiviteitToevoegen(obj);
@@ -2210,6 +2243,11 @@ function apiActiviteitOpslaan(obj) {
   if (!oud) throw new Error('Activiteit niet gevonden (misschien al gearchiveerd).');
   if (!isBeheerder() && oud.door && oud.door !== ikNaam()) throw new Error('Alleen wie het vastlegde of de beheerder kan dit wijzigen.');
   if (o.type !== undefined && ACTIVITEIT_TYPES.concat(['fase', 'taak']).indexOf(o.type) < 0) throw new Error('Onbekend soort activiteit.');
+  if (o.vorm !== undefined) {  // v7.1: de vorm bepaalt het type; een mijlpaal of taakregel heeft geen vorm
+    if (!TYPE_VAN_VORM.hasOwnProperty(o.vorm)) throw new Error('Onbekend soort activiteit.');
+    if (oud.type === 'fase' || oud.type === 'taak') throw new Error('Een mijlpaal of afgeronde taak krijgt geen ander soort.');
+    o.type = TYPE_VAN_VORM[o.vorm];
+  } else if (o.type !== undefined && VORM_VAN_TYPE[o.type]) o.vorm = VORM_VAN_TYPE[o.type];
   if (o.datum !== undefined) { o.datum = datumTijdIn(o.datum); if (!o.datum) throw new Error('Ongeldige datum.'); }
   if (o.duurMin !== undefined) o.duurMin = Number(o.duurMin) || '';
   ['onderwerp', 'tekst'].forEach(function (k) { if (o[k] !== undefined) o[k] = String(o[k]).trim(); });
@@ -3230,7 +3268,7 @@ var BREIN_ACTIES = {
     properties: metKoppeling({ tekst: { type: 'string' }, deadline: { type: 'string', description: 'yyyy-MM-dd' }, tijd: { type: 'string', description: 'uu:mm, alleen als er een tijdstip bij hoort.' }, prio: { type: 'string', enum: ['hoog', 'midden', 'laag'] }, eigenaar: { type: 'string', description: 'Naam van een collega; standaard de gebruiker zelf.' }, notitie: { type: 'string' } }),  // v4.5: tijd
     required: ['tekst'] },
   log_activiteit: { titel: 'Activiteit vastleggen', description: 'Leg een notitie, gesprek, mail of afspraak vast op de tijdlijn van een school, persoon of kans.',
-    properties: metKoppeling({ type: { type: 'string', enum: ['notitie', 'gesprek', 'mail', 'afspraak'] }, onderwerp: { type: 'string' }, tekst: { type: 'string' }, datum: { type: 'string', description: 'yyyy-MM-dd HH:mm, standaard nu' } }),
+    properties: metKoppeling({ type: { type: 'string', enum: ['notitie', 'gesprek', 'mail', 'afspraak'] }, vorm: { type: 'string', enum: ACTIVITEIT_VORMEN, description: 'preciezer dan type: call, whatsapp, afspraak of evaluatiegesprek online/fysiek (v7.1)' }, onderwerp: { type: 'string' }, tekst: { type: 'string' }, datum: { type: 'string', description: 'yyyy-MM-dd HH:mm, standaard nu' } }),
     required: ['type', 'onderwerp'] },
   wijzig_kans: { titel: 'Kans bijwerken', description: 'Wijzig een bestaande kans: mijlpaal (fase), waarde, volgende actie, deadline of verwachte sluiting. Geef alleen de velden die veranderen.',
     properties: { kansId: { type: 'string' }, fase: { type: 'string' }, waarde: { type: 'number' }, volgendeActie: { type: 'string' }, deadline: { type: 'string' }, verwachteSluiting: { type: 'string' } },
@@ -3414,7 +3452,7 @@ function apiBreinUitvoeren(actie) {
     return { melding: 'Taak aangemaakt: ' + t.tekst };
   }
   if (soort === 'log_activiteit') {
-    apiActiviteitToevoegen({ type: o.type, onderwerp: o.onderwerp, tekst: o.tekst || '', datum: o.datum || '', schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '' });
+    apiActiviteitToevoegen({ type: o.type, vorm: o.vorm || '', onderwerp: o.onderwerp, tekst: o.tekst || '', datum: o.datum || '', schoolId: o.schoolId || '', persoonId: o.persoonId || '', kansId: o.kansId || '' });
     return { melding: 'Vastgelegd op de tijdlijn.' };
   }
   if (soort === 'wijzig_kans') {

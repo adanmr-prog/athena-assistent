@@ -204,6 +204,7 @@ create table if not exists "activiteiten" (
   "aangemaakt" text,
   "tekst" text,
   "talent_id" text,
+  "vorm" text,
   rij bigserial
 );
 create table if not exists "activiteiten_archief" (
@@ -223,6 +224,7 @@ create table if not exists "activiteiten_archief" (
   "aangemaakt" text,
   "tekst" text,
   "talent_id" text,
+  "vorm" text,
   rij bigserial
 );
 create table if not exists "mijlpalen" (

@@ -450,18 +450,18 @@ function demoVul() {
   act('mail', -3, '16:40', M.lars, 's10', { kansId: 'k10', persoonId: 'p12' }, 'Offerte examentraining verstuurd');
   act('fase', -12, '11:00', M.lars, 's10', { kansId: 'k10' }, 'Mijlpaal: gesprek → voorstel');
   act('fase', -6, '15:20', M.noor, 's5', { kansId: 'k6' }, 'Mijlpaal: gesprek → voorstel');
-  act('gesprek', -5, '13:00', M.noor, 's11', { kansId: 'k11', persoonId: 'p13' }, 'Hulpvraag praktijkvakken', 'Behoefte aan ondersteuning bij techniek en zorg, 2 dagen per week.');
-  act('afspraak', -4, '09:30', M.noor, 's5', { kansId: 'k6', persoonId: 'p7' }, 'Voorstel toegelicht aan de directie', '', '');
+  act('gesprek', -5, '13:00', M.noor, 's11', { kansId: 'k11', persoonId: 'p13', vorm: 'whatsapp' }, 'Hulpvraag praktijkvakken', 'Behoefte aan ondersteuning bij techniek en zorg, 2 dagen per week.');
+  act('afspraak', -4, '09:30', M.noor, 's5', { kansId: 'k6', persoonId: 'p7', vorm: 'afspraak-online' }, 'Voorstel toegelicht aan de directie', '', '');
   act('gesprek', -3, '11:30', M.yara, 's9', { kansId: 'k9', persoonId: 'p11' }, 'Eerste kennismaking', 'Interesse in huiswerkbegeleiding voor groep 8.');
   act('mail', -1, '09:05', M.yara, 's6', { kansId: 'k12', persoonId: 'p8' }, 'Informatie NT2 voor nieuwkomers');
   act('fase', -6, '10:00', M.noor, 's2', { kansId: 'k5' }, 'Mijlpaal: onderhandeling → gewonnen');
   act('fase', -20, '12:00', M.lars, 's4', { kansId: 'k4' }, 'Mijlpaal: onderhandeling → gewonnen');
   act('notitie', -15, '15:00', M.lars, 's4', { trajectId: 't4', kansId: 'k4' }, 'Taskforce (' + d(-15) + ')', 'Hulpvraag: twee NT2-ondersteuners voor de instroomklassen. Start over drie weken.');
   act('gesprek', -1, '14:00', M.femke, 's1', { trajectId: 't1', persoonId: 'p1' }, 'Evaluatie periode 1 voorbereid', 'Tevreden over de vaste gezichten; vraag om een extra ondersteuner op donderdag.');
-  act('afspraak', 0, '10:00', M.femke, 's1', { trajectId: 't1', persoonId: 'p1' }, 'Evaluatie periode 1');
+  act('afspraak', 0, '10:00', M.femke, 's1', { trajectId: 't1', persoonId: 'p1', vorm: 'evaluatie-fysiek' }, 'Evaluatie periode 1');  // v7.1: soorten contactmoment
   act('mail', -2, '08:50', M.ruben, 's2', { trajectId: 't2', persoonId: 'p3' }, 'Rooster huiswerkklas na de herfstvakantie');
   act('gesprek', -7, '10:30', M.ruben, 's6', { trajectId: 't5', persoonId: 'p8' }, 'Verlenging studentdocent Duits', 'School verlengt voor volgend schooljaar; zelfde uren.');
-  act('afspraak', 6, '15:00', M.ruben, 's2', { trajectId: 't2', persoonId: 'p3' }, 'Evaluatie Kompas College');
+  act('afspraak', 6, '15:00', M.ruben, 's2', { trajectId: 't2', persoonId: 'p3', vorm: 'evaluatie-online' }, 'Evaluatie Kompas College');
   act('gesprek', -4, '11:00', M.bas, 's4', { trajectId: 't4', persoonId: 'p6' }, 'Kennismaking ondersteuners voorbereid');
   act('notitie', -9, '16:00', M.bas, 's10', { trajectId: 't6' }, 'School stopt na dit schooljaar met surveillance', 'Eigen surveillanten vanaf volgend jaar; afscheid netjes afronden.');
   act('taak', -2, '11:00', M.sem, 's4', { trajectId: 't4' }, 'Kandidaat Fatima Aydin: vog → klaar voor start');

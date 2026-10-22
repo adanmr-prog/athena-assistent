@@ -36,11 +36,11 @@ with sync_playwright() as p:
         pg.keyboard.press('Escape'); ok('7 Esc sluit', pg.locator('#palet.aan').count()==0)
     stap('7', t7)
     def t11():
-        ok('11 Link-knop in detail', pg.locator('.d-naam [data-linkkopie]').count()>=0)
+        ok('11 Link-knop in detail', pg.locator('#crmDetailScherm [data-linkkopie]').count()>=0)
         pg.goto(U+'sophie'); pg.wait_for_selector('#zijbalk'); pg.wait_for_load_state('networkidle')
-        pg.evaluate("routeHash('school:s1')"); pg.wait_for_selector('.d-naam [data-linkkopie]')
+        pg.evaluate("routeHash('school:s1')"); pg.wait_for_selector('#crmDetailScherm [data-linkkopie]')
         pg.context.grant_permissions(['clipboard-read','clipboard-write'])
-        pg.click('.d-naam [data-linkkopie]'); pg.wait_for_timeout(500); clip=pg.evaluate("navigator.clipboard.readText()")
+        pg.click('#crmDetailScherm [data-linkkopie]'); pg.wait_for_timeout(500); clip=pg.evaluate("navigator.clipboard.readText()")
         ok('11 link gekopieerd: %s' % clip[-30:], clip.endswith('#school:s1'))
     stap('11', t11)
     def t9():

@@ -103,7 +103,7 @@ with sync_playwright() as p:
     page.click('[data-crm-terug]'); page.wait_for_selector('#view-trajecten.actief .vac-kaart'); page.click('[data-pweergave="am"]'); page.wait_for_selector('[data-crm-open="project:t1"]')
     page.click('[data-crm-open="project:t1"]'); page.wait_for_selector('.d-naam h2:has-text("Onderwijsondersteuning")')
     page.select_option('.d-links [data-pveld="gefactureerd"]', 'nee'); page.wait_for_selector('.d-links select.pill.p-nee')
-    page.locator('[data-composer="notitie"]').first.click(); page.fill('#crmComposer #cf-tekst', 'Update van de accountmanager'); page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Update van de accountmanager")')
+    page.select_option('#dTab [data-logvorm]', 'notitie'); page.fill('#crmComposer #cf-tekst', 'Update van de accountmanager'); page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Update van de accountmanager")')  # v7.1: Activiteit loggen is een keuzelijst
     page.locator('[data-koppelmail]').first.click(); page.wait_for_selector('#toast.aan:has-text("gekoppeld")')
     page.locator('[data-termijn="nieuw"]').first.click(); page.wait_for_selector('#venster.aan #vf-omschrijving'); page.fill('#vf-omschrijving', 'Extra workshop'); page.fill('#vf-bedrag', '450'); page.click('#venster [data-cf-opslaan]')
     page.wait_for_selector('.d-links .rij:has-text("Extra workshop")'); page.wait_for_timeout(200)
@@ -122,25 +122,31 @@ with sync_playwright() as p:
     page.fill('#crmZoek', 'lyceum'); page.wait_for_timeout(150); assert page.locator('#crmInhoud [data-crm-open^="school:"]').count() == 1, 'zoeken op school'
     page.fill('#crmZoek', ''); page.wait_for_timeout(100)
     page.click('[data-crm-open="school:s1"]'); page.wait_for_selector('.d-naam h2'); page.wait_for_timeout(200)
-    page.click('[data-composer="gesprek"]'); page.fill('#cf-onderwerp', 'Evaluatie periode 1'); page.fill('#cf-tekst', 'Tevreden over de ondersteuner.'); page.click('[data-cf-opslaan]')
+    # v7.1: één keuzelijst met acht soorten in plaats van de knoppenrij; Afspraak, Taak, Kans en Persoon staan rechts of in hun tab
+    assert page.locator('[data-logvorm] option:not([disabled])').count() == 8, 'acht soorten in Activiteit loggen'
+    assert page.locator('#dTab .d-acties [data-composer="persoon"], #dTab .d-acties [data-composer="kans"]').count() == 0, 'geen knoppenrij meer in de historie'
+    page.select_option('[data-logvorm]', 'call'); page.fill('#cf-onderwerp', 'Evaluatie periode 1'); page.fill('#cf-tekst', 'Tevreden over de ondersteuner.'); page.click('[data-cf-opslaan]')
     page.wait_for_selector('.t-item:has-text("Evaluatie periode 1")'); page.wait_for_timeout(200)
+    assert page.locator('.t-item:has-text("Evaluatie periode 1") .t-ic.gesprek').count() == 1 and 'Call' in page.inner_text('.t-item:has-text("Evaluatie periode 1") .r-meta'), 'call telt als gesprek en toont zijn soort'
+    page.select_option('[data-logvorm]', 'evaluatie-online'); page.wait_for_selector('#crmComposer #cf-onderwerp'); assert page.input_value('#crmComposer #cf-onderwerp').startswith('Evaluatie'), 'evaluatiegesprek vult het onderwerp'
+    page.fill('#crmComposer #cf-tekst', 'Online evaluatie met de directie'); page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Online evaluatie met de directie") .t-ic.afspraak.evaluatie')
     page.locator('.t-item:has-text("Evaluatie periode 1") [data-actbewerk]').click(); page.wait_for_selector('#venster.aan #vf-onderwerp')  # v3.7
     page.fill('#vf-onderwerp', 'Evaluatie periode 1 (bijgesteld)'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("(bijgesteld)")')
     page.screenshot(path=OUT + '/12b_tijdlijn_bewerken.png', full_page=True)
-    page.click('[data-composer="notitie"]'); page.fill('#crmComposer #cf-tekst', 'Notitie naast het venster')  # v3.7: een open formulier blijft werken na het venster
+    page.select_option('[data-logvorm]', 'notitie'); page.fill('#crmComposer #cf-tekst', 'Notitie naast het venster')  # v3.7: een open formulier blijft werken na het venster
     page.locator('.t-item [data-actbewerk]').first.click(); page.wait_for_selector('#venster.aan'); page.click('#venster [data-cf-annuleer]')
     page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Notitie naast het venster")')
     page.screenshot(path=OUT + '/12_school_detail.png', full_page=True)
     page.click('[data-dtab="projecten"]'); page.wait_for_selector('#dTab [data-crm-open^="project:"]'); page.click('[data-dtab="historie"]')  # v3.8: tabs, samenvatting, filters
     page.click('[data-samenvatting]'); page.wait_for_selector('.samenvatting')
-    page.select_option('[data-tl="type"]', 'gesprek'); n = page.locator('#tlLijst .t-item').count(); assert n >= 1 and n == page.locator('#tlLijst .t-ic.gesprek').count(), 'filter op soort'
+    page.select_option('[data-tl="type"]', 'call'); n = page.locator('#tlLijst .t-item').count(); assert n >= 1 and n == page.locator('#tlLijst .t-ic.gesprek').count(), 'filter op soort (v7.1: vorm)'
     page.select_option('[data-tl="type"]', ''); page.fill('[data-tl="zoek"]', 'Tevreden'); page.wait_for_timeout(100); assert page.locator('#tlLijst .t-item').count() == 1, 'zoeken in historie'
     page.fill('[data-tl="zoek"]', '')
     page.click('[data-composer="afspraak"]'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Gesprek Voorbeeldcollege Zuid")'); page.wait_for_timeout(100)
     page.locator('.t-item:has-text("Gesprek Voorbeeldcollege Zuid") [data-actbewerk]').first.click(); page.wait_for_selector('#venster.aan [data-actweg]'); page.click('#venster [data-actweg]')  # v3.7: verwijderen
     page.wait_for_selector('.t-item:has-text("Gesprek Voorbeeldcollege Zuid")', state='detached')
-    page.click('[data-composer="persoon"]'); page.fill('#cf-voornaam', 'Dirk'); page.fill('#cf-achternaam', 'Smit'); page.click('[data-cf-opslaan]'); page.wait_for_timeout(400)
-    page.click('[data-dtab="personen"]'); page.wait_for_selector('#dTab .rij:has-text("Dirk Smit")'); page.click('[data-dtab="historie"]')
+    page.click('[data-dtab="personen"]'); page.click('#dTab [data-composer="persoon"]'); page.fill('#cf-voornaam', 'Dirk'); page.fill('#cf-achternaam', 'Smit'); page.click('[data-cf-opslaan]'); page.wait_for_timeout(400)  # v7.1: + Persoon staat in de tab
+    page.wait_for_selector('#dTab .rij:has-text("Dirk Smit")'); page.click('[data-dtab="historie"]')
     # v3.3: bewerken stuurt alleen gewijzigde velden; een gelijktijdige wijziging van hetzelfde veld geeft een melding
     page.click('[data-composer="bewerk"]'); page.fill('#cf-plaats', 'Schiedam')
     page.evaluate("() => run('apiSchoolOpslaan', { id: 's1', plaats: 'Vlaardingen', _oud: { plaats: 'Rotterdam' } })")  # een collega was net eerder
@@ -235,7 +241,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/18_doelen_beheer.png'); page.click('#venster [data-cf-annuleer]')
     page.click('[data-beheer="capsule"]'); page.wait_for_selector('#crmBeheer:has-text("klaar")', timeout=8000)
     page.click('[data-crmtab="scholen"]'); page.click('[data-crmnieuw="school"]'); page.fill('#cf-naam', 'Testschool Noord'); page.fill('#cf-plaats', 'Groningen'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.d-naam h2:has-text("Testschool Noord")')
-    page.click('[data-composer="kans"]'); page.fill('#cf-naam', 'Studentdocenten'); page.fill('#cf-waarde', '8000'); page.click('[data-cf-opslaan]'); page.wait_for_selector('[data-kansfase]')
+    page.click('[data-dtab="kansen"]'); page.click('#dTab [data-composer="kans"]'); page.fill('#cf-naam', 'Studentdocenten'); page.fill('#cf-waarde', '8000'); page.click('[data-cf-opslaan]'); page.wait_for_selector('[data-kansfase]')  # v7.1: + Kans staat in de tab Kansen
     # v6.4: gewonnen opent eerst het winformulier (aantal en startdatum verplicht); annuleren laat de kans staan
     page.select_option('[data-kansfase]', 'gewonnen'); page.wait_for_selector('#venster.aan #vf-aantal')
     page.click('#venster [data-cf-annuleer]'); page.wait_for_timeout(400); assert page.locator('.t-item:has-text("→ gewonnen")').count() == 0, 'annuleren wint de kans niet'
@@ -263,8 +269,14 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     assert page.locator('body.desk #zijbalk').is_visible(), 'zijbalk op desktop'
     page.click('.zb-item[data-desk="home"]'); page.wait_for_selector('#homeInhoud .hkaart'); page.wait_for_timeout(200)
-    assert page.locator('#homeInhoud .tegel:has-text("Deze week afgerond")').count() == 1 and page.locator('#homeInhoud .tegel:has-text("op rij")').count() == 1, 'tegels teller en streak'  # v4.6
+    # v7.1: hoogstens vier tegels per functie (management: Te laat, Open kansen, Gewogen pijplijn, Lopende projecten); geen streak meer
+    assert page.locator('#homeInhoud .tegels .tegel').count() == 4, 'vier tegels op Home'
+    assert page.locator('#homeInhoud .tegel:has-text("Lopende projecten")').count() == 1 and page.locator('#homeInhoud .tegel:has-text("op rij")').count() == 0, 'tegels per functie'
     page.screenshot(path=OUT + '/20_desk_home.png')
+    page.click('#homeInhoud .tegel[data-kpi="laat"]'); page.wait_for_timeout(500)
+    assert page.locator('#crmBalk .chip.aan[data-taakweergave="laat"]').count() == 1, 'tegel Te laat opent Taken in de weergave Te laat'
+    page.click('#crmBalk [data-taakweergave="alles"]'); page.wait_for_timeout(200)  # terug naar Alles voor de rest van de test
+    page.click('.zb-item[data-desk="home"]'); page.wait_for_selector('#homeInhoud .hkaart'); page.wait_for_timeout(200)
     page.click('.zb-item[data-desk="contacten"]'); page.wait_for_selector('.dtabel tr.klik'); page.wait_for_timeout(150)
     page.click('th[data-sorteer="plaats"]'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/21_desk_contacten.png')
@@ -340,7 +352,7 @@ with sync_playwright() as p:
         page.set_viewport_size({'width': breedte, 'height': 800}); page.wait_for_timeout(200)
         print('horizontale scroll desktop', breedte, page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
     page.click('.zb-item[data-desk="contacten"]'); page.click('.dtabel tr[data-crm-open="school:s1"]'); page.wait_for_selector('.detail-3')
-    page.click('[data-composer="notitie"]'); page.fill('#cf-tekst', 'Half getypt')
+    page.select_option('[data-logvorm]', 'notitie'); page.fill('#cf-tekst', 'Half getypt')
     page.set_viewport_size({'width': 900, 'height': 800}); page.wait_for_timeout(200); page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(200)
     assert page.input_value('#cf-tekst') == 'Half getypt', 'concept blijft bij wisselen van breedte'
     page.click('[data-cf-annuleer]')
