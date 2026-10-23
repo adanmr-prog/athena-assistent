@@ -714,7 +714,7 @@ function apiZetHuisstijl(sleutel, waarde) {
   return null;
 }
 function apiMaakContent(type, onderwerp, extra) {
-  var t = CONTENT_TYPES[type]; if (!t) throw new Error('Onbekend contenttype.');
+  var t = uitMap(CONTENT_TYPES, type); if (!t) throw new Error('Onbekend contenttype.');  // v7.2: geen geërfde sleutels (constructor, __proto__)
   onderwerp = String(onderwerp || '').trim(); if (!onderwerp) throw new Error('Geef een onderwerp.');
   var h = huisstijl();
   var systeem = 'Je schrijft teksten namens ' + h.bedrijf + '. Over het bedrijf: ' + h.omschrijving + '\n\nToon en stijl:\n' + h.toon +
@@ -865,7 +865,7 @@ function apiExportAlles(tabel, vanaf, aantal) {
     Object.keys(pr).forEach(function (k) { if (['ANTHROPIC_API_KEY', 'CAPSULE_TOKEN'].indexOf(k) < 0) eig[k] = pr[k]; });
     return { tabel: tabel, rijen: eig, totaal: Object.keys(eig).length, volgende: null };
   }
-  if (!TABELLEN[tabel]) throw new Error('Onbekend tabblad ' + tabel);
+  if (!uitMap(TABELLEN, tabel)) throw new Error('Onbekend tabblad ' + (tabel == null || tabel === '' ? '(leeg)' : String(tabel)));  // v7.2: geen geërfde sleutels (__proto__) en geen 'undefined' in de melding
   var alle = lees(tabel), v = Math.max(0, Number(vanaf) || 0), n = Math.min(500, Math.max(1, Number(aantal) || 200));
   var deel = alle.slice(v, v + n).map(function (r) { var o = {}; TABELLEN[tabel].forEach(function (k) { o[k] = r[k]; }); return o; });
   return { tabel: tabel, vanaf: v, rijen: deel, totaal: alle.length, volgende: v + n < alle.length ? v + n : null };
@@ -1046,7 +1046,7 @@ function mijlpalen() {
 function mijlpaalMap() { var m = {}; mijlpalen().forEach(function (x) { if (!m[x.mijlpaal]) m[x.mijlpaal] = x; }); return m; }
 function apiMijlpalenOpslaan(lijst) {
   alleenBeheerder();
-  if (!(lijst instanceof Array) || !lijst.length) throw new Error('Geef minstens één mijlpaal.');
+  if (!(lijst instanceof Array) || !lijst.length || lijst.some(function (m) { return !m || typeof m !== 'object'; })) throw new Error('Geef minstens één mijlpaal (naam, pipeline, kans, dagen).');  // v7.2: elk element een object (null gaf een TypeError)
   var rijen = lijst.map(function (m, i) {
     var naam = klein(m.mijlpaal); if (!naam || naam === 'gewonnen' || naam === 'verloren') throw new Error('Ongeldige mijlpaal: ' + (m.mijlpaal || '(leeg)') + '. Gewonnen en verloren bestaan altijd.');
     return { id: slug((m.pipeline || 'Scholen') + '-' + naam), pipeline: String(m.pipeline || 'Scholen').trim(), mijlpaal: naam, volgorde: i + 1, kans: Math.max(0, Math.min(100, Number(m.kans) || 0)), dagenNorm: Math.max(0, Number(m.dagenNorm) || 0) };
@@ -1095,6 +1095,7 @@ function apiCrm() {
   };
 }
 function apiSchool(id) {
+  eis('relaties', 'zien');  // v7.2: ook lezen volgt de rechtentabel (elk team heeft nu 'alles'; de tabel is de enige bron van waarheid)
   var s = vind('Scholen', id); if (!s) throw new Error('School niet gevonden.');
   var naam = klein(s.naam), mp = mijlpaalMap(), sMap = {}; sMap[s.id] = s;
   var personen = lees('Personen').filter(function (p) { return String(p.schoolId) === String(id); }), pMap = perId(personen);
@@ -1117,6 +1118,7 @@ function apiSchool(id) {
   };
 }
 function apiPersoon(id) {
+  eis('relaties', 'zien');  // v7.2: ook lezen volgt de rechtentabel
   var p = vind('Personen', id); if (!p) throw new Error('Persoon niet gevonden.');
   var s = p.schoolId ? vind('Scholen', p.schoolId) : null, sMap = {}, pMap = {}, mp = mijlpaalMap();
   if (s) sMap[s.id] = s; pMap[p.id] = p;
@@ -1176,7 +1178,7 @@ function apiPersoonOpslaan(obj) {
 var VERWIJDER_TABBLAD = { school: 'Scholen', persoon: 'Personen', kans: 'Kansen', activiteit: 'Activiteiten', taak: 'Acties', traject: 'Trajecten', notitie: 'Notities', content: 'Content', doel: 'Doelen', factuur: 'Facturen', vacature: 'Vacatures', kandidaat: 'Kandidaten',
   talent: 'Talenten', beoordeling: 'Beoordelingen', talentdocument: 'TalentDocumenten', talentschool: 'TalentSchool' };  // v5.0
 function apiVerwijder(soort, id, opties) {
-  var tab = VERWIJDER_TABBLAD[soort];
+  var tab = uitMap(VERWIJDER_TABBLAD, soort);  // v7.2: geen geërfde sleutels ('constructor' gaf de functie Object als tabblad)
   if (!tab) throw new Error('Onbekend soort.');
   var r = vind(tab, id); if (!r) throw new Error('Niet gevonden.');
   if (soort === 'doel') eisDoelRecht(r.eigenaar);
@@ -1619,7 +1621,7 @@ function apiHome() {
   return {
     groet: groet(), datum: datumLang(new Date()), ik: ikUit(), bedrijf: bedrijfCijfers(),  // v4.2: bedrijfsdoelen voor iedereen
     taken: taken.slice(0, 40).map(function (a) { return taakUit(a, sMap, pMap, kMap); }),
-    agenda: agendaItems(begin, new Date(begin.getTime() + 7 * 86400000)), gekoppeld: mijnMailbox(),
+    agenda: agendaItems(begin, new Date(begin.getFullYear(), begin.getMonth(), begin.getDate() + 7)), gekoppeld: mijnMailbox(),  // v7.2: kalenderdag, niet 24 uur (zomertijd)
     pipeline: { open: open.length, waarde: som('waarde'), gewogen: som('gewogen'), stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 8) },
     recent: recent.map(function (a) { return activiteitUit(a, sMap, pMap, kMap); }),
     afgerondWeek: afgerondDezeWeek(mijnAf), streak: werkdagenStreak(mijnAf),  // v4.6
@@ -1663,7 +1665,7 @@ function apiAgenda(van, tot) {
   var a = parseDatum(van), b = parseDatum(tot);
   if (!a || !b || b < a) throw new Error('Ongeldige periode.');
   if ((b - a) / 86400000 > 62) throw new Error('Kies maximaal twee maanden.');
-  var eind = new Date(b.getTime() + 86400000), vanS = datumStr(a), totS = datumStr(b);
+  var eind = new Date(b.getFullYear(), b.getMonth(), b.getDate() + 1), vanS = datumStr(a), totS = datumStr(b);  // v7.2: kalenderdag, niet 24 uur (zomertijd)
   var sMap = perId(lees('Scholen')), pMap = perId(lees('Personen')), kMap = perId(lees('Kansen'));
   var zicht = zichtbaarFilter(), acts = lees('Activiteiten').filter(function (x) { return x.type === 'afspraak' && zicht(x) && taakVanMijOfTeam({ eigenaar: x.door }); }), perSleutel = {};  // v4.0
   acts.forEach(function (x) { if (x.agendaId) perSleutel[x.agendaId] = x; });
@@ -1809,7 +1811,7 @@ function apiArchiefTijdlijn(soort, id) {
 function archiveerTrigger() { try { metLock(archiveer); } catch (e) { Logger.log('Archiveren mislukt: ' + e); } }
 function apiArchiveer() { alleenBeheerder(); return metLock(archiveer); }
 function archiveer() {
-  var grens = datumStr(new Date(Date.now() - 365 * 86400000)), alle = lees('Activiteiten');
+  var grens = datumStr(plusDagen(-365)), alle = lees('Activiteiten');  // v7.2: kalenderdagen (geen uurdrift rond de zomertijd)
   var isOud = function (a) { var d = String(a.datum).slice(0, 10); return !!d && d < grens; };
   var oud = alle.filter(isOud), houden = alle.filter(function (a) { return !isOud(a); });
   if (!oud.length) return { gearchiveerd: 0, over: houden.length };
@@ -1823,7 +1825,7 @@ function archiveer() {
 }
 // v5.0: weekuren ouder dan 26 weken naar TalentUren_archief (zelfde aanpak: eerst het archief schrijven, dan het tabblad in één keer herschrijven)
 function archiveerUren() {
-  var grens = isoWeekStr(new Date(Date.now() - 26 * 7 * 86400000)), alle = lees('TalentUren');
+  var grens = isoWeekStr(plusDagen(-26 * 7)), alle = lees('TalentUren');  // v7.2: kalenderdagen
   var oud = alle.filter(function (u) { return u.week && String(u.week) < grens; });
   if (!oud.length) return 0;
   schrijfVeel('TalentUren_archief', oud);
@@ -1881,7 +1883,8 @@ function apiDoelOpslaan(obj) {
 
 function apiExport(tabel) {
   alleenBeheerder();  // v3.3
-  var naam = { scholen: 'Scholen', personen: 'Personen', kansen: 'Kansen', activiteiten: 'Activiteiten', taken: 'Acties', trajecten: 'Trajecten', talenten: 'Talenten', beoordelingen: 'Beoordelingen', talenturen: 'TalentUren' }[String(tabel || '').toLowerCase()];  // v5.0: talentnetwerk (alleen management)
+  var namen = { scholen: 'Scholen', personen: 'Personen', kansen: 'Kansen', activiteiten: 'Activiteiten', taken: 'Acties', trajecten: 'Trajecten', talenten: 'Talenten', beoordelingen: 'Beoordelingen', talenturen: 'TalentUren' };  // v5.0: talentnetwerk (alleen management)
+  var naam = uitMap(namen, String(tabel || '').toLowerCase());  // v7.2: geen geërfde sleutels ('__proto__' gaf Object.prototype als tabel)
   if (!naam) throw new Error('Onbekende tabel.');
   var kop = TABELLEN[naam], cel = function (v) { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[";\n,]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   var regels = [kop.join(',')].concat(lees(naam).map(function (r) { return kop.map(function (k) { return cel(r[k]); }).join(','); }));
@@ -2180,7 +2183,7 @@ function apiSchooljaarOpslaan(sj) {
 // lijst: [{waarde, oud}] in de gewenste volgorde; oud = de waarde zoals geladen (leeg bij een nieuwe).
 function apiKeuzelijstOpslaan(sleutel, lijst) {
   alleenBeheerder();
-  var def = KEUZELIJSTEN[sleutel]; if (!def) throw new Error('Onbekende lijst.');
+  var def = uitMap(KEUZELIJSTEN, sleutel); if (!def) throw new Error('Onbekende lijst.');  // v7.2: geen geërfde sleutels
   var waarden = [], hernoem = {};
   (lijst instanceof Array ? lijst : []).forEach(function (x) {
     var w = klein(x && typeof x === 'object' ? x.waarde : x); if (!w) return;
@@ -2310,7 +2313,7 @@ function apiTrackVerwijderen(id) {
 /* ----- Huisstijl, teksten, tags en documenten ----- */
 
 function zetHuisstijlVeld(sleutel, waarde) {  // altijd binnen metLock
-  if (!HUISSTIJL_STANDAARD.hasOwnProperty(sleutel)) throw new Error('Onbekend huisstijlveld: ' + sleutel);
+  if (!HUISSTIJL_STANDAARD.hasOwnProperty(sleutel)) throw new Error('Onbekend huisstijlveld: ' + (sleutel == null || sleutel === '' ? '(leeg)' : String(sleutel)));  // v7.2: geen 'undefined' in de melding
   waarde = String(waarde == null ? '' : waarde);
   if (/^kleur_/.test(sleutel) && !/^#[0-9a-fA-F]{6}$/.test(waarde)) throw new Error('Kleur als #RRGGBB.');
   var b = blad('Huisstijl'), hit = lees('Huisstijl').filter(function (r) { return r.sleutel === sleutel; })[0];
@@ -2820,7 +2823,7 @@ function kandidaatSchrijven(o, oud, v, t, nieuwStatus, stil) {
   // v5.0: de inzet loopt: het talent heeft contact, de accountmanager beoordeelt na zes weken en daarna elk kwartaal (herhalende taak, zie v4.5)
   if (nieuwStatus === 'geplaatst' && k.talentId) {
     zetTalentContact(k.talentId, nu());
-    if (t.am) { var startD = parseDatum(k.start) || new Date(), eerste = new Date(startD.getTime() + 42 * 86400000); if (eerste < new Date()) eerste = plusDagen(7);
+    if (t.am) { var startD = parseDatum(k.start) || new Date(), eerste = middag(startD); eerste.setDate(eerste.getDate() + 42); if (eerste < new Date()) eerste = plusDagen(7);  // v7.2: kalenderdagen vanaf 12:00 (42 × 24 uur over de wissel naar wintertijd gaf een dag te vroeg)
       schrijf('Acties', { tekst: 'Beoordeel ' + naam + ' bij ' + t.school, eigenaar: t.am, deadline: datumStr(eerste), prio: 'midden', categorie: 'opvolgen', status: 'open', bron: 'bezetting', aangemaakt: nu(),
         schoolId: t.schoolId || '', trajectId: t.id, link: 'talent:' + k.talentId, herhaling: k.eind ? { eenheid: 'maand', interval: 3, tot: k.eind } : { eenheid: 'maand', interval: 3 } }); }
   }
@@ -3202,7 +3205,7 @@ function apiFacturenMaken(trajectId, opties) {
 }
 // CSV voor import in Exact Online (tot de directe koppeling er is): standaard de termijnen met status 'aangemaakt'.
 function apiFacturenExport(status) {
-  status = status || 'aangemaakt';
+  status = typeof status === 'string' && status ? status : 'aangemaakt';  // v7.2: alleen een tekst als status (een lijst of object gaf een TypeError)
   eis('facturatie', 'zien');  // v4.0: alleen termijnen van projecten die ik mag zien
   var tMap = perId(lees('Trajecten').filter(function (t) { return mag('facturatie', 'zien', t); })), sMap = perId(lees('Scholen'));
   var cel = function (v) { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
@@ -3392,7 +3395,7 @@ function breinLees(naam, inv, bronnen) {
     var van = parseDatum(inv.van), tot = parseDatum(inv.tot);
     if (!van || !tot || tot < van) throw new Error('Geef van en tot als yyyy-MM-dd.');
     if ((tot - van) / 86400000 > 31) throw new Error('Maximaal 31 dagen.');
-    return agendaItems(van, new Date(tot.getTime() + 86400000)).map(function (e) { return { titel: e.titel, start: e.start, eind: e.eind, heleDag: e.heleDag, locatie: e.locatie }; });
+    return agendaItems(van, new Date(tot.getFullYear(), tot.getMonth(), tot.getDate() + 1)).map(function (e) { return { titel: e.titel, start: e.start, eind: e.eind, heleDag: e.heleDag, locatie: e.locatie }; });  // v7.2: kalenderdag, niet 24 uur (zomertijd)
   }
   throw new Error('Onbekende tool.');
 }
@@ -3421,7 +3424,7 @@ function breinZoekCrm(zoekterm) {
 }
 // Ook gebruikt bij uitvoeren: de app kan de invoer aangepast hebben.
 function breinActieCheck(soort, inv) {
-  var def = BREIN_ACTIES[soort]; if (!def) throw new Error('Onbekende actie.');
+  var def = uitMap(BREIN_ACTIES, soort); if (!def) throw new Error('Onbekende actie.');  // v7.2: geen geërfde sleutels ('__proto__' passeerde de controle en brak op Object.keys)
   inv = (inv && typeof inv === 'object') ? inv : {};
   var o = {};
   Object.keys(def.properties).forEach(function (k) {
@@ -3986,7 +3989,7 @@ function roosterUitTekst(tekst) {
   return uit;
 }
 function uren90Dagen() {
-  var grens = isoWeekStr(new Date(Date.now() - 90 * 86400000)), per = {};
+  var grens = isoWeekStr(plusDagen(-90)), per = {};  // v7.2: kalenderdagen
   lees('TalentUren').forEach(function (u) { if (String(u.week) < grens) return; var x = per[String(u.talentId)] = per[String(u.talentId)] || { diensten: 0, noShows: 0, late: 0, uren: 0 }; x.diensten += Number(u.diensten) || 0; x.noShows += Number(u.noShows) || 0; x.late += Number(u.lateAfmeldingen) || 0; x.uren += Number(u.uren) || 0; });
   return per;
 }
@@ -4304,7 +4307,7 @@ function peilingRun() {
 }
 // Zes maanden geen inzet, contact of bevestiging: actief → slapend, met een heractivatiemail (één tik en het profiel staat weer op actief)
 function slapendRun() {
-  var grens = datumStr(new Date(Date.now() - 182 * 86400000)), idx = talentIndex();
+  var grens = datumStr(plusDagen(-182)), idx = talentIndex();  // v7.2: kalenderdagen
   var lijst = lees('Talenten').filter(function (t) {
     if (t.status !== 'actief') return false;
     var x = idx.per[String(t.id)] || leegTalentIndex();
@@ -4425,6 +4428,8 @@ function apiPortaalToon(token) {
 }
 function apiPortaalBeschikbaarheid(token, raster, uitzonderingen, alleenBevestigen) {
   var t = talentVanToken(token), o = { id: t.id, beschikbaarheidBevestigd: nu(), laatsteContact: datumStr(new Date()) };
+  alleenBevestigen = alleenBevestigen === true;  // v7.2: alleen een echte boolean bevestigt; een object of een verschoven argument maakt van aanpassen geen stil bevestigen
+  if (raster !== undefined && raster !== null && typeof raster !== 'object') throw new Error('Geen beschikbaarheid.');  // v7.2: het raster is een object per dag, geen tekst
   if (!alleenBevestigen) { if (raster) o.beschikbaarheid = beschikbaarheidIn(raster); if (uitzonderingen !== undefined && uitzonderingen !== null) o.uitzonderingen = uitzonderingenIn(uitzonderingen); }
   if (t.status === 'slapend') { o.status = 'actief'; o.statusSinds = nu(); }
   metLock(function () {
@@ -4693,7 +4698,7 @@ function projectLopend(t) {
 function datumStr(d) { return (d instanceof Date) ? Utilities.formatDate(d, tz(), 'yyyy-MM-dd') : String(d || ''); }
 function datumTijdStr(d) { return Utilities.formatDate(d, tz(), 'yyyy-MM-dd HH:mm'); }
 function nu() { return datumTijdStr(new Date()); }
-function plusDagen(n) { return new Date(Date.now() + n * 86400000); }
+function plusDagen(n) { var d = new Date(); d.setDate(d.getDate() + n); return d; }  // v7.2: kalenderdagen, niet n × 24 uur (rond middernacht op een zomertijdwisseldag zat de oude rekenwijze een dag ernaast)
 function parseDatum(s) {
   if (s instanceof Date) return s;
   s = String(s || '').trim(); if (!s) return null;
@@ -4701,7 +4706,7 @@ function parseDatum(s) {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] || 0), Number(m[5] || 0));
 }
 function dagenSinds(s) { var d = parseDatum(s); return d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null; }
-function dagenTot(s) { var d = parseDatum(s); return d ? Math.ceil((d.getTime() - Date.now()) / 86400000) : null; }
+function dagenTot(s) { var d = parseDatum(s); return d ? Math.round((middag(d) - middag(new Date())) / 86400000) : null; }  // v7.2: kalenderdagen (ceil over ms vanaf 00:00 zat in het uur rond middernacht op een wisseldag een dag ernaast)
 var DAGEN = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
 var MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
 function datumLang(d) { return DAGEN[d.getDay()] + ' ' + d.getDate() + ' ' + MAANDEN[d.getMonth()]; }
@@ -4714,6 +4719,7 @@ function slug(s) { return zonderAccenten(String(s || '').toLowerCase()).replace(
 function zonderAccenten(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 function uniek(lijst) { var uit = []; lijst.forEach(function (x) { if (x !== '' && x != null && uit.indexOf(x) < 0) uit.push(x); }); return uit; }
 function vind(naam, id) { return lees(naam).filter(function (r) { return String(r.id) === String(id); })[0] || null; }
+function uitMap(map, sleutel) { return Object.prototype.hasOwnProperty.call(map, sleutel) ? map[sleutel] : undefined; }  // v7.2: alleen eigen sleutels van een keuzetabel; 'constructor', 'toString' en '__proto__' uit Object.prototype tellen niet
 function mapUrl() { var id = P.getProperty('DRIVE_MAP_ID'); try { return id ? DriveApp.getFolderById(id).getUrl() : ''; } catch (e) { return ''; } }
 function naamUitAdres(van) { var m = String(van).match(/^"?([^"<]+?)"?\s*<|^([^@\s]+)@/); return (m && (m[1] || m[2]) || String(van)).trim(); }
 function escHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }

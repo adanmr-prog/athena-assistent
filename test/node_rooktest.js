@@ -2,7 +2,7 @@
 // Gebruik: node test/node_rooktest.js  → "ALLES GOED" of een lijst FOUT-regels (exitcode 1).
 var vm = require('vm'), fs = require('fs'), path = require('path'), R = path.join(__dirname, '..');
 var ctx = { console: console }; ctx.globalThis = ctx; vm.createContext(ctx);  // alleen console van buiten: JSON, Date en Array moeten uit de context zelf komen (instanceof)
-vm.runInContext(fs.readFileSync(path.join(R, 'demo/demo-backend.js'), 'utf8') + '\n;\n' + fs.readFileSync(path.join(R, 'backend/Code.gs'), 'utf8'), ctx, { filename: 'demo.js' });
+vm.runInContext(fs.readFileSync(path.join(R, 'demo/demo-backend.js'), 'utf8') + '\n;\n' + fs.readFileSync(process.env.CODE_GS || path.join(R, 'backend/Code.gs'), 'utf8'), ctx, { filename: 'demo.js' });  // v7.2: CODE_GS wijst naar een (gemuteerde) kopie van Code.gs voor test/mutatie_test.js
 ctx.demoStart('');
 
 var fouten = 0;
@@ -210,8 +210,21 @@ ctx.schrijf('Talenten', { id: 'tl-oud', status: 'slapend' });
 var bw = ctx.bewaartermijnRun(), oud2 = ctx.lees('Talenten').filter(function (t) { return t.id === 'tl-oud'; })[0];
 eis(bw === 1 && oud2.voornaam === 'Verwijderd' && oud2.email === '' && oud2.status === 'uitgeschreven' && oud2.portaalToken === '' && ctx.bewaartermijnRun() === 0, 'bewaartermijnRun: verstreken termijn zonder lopende inzet → geanonimiseerd, en niet nog eens');
 ctx._demoVerzonden.length = 0;
+// v7.2: de seed zet VOG-afgiftes relatief aan vandaag; hoeveel talenten een mail krijgen hangt dus van de datum af (20 in augustus–januari,
+// aflopend tot 7 eind juli, omdat steeds meer VOG's jong genoeg worden voor 1 augustus). De oude ondergrens (>= 15) klopte daardoor niet
+// tussen begin april en eind juli, wat test/tz_test.js met een vaste klok aan het licht bracht. De verwachting wordt nu onafhankelijk
+// uitgerekend uit de gegevens met de regel uit art. 34b WPO: groen = afgegeven op of na zes maanden vóór 1 augustus van het volgende
+// schooljaar; wie actief is of dan nog een lopende inzet heeft en niet groen is, krijgt een mail. Exacte gelijkheid in plaats van een drempel.
+var sjH = ctx.huidigSchooljaar(), jaarV = Number(sjH.slice(0, 4)) + 1, sjV = jaarV + '-' + (jaarV + 1), vogGrens = jaarV + '-02-01', startV = jaarV + '-08-01';
+var vogDocs = ctx.lees('TalentDocumenten'), vogKand = ctx.lees('Kandidaten');
+var vogLijst = ctx.lees('Talenten').filter(function (t) {
+  var loopt = vogKand.some(function (k) { return String(k.talentId) === String(t.id) && ctx.kandidaatGevuld(k) && (!k.eind || String(k.eind) >= startV); });
+  if (!(t.status === 'actief' || loopt)) return false;
+  return !vogDocs.some(function (dd) { return String(dd.talentId) === String(t.id) && String(dd.soort).toLowerCase() === 'vog' && dd.afgifte && String(dd.afgifte).slice(0, 10) >= vogGrens; });
+});
+var vogMails = vogLijst.filter(function (t) { return t.email; }).length;
 var vr = ctx.vogRun(true);
-eis(vr >= 15 && ctx._demoVerzonden.length === vr && /Nieuwe VOG voor schooljaar/.test(ctx._demoVerzonden[0].subject) && acties().some(function (a) { return /VOG vernieuwen voor \d+ talenten vóór schooljaar/.test(a.tekst) && a.eigenaar === 'Iris Mulder'; }), 'vogRun: iedereen zonder verse VOG voor volgend schooljaar krijgt een mail; het talentteam één verzameltaak');
+eis(vogLijst.length >= 5 && vr === vogMails && ctx._demoVerzonden.length === vr && /Nieuwe VOG voor schooljaar/.test(ctx._demoVerzonden[0].subject) && acties().some(function (a) { return a.tekst === 'VOG vernieuwen voor ' + vogLijst.length + ' talenten vóór schooljaar ' + sjV && a.eigenaar === 'Iris Mulder'; }), 'vogRun: iedereen zonder verse VOG voor volgend schooljaar krijgt een mail (' + vogMails + ' van ' + vogLijst.length + ', schooljaar ' + sjV + '); het talentteam één verzameltaak');
 ctx._demoVerzonden.length = 0;
 var ar = ctx.aanmeldingenRun(), lieke = ctx.lees('Talenten').filter(function (t) { return t.email === 'lieke.vos@mail.example'; })[0];
 eis(/1 nieuw, 0 bestaand, 1 mails/.test(ar) && !!lieke && lieke.status === 'aangemeld' && lieke.bron === 'website' && lieke.door === 'Formulier' && JSON.parse(lieke.functies).join() === 'huiswerkbegeleider,examentrainer' && JSON.parse(lieke.sectoren).join() === 'vo' && JSON.parse(lieke.beschikbaarheid).ma.join() === '0,2,0' && JSON.parse(lieke.beschikbaarheid).do.join() === '2,2,0' && String(lieke.portaalToken).length === 40 && lieke.toestemmingDatum === plusDagen(-1) && lieke.postcode === '3581 KL', 'aanmeldingenRun: de formulierrij wordt een profiel (functies, sector, beschikbaarheid uit tekst, toestemming = tijdstempel, token)');
@@ -341,7 +354,7 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
   eis(b1.rijen > 0 && b2.al === true && b2.rijen === 0, 'bevriezen schrijft de prognose van deze maand één keer');
   // Exact-import (fictieve export): 20261033 is nu betaald, 20261051 heeft een ander bedrag, 99990001 staat alleen in Exact, 20261052 ontbreekt in de export
   var csv = 'Factuurnummer;Factuurdatum;Debiteur;Bedrag;Betaaldatum\n' + ['20261033;' + nt.datum.split('-').reverse().join('-') + ';Noorderhof;1.950,00;' + plusDagen(-1).split('-').reverse().join('-'),
-    '20261051;' + plusDagen(-5).split('-').reverse().join('-') + ';Esdoorn;1.100,00;', '99990001;' + plusDagen(-3).split('-').reverse().join('-') + ';Onbekend;500,00;'].join('\n');
+    '20261051;' + plusDagen(-5).split('-').reverse().join('-') + ';Esdoorn;1.100,00;', '99990001;' + plusDagen(-1).split('-').reverse().join('-') + ';Onbekend;500,00;'].join('\n');  // v7.2: het csv-venster loopt tot gisteren, zodat 20261052 (verzonden d(-2)) er het hele jaar in valt, ook als 31 oktober allang voorbij is
   var proef = roep(SOPHIE, 'apiExactImport', csv, {});
   eis(proef.gekoppeld === 2 && proef.afwijkend.length === 1 && proef.afwijkend[0].nummer === '20261051' && proef.alleenExact.length === 1 && proef.alleenExact[0].nummer === '99990001' && proef.alleenAthena.some(function (x) { return x.nummer === '20261052'; }) && !proef.toegepast, 'Exact controleren: gekoppeld, bedrag wijkt af, alleen in Exact, alleen in Athena');
   eis(ctx.lees('Facturen').filter(function (f) { return f.factuurnummer === '20261033'; })[0].status === 'verzonden', 'controleren verandert niets');
@@ -361,13 +374,17 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
   eis(voor.tijdlijn.every(function (a) { return a.vorm || a.type === 'fase' || a.type === 'taak'; }), 'elke tijdlijnregel heeft een vorm (behalve mijlpaal en taak)');
   var school = ctx.lees('Scholen').filter(function (x) { return x.eigenaar === 'Lars Visser'; })[0];
   var wa = roep(LARS, 'apiActiviteitToevoegen', { vorm: 'whatsapp', schoolId: school.id, onderwerp: 'Rooster afgestemd', tekst: 'via WhatsApp' });
+  eis(String(ctx.vind('Scholen', school.id).laatsteContact).slice(0, 10) === plusDagen(0) && String(ctx.vind('Kansen', 'k16').laatsteContact).slice(0, 10) === plusDagen(0), 'een gelogd gesprek zet laatsteContact van de school en haar open kans op vandaag');  // v7.2: mutatietest (laatste_contact_niets); seed: s1 had gisteren contact, k16 is haar open kans
   var ev = roep(LARS, 'apiActiviteitToevoegen', { vorm: 'evaluatie-online', schoolId: school.id, onderwerp: 'Evaluatie periode 1' });
   var rijWa = ctx.vind('Activiteiten', wa.id);
   eis(wa.type === 'gesprek' && wa.vorm === 'whatsapp' && rijWa.vorm === 'whatsapp' && ev.type === 'afspraak' && ev.vorm === 'evaluatie-online', 'WhatsApp telt als gesprek, een evaluatiegesprek als afspraak; de vorm staat in de Sheet');
   var oud = roep(LARS, 'apiActiviteitToevoegen', { type: 'gesprek', schoolId: school.id, onderwerp: 'Oude aanroep met alleen type' });
   eis(oud.vorm === 'call', 'een aanroep met alleen type (oude app, assistent) krijgt de vorm van het type');
+  var bel = roep(LARS, 'apiActiviteitToevoegen', { vorm: 'call', schoolId: school.id, onderwerp: 'Belletje' });  // v7.2: mutatietest (vorm_call_afspraak)
+  eis(bel.type === 'gesprek' && bel.vorm === 'call' && ctx.vind('Activiteiten', bel.id).type === 'gesprek', 'een call telt als gesprek (type uit TYPE_VAN_VORM)');
+  eis(ctx.TYPE_VAN_VORM.call === 'gesprek' && ctx.TYPE_VAN_VORM.whatsapp === 'gesprek' && ctx.TYPE_VAN_VORM['afspraak-online'] === 'afspraak', 'TYPE_VAN_VORM: call en whatsapp zijn gesprekken, een afspraak een afspraak');  // v7.2
   var na = roep(SOPHIE, 'apiActiviteiten', '', '', '', '');
-  eis(na.totaal === voor.totaal + 3 && (na.perType.gesprek || 0) === (voor.perType.gesprek || 0) + 2 && (na.perType.afspraak || 0) === (voor.perType.afspraak || 0) + 1, 'de rapporttelling per type telt de nieuwe soorten mee in de bestaande cijfers');
+  eis(na.totaal === voor.totaal + 4 && (na.perType.gesprek || 0) === (voor.perType.gesprek || 0) + 3 && (na.perType.afspraak || 0) === (voor.perType.afspraak || 0) + 1, 'de rapporttelling per type telt de nieuwe soorten mee in de bestaande cijfers');  // v7.2: + de call
   var gew = roep(LARS, 'apiActiviteitOpslaan', { id: wa.id, vorm: 'afspraak-fysiek', _oud: { vorm: 'whatsapp' } });
   eis(gew.vorm === 'afspraak-fysiek' && ctx.vind('Activiteiten', wa.id).type === 'afspraak', 'de soort wijzigen zet ook het type');
   eis(/Onbekend soort/.test(faalt(LARS, 'apiActiviteitOpslaan', { id: wa.id, vorm: 'telegram' })), 'een onbekende vorm wordt geweigerd');
@@ -382,6 +399,55 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
   eis(typeof hS.openVacatures === 'number' && typeof hS.teBezetten === 'number' && hS.teFactureren === undefined, 'Home van talent: open vacatures en te bezetten plekken');
   eis(hL.teFactureren === undefined && typeof hL.lopendeProjecten === 'number', 'Home van de consultant: geen facturatiecijfer');
   eis(hM.lopendeProjecten >= hF.lopendeProjecten && hM.lopendeProjecten === ctx.lees('Trajecten').filter(ctx.projectLopend).length, 'management ziet alle lopende projecten');
+})();
+
+/* ---- v7.2: robuust — invoercontroles uit de fuzzer, lezen volgt de rechtentabel, portaal, kalenderdagen rond de zomertijd ---- */
+(function () {
+  var CtxDate = vm.runInContext('Date', ctx);  // de Date van de context (instanceof in Code.gs; test/tz_klok.js vervangt hem onder een vaste klok)
+  var kal = function (n, basis) { var b = basis || new CtxDate(); return new CtxDate(b.getFullYear(), b.getMonth(), b.getDate() + n, 12); };  // kalenderrekenen met componenten (12:00), zomertijdbestendig
+  // fuzz FZ-1/FZ-2: een lijst of object waar een tekst of een object hoort
+  eis(roep(SOPHIE, 'apiFacturenExport', []).bestandsnaam.indexOf('facturen-aangemaakt-') === 0 && roep(FEMKE, 'apiFacturenExport', {}).bestandsnaam.indexOf('facturen-aangemaakt-') === 0 && roep(SOPHIE, 'apiFacturenExport', 'verzonden').bestandsnaam.indexOf('facturen-verzonden-') === 0, 'apiFacturenExport: alleen een tekst telt als status, anders de standaard aangemaakt');
+  eis(/minstens één mijlpaal/.test(faalt(SOPHIE, 'apiMijlpalenOpslaan', [null])) && /minstens één mijlpaal/.test(faalt(SOPHIE, 'apiMijlpalenOpslaan', [{ mijlpaal: 'intake' }, 'tekst'])) && /minstens één mijlpaal/.test(faalt(SOPHIE, 'apiMijlpalenOpslaan', [])), 'apiMijlpalenOpslaan: elk element moet een object zijn');
+  // fuzz FZ-3 t/m FZ-7: sleutels uit Object.prototype zijn geen keuze (ze gaven een functie of Object.prototype als tabel/actie en daarmee een TypeError)
+  ['constructor', 'toString', '__proto__', 'hasOwnProperty'].forEach(function (s) {
+    eis(/Onbekend soort/.test(faalt(LARS, 'apiVerwijder', s, 'tk2')) && /Onbekende tabel/.test(faalt(SOPHIE, 'apiExport', s)) && /Onbekend tabblad/.test(faalt(SOPHIE, 'apiExportAlles', s, 0, 50)) &&
+      /Onbekende actie/.test(faalt(FEMKE, 'apiBreinUitvoeren', { soort: s, invoer: { tekst: 'x' } })) && /Onbekend contenttype/.test(faalt(SOPHIE, 'apiMaakContent', s, 'Onderwerp')) && /Onbekende lijst/.test(faalt(SOPHIE, 'apiKeuzelijstOpslaan', s, [])) && /Onbekend huisstijlveld: /.test(faalt(SOPHIE, 'apiZetHuisstijl', s, 'x')),
+      'geërfde sleutel "' + s + '" is geen soort, tabel, tabblad, actie, contenttype, lijst of huisstijlveld');
+  });
+  eis(/Onbekend tabblad \(leeg\)/.test(faalt(SOPHIE, 'apiExportAlles')) && /Onbekend tabblad \(leeg\)/.test(faalt(SOPHIE, 'apiExportAlles', '')) && roep(SOPHIE, 'apiExportAlles', 'Scholen', 0, 5).rijen.length === 5, 'apiExportAlles: zonder tabblad een melding met (leeg), niet undefined; een echt tabblad werkt');
+  eis(/Onbekend huisstijlveld: \(leeg\)/.test(faalt(SOPHIE, 'apiZetHuisstijl')) && /Onbekend huisstijlveld: kleur_x$/.test(faalt(SOPHIE, 'apiZetHuisstijl', 'kleur_x', '#000000')), 'apiZetHuisstijl: de melding noemt de sleutel of (leeg)');
+  // rechten R2: ook lezen van een school of persoon volgt de rechtentabel (elk team heeft nu 'alles' op relaties.zien; alleen de tabel bepaalt dat)
+  eis(!faalt(SEM, 'apiSchool', 's1') && !faalt(FEMKE, 'apiPersoon', 'p1') && !faalt(LARS, 'apiSchool', 's1'), 'apiSchool en apiPersoon: elk team mag lezen volgens de tabel');
+  var oudRelaties = ctx.RECHTEN.relaties.talent; ctx.RECHTEN.relaties.talent = ['geen', 'geen'];
+  try { eis(/toegang/.test(faalt(SEM, 'apiSchool', 's1')) && /toegang/.test(faalt(SEM, 'apiPersoon', 'p1')) && !faalt(LARS, 'apiSchool', 's1'), 'apiSchool en apiPersoon: zonder relaties.zien in de tabel geweigerd (alleen voor dat team)'); }
+  finally { ctx.RECHTEN.relaties.talent = oudRelaties; }
+  // portaal R3: alleen een echte boolean bevestigt; een tekst als raster (verschoven argumenten) wordt geweigerd en bevestigt of logt niets
+  ctx._demoCache = {};  // het budget van 30 verzoeken per token is hierboven al opgebruikt
+  var portaalActs = function () { return ctx.lees('Activiteiten').filter(function (a) { return a.talentId === 'tl2' && a.door === 'Portaal'; }); }, actVoor = portaalActs().length;
+  var r3 = portaal(TOKEN, 'apiPortaalBeschikbaarheid', TOKEN2, { ma: [1, 1, 1] }, [], false);
+  eis(!r3.ok && /Geen beschikbaarheid/.test(r3.fout) && portaalActs().length === actVoor, 'portaal: een tekst als raster (token van een ander als eerste argument) wordt geweigerd zonder te bevestigen of te loggen');
+  var r3b = portaal(TOKEN, 'apiPortaalBeschikbaarheid', { ma: [1, 1, 1], di: [0, 0, 0], wo: [0, 0, 0], do: [0, 0, 0], vr: [0, 0, 0], za: [0, 0, 0], zo: [0, 0, 0] }, [], { toch: true });
+  eis(r3b.ok && JSON.parse(ctx.vind('Talenten', 'tl2').beschikbaarheid).ma.join() === '1,1,1' && /aangepast via mail/.test(portaalActs().pop().onderwerp), 'portaal: een object als alleenBevestigen telt niet als bevestigen; het raster wordt gewoon aangepast en zo gelogd');
+  // tijdzone TZ-3/TZ-5: plusDagen en dagenTot rekenen in kalenderdagen (test/tz_test.js draait deze rooktest ook onder vaste klokken rond de zomertijdwissel)
+  eis([1, -1, 7, 14, -60, -365].every(function (n) { return plusDagen(n) === ctx.datumStr(kal(n)); }), 'plusDagen rekent in kalenderdagen');
+  eis(ctx.dagenTot(ctx.datumStr(kal(0))) === 0 && ctx.dagenTot(ctx.datumStr(kal(1))) === 1 && ctx.dagenTot(ctx.datumStr(kal(2))) === 2 && ctx.dagenTot(ctx.datumStr(kal(-1))) === -1 && ctx.dagenTot(ctx.datumStr(kal(-3))) === -3 && ctx.dagenTot('') === null, 'dagenTot rekent in kalenderdagen: vandaag 0, morgen 1, gisteren -1');
+  // tijdzone TZ-4: de beoordelingstaak na plaatsing staat 42 kalenderdagen na de start, ook als de zomertijd in die zes weken wisselt (eerste toekomstige start waarbij dat zo is)
+  var startK = null;
+  for (var zoek = 1; zoek < 400 && !startK; zoek++) { var a4 = kal(zoek); if (a4.getTimezoneOffset() !== kal(42, a4).getTimezoneOffset()) startK = a4; }
+  if (!startK) { startK = kal(10); console.log('info tijdzone zonder zomertijd (' + Intl.DateTimeFormat().resolvedOptions().timeZone + '): start over tien dagen, zonder wissel in de zes weken'); }
+  var startS = ctx.datumStr(startK), verwachtK = ctx.datumStr(kal(42, startK));
+  roep(RUBEN, 'apiKandidaatOpslaan', { id: 'c12', status: 'geplaatst', start: startS, _oud: { status: 'voorgesteld' } });  // Sara Peeters bij Kompas College (project t9 van Ruben)
+  var bk = acties().filter(function (a) { return /Beoordeel Sara Peeters/.test(a.tekst); })[0];
+  eis(!!bk && bk.deadline === verwachtK && ctx.vind('Kandidaten', 'c12').start === startS, 'geplaatst met start ' + startS + ': beoordelingstaak op ' + verwachtK + ' (42 kalenderdagen, over de zomertijdwissel heen)');
+  // tijdzone TZ-7: de agendavensters eindigen op een kalenderdag (00:00 van de dag erna), niet 24 uur na 00:00
+  var d10 = kal(10), d6 = kal(6), d7 = kal(7);
+  ctx._demoAgenda.push(ctx._demoEvent('ev-tz-laat10', 'Laat overleg dag 10 (tz-test)', new CtxDate(d10.getFullYear(), d10.getMonth(), d10.getDate(), 23, 30), 30, ''),
+    ctx._demoEvent('ev-tz-erna10', 'Nachtelijk overleg dag 11 (tz-test)', new CtxDate(d10.getFullYear(), d10.getMonth(), d10.getDate() + 1, 0, 30), 30, ''),
+    ctx._demoEvent('ev-tz-laat6', 'Laat overleg dag 6 (tz-test)', new CtxDate(d6.getFullYear(), d6.getMonth(), d6.getDate(), 23, 30), 30, ''),
+    ctx._demoEvent('ev-tz-vroeg7', 'Vroeg overleg dag 7 (tz-test)', new CtxDate(d7.getFullYear(), d7.getMonth(), d7.getDate(), 0, 30), 30, ''));
+  var agTitels = roep(SOPHIE, 'apiAgenda', plusDagen(-3), ctx.datumStr(d10)).events.map(function (e) { return e.titel; }), homeTitels = roep(SOPHIE, 'apiHome').agenda.map(function (e) { return e.titel; });
+  eis(agTitels.indexOf('Laat overleg dag 10 (tz-test)') >= 0 && agTitels.indexOf('Nachtelijk overleg dag 11 (tz-test)') < 0, 'apiAgenda: een afspraak om 23:30 op de laatste dag valt in het venster, 00:30 de dag erna niet');
+  eis(homeTitels.indexOf('Laat overleg dag 6 (tz-test)') >= 0 && homeTitels.indexOf('Vroeg overleg dag 7 (tz-test)') < 0, 'apiHome: de agenda loopt zeven kalenderdagen (dag 6 om 23:30 erin, dag 7 om 00:30 niet)');
 })();
 
 /* ---- bestaande schermen blijven werken ---- */

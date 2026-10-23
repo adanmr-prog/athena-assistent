@@ -336,6 +336,14 @@ with sync_playwright() as p:
     page.click('.zb-item[data-desk="financien"]'); page.wait_for_selector('table.fin [data-finopen]')
     page.click('table.fin [data-finopen]'); page.wait_for_selector('table.fin td.fin-project'); page.wait_for_timeout(150)
     assert page.locator('[data-finexact]').is_visible(), 'financien: Exact-knop voor management'
+    # v7.2: prognose vastleggen en de Exact-afstemming (controleren, toepassen) doorlopen; de mock geeft de vorm van Code.gs terug
+    page.click('[data-finbevries]'); page.wait_for_selector('[data-finbevries]', state='hidden'); page.wait_for_selector('table.fin [data-finopen]')
+    page.click('[data-finexact]'); page.wait_for_selector('#venster.aan #vf-exactbestand')
+    page.set_input_files('#vf-exactbestand', {'name': 'exact.csv', 'mimeType': 'text/csv', 'buffer': b'Factuurnummer;Factuurdatum;Debiteur;Bedrag;Betaaldatum\nF2026-001;01-10-2026;Lyceum Demo;1.950,00;15-10-2026\n'})
+    page.wait_for_selector('#venster [data-exactcontrole]:not([disabled])'); page.click('#venster [data-exactcontrole]'); page.wait_for_selector('#exactUit .kaart')
+    assert 'gekoppeld' in page.inner_text('#exactUit') and 'F9999' in page.inner_text('#exactUit'), 'financien: uitkomst van de Exact-controle'
+    page.click('#venster [data-exacttoepassen]'); page.wait_for_selector('#exactUit .kaart:has-text("1 bijgewerkt.")')  # de confirm wordt door de dialoog-handler hierboven geaccepteerd
+    page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden'); page.wait_for_selector('table.fin [data-finopen]')
     page.click('[data-finkas="1"]'); page.wait_for_selector('[data-finkas="1"].aan')
     page.screenshot(path=OUT + '/29b_desk_financien.png')
     page.click('.zb-item[data-desk="rapporten"]'); page.wait_for_selector('.tabel'); page.wait_for_timeout(150)
