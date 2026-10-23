@@ -6,7 +6,8 @@
 #   (3)   het gefocuste element heeft een zichtbare focusstijl: outline-style ≠ none met outline-width > 0 (en niet transparant),
 #         of een box-shadow/border-color die verschilt van de niet-gefocuste stijl;
 #   (4)   Enter op een gefocuste rij/kaart met data-crm-open opent het detail; Escape sluit een venster of de commandobalk en
-#         geeft de focus terug aan het element dat hem opende;
+#         geeft de focus terug aan het element dat hem opende; (4b, iOS-review R2) Enter op een sleepbare taakrij in de weekweergave
+#         vult het bewerkvenster precies één keer (twee handlers luisteren naar Enter; vóór de fix opende de taak twee keer);
 #   (5)   Ctrl+K opent de commandobalk, typen filtert, pijl omlaag + Enter kiest, Escape sluit;
 #   (6)   geen focus-val: na Escape of sluiten kun je verder tabben.
 # Gebruik: python3 test/toetsenbord.py — print per controle "ok   …" of "FOUT …" en eindigt met ALLES GOED (exitcode 0) of
@@ -324,6 +325,21 @@ with sync_playwright() as p:
                 if not dicht: page.evaluate('sluitVenster()')
                 verder_tabben(page, 'sophie/taken', r)
         else: fout('sophie/taken: geen taakrij krijgt focus met Tab')
+        # (4b) v7.2 (iOS-review R2): een sleepbare taakrij (data-sleep, weekweergave en desktop-agenda) heeft twee Enter-handlers: de sneltoetsen
+        # en de kaart-handler. Tel hoe vaak het venster gevuld wordt: precies één keer. openVenster is een globale functie; de teller vervangt hem tijdelijk.
+        page.evaluate("deskNaar('taken')"); wacht(page)
+        page.evaluate("CRM.taakWeergave = 'week'; zetOpslag('aa_taakweergave', 'week'); renderCrm();"); wacht(page, 500)
+        rij = page.evaluate(HULP + """(function () { var r = document.querySelector('.view.actief .rij[data-sleep^="taak:"]'); if (!r) return null;
+          window.__vensterVul = 0; var ov = openVenster; window.__openVensterOud = ov; window.openVenster = function (h) { window.__vensterVul++; return ov(h); };
+          r.focus(); return beschrijf(r); })()""")
+        if rij:
+            page.keyboard.press('Enter'); wacht(page, 500)
+            vul = page.evaluate('window.__vensterVul'); venster = page.locator('#venster.aan').count() > 0
+            r['toetsen']['enterSleepbareRij'] = {'rij': rij, 'venster': venster, 'vensterGevuld': vul}
+            (ok if venster and vul == 1 else fout)('sophie/taken (week): Enter op de sleepbare taakrij %s → venster %s, %d keer gevuld (verwacht precies 1)' % (kort(rij), 'open' if venster else 'dicht', vul))
+            page.evaluate("window.openVenster = window.__openVensterOud; if (document.querySelector('#venster.aan')) sluitVenster();")
+        else: fout('sophie/taken (week): geen sleepbare taakrij (.rij[data-sleep^="taak:"]) in de weekweergave')
+        page.evaluate("CRM.taakWeergave = 'alles'; zetOpslag('aa_taakweergave', 'alles'); renderCrm();"); wacht(page, 300)
     # (5) commandobalk
     page.evaluate("deskNaar('home')"); wacht(page)
     r = next(x for x in rapport if x['rol'] == 'sophie' and x['scherm'] == 'home')

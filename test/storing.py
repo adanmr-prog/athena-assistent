@@ -6,9 +6,12 @@
 #   C  offline                          Home uit aa_cache_home, een actie geeft een toast, na online werkt het weer zonder herladen
 #   D  {"ok":false,"fout":"secret"}     koppelscherm precies één keer, geen lus van verzoeken
 #   E  antwoord is geen JSON (HTML)     nette toast, geen pageerror (met status 503 en met status 200)
+#   G  /api antwoordt nooit             (iOS-review R1) na de time-out van run() (25 s) een toast "de server reageert niet", het verzoek is
+#                                       afgebroken, tekst blijft in het veld, knop weer bruikbaar, geen spinner; ook bij het laden van een detail
 #   F  sw.js met een andere CACHE       nieuwe shell in de nieuwe cache, oude cache weg, na reload de nieuwe versie
 # Gebruik: python3 test/storing.py [--poort 8786]. Screenshots: test/shots/robuust/storing_<X>.png. Eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
-# Grens: de totale looptijd blijft onder 6 minuten; de wachttijden zijn 8 s (B, traag) en 5 s (D, tellen). Niets anders is weggelaten.
+# Grens: de totale looptijd blijft onder 6 minuten; de wachttijden zijn 8 s (B, traag), 5 s (D, tellen) en 2 × 25 s (G, de echte time-out van
+# run(); niet verkort, anders test hij de constante niet). Niets anders is weggelaten.
 import os, sys, re, json, time, subprocess, urllib.request
 os.environ.setdefault('PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS', '1')  # Chromium: ook de verzoeken van de service worker via context.route (nodig voor F)
 from playwright.sync_api import sync_playwright
@@ -61,6 +64,7 @@ def api_route(route, request):
     if m == 'html200': return route.fulfill(status=200, content_type='text/html', body=HTML_FOUT)
     if m == 'html503': return route.fulfill(status=503, content_type='text/html', body=HTML_FOUT)
     if m == 'vasthouden' and fn == 'apiActiviteitToevoegen': MODUS['vast'].append(route); return  # blijft hangen tot de test hem loslaat
+    if m == 'nooit': MODUS['vast'].append(route); return  # v7.2 (G): geen enkel antwoord, zoals een fetch die iOS laat hangen; alleen de app zelf kan afbreken
     return route.continue_()
 
 # ---- hulpjes --------------------------------------------------------------------------------------------------------------
@@ -132,6 +136,14 @@ try:
     BEZIG = set()
     pg.on('request', lambda r: BEZIG.add(r) if r.method == 'POST' and API_RE.search(r.url) else None)
     pg.on('requestfinished', lambda r: BEZIG.discard(r)); pg.on('requestfailed', lambda r: BEZIG.discard(r))
+    AFGEBROKEN = []  # v7.2 (G): API-verzoeken die de pagina zelf afbrak (AbortController), met de functienaam en de reden
+    def afgebroken(r):
+        if r.method != 'POST' or not API_RE.search(r.url): return
+        fn = ''
+        try: fn = json.loads(r.post_data or '{}').get('fn', '')
+        except Exception: pass
+        AFGEBROKEN.append((round(time.time() - T0, 2), fn, r.failure or ''))
+    pg.on('requestfailed', afgebroken)
     def rust(ms=10000):  # wachten tot er geen API-verzoek meer onderweg is (in plaats van networkidle, dat op externe fonts kan blijven hangen)
         t = time.time()
         while BEZIG and time.time() - t < ms / 1000.0: pg.wait_for_timeout(100)
@@ -299,6 +311,49 @@ try:
         w = spinner_weg(pg); ok('E geen spinner > 5 s (200)', w is not None)
         pg.click('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(300); MODUS['m'] = 'door'
     scenario('E', scen_e, pg, ctx)
+
+    # ================================================================ G: de server antwoordt nooit (v7.2, iOS-review R1)
+    # iOS laat een lopende fetch na een netwerkwissel of een pauze op de achtergrond vaak minutenlang hangen zonder fout. run() heeft daarom een
+    # time-out van 25 s (AbortController); de mock houdt hier elk verzoek vast en antwoordt nooit, zodat alleen die time-out de app kan redden.
+    def scen_g():
+        open_school(pg, 0)
+        tekst = 'Storingstest G: notitie zonder antwoord van de server'
+        notitie_openen(pg, tekst)
+        MODUS['m'] = 'nooit'; del MODUS['vast'][:]; del AFGEBROKEN[:]; toast_wis(pg)
+        t_klik = time.time(); pg.click('#crmComposer [data-cf-opslaan]'); pg.wait_for_timeout(1500)
+        ok('G verzoek onderweg en vastgehouden', len(MODUS['vast']) == 1, '%d verzoeken vastgehouden' % len(MODUS['vast']))
+        ok('G knop Opslaan uitgeschakeld tijdens het wachten', pg.locator('#crmComposer [data-cf-opslaan][disabled]').count() == 1)
+        t = toast_wacht(pg, 32000); duur = round(time.time() - t_klik, 1); metingen['timeout_actie_s'] = duur; metingen['toast_timeout'] = t
+        shot(pg, 'G')
+        ok('G toast na de time-out van run() (%.1f s, verwacht 25–31 s)' % duur, 'Niet gelukt' in t and 24.0 <= duur <= 31.0, t)
+        ok('G melding zegt dat de server niet reageert, in gewoon Nederlands', 'reageert niet' in t and nederlands(t) and leesbaar(t), t)
+        pg.wait_for_timeout(300)
+        ok('G de app heeft het verzoek zelf afgebroken (AbortController)', any(x[1] == 'apiActiviteitToevoegen' for x in AFGEBROKEN), 'afgebroken: %s' % AFGEBROKEN[:4])
+        ok('G tekst blijft in het veld na de time-out', pg.input_value('#crmComposer #cf-tekst') == tekst)
+        ok('G knop Opslaan weer bruikbaar', pg.locator('#crmComposer [data-cf-opslaan]:not([disabled])').count() == 1)
+        w = spinner_weg(pg); ok('G geen spinner > 5 s na de time-out (detail)', w is not None, 'spinners: %s' % spinner_zichtbaar(pg))
+        # G2: een detail laden zonder antwoord — de spinner mag niet blijven staan, het detail meldt dat het niet kon laden
+        toast_wis(pg); del AFGEBROKEN[:]; naar(pg, 'contacten'); pg.wait_for_timeout(600)
+        ok('G2 Contacten toont de lijst uit het geheugen', pg.locator('#crmInhoud [data-crm-open^="school:"]').count() > 0)
+        t_klik = time.time(); pg.locator('#crmInhoud [data-crm-open^="school:"]').nth(1).click()
+        t = toast_wacht(pg, 32000); duur = round(time.time() - t_klik, 1); metingen['timeout_laden_s'] = duur
+        ok('G2 toast na de time-out bij het laden van een school (%.1f s)' % duur, 'Niet gelukt' in t and 'reageert niet' in t and duur <= 31.0, t)
+        w = spinner_weg(pg); ok('G2 geen spinner > 5 s na de time-out (school openen)', w is not None, 'spinners: %s' % spinner_zichtbaar(pg))
+        ok('G2 detail meldt dat het niet kon laden, met Terug', 'Kon dit niet laden' in pg.inner_text('#crmDetailScherm') and pg.locator('#crmDetailScherm [data-crm-terug]').count() == 1)
+        ok('G2 het laadverzoek is afgebroken door de app', any(x[1] == 'apiSchool' for x in AFGEBROKEN), 'afgebroken: %s' % AFGEBROKEN[:4])
+        shot(pg, 'G2')
+        MODUS['m'] = 'door'
+        for r in MODUS['vast']:
+            try: r.continue_()
+            except Exception: pass
+        del MODUS['vast'][:]
+        pg.click('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(400)
+        pg.locator('#crmInhoud [data-crm-open^="school:"]').first.click()
+        try: pg.wait_for_selector('#crmDetailScherm .d-naam h2', timeout=10000); detail = True
+        except Exception: detail = False
+        ok('G2 daarna werkt een school openen weer zonder herladen', detail)
+        if pg.locator('#crmDetailScherm [data-crm-terug]').count(): pg.click('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(300)
+    scenario('G', scen_g, pg, ctx)
 
     # ================================================================ F: update van de service worker (nieuwe versie)
     # Chromium haalt sw.js bij een update-controle op in het browserproces: dat verzoek is niet te onderscheppen met page.route, context.route

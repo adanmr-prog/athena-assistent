@@ -111,8 +111,9 @@
   .veld input, .veld select, .veld textarea { width: 100%; border: 1.5px solid var(--lijn); background: var(--wit); border-radius: 10px; padding: 9px 12px; outline: none; }
   .veld textarea { min-height: 84px; resize: vertical; line-height: 1.45; }
   .veld input:focus, .veld select:focus, .veld textarea:focus { border-color: var(--paars); }
-  .invoer:focus-within, .balk select:focus-visible, .filters select:focus-visible, .filterbalk select:focus-visible { border-color: var(--paars); box-shadow: 0 0 0 2px var(--paars-l); }  /* v7.2: zichtbare toetsenbordfocus op zoekvelden en keuzelijsten (outline none zonder vervanging, WCAG 2.4.7) */
-  .invoer input:focus-visible { box-shadow: inset 0 -2px 0 var(--paars); }  /* v7.2: ook het veld zelf toont zijn focus (streep onder de tekst), niet alleen de omlijsting eromheen */
+  .invoer:focus-within { border-color: var(--paars); box-shadow: 0 0 0 2px var(--paars-l); }  /* v7.2: zichtbare toetsenbordfocus op zoekvelden en keuzelijsten (outline none zonder vervanging, WCAG 2.4.7); los van :focus-visible, want iOS < 15.4 kent die niet en zou dan de hele lijst negeren */
+  .balk select:focus-visible, .filters select:focus-visible, .filterbalk select:focus-visible { border-color: var(--paars); box-shadow: 0 0 0 2px var(--paars-l); }
+  body.desk .invoer input:focus-visible { box-shadow: inset 0 -2px 0 var(--paars); }  /* v7.2: ook het veld zelf toont zijn focus (streep onder de tekst), niet alleen de omlijsting eromheen; alleen op desktop, op de telefoon matcht :focus-visible op een tekstveld ook na een tik */
   .velden-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }  /* v2.0: datetime-velden op iOS mogen het raster niet oprekken */
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .chip { font-size: var(--fs-klein); font-weight: 600; border: 1.5px solid var(--lijn); background: var(--wit); border-radius: 999px; padding: 5px 12px; cursor: pointer; color: var(--inkt2); }
@@ -1259,7 +1260,7 @@
     var t = leesOpslag('aa_token'), tot = Number(leesOpslag('aa_token_tot')) || 0, r = leesOpslag('aa_refresh');
     if (!SERVER || !t || !r || tot - Date.now() > 60000) return Promise.resolve(t);
     if (_tokenVersBezig) return _tokenVersBezig;  // v6.1: één vernieuwing tegelijk: na het hervatten van de PWA vuren meerdere run()'s, en Supabase trekt de sessie in als een refresh-token twee keer wordt gebruikt
-    _tokenVersBezig = fetch(SERVER.supabaseUrl + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SERVER.anonKey }, body: JSON.stringify({ refresh_token: r }) })
+    _tokenVersBezig = metTimeout(function (signal) { return fetch(SERVER.supabaseUrl + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SERVER.anonKey }, body: JSON.stringify({ refresh_token: r }), signal: signal }); }, RUN_TIMEOUT_MS)  // v7.2: ook de tokenvernieuwing mag niet eindeloos hangen (bij een time-out gaat het oude token mee, zoals bij elke mislukte vernieuwing)
       .then(function (x) { return x.ok ? x.json() : null; })
       .then(function (d) {
         if (!d || !d.access_token) return t;
@@ -1303,11 +1304,22 @@
     el('uitloggen').style.display = 'none'; el('koppelSluit').style.display = 'none'; el('statusInfo').innerHTML = '';
     if (opnieuw) toast('Nog geen verbinding.');
   }
+  // v7.2: iOS laat een lopende fetch na een wissel van wifi naar 4G of een pauze op de achtergrond vaak tientallen seconden tot minuten hangen
+  // zonder fout; dan blijft de spinner staan en komt er geen melding. Daarom één time-out per verzoek (AbortController, iOS 12.1+, met guard).
+  // De time-out dekt het hele antwoord (ook het lezen van de body). Functies die Claude aanroepen, importeren of een bestand meesturen krijgen
+  // meer tijd: Apps Script mag daar tot 6 minuten over doen en Vercel 300 s.
+  var RUN_TIMEOUT_MS = 25000, RUN_TIMEOUT_LANG_MS = 120000;
+  var RUN_LANG = { apiBrein: 1, apiReviewNu: 1, apiMaakContent: 1, apiCapsuleMigratie: 1, apiTalentUrenImport: 1, apiExactImport: 1, apiTalentDocumentOpslaan: 1 };
+  function metTimeout(maak, ms) {
+    var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+    var timer = ac ? setTimeout(function () { ac.abort(); }, ms) : null;
+    return maak(ac ? ac.signal : undefined).then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
+  }
   function run(fn) {
-    var args = Array.prototype.slice.call(arguments, 1);
+    var args = Array.prototype.slice.call(arguments, 1), ms = RUN_LANG.hasOwnProperty(fn) ? RUN_TIMEOUT_LANG_MS : RUN_TIMEOUT_MS;  // v7.2
     var verzoek = DEMO ? laadDemo().then(function (D) { return D.run(fn, args); })  // v4.3
-      : SERVER ? tokenVers().then(function (t) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }) }); }).then(leesAntwoord)  // v6.0: eigen server, sessietoken in plaats van koppelcode
-      : fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }) }).then(leesAntwoord);   // geen headers: geen CORS-preflight op Apps Script
+      : SERVER ? tokenVers().then(function (t) { return metTimeout(function (signal) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }), signal: signal }).then(leesAntwoord); }, ms); })  // v6.0: eigen server, sessietoken in plaats van koppelcode
+      : metTimeout(function (signal) { return fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }), signal: signal }).then(leesAntwoord); }, ms);   // geen headers: geen CORS-preflight op Apps Script
     return verzoek
       .then(function (d) {
         if (d && d.ok) return d.result;
@@ -1318,7 +1330,8 @@
       })
       .catch(function (err) {
         var m = (err && err.message) || 'probeer opnieuw';
-        if (err && err.name === 'TypeError') m = navigator.onLine === false ? 'je bent offline' : 'geen verbinding met de server — probeer het zo nog eens';  // v7.2: fetch-fouten zijn Engels en per browser anders ("Failed to fetch", "Load failed")
+        if (err && err.name === 'AbortError') m = 'de server reageert niet — probeer het zo nog eens';  // v7.2: de time-out van metTimeout (een hangende fetch geeft op iOS geen TypeError)
+        else if (err && err.name === 'TypeError') m = navigator.onLine === false ? 'je bent offline' : 'geen verbinding met de server — probeer het zo nog eens';  // v7.2: fetch-fouten zijn Engels en per browser anders ("Failed to fetch", "Load failed")
         if (!err || err.message !== 'secret') toast('Niet gelukt — ' + m);
         throw err;
       });
@@ -3828,7 +3841,7 @@
     if (ev.key === 'n' || ev.key === 'N') { ev.preventDefault(); deskNieuw('taak'); }
     else if (ev.key === '/') { ev.preventDefault(); var z = el('zbZoek'); if (z) z.focus(); }
     else if ((ev.key === 'e' || ev.key === 'E') && id) { ev.preventDefault(); bewerkTaak(id); }
-    else if (ev.key === 'Enter' && id && (a === rij || a.classList.contains('rij'))) { ev.preventDefault(); bewerkTaak(id); }  // v7.2: Enter op de gefocuste rij = openen, zoals bij rijen met data-crm-open (niet op de afvinkknop erin)
+    else if (ev.key === 'Enter' && id && !a.getAttribute('data-sleep') && (a === rij || a.classList.contains('rij'))) { ev.preventDefault(); bewerkTaak(id); }  // v7.2: Enter op de gefocuste rij = openen, zoals bij rijen met data-crm-open (niet op de afvinkknop erin); een sleepbare rij (weekweergave, agenda) doet dit al via de kaart-handler, anders opent de taak twee keer
     else if (/^[123]$/.test(ev.key) && id) { ev.preventDefault(); zetPrioSnel(id, ['hoog', 'midden', 'laag'][Number(ev.key) - 1]); }
     else if (ev.key === 'Escape') sluitZoek();
   });
