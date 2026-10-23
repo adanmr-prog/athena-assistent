@@ -13,6 +13,8 @@ TOKENS = {'testtoken-menno': 'test123', 'testtoken-menno-vers': 'test123', 'test
 vandaag = datetime.date.today()
 def d(n): return (vandaag + datetime.timedelta(days=n)).isoformat()
 def nu(): return datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+FIN_MAAND = '2026-10'  # v7.2: de huidige maand van apiFinancien (maanden[2] van het standaardschooljaar); BEVRIEZING onthoudt de laatste bevriezing, zodat de knop "Prognose vastleggen" na één keer verdwijnt
+BEVRIEZING = {'maand': ''}
 
 ACTIES = [
     {'id': 'a1', 'tekst': 'Voorstel ISK Voorbeeld nabellen', 'bron': 'kans', 'prio': 'hoog', 'deadline': d(-1), 'link': '', 'over': 1},
@@ -414,7 +416,7 @@ def handle_crm(fn, args):
         school = dict({k: proj[k] for k in ['contract', 'gefactureerd', 'ontvangen', 'nogTeFactureren', 'openstaand', 'ouderdom', 'geschat', 'gemBetaaltijd']}, schoolId='s1', naam='Testschool Noord', betaaltermijn=30, reeksen=pr, projecten=[proj])
         return {'schooljaar': sj, 'schooljaren': ['2026-2027', '2025-2026'], 'maanden': maanden, 'huidigeMaand': maanden[2], 'scholen': [school], 'reeksen': pr,
                 'totalen': dict({k: proj[k] for k in ['contract', 'gefactureerd', 'ontvangen', 'nogTeFactureren', 'openstaand', 'ouderdom', 'gemBetaaltijd']}), 'geschat': False, 'standaardBetaaltermijn': 30,
-                'laatsteBevriezing': maanden[2], 'exactKolommen': {'factuurnummer': 'Factuurnummer', 'datum': 'Factuurdatum', 'bedrag': 'Bedrag', 'betaald': 'Betaaldatum'}, 'magImporteren': beheer(), 'ik': ik()}
+                'laatsteBevriezing': BEVRIEZING['maand'] or maanden[1], 'exactKolommen': {'factuurnummer': 'Factuurnummer', 'datum': 'Factuurdatum', 'bedrag': 'Bedrag', 'betaald': 'Betaaldatum'}, 'magImporteren': beheer(), 'ik': ik()}
     if fn == 'apiFacturatie':
         return {'projecten': [dict(project_uit(t), magWijzigen=True) for t in sorted(TRAJECTEN, key=lambda t: (t['am'], t['school'])) if eigen_project(t)], 'keuzes': KEUZES, 'gebruikers': GEBRUIKERS_NAMEN, 'ik': ik()}
     if fn == 'apiFactuurOpslaan':
@@ -790,6 +792,18 @@ def handle(fn, args):
                 'herinneringTrigger': True, 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True), 'email': 'menno@voorbeeld.nl',  # v4.6
                 'talentTrigger': True, 'urenTrigger': True, 'xpsExportMap': True, 'laatsteUrenImport': d(-1) + ' 06:05'}  # v5.0
     if fn == 'apiImporteer': return {'ingevoegd': len(args[1]), 'bijgewerkt': 0}
+    # v7.2: Financiën — prognose vastleggen en de Exact-afstemming, met de vorm van financienBevriezen en apiExactImport in Code.gs (de app leest al/maand resp. van, tot, gekoppeld, toegepast en de vier lijsten)
+    if fn == 'apiFinancienBevriezen':
+        if not beheer(): geen_toegang()
+        al = BEVRIEZING['maand'] == FIN_MAAND; BEVRIEZING['maand'] = FIN_MAAND
+        return {'maand': FIN_MAAND, 'rijen': 0 if al else 3, 'al': al}
+    if fn == 'apiExactImport':
+        if not beheer(): geen_toegang()
+        if not str(args[0] if args else '').strip(): raise ValueError('Het bestand is leeg.')
+        o = args[1] if len(args) > 1 and isinstance(args[1], dict) else {}
+        return {'van': d(-30), 'tot': d(-1), 'gekoppeld': 2, 'toegepast': bool(o.get('toepassen')),
+                'bijgewerkt': [{'nummer': 'F2026-001', 'waar': 'Lyceum Demo · termijn 1', 'wat': 'verzonden, betaald'}],
+                'afwijkend': [], 'alleenAthena': [], 'alleenExact': [{'nummer': 'F9999', 'datum': d(-3), 'bedrag': 125000}]}
     return handle_crm(fn, args)
 
 # v6.2: met MOCK_CSP=1 gaat de Content-Security-Policy uit vercel.json mee met de app (zoals Vercel die stuurt), met de nep-Supabase

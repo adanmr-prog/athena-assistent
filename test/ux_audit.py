@@ -117,3 +117,12 @@ for x in sorted(set(o[3].split(' (')[0] + ' (' + o[3].split(' (')[-1] for o in o
 print('telefoon 24-35 px hoog (onder de 36/44-norm):', len(tel44))
 for x in sorted(set(t[1].split(' (')[0][:30] + ' (' + t[1].split(' (')[-1] for t in tel44))[:25]: print('   ', x)
 print('afgekapte tekst, totaal:', sum(len(m['afgekapt']) for m in resultaat))
+# v7.2: het doel "0 serious/critical" (docs/ux-audit-v6.6.md) is een harde controle met exitcode; voorheen eindigde de audit altijd op 0,
+# ook toen link-in-text-block (serious) op zes schermen stond. Zonder axe (geen --axe) is er niets gemeten en blijft de controle uit.
+if axe_bron:
+    ernstig = [(m['rol'], m['breedte'], m['scherm'], v['id']) for m in resultaat for v in m['axe'] if v['impact'] in ('serious', 'critical')]
+    if ernstig:
+        print('FOUT axe: %d serious/critical op %d schermen: %s' % (len(ernstig), len(set(e[:3] for e in ernstig)), sorted(set(e[3] for e in ernstig))))
+        print('FOUTEN: 1'); sys.exit(1)
+    print('ok   axe: 0 serious/critical op %d schermen' % len(resultaat))
+    print('ALLES GOED')
