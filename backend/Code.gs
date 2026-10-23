@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '6.5';
+var VERSIE = '7.2.1';  // v7.2.1: houd gelijk aan de release (zie /release); controleer() print dit als eerste regel
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -82,7 +82,7 @@ function controleer() {
       var ss = sheet(), perNaam = {};
       ss.getSheets().forEach(function (b) { perNaam[b.getName()] = b; });
       regels.push('Sheet: ' + ss.getName());
-      Object.keys(TABELLEN).forEach(function (naam) { var b = perNaam[naam]; regels.push('- ' + naam + ': ' + (b ? Math.max(0, b.getLastRow() - 1) + ' rijen' : 'nog niet aangemaakt (gebeurt vanzelf)')); });
+      Object.keys(TABELLEN).forEach(function (naam) { var b = perNaam[naam]; regels.push('- ' + naam + ': ' + (b ? Math.max(0, b.getLastRow() - 1) + ' rijen' + kopControle(b, TABELLEN[naam]) : 'nog niet aangemaakt (gebeurt vanzelf)')); });
     } catch (e) { regels.push('Sheet ' + P.getProperty('SHEET_ID') + ' niet bereikbaar (verwijderd, in de prullenbak of niet gedeeld met dit account): ' + ((e && e.message) || e)); }
   }
   var aanwezig = triggerNamen(), mist = TRIGGERS.filter(function (n) { return aanwezig.indexOf(n) < 0; });
@@ -92,6 +92,25 @@ function controleer() {
   regels.push('Nieuwe Code.gs live zetten: implementeren als nieuwe versie, zie backend/README.md.');
   Logger.log(regels.join('\n'));
   return regels.join('\n');
+}
+
+// v7.2.1: lees() leest op kolompositie, niet op kolomnaam. Een hernoemde of verschoven kop in de Sheet wordt dus stil onder het
+// verkeerde veld gelezen; daarom vergelijkt controleer() per tabblad de koprij met TABELLEN. Kolommen die achteraan ontbreken vult
+// blad() vanzelf aan; extra kolommen daarna worden genegeerd. Geeft '' als alles klopt, anders een korte melding voor achter het aantal rijen.
+function kopControle(b, kop) {
+  var breed = b.getLastColumn(), rij = breed > 0 && b.getLastRow() > 0 ? b.getRange(1, 1, 1, breed).getValues()[0] : [], fout = [], extra = [];
+  for (var i = 0; i < Math.min(rij.length, kop.length); i++) if (String(rij[i]).trim() !== kop[i]) fout.push((i + 1) + ': "' + String(rij[i]).trim() + '" moet "' + kop[i] + '" zijn');
+  for (var j = kop.length; j < rij.length; j++) if (String(rij[j]).trim()) extra.push(String(rij[j]).trim());
+  var uit = [];
+  if (fout.length) uit.push('AFWIJKENDE KOP (kolom ' + fout.slice(0, 3).join('; ') + (fout.length > 3 ? '; +' + (fout.length - 3) : '') + ') — die kolommen worden onder de verkeerde naam gelezen; zet de kop gelijk aan TABELLEN');
+  else if (rij.length && rij.length < kop.length) uit.push('kop mist ' + (kop.length - rij.length) + ' kolommen achteraan (worden vanzelf aangevuld)');
+  if (extra.length) uit.push('extra kolommen genegeerd: ' + extra.slice(0, 3).join(', ') + (extra.length > 3 ? ', +' + (extra.length - 3) : ''));
+  if (kop[0] === 'id' && b.getLastRow() > 1) {
+    var ids = b.getRange(2, 1, b.getLastRow() - 1, 1).getValues(), leeg = 0;
+    ids.forEach(function (r) { if (!String(r[0]).trim()) leeg++; });
+    if (leeg) uit.push(leeg + ' rijen zonder id (worden overgeslagen)');
+  }
+  return uit.length ? ' · ' + uit.join(' · ') : '';
 }
 
 function setup() {

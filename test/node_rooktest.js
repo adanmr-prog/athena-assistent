@@ -450,6 +450,19 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
   eis(homeTitels.indexOf('Laat overleg dag 6 (tz-test)') >= 0 && homeTitels.indexOf('Vroeg overleg dag 7 (tz-test)') < 0, 'apiHome: de agenda loopt zeven kalenderdagen (dag 6 om 23:30 erin, dag 7 om 00:30 niet)');
 })();
 
+/* ---- v7.2.1: controleer() meldt de versie en afwijkende kolomkoppen (lees() leest op positie) ---- */
+(function () {
+  ctx.GEBRUIKER = null;
+  var c1 = ctx.controleer();
+  eis(c1.indexOf('backend 7.2.1') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.2.1 en geen afwijkende koppen in de demo-sheet');
+  var b = ctx.blad('Scholen'), kop = ctx.TABELLEN.Scholen, was = b.getRange(1, 2, 1, 1).getValues()[0][0];
+  b.getRange(1, 2, 1, 1).setValues([['schoolnaam']]);
+  var c2 = ctx.controleer(), regel = c2.split('\n').filter(function (r) { return r.indexOf('- Scholen:') === 0; })[0] || '';
+  eis(regel.indexOf('AFWIJKENDE KOP (kolom 2: "schoolnaam" moet "' + kop[1] + '" zijn)') > 0, 'controleer(): een hernoemde kop wordt gemeld met positie, gevonden en verwachte naam');
+  b.getRange(1, 2, 1, 1).setValues([[was]]);
+  eis(ctx.controleer().indexOf('AFWIJKENDE KOP') < 0, 'controleer(): na herstel van de kop geen melding meer');
+})();
+
 /* ---- bestaande schermen blijven werken ---- */
 ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });
 try { ctx.GEBRUIKER = null; ctx.nachtelijkeReview(); eis(true, 'nachtelijke review draait'); } catch (e) { eis(false, 'nachtelijke review draait: ' + e.message); }

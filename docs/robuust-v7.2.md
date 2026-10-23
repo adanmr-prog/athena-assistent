@@ -184,6 +184,20 @@ Wat daarna vergeleken wordt:
 
 Pas daarna kan v7.2 als nieuwe Apps Script-versie geïmplementeerd worden (`/release`; de `/exec`-URL blijft gelijk).
 
+### Resultaat (23-10-2026, uitdraai van `controleer()` na het implementeren van v7.2)
+
+| wat | gevonden | oordeel |
+|---|---|---|
+| backendversie | "backend 6.5" | geen oude code: `VERSIE` in `Code.gs` stond sinds v6.5 stil (git bevestigt dat). v7.2.1 zet hem op het releasenummer en de release-skill eist dat voortaan |
+| tabbladen | 21 van 28 aanwezig; de talent- en prognosetabbladen "nog niet aangemaakt" | normaal: `blad()` maakt ze bij het eerste gebruik of de eerste trigger |
+| aantallen | Scholen 1, Trajecten 1, Kansen 1, Personen 1, Acties 8, Activiteiten 15, Documenten 16, Reviews 24; Gebruikers 0, Instellingen 0, Mijlpalen 0 | productie is nog één gebruiker (de beheerder via `SECRET`); de teams, rechten en keuzelijsten uit v4.0+ zijn nog niet in gebruik (standaardwaarden uit de code gelden). Geen fout, wel een feit: de rechtenmatrix beschermt nog niemand |
+| triggers | 4 van 8: `indexeerTrigger`, `nachtelijkeReviewTrigger`, `crmSyncTrigger`, `archiveerTrigger`; ontbreken `herinneringTrigger` (v4.6), `talentDagelijksTrigger`, `talentUrenTrigger` (v5.0), `financienTrigger` (v6.5) | **actie**: `setup()` één keer uitvoeren onder het account van de eigenaar; `installeerTriggers()` verwijdert de bestaande acht namen en zet ze alle acht opnieuw (idempotent, geen dubbele). Tot die tijd: geen herinneringsmail, geen VOG-/peilingrun, geen bevroren prognose |
+| gebruikerscodes | 0 | pas nodig zodra collega's inloggen; aanmaken via Beheer → Gebruikers |
+| Claude-sleutel | ingesteld | — |
+| kolomkoppen | niet in de uitdraai | v7.2.1: `controleer()` vergelijkt per tabblad de koprij met `TABELLEN` en meldt "AFWIJKENDE KOP" (kolompositie, gevonden, verwacht), ontbrekende en extra kolommen, en rijen zonder id. Nog uit te voeren na het implementeren van v7.2.1 |
+| Uitvoeringen (mislukt, 7 dagen) | nog niet aangeleverd | open |
+
+
 ## 8. iOS-review
 
 De iOS-review van de v7.2-wijzigingen in `index.html` (standalone PWA op iPhone en iPad) gaf drie bevindingen. Alle drie zijn verwerkt; elke fix heeft een `// v7.2`-commentaar en een test.
