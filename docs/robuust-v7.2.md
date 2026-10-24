@@ -194,8 +194,20 @@ Pas daarna kan v7.2 als nieuwe Apps Script-versie geïmplementeerd worden (`/rel
 | triggers | 4 van 8: `indexeerTrigger`, `nachtelijkeReviewTrigger`, `crmSyncTrigger`, `archiveerTrigger`; ontbreken `herinneringTrigger` (v4.6), `talentDagelijksTrigger`, `talentUrenTrigger` (v5.0), `financienTrigger` (v6.5) | **actie**: `setup()` één keer uitvoeren onder het account van de eigenaar; `installeerTriggers()` verwijdert de bestaande acht namen en zet ze alle acht opnieuw (idempotent, geen dubbele). Tot die tijd: geen herinneringsmail, geen VOG-/peilingrun, geen bevroren prognose |
 | gebruikerscodes | 0 | pas nodig zodra collega's inloggen; aanmaken via Beheer → Gebruikers |
 | Claude-sleutel | ingesteld | — |
-| kolomkoppen | niet in de uitdraai | v7.2.1: `controleer()` vergelijkt per tabblad de koprij met `TABELLEN` en meldt "AFWIJKENDE KOP" (kolompositie, gevonden, verwacht), ontbrekende en extra kolommen, en rijen zonder id. Nog uit te voeren na het implementeren van v7.2.1 |
-| Uitvoeringen (mislukt, 7 dagen) | nog niet aangeleverd | open |
+| kolomkoppen | niet in de uitdraai | v7.2.1: `controleer()` vergelijkt per tabblad de koprij met `TABELLEN` en meldt "AFWIJKENDE KOP" (kolompositie, gevonden, verwacht), ontbrekende en extra kolommen, en rijen zonder id |
+| Uitvoeringen (mislukt, 7 dagen) | niet aangeleverd | open; bij de volgende productiecontrole meenemen |
+
+### Afronding (23-10-2026, na v7.2.1 en `setup()`)
+
+| wat | gevonden | oordeel |
+|---|---|---|
+| backendversie | "backend 7.2.1" | de nieuwe code draait; `VERSIE` loopt voortaan mee met de release |
+| kolomkoppen | 0 tabbladen met "AFWIJKENDE KOP"; de twee koppen die achteraan kolommen misten (`Activiteiten_archief`, `Facturen`) zijn inmiddels aangevuld | in orde: de Sheet heeft exact de kolommen en volgorde van `TABELLEN` |
+| tabbladen | 28 van 28 aanwezig (de talent- en prognosetabbladen zijn door `setup()` aangemaakt) | in orde |
+| triggers | 8 van 8 onder het account van de eigenaar | in orde: herinneringsmail, talentrun, urenimport en het bevriezen van de prognose draaien nu ook |
+| gebruikers | 0 | ongewijzigd: pas nodig als collega's inloggen |
+
+⚠️ De uitvoer van `setup()` print de koppelcode van de beheerder. Wie die uitvoer ergens plakt (chat, ticket, mail), vervangt daarna `SECRET` in de scripteigenschappen en koppelt de app opnieuw; de code staat nooit in de repo of in dit rapport.
 
 
 ## 8. iOS-review
