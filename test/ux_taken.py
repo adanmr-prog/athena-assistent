@@ -1,6 +1,7 @@
 # v6.6: taakmetingen in de demomodus (cognitive walkthrough als script). Per taak en schermbreedte: gelukt, aantal handelingen
 # (tik, typ, kies), hoe vaak het doel eerst buiten beeld lag (scrollen) en de tijd. Zelfde taken voor en na een verbeterronde.
 # Gebruik: python3 test/ux_taken.py [--label voor|na] → test/shots/ux/<label>/taken.json en een tabel op stdout.
+# v7.3 (FL-7): eindigt met ALLES GOED (exitcode 0) als elke taak lukte zonder pageerror, anders FOUTEN: n (exitcode 1) met de mislukte regels.
 import os, sys, json, time, threading, functools, http.server, socketserver
 from playwright.sync_api import sync_playwright
 
@@ -144,3 +145,9 @@ print('| taak | rol | breedte | gelukt | handelingen | scrolls | s | fout |')
 print('|---|---|---|---|---|---|---|---|')
 for u in uitkomst:
     print('| %s %s | %s | %d | %s | %d | %d | %.1f | %s |' % (u['taak'], u['omschrijving'], u['rol'], u['breedte'], 'ja' if u['gelukt'] else 'NEE', u['handelingen'], u['scrolls'], u['seconden'], (u['fout'] or '; '.join(u['pageerrors']))[:90]))
+# v7.3 (FL-7): een mislukte taak of een pageerror maakt de suite rood (voorheen altijd exitcode 0)
+mislukt = [u for u in uitkomst if not u['gelukt'] or u['pageerrors']]
+for u in mislukt: print('FOUT %s %s (%s, %d px): %s' % (u['taak'], u['omschrijving'], u['rol'], u['breedte'], (u['fout'] or '; '.join(u['pageerrors']))[:200]))
+print('%d taakmetingen, %d mislukt' % (len(uitkomst), len(mislukt)))
+print('ALLES GOED' if not mislukt else 'FOUTEN: %d' % len(mislukt))
+sys.exit(1 if mislukt else 0)

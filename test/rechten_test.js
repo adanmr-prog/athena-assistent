@@ -127,7 +127,7 @@ function rijB(tl, c) { var k = S.Kandidaten[c]; return { label: 'nieuw voor ' + 
 
 // Regels die een api kent bóven RECHTEN: de verwachting wordt ermee bijgesteld en ze staan in het json onder "onbepaald"
 var UITZONDERINGEN = {
-  kansViaProject: { naam: 'apiKans: een AM ziet de kans achter een project dat hij mag zien (kansZichtbaar/kansenViaProject); RECHTEN zegt pipeline accountmanagement = geen',
+  kansViaProject: { naam: 'apiKans: wie een project mag zien, mag de kans erachter lezen (kansZichtbaar/kansenViaProject); RECHTEN zegt pipeline accountmanagement = geen. v7.3 (R1): de eigenaar van het project (niveau eigen/team: de AM) krijgt de kans volledig, wie het project alleen via opstart ziet (talent) een beperkt object (sectie 5 hieronder)',
     extra: function (g, rij, v) { return v || (TRAJECTEN_MET_KANS[rij.id] || []).some(function (t) { return verwacht(g, 'projecten', 'zien', t); }); } },
   beoordelingGever: { naam: 'apiBeoordelingOpslaan: een bestaande beoordeling wijzigt alleen wie haar gaf, het talentteam of het management (strenger dan RECHTEN team)',
     extra: function (g, rij, v) { return v && (g.team === 'management' || rij.door === g.naam || niveauVerwacht(g, 'beoordelingen', 'wijzigen') === 'alles'); } }
@@ -138,7 +138,8 @@ ONBEPAALD.push({ sleutel: 'beoordelingPlaatsing', uitleg: 'apiBeoordelingOpslaan
 ONBEPAALD.push({ sleutel: 'financienWijzigen', uitleg: 'financien wijzigen: geen api (alleen lezen); apiFinancienBevriezen en apiExactImport zijn alleenBeheerder en staan bij de management-aanvallen.', in_test: 'management-only aanvallen' });
 ONBEPAALD.push({ sleutel: 'beoordelingenZien', uitleg: 'beoordelingen zien: geen eigen api; zichtbaar via apiTalent (valt onder talenten zien).', in_test: 'niet apart getest' });
 ONBEPAALD.push({ sleutel: 'relatiesZien', uitleg: 'apiSchool en apiPersoon roepen geen eis(relaties, zien) aan; dat klopt alleen omdat elk team daar alles heeft (het portaalprofiel komt niet voorbij doPost).', in_test: 'getest met de huidige tabel' });
-ONBEPAALD.push({ sleutel: 'talentOpslaanZonderRij', uitleg: 'apiTalentOpslaan controleert eis(talenten, wijzigen) zonder rij; een rijniveau eigen zou niet gelden (nu niet relevant: AM heeft geen).', in_test: 'verwachting zonder rij' });
+ONBEPAALD.push({ sleutel: 'talentOpslaanMetRij', uitleg: 'v7.3 (R4): apiTalentOpslaan controleert eis(talenten, wijzigen, oud || null) mét de rij; een rijniveau eigen of team geldt dus ook hier (de rooktest bewijst dat met een tijdelijk niveau eigen voor de AM).', in_test: 'verwachting met rij (tl1)' });
+ONBEPAALD.push({ sleutel: 'kansBeperkt', uitleg: 'v7.3 (R1): de kans achter een zichtbaar project komt beperkt terug (naam, school, fase; waarde 0, notities leeg, geen taken of tijdlijn) voor wie het project alleen via niveau opstart ziet (talent); de eigenaar van het project (AM, niveau eigen/team) en het management krijgen de kans volledig. Ook in apiProject, apiCrm (openWaarde) en de zoektool van de assistent.', in_test: 'sectie 5' });
 
 var PROEVEN = [
   { onderdeel: 'relaties', actie: 'zien', api: 'apiSchool', rijen: ['s1', 's3'].map(function (id) { var s = S.Scholen[id]; return { label: id + ' (eigenaar ' + s.eigenaar + ')', rij: s, args: [id] }; }) },
@@ -159,7 +160,7 @@ var PROEVEN = [
   { onderdeel: 'kandidaten', actie: 'wijzigen', api: 'apiKandidaatOpslaan', schrijft: true, rijen: ['c1', 'c4', 'c8', 'c11', 'c6'].map(rijC).concat([{ label: 'nieuw op v3 van ' + labelT(T('t4')), rij: T('t4'), args: [{ vacatureId: 'v3', naam: 'Rechtentest kandidaat' }] }]) },
   { onderdeel: 'talenten', actie: 'zien', api: 'apiTalent', rijen: ['tl1', 'tl4', 'tl8', 'tl15', 'tl19', 'tl24', 'tl13'].map(rijTl) },
   { onderdeel: 'talenten', actie: 'zien', api: 'apiTalenten', lijst: function (res, rij) { return res.talenten.some(function (t) { return t.id === rij.id; }); }, rijen: ['tl1', 'tl4', 'tl8', 'tl15', 'tl19', 'tl24', 'tl13'].map(rijTl) },
-  { onderdeel: 'talenten', actie: 'wijzigen', api: 'apiTalentOpslaan', schrijft: true, rijen: [{ label: 'tl1 (api controleert zonder rij)', rij: null, args: [{ id: 'tl1', notitie: S.Talenten.tl1.notitie }] },
+  { onderdeel: 'talenten', actie: 'wijzigen', api: 'apiTalentOpslaan', schrijft: true, rijen: [{ label: labelTl(S.Talenten.tl1) + ' (v7.3: api controleert met de rij)', rij: S.Talenten.tl1, args: [{ id: 'tl1', notitie: S.Talenten.tl1.notitie }] },
     { label: 'nieuw', rij: null, args: [{ voornaam: 'Rechten', achternaam: 'Test', toestemmingDatum: vandaag() }] }] },
   { onderdeel: 'beoordelingen', actie: 'wijzigen', api: 'apiBeoordelingOpslaan', schrijft: true, rijen: [rijB('tl1', 'c1'), rijB('tl4', 'c4'), rijB('tl13', 'c13'), rijB('tl19', 'c16'), rijB('tl24', 'c15')] },
   { onderdeel: 'beoordelingen', actie: 'wijzigen', api: 'apiBeoordelingOpslaan', schrijft: true, uitzondering: 'beoordelingGever', rijen: ['b1', 'b3'].map(function (id) { var b = S.Beoordelingen[id]; return { label: id + ' (door ' + b.door + ', talent ' + b.talentId + ' in ' + b.trajectId + '/am ' + T(b.trajectId).am + ')', rij: b, args: [{ id: id, tekst: b.tekst }] }; }) },
@@ -298,6 +299,35 @@ var raster = { ma: [2, 2, 2], di: [2, 2, 2], wo: [2, 2, 2], do: [2, 2, 2], vr: [
   herstel();
 })();
 log(!!toon.ok, 'portaal: het eigen profiel blijft via het portaal gewoon bereikbaar (geen te strenge afsluiting)');
+
+/* ---- 5. v7.3 (R1): de kans achter een zichtbaar project — beperkt voor wie het project alleen via opstart ziet (talent), volledig voor de eigenaar (AM) en het management ---- */
+(function () {
+  var sem = MENSEN.filter(function (m) { return m.kort === 'sem'; })[0], proef = null;
+  Object.keys(S.Trajecten).forEach(function (id) { var t = S.Trajecten[id]; if (!proef && t.kansId && S.Kansen[t.kansId] && verwacht(sem, 'projecten', 'zien', t) && !verwacht(sem, 'pipeline', 'zien', S.Kansen[t.kansId])) proef = t; });
+  log(!!proef, 'R1: de seed heeft een project met een kans dat talent via opstart ziet maar waarvan hij de kans zelf niet mag zien' + (proef ? ': ' + labelT(proef) + ', kans ' + proef.kansId : ''));
+  if (!proef) return;
+  var k = S.Kansen[proef.kansId], am = MENSEN.filter(function (m) { return m.naam === proef.am; })[0], waarde = Number(k.waarde) || 0, notities = String(k.notities || '');
+  function noteer(naam, wie, fn, res, ok) { AANVALLEN.push({ naam: 'R1: ' + naam, wie: wie, fn: fn, verwacht: 'beperkt of volledig volgens de eigenaarsregel', toegestaan: res.ok, melding: res.ok ? '' : String(res.fout || ''), ok: ok }); log(ok, 'aanval  ' + pad('R1: ' + naam, 78) + (res.ok ? 'toegestaan' : 'geweigerd: ' + res.fout)); }
+  var rS = roepRuw(SEM, 'apiKans', [k.id]), kS = rS.ok ? rS.result.kans : {};
+  noteer('talent (Sem) leest de kans achter ' + proef.id + ': beperkt, waarde 0, notities leeg, geen taken of tijdlijn', SEM, 'apiKans', rS,
+    rS.ok && rS.result.beperkt === true && rS.result.alleenLezen === true && kS.beperkt === true && kS.waarde === 0 && kS.gewogen === 0 && kS.notities === '' && kS.verliesReden === '' && kS.volgendeActie === '' && rS.result.taken.length === 0 && rS.result.tijdlijn.length === 0 && kS.naam === (k.naam || k.traject) && kS.school === k.school && kS.fase === k.fase && kS.id === k.id);
+  var rA = am ? roepRuw(am.code, 'apiKans', [k.id]) : { ok: false, fout: 'geen AM in de seed' }, kA = rA.ok ? rA.result.kans : {};
+  noteer('de AM van het project (' + proef.am + ') leest de kans volledig: waarde ' + waarde + ', notities, historie', am ? am.code : '-', 'apiKans', rA, rA.ok && rA.result.beperkt === false && !kA.beperkt && kA.waarde === waarde && kA.notities === notities);
+  var rM = roepRuw(SOPHIE, 'apiKans', [k.id]);
+  noteer('management leest de kans volledig', SOPHIE, 'apiKans', rM, rM.ok && rM.result.beperkt === false && rM.result.kans.waarde === waarde && rM.result.kans.notities === notities);
+  var pS = roepRuw(SEM, 'apiProject', [proef.id]), pA = am ? roepRuw(am.code, 'apiProject', [proef.id]) : { ok: false, fout: 'geen AM' };
+  noteer('apiProject ' + proef.id + ': talent krijgt dezelfde beperkte kans, de AM de volledige', SEM, 'apiProject', pS,
+    pS.ok && !!pS.result.kans && pS.result.kans.beperkt === true && pS.result.kans.waarde === 0 && pS.result.kans.notities === '' && pA.ok && !!pA.result.kans && !pA.result.kans.beperkt && pA.result.kans.waarde === waarde);
+  var cS = roepRuw(SEM, 'apiCrm');
+  noteer('apiCrm: talent ziet geen pipelinewaarde per school en geen waarde of notities in kansenKort', SEM, 'apiCrm', cS,
+    cS.ok && cS.result.scholen.every(function (s) { return s.openWaarde === 0; }) && cS.result.kansenKort.every(function (x) { return !('waarde' in x) && !('notities' in x); }));
+  ctx.GEBRUIKER = { id: sem.id, naam: sem.naam, email: sem.email, team: sem.team, rol: sem.rol }; vers(); ctx.GEBRUIKER = { id: sem.id, naam: sem.naam, email: sem.email, team: sem.team, rol: sem.rol };
+  var zoek = { ok: true, result: null }; try { zoek.result = ctx.breinZoekCrm(k.naam || k.traject); } catch (e) { zoek = { ok: false, fout: String(e.message) }; }
+  ctx.GEBRUIKER = null; vers();
+  var zK = zoek.ok ? zoek.result.kansen.filter(function (x) { return x.id === k.id; }) : [];
+  noteer('zoek_crm (assistent) als talent: de kans staat erin met beperkt true en waarde 0', SEM, 'breinZoekCrm', zoek, zoek.ok && zK.length === 1 && zK[0].beperkt === true && zK[0].waarde === 0 && zK[0].fase === k.fase);
+  herstel();
+})();
 
 /* ---- json en slot ---- */
 var looptijd = Math.round((Date.now() - T0) / 100) / 10;

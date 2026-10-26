@@ -36,7 +36,7 @@ var VERWACHT_PRODUCTIE = {
 };
 // Niet vergeleken: api's die Claude aanroepen (niet deterministisch) en api's die schrijven. apiTalentExport schrijft een
 // auditregel (inzage) en draait daarom als laatste, zodat hij de tijdlijnen van de andere api's niet beïnvloedt.
-var NIET_VERGELEKEN = ['apiSchoolSamenvatting', 'apiVraag', 'apiBrein', 'apiMaakContent', 'apiReviewNu', 'apiIndexeer', 'apiCrmSync', 'apiTalentRunNu'];
+var NIET_VERGELEKEN = ['apiSchoolSamenvatting', 'apiBrein', 'apiMaakContent', 'apiReviewNu', 'apiIndexeer', 'apiCrmSync', 'apiTalentRunNu'];  // v7.3: apiVraag bestaat niet meer (K2)
 
 /* ----- normaliseren en vergelijken ----- */
 function norm(x) {
@@ -133,7 +133,7 @@ function plan(rol, basis, tabellen) {
   scholen.forEach(function (id) { p.push(['apiSchool', [id]], ['apiArchiefTijdlijn', ['school', id]]); });
   personen.forEach(function (id) { p.push(['apiPersoon', [id]]); });
   kansen.forEach(function (id) { p.push(['apiKans', [id]]); });
-  projecten.forEach(function (id) { p.push(['apiTraject', [id]], ['apiProject', [id]]); });
+  projecten.forEach(function (id) { p.push(['apiProject', [id]]); });  // v7.3: apiTraject (de oude projectpagina) is weg (K2)
   taken.forEach(function (id) { p.push(['apiTaak', [id]]); });
   talenten.forEach(function (id) { p.push(['apiTalent', [id]]); });
   vacatures.forEach(function (id) { p.push(['apiMatch', [id]]); });

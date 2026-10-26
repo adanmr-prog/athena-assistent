@@ -126,6 +126,8 @@ Weg: 10 CSS-regels (`.detailkop` + h2/p/.tags, `.knoppenrij` + scrollbar/.knop, 
 
 ## 5. Open punten ter beoordeling door de eigenaar
 
+Verwerkt in v7.3, zie docs/robuust-v7.3.md.
+
 Gerangschikt op ernst; "zeker" = bevestigd met een reproductie, de rest vraagt een besluit.
 
 ### Midden

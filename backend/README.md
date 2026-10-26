@@ -66,19 +66,15 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiActieToevoegen` | tekst, prio, deadline, extra? `{tijd, herhaling, categorie, eigenaar, schoolId, persoonId, kansId, trajectId, notitie}` | taak (v4.5: intern `apiTaakOpslaan` met `bron: 'handmatig'`; de oude aanroep met drie argumenten blijft werken) |
 | `apiKennisbank` | — | `{ tellingen, documenten:[{id,titel,type,school,url,gewijzigd,woorden}], laatsteIndex, mapUrl }` |
 | `apiIndexeer` | — | `{ aantal, nieuw, bijgewerkt, verwijderd }` |
-| `apiVraag` | vraag | `{ antwoord, bronnen:[{titel,url,type}] }` (oud; de app gebruikt sinds v3.5 `apiBrein`) |
-| `apiBrein` | bericht, gesprek:[{rol:'ik'\|'bot', tekst}] | `{ antwoord, bronnen, acties:[{id, soort, titel, invoer}] }` |
+| `apiBrein` | bericht, gesprek:[{rol:'ik'\|'bot', tekst}] | `{ antwoord, bronnen, acties:[{id, soort, titel, invoer}] }` (v7.3: de oude vraag-en-antwoordfunctie v1 is verwijderd) |
 | `apiBreinUitvoeren` | {soort, invoer} | `{ melding, url? }` |
 | `apiReview` | — | `{ laatste: review, eerdere:[{id,datum,gemaaktOp,samenvatting,tellingen}] }` |
 | `apiReviewNu` | — | review (`{id,datum,gemaaktOp,samenvatting,gedaan,blijvenLiggen,vandaag,tellingen}`) |
-| `apiHuisstijl` | — | `{ velden, kleuren, toon, zinnen, types, recent }` |
-| `apiZetHuisstijl` | sleutel, waarde | null |
+| `apiHuisstijl` | — | `{ velden, kleuren, toon, zinnen, types, recent }` (wijzigen via `apiHuisstijlOpslaan`; v7.3: de oude functie voor één veld per aanroep is verwijderd) |
 | `apiMaakContent` | type, onderwerp, extra | `{ id, datum, type, typeNaam, onderwerp, tekst }` |
 | `apiTrajecten` | — | `{ trajecten:[traject+{updates, laatsteUpdate, magWijzigen}], gebruikers, am, ik, filters:{schooljaren,trajecten,statussen,verlenging} }` (v4.0: alleen projecten die je mag zien) |
-| `apiTraject` | id | `{ traject, documenten, notities, kansen, school }` |
-| `apiTrajectOpslaan` | object (met of zonder id) | traject |
-| `apiNotitieToevoegen` | trajectId, tekst | `{ id, datum, tekst }` |
-| `apiImporteer` | tabel, rijen | `{ ingevoegd, bijgewerkt, ongewijzigd }` |
+| `apiTrajectOpslaan` | object (met of zonder id; v7.3: de rooktest vergelijkt de whitelist met `trajectVelden()` in de app) | traject (v7.3: de oude projectpagina-functie en de losse notitiefunctie zijn verwijderd; de projectpagina is `apiProject`, een notitie gaat via `apiActiviteitToevoegen` met `trajectId`) |
+| `apiImporteer` | tabel, rijen | `{ ingevoegd, bijgewerkt, ongewijzigd }` (beheer, zie onder) |
 | `apiStatus` | — | status van de installatie (v2.0: ook `gebruiker`, `crmSyncTrigger`, `laatsteCrmSync`, `capsuleToken`, `capsuleMigratie`; v4.6: `herinneringTrigger`, `herinneringen`, `email`; v5.0: `talentTrigger`, `urenTrigger`, `xpsExportMap`, `laatsteUrenImport`) |
 
 ### CRM (v2.0, module Relaties)
@@ -119,7 +115,12 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 | `apiVerwijder` | `school\|persoon\|kans\|activiteit\|taak\|traject\|notitie\|content\|doel` (v5.0: `talent\|beoordeling\|talentdocument\|talentschool`), id, opties? `{agenda: true}` of `{metSubtaken: true}` | null (school alleen zonder personen en kansen; eigenaar of beheerder; `agenda` haalt een afspraak ook uit Google Agenda; v4.6: bij een taak gaan de subtaken mee met `metSubtaken`, anders worden ze losse taken; v5.0: een talent alleen zonder lopende inzet, zie Talentnetwerk) |
 | `apiProject` (v3.8) | id | `{ project, school, kans, personen, taken, tijdlijn (incl. historie van de kans), losseMails, facturen (null zonder facturatierecht), keuzes, rechten:{wijzigen,facturatie,facturatieWijzigen} }` |
 | `apiFacturatie` | — | `{ projecten (+facturen), keuzes, gebruikers, ik }` |
-| `apiFactuurOpslaan` / `apiFacturenMaken` | `{id?, trajectId, omschrijving, bedrag, datum, status, factuurnummer, bijzonderheden, _oud?}` / trajectId, `{per: 'maand'\|'eenmalig', van, tot, bedrag, zomer}` | termijn / termijnen van het project |
+| `apiFactuurOpslaan` / `apiFacturenMaken` | `{id?, trajectId, omschrijving, bedrag, datum, status, factuurnummer, bijzonderheden, _oud?}` / trajectId, `{per: 'maand'\|'eenmalig', van, tot, bedrag, zomer}` | termijn / termijnen van het project (v7.3: zonder `bedrag` is het totaal de `contractwaarde` (leeg: `omzet`), in centen verdeeld zodat de som precies klopt; een tweede aanroep slaat bestaande termijnen met dezelfde omschrijving en datum over) |
+| `apiTalentscoutToewijzen` (v6.4) | trajectId, naam (leeg = geen scout) | bezetting van het project (`projectBezetting`); management, wie het project mag wijzigen en de teamlead van talent kiezen iedereen uit het talentteam, een talentscout pakt alleen een project zonder scout zelf op; melding, taak "Talentscout toewijzen" afgevinkt, tijdlijnregel `bron: 'overdracht'` |
+| `apiTaskforcePlannen` (v6.4) | trajectId, `{start: 'yyyy-MM-ddTHH:mm', duurMin (15–240, standaard 45), locatie}` | bezetting van het project + `zonderEmail:[naam]`; zet de taskforcemeeting in de agenda met consultant, AM en talentscout als genodigden, schrijft `taskforce.gepland` en vinkt de taak `bron: 'taskforceplannen'` af |
+| `apiFinancien` (v6.5) | schooljaar? (`yyyy-yyyy`, standaard het huidige) | `{ schooljaar, schooljaren, maanden (aug–jul), huidigeMaand, scholen:[{schoolId, naam, betaaltermijn, reeksen, projecten:[…]}], reeksen, totalen, geschat, standaardBetaaltermijn, laatsteBevriezing, exactKolommen, magImporteren, ik }`; bedragen in centen; recht `financien` (alleen lezen) |
+| `apiFinancienBevriezen` (v6.5) | — | `{ maand, rijen, al }` (management; schrijft de prognose van de lopende maand één keer in tab `Prognoses`, zoals `financienTrigger` op de 1e) |
+| `apiExactImport` (v6.5) | tekst (csv, ≤ 3 MB), `{kolommen?: {factuurnummer, datum, bedrag, betaaldatum}, toepassen?}` | `{ gekoppeld, bijgewerkt, afwijkend, alleenExact, alleenAthena, van, tot, kolommen, toegepast }` (management; zonder `toepassen` alleen controleren) |
 | `apiFacturenExport` | status (standaard `aangemaakt`) | `{ bestandsnaam, csv, aantal }` (puntkomma-CSV voor import in Exact) |
 | `apiSchoolSamenvatting` | schoolId | `{ tekst }` (AI-samenvatting met `BREIN_MODEL`) |
 | `apiActiviteitOpslaan` (v3.7) | `{id, type?, datum?, onderwerp?, tekst?, duurMin?, schoolId?, persoonId?, kansId?, trajectId?, _oud}` | activiteit + `agendaBijgewerkt` (afspraak ook in Google Agenda verzet/hernoemd) |
@@ -133,6 +134,17 @@ Antwoord `{ ok: true, result }` of `{ ok: false, fout }`; `fout === 'secret'` be
 
 Een `kans` heeft sinds v2.0 ook `naam, schoolId, persoonId, pipeline, kans, gewogen, verwachteSluiting, gesloten, verliesReden, eigenaar, tags, stil`
 (`stil` = langer geen contact dan `dagenNorm` van de mijlpaal). Een `taak` is een `actie` plus `categorie, eigenaar, status, schoolId, persoonId, kansId, school, persoon, kans` en sinds v4.5 `tijd, herhaling, bijgewerkt`.
+
+## Beheerfuncties zonder knop in de app (v7.3)
+
+Twee functies zijn alleen via `doPost` aan te roepen (curl of een script met de koppelcode van het management); de app heeft er geen knop voor. Ze blijven bestaan omdat ze bij de inrichting en het onderhoud horen, en ze staan in de rooktest.
+
+| fn | args | result |
+|---|---|---|
+| `apiArchiveer` | — | `{ gearchiveerd, over, uren }`: activiteit ouder dan 365 kalenderdagen naar `Activiteiten_archief` en weekuren ouder dan 26 weken naar `TalentUren_archief`; dezelfde stap als `archiveerTrigger` (1e van de maand); een tweede aanroep archiveert niets; `apiArchiefTijdlijn` haalt het archief terug |
+| `apiImporteer` | `scholen\|trajecten\|kansen\|acties`, rijen (lijst met de kolomnamen van het tabblad) | `{ ingevoegd, bijgewerkt, ongewijzigd }`: rijen zonder `id` krijgen een stabiel id (scholen: naam; trajecten: school + traject + schooljaar; kansen: school + traject; acties: tekst), een herhaalde import werkt bij in plaats van te dupliceren en telt ongewijzigde rijen apart; zie "Koppeling met de Cowork-map" onderaan |
+
+Allebei alleen voor het management; een ander krijgt "Alleen het management kan dit." (`alleenBeheerder`). In v7.3 zijn de vier v1-functies die niets meer aanriep verwijderd (vraag-en-antwoord, één huisstijlveld, de oude projectpagina en de losse notitie bij een project: `Vraag`, `ZetHuisstijl`, `Traject`, `NotitieToevoegen`, alle met het voorvoegsel api).
 
 ## Financiën (v6.5)
 

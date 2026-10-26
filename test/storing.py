@@ -8,7 +8,11 @@
 #   E  antwoord is geen JSON (HTML)     nette toast, geen pageerror (met status 503 en met status 200)
 #   G  /api antwoordt nooit             (iOS-review R1) na de time-out van run() (25 s) een toast "de server reageert niet", het verzoek is
 #                                       afgebroken, tekst blijft in het veld, knop weer bruikbaar, geen spinner; ook bij het laden van een detail
-#   F  sw.js met een andere CACHE       nieuwe shell in de nieuwe cache, oude cache weg, na reload de nieuwe versie
+#   F  sw.js met een andere CACHE       nieuwe shell in de nieuwe cache, oude cache weg; de open pagina blijft op de oude shell en toont
+#                                       (v7.3, STORING-F-1) één keer de vaste balk #updateBalk "Nieuwe versie beschikbaar" met Herladen en Later;
+#                                       (v7.3, iOS-review R2) een gewone toast wist die melding niet, Later verbergt hem en hij komt terug zodra de
+#                                       app weer in beeld komt (visibilitychange); Herladen herlaadt en de nieuwe shell is actief; bij de eerste
+#                                       installatie (geen controller) komt de balk niet
 # Gebruik: python3 test/storing.py [--poort 8786]. Screenshots: test/shots/robuust/storing_<X>.png. Eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Grens: de totale looptijd blijft onder 6 minuten; de wachttijden zijn 8 s (B, traag), 5 s (D, tellen) en 2 × 25 s (G, de echte time-out van
 # run(); niet verkort, anders test hij de constante niet). Niets anders is weggelaten.
@@ -128,6 +132,11 @@ try:
   with sync_playwright() as p:
     b = p.chromium.launch(executable_path=exe, headless=True) if exe else p.chromium.launch(headless=True)
     ctx = b.new_context(viewport={'width': 1440, 'height': 900})
+    # v7.3 (F): tel hoe vaak de balk "Nieuwe versie beschikbaar" (#updateBalk, iOS-review R2) verschijnt (overgang van verborgen naar zichtbaar), vanaf het eerste moment van elke pagina
+    ctx.add_init_script("""(function () { window.__nieuweVersie = 0;
+      function start() { var u = document.getElementById('updateBalk'); if (!u) return; var was = !u.hidden;
+        new MutationObserver(function () { var nu = !u.hidden; if (nu && !was) window.__nieuweVersie++; was = nu; }).observe(u, { attributes: true, attributeFilter: ['hidden'] }); }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start(); })()""")
     pg = ctx.new_page()
     pg.on('pageerror', lambda e: pageerrors.append(str(e).split('\n')[0]))
     pg.on('console', lambda m: consolefouten.append(m.text) if m.type == 'error' and 'Failed to load resource' not in m.text else None)
@@ -165,6 +174,8 @@ try:
         if st['actief'] and st['shell'] and SW_CACHE in st['keys']: sw_ok = True; break
         pg.wait_for_timeout(250)
     ok('start service worker actief met shell in cache %s' % SW_CACHE, sw_ok, json.dumps(st))
+    pg.wait_for_timeout(500)
+    ok('start geen melding "Nieuwe versie" bij de eerste installatie (de pagina had nog geen controller)', pg.evaluate('window.__nieuweVersie') == 0 and pg.locator('#updateBalk:not([hidden])').count() == 0 and 'Nieuwe versie' not in (pg.inner_text('#toast') if pg.locator('#toast.aan').count() else ''), 'teller %s' % pg.evaluate('window.__nieuweVersie'))  # v7.3 (STORING-F-1, iOS-review R2)
     ok('start aa_cache_home gevuld', bool(opslag(pg, 'aa_cache_home')) and 'taken' in (opslag(pg, 'aa_cache_home') or ''))
     tel_start = MODUS['tel']; metingen['verzoeken_start'] = tel_start
 
@@ -362,7 +373,10 @@ try:
     # levenscyclus met een nieuwe script-URL (sw.js?v=test = voor de browser een nieuwe worker: install → skipWaiting → activate → claim),
     # plant vooraf een oude cache 'athena-assistent-v-oud' om de opruiming in activate te zien, en zet een marker in de shell die de install
     # opnieuw ophaalt (de fetches van de worker zelf gaan wél door context.route). Zo is controleerbaar: nieuwe shell in de cache, oude cache weg,
-    # de open pagina draait door op de oude versie, na reload draait de nieuwe. Wat ontbreekt: de CACHE-naamwissel zelf (zie samenvatting).
+    # de open pagina draait door op de oude versie en meldt de nieuwe (v7.3), na Herladen draait de nieuwe. Wat ontbreekt: de CACHE-naamwissel zelf.
+    # De pagina wordt eerst herladen, zodat hij start mét een controller (zoals elke start na de eerste installatie): alleen dan luistert de app naar
+    # controllerchange. Na Herladen registreert de app weer 'sw.js' (een andere URL dan sw.js?v=test): die wissel geeft op de nieuwe pagina opnieuw
+    # een controllerchange — een gevolg van deze proefopstelling, niet van een echte release, en daarom niet gecontroleerd.
     def scen_f():
         shell_hits = []
         def shell_route(route, request):
@@ -370,8 +384,10 @@ try:
             resp = route.fetch(); body = resp.text().replace('</head>', '<meta name="aa-test-versie" content="v-test"></head>', 1)
             route.fulfill(response=resp, body=body)
         SHELL_RE = re.compile(r'^http://127\.0\.0\.1:%d/(index\.html)?$' % POORT)
-        ctx.route(SHELL_RE, shell_route)
-        naar(pg, 'home'); pg.wait_for_selector('#homeInhoud .hkaart'); rust(); toast_wis(pg)
+        naar(pg, 'home'); pg.wait_for_selector('#homeInhoud .hkaart'); rust()  # de app herstelt na een reload het laatste scherm (#home)
+        pg.reload(wait_until='domcontentloaded'); pg.wait_for_selector('#homeInhoud .hkaart', timeout=15000); rust(); toast_wis(pg)  # v7.3: start mét controller, nog zonder marker
+        ok('F uitgangspunt: pagina gestart met een controller (niet de eerste installatie), oude shell', pg.evaluate('!!navigator.serviceWorker.controller') and pg.locator('meta[name="aa-test-versie"]').count() == 0)
+        ctx.route(SHELL_RE, shell_route)  # vanaf nu krijgt elke shell-fetch de marker: de install van de nieuwe worker haalt zo een "nieuwe" index.html
         voor = pg.evaluate("""(async function(){ var c = await caches.open('athena-assistent-v-oud'); await c.put('./oud.txt', new Response('oud'));
           window.__cc = 0; navigator.serviceWorker.addEventListener('controllerchange', function () { window.__cc++; });
           return { keys: await caches.keys(), script: navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL }; })()""")
@@ -389,14 +405,30 @@ try:
         ok('F nieuwe worker neemt meteen over (skipWaiting + clients.claim → controllerchange)', na['cc'] >= 1 and (na['controller'] or '').endswith('sw.js?v=test'), json.dumps(na))
         ok('F install haalt de shell opnieuw op (nieuwe index.html in de cache)', na['shellNieuw'] and any(h[1] for h in shell_hits), 'shell met marker: %s, verzoeken: %s' % (na['shellNieuw'], shell_hits[:4]))
         ok('F activate ruimt oude caches op (athena-assistent-v-oud weg)', 'athena-assistent-v-oud' not in na['keys'] and SW_CACHE in na['keys'], json.dumps(na['keys']))
-        ok('F de open pagina draait door op de oude versie, zonder melding', pg.locator('meta[name="aa-test-versie"]').count() == 0 and not pg.locator('#toast.aan').count() and pg.locator('#homeInhoud .hkaart').count() > 0,
-           'marker: %d, toast: %r, hkaarten: %d' % (pg.locator('meta[name="aa-test-versie"]').count(), pg.inner_text('#toast') if pg.locator('#toast.aan').count() else '', pg.locator('#homeInhoud .hkaart').count()))
-        pg.reload(wait_until='domcontentloaded'); pg.wait_for_selector('#homeInhoud .hkaart', timeout=15000)
-        ok('F na reload gebruikt de app de nieuwe shell', pg.locator('meta[name="aa-test-versie"]').count() == 1)
-        ok('F na reload geen koppelscherm, gegevens geladen', not pg.locator('#koppel.aan').count())
+        # v7.3 (STORING-F-1): de open pagina blijft op de oude shell, maar meldt de nieuwe versie één keer, met een knop Herladen;
+        # v7.3 (iOS-review R2): in de eigen vaste balk #updateBalk, niet in #toast, zodat een gewone toast de melding niet wist
+        balk = pg.locator('#updateBalk:not([hidden])'); knop = pg.locator('#updateBalk [data-update="herladen"]'); later = pg.locator('#updateBalk [data-update="later"]')
+        balk_t = balk.inner_text() if balk.count() else ''; knop_tekst = knop.inner_text().strip() if balk.count() and knop.count() else ''
+        teller = pg.evaluate('window.__nieuweVersie'); metingen['balk_nieuwe_versie'] = balk_t
+        ok('F de open pagina draait door op de oude versie', pg.locator('meta[name="aa-test-versie"]').count() == 0 and pg.locator('#homeInhoud .hkaart').count() > 0,
+           'marker: %d, hkaarten: %d' % (pg.locator('meta[name="aa-test-versie"]').count(), pg.locator('#homeInhoud .hkaart').count()))
+        ok('F balk "Nieuwe versie beschikbaar" zichtbaar met de knoppen Herladen en Later', 'Nieuwe versie' in balk_t and balk.count() == 1 and balk.is_visible() and knop.count() == 1 and knop_tekst == 'Herladen' and later.count() == 1, 'balk: %r, knop: %r' % (balk_t, knop_tekst))
+        ok('F de melding verscheen precies één keer', teller == 1, 'teller %s' % teller)
+        toast_wis(pg); pg.evaluate("toast('Opgeslagen.')"); pg.wait_for_timeout(300)
+        ok('F een gewone toast laat de versiemelding met Herladen staan', balk.count() == 1 and balk.is_visible() and knop.is_visible() and 'Nieuwe versie' in balk.inner_text(), 'balk: %r' % (balk.inner_text() if balk.count() else ''))
+        ok('F de gewone toast zelf verschijnt los van de balk', pg.locator('#toast.aan').count() == 1 and 'Opgeslagen' in pg.inner_text('#toast'), pg.inner_text('#toast'))
         shot(pg, 'F')
+        later.click(); pg.wait_for_timeout(200)
+        ok('F Later verbergt de balk', pg.locator('#updateBalk:not([hidden])').count() == 0)
+        pg.evaluate("document.dispatchEvent(new Event('visibilitychange'))"); pg.wait_for_timeout(200)
+        ok('F de balk komt terug zodra de app weer in beeld komt (visibilitychange), tweede verschijning', pg.locator('#updateBalk:not([hidden])').count() == 1 and pg.evaluate('window.__nieuweVersie') == 2, 'teller %s' % pg.evaluate('window.__nieuweVersie'))
+        if knop.count(): knop.click()
+        try: pg.wait_for_selector('meta[name="aa-test-versie"]', state='attached', timeout=15000); pg.wait_for_selector('#homeInhoud .hkaart', timeout=15000)
+        except Exception as e: ok('F Herladen laadt de pagina opnieuw', False, str(e).split('\n')[0][:160])
+        ok('F na Herladen gebruikt de app de nieuwe shell', pg.locator('meta[name="aa-test-versie"]').count() == 1)
+        ok('F na Herladen geen koppelscherm, gegevens geladen', not pg.locator('#koppel.aan').count())
         ctx.unroute(SHELL_RE)
-        print('info F update: sw.js wordt bij elke start/navigatie gecontroleerd; een nieuwe versie installeert, neemt meteen over (skipWaiting + clients.claim) en ruimt oude caches op; de open pagina blijft de oude index.html tot de gebruiker herlaadt of de app opnieuw opent; index.html zelf is network-first (3 s), dus de volgende start haalt de nieuwe versie los van de worker.')
+        print('info F update: sw.js wordt bij elke start/navigatie gecontroleerd; een nieuwe versie installeert, neemt meteen over (skipWaiting + clients.claim) en ruimt oude caches op; de open pagina blijft de oude index.html en toont de balk "Nieuwe versie beschikbaar · Herladen · Later" (v7.3, los van #toast); index.html zelf is network-first (3 s), dus de volgende start haalt de nieuwe versie los van de worker.')
     scenario('F', scen_f, pg, ctx)
 
     metingen['verzoeken_totaal'] = MODUS['tel']; metingen['consolefouten'] = consolefouten[:10]

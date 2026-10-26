@@ -279,6 +279,8 @@
   body.desk main { flex: 1; min-width: 0; }
   body.desk #zijbalk { display: flex; flex-direction: column; width: 236px; flex-shrink: 0; background: var(--paars-d); color: #fff; padding: 16px 12px calc(14px + env(safe-area-inset-bottom)); overflow-y: auto; }
   body.desk #toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
+  body.desk #updateBalk { position: fixed; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom)); border-radius: 10px; box-shadow: 0 6px 20px rgba(36,26,40,.25); z-index: 199; max-width: calc(100% - 48px); }  /* v7.3 (iOS-review R2): rechtsonder, de toast blijft in het midden */
+  body.desk:has(#updateBalk:not([hidden])) #toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   body.desk #deskKop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; background: var(--wit); border-bottom: 1px solid var(--lijn); padding: 14px 32px; }
   #deskKop h1 { font-size: var(--fs-titel); font-weight: 800; letter-spacing: -.01em; margin-right: auto; }
   body.desk .view { max-width: 1280px; padding: 18px 32px 60px; }
@@ -561,6 +563,14 @@
   #toast.aan { opacity: 1; transform: translateX(-50%) translateY(0); }
   #toast.knop { pointer-events: auto; padding: 12px 16px; }  /* v4.5: toast met knop (Ongedaan maken); iets hoger zodat de knop een tikdoel van ±44 px krijgt */
   .toast-knop { background: none; border: none; color: var(--oranje); font: inherit; font-weight: 800; margin: -12px -10px -12px 6px; padding: 12px 12px; cursor: pointer; }
+  /* v7.3 (iOS-review R2): de versiebalk staat op de telefoon in de flow tussen main en de tabbalk (niets overlapt, main wordt iets korter) en op
+     desktop rechtsonder als losse kaart; een toast die tegelijk verschijnt gaat erboven staan */
+  #updateBalk { display: flex; align-items: center; justify-content: center; gap: 2px; flex-shrink: 0; background: var(--inkt); color: #fff; font-size: var(--fs-zacht); line-height: 1.4; padding: 2px 8px 2px 16px; }
+  #updateBalk[hidden] { display: none; }
+  #updateBalk span { padding: 6px 6px 6px 0; min-width: 0; }
+  .update-knop { background: none; border: none; color: var(--oranje); font: inherit; font-weight: 800; padding: 12px 10px; min-height: 44px; cursor: pointer; border-radius: 8px; white-space: nowrap; }
+  .update-knop.later { color: #fff; opacity: .85; font-weight: 600; }
+  body:has(#updateBalk:not([hidden])) #toast { bottom: calc(144px + env(safe-area-inset-bottom)); }
   /* v4.5: wat de snelinvoer begrepen heeft */
   .p-chip { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 2px 0; min-height: 0; font-size: var(--fs-klein); }
   .p-chip:empty { display: none; }
@@ -658,6 +668,7 @@
   body.desk button, body.desk select, body.desk .chip { min-height: 24px; }
   body.desk #crmBalk [data-crmnieuw] { display: none; }
   [role=region]:focus:not(:focus-visible) { outline: none; }
+  [tabindex="-1"]:focus { outline: none; }  /* v7.3 (TB-8/TB-9): main, #vensterInhoud en de naam in de detailkop krijgen alleen programmatisch focus (nooit met Tab), dus geen ring; echte toetsenbordfocus (tabindex 0, knoppen, velden) houdt zijn :focus-visible-stijl */
   button, .chip, .vink, .rij, .knop-ic { touch-action: manipulation; }  /* geen dubbeltik-zoom nu zoomen weer mag */
   body:not(.desk) #projectHeroTekst { display: none; }  /* v6.6: op de telefoon eerst de projecten; de kop zegt al wat dit scherm is */
   .p-acties { margin: 0 0 12px; }
@@ -843,7 +854,7 @@
   </div>
 </header>
 
-<main>
+<main tabindex="-1"><!-- v7.3 (TB-8/TB-9): laatste uitwijk voor de focus als het element dat een venster of detail opende weg is -->
   <div id="deskKop"><h1 id="deskTitel">Home</h1><div id="deskActies" class="balk" style="margin:0"></div></div>
   <!-- v3.0: weergaven die alleen vanuit de zijbalk (desktop) bereikbaar zijn -->
   <div class="view" id="view-home"><div class="hero"><h2 id="homeGroet">Goedemorgen</h2><p id="homeDatum">&nbsp;</p></div><div id="homeInhoud"><div class="spinner">Laden</div></div></div>
@@ -1002,8 +1013,10 @@
   </div>
 </div>
 
-<div id="venster" class="venster" role="dialog" aria-modal="true"><div class="venster-binnen composer" id="vensterInhoud"></div></div>  <!-- v3.7: bewerkvenster -->
+<div id="venster" class="venster" role="dialog" aria-modal="true" aria-label="Venster"><div class="venster-binnen composer" id="vensterInhoud" tabindex="-1"></div></div>  <!-- v3.7: bewerkvenster; v7.3 (TB-8): krijgt bij openen de focus; v7.3 (iOS-review O2): openVenster zet de naam (aria-labelledby op de titel) -->
 <div id="toast"></div>
+<!-- v7.3 (iOS-review R2): een eigen vaste balk voor "Nieuwe versie beschikbaar", los van #toast: gewone toasts overschrijven hem niet; hij blijft staan tot Herladen of Later en komt na Later terug zodra de app weer in beeld komt -->
+<div id="updateBalk" role="status" hidden><span>Nieuwe versie beschikbaar</span><button class="update-knop" data-update="herladen">Herladen</button><button class="update-knop later" data-update="later" aria-label="Later herladen">Later</button></div>
 
 <nav>
   <button class="actief" data-view="vandaag"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span>Vandaag</span></button>
@@ -1355,7 +1368,7 @@
     // v7.2: dood gewicht weg: data-aid op de rij (uitgezonden, nergens afgevangen; handelingen-inventaris)
     return '<div class="rij veegbaar" tabindex="0"><button class="vink" data-klaar="' + esc(a.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
       '<div class="r-body" data-taakbewerk="' + esc(a.id) + '"><div class="r-titel">' + esc(a.tekst) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
-      (a.prio ? '<span class="tag ' + esc(a.prio) + '">' + esc(a.prio) + '</span>' : '') + '</div>';
+      (a.prio ? '<span class="tag ' + esc(statusKlasse(a.prio)) + '">' + esc(a.prio) + '</span>' : '') + '</div>';
   }
   function renderVandaag(d) {
     S.data = d;
@@ -1372,7 +1385,7 @@
     el('kansenLijst').innerHTML = d.kansen.length ? d.kansen.map(function (k) {
       var stil = (k.dagenStil !== null && k.dagenStil !== undefined) ? (k.stil ? '<b>' + k.dagenStil + ' dagen stil</b>' : k.dagenStil + ' d geleden contact') : '';  // v2.0: norm per mijlpaal
       return '<div class="rij klik" tabindex="0" data-crm-open="kans:' + esc(k.id) + '"><div class="r-body"><div class="r-titel">' + esc(k.school) + ' <span class="zacht">· ' + esc(k.traject) + '</span></div><div class="r-meta">' + [k.volgendeActie ? esc(k.volgendeActie) : '', k.deadline ? 'uiterlijk ' + esc(kortDatum(k.deadline)) : '', stil].filter(Boolean).join(' · ') + '</div></div>' +
-        '<div class="r-rechts"><span class="tag ' + esc(k.fase) + '">' + esc(k.fase) + '</span>' + (k.waarde ? '<div class="r-bedrag">' + euro(k.waarde) + '</div>' : '') + '</div></div>';
+        '<div class="r-rechts"><span class="tag ' + esc(statusKlasse(k.fase)) + '">' + esc(k.fase) + '</span>' + (k.waarde ? '<div class="r-bedrag">' + euro(k.waarde) + '</div>' : '') + '</div></div>';
     }).join('') : '<div class="leeg">Geen open kansen.</div>';
     el('agendaLijst').innerHTML = d.agenda.length ? d.agenda.map(function (a) {
       return '<div class="agenda-blok"><span class="tijd">' + esc(a.tijd) + '</span><div>' + esc(a.titel) + (a.duurMin ? ' <span style="color:var(--gedempt);font-size:var(--fs-klein)">· ' + (a.duurMin >= 60 ? (Math.round(a.duurMin / 6) / 10) + ' u' : a.duurMin + ' min') + '</span>' : '') + '</div></div>';
@@ -1676,7 +1689,7 @@
   function trajectRij(t) {
     var periode = [t.start ? kortDatum(t.start) : '', t.eind ? kortDatum(t.eind) : ''].filter(Boolean).join(' – ');
     return '<div class="rij klik" tabindex="0" data-crm-open="project:' + esc(t.id) + '"><div class="r-body"><div class="r-titel">' + esc(t.school) + (t.plaats ? ' <span class="zacht">· ' + esc(t.plaats) + '</span>' : '') + '</div><div class="r-meta">' + [t.traject, t.schooljaar, periode, t.am ? 'AM ' + t.am : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
-      '<div class="r-rechts"><span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span>' + (t.omzet ? '<div class="r-bedrag">' + euro(t.omzet) + '</div>' : '') + '</div></div>';
+      '<div class="r-rechts"><span class="tag ' + esc(statusKlasse(t.status)) + '">' + esc(t.status) + '</span>' + (t.omzet ? '<div class="r-bedrag">' + euro(t.omzet) + '</div>' : '') + '</div></div>';
   }
   // v4.0: weergaven zoals in monday — per accountmanager (lopend/afgelopen), verlenging per schooljaar, examentraining, lijst en (desktop) bord
   function schooljaarNu() {  // v4.1: het schooljaar uit de backend (instelbaar in Beheer → Keuzelijsten), anders op datum
@@ -1826,7 +1839,7 @@
   }
   function vacatureKaart(v, zienK, wijzigK, wijzigV, K, project) {
     var concept = v.status === 'concept';  // v6.4: uit het winformulier; matchen kan, voordragen pas na bevestigen door de AM
-    var kop = '<div class="vac-kop"><div><b>' + esc(v.titel) + '</b> <span class="tag ' + esc(v.status) + '">' + esc(concept ? 'concept · nog niet bevestigd' : v.status) + '</span>' +
+    var kop = '<div class="vac-kop"><div><b>' + esc(v.titel) + '</b> <span class="tag ' + esc(statusKlasse(v.status)) + '">' + esc(concept ? 'concept · nog niet bevestigd' : v.status) + '</span>' +
       (project ? '<div class="r-meta"><a data-crm-open="project:' + esc(project.id) + '" tabindex="0" role="link" style="cursor:pointer;font-weight:600;display:inline-block;padding:8px 0">' + esc(project.school) + ' · ' + esc(project.traject) + '</a>' + (project.am ? ' · AM ' + esc(project.am) : '') + ' · ' + (project.talentscout ? 'TS ' + esc(project.talentscout) : '<span style="color:var(--rood)">geen talentscout</span>') + '</div>' : '') +
       '<div class="r-meta">' + [v.aantal + '×', v.dagen, v.urenPerWeek ? v.urenPerWeek + ' u/wk' : '', v.start ? 'start ' + kortDatum(v.start) : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
       '<div class="vac-teller' + (v.gevuld >= v.aantal ? ' vol' : '') + '" title="gevuld van nodig">' + esc(v.gevuld) + '/' + esc(v.aantal) + '</div></div>';
@@ -1985,15 +1998,19 @@
     }, '<div class="hint">Er komt een project voor de accountmanager en een conceptvacature op het bord van het talentteam. De taskforce staat vooringevuld; de AM bevestigt de vacature na de meeting.</div>'));
     VENSTER.annuleer = function () { if (s) s.disabled = false; herlaadDetail(); };
   }
+  // v7.3 (iOS-review O3): een venster dat met alleen een spinner opent (meldingen, voorstellen, doelen) krijgt meteen een knop Annuleren: op iOS is er
+  // geen Escape en voor VoiceOver is de achtergrond achter aria-modal onbereikbaar, dus tot nu toe zat de gebruiker bij een trage aanroep vast.
+  var LADEN_ANNULEER = '<div class="balk"><button class="knop licht" data-cf-annuleer="1">Annuleren</button></div>';
   /* --- v4.1: meldingen (de bel) --- */
   function zetMeldingen(n) { ['meldTeller', 'zbMeldTeller'].forEach(function (id) { var x = el(id); if (!x) return; x.textContent = n > 9 ? '9+' : String(n || ''); x.hidden = !n; }); ['meldKnop', 'zbMeld'].forEach(function (id) { var k = el(id); if (k) k.setAttribute('aria-label', n ? 'Meldingen: ' + (n > 9 ? '9+' : n) + ' nieuw' : 'Meldingen'); }); }  // v6.6: de naam bevat het zichtbare getal
   function toonMeldingen() {
-    formActie = null; openVenster('<div class="spinner" id="meldLaden">Laden</div>');
+    formActie = null; openVenster('<div class="spinner" id="meldLaden">Laden</div>' + LADEN_ANNULEER);  // v7.3 (iOS-review O3): ook tijdens het laden een uitweg
     run('apiMeldingen').then(function (l) {
       if (!el('meldLaden')) return;  // intussen gesloten of een ander venster geopend
       el('vensterInhoud').innerHTML = '<div class="kop" style="margin-top:14px">Meldingen</div>' + (l.length ? l.map(function (m) {
         return '<div class="rij' + (m.link ? ' klik' : '') + (m.gelezen ? '' : ' nieuw') + '"' + (m.link ? ' tabindex="0" data-crm-open="' + esc(m.link) + '"' : '') + '><div class="r-body"><div class="r-titel">' + esc(m.tekst) + '</div><div class="r-meta">' + esc([datumTijdKort(m.datum), m.door].filter(Boolean).join(' · ')) + '</div></div></div>';
       }).join('') : '<div class="leeg">Geen meldingen.</div>') + '<div class="balk"><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>';
+      vensterNaam();  // v7.3 (iOS-review O2)
       if (l.some(function (m) { return !m.gelezen; })) run('apiMeldingenGelezen').then(function () { zetMeldingen(0); if (CRM.basis) CRM.basis.meldingen = 0; }).catch(function () {});
     }).catch(function () { sluitVenster(); });
   }
@@ -2056,6 +2073,9 @@
   var DAGDEEL_KORT = ['ochtend', 'middag', 'avond'];
   var UITZ_KOLOMMEN = [{ naam: 'van', label: 'Van', type: 'date', flex: 1.3 }, { naam: 'tot', label: 'Tot', type: 'date', flex: 1.3 }, { naam: 'soort', label: 'niet / wel', lijst: 'dl-soort', flex: 0.8 }, { naam: 'reden', label: 'Reden', flex: 1.6 }];
   function talentAlles() { return recht('talenten', 'zien') === 'alles'; }
+  // v7.3 (DEK-8): dé slug voor statusklassen op een .tag: kleine letters, elke reeks niet-alfanumerieke tekens één streepje ("in aanvraag" → in-aanvraag,
+  // "niet geschikt" → niet-geschikt). Alle statustags (school, kans, project, vacature, talent, document, oordeel, prio) gaan hierdoor, zodat een
+  // waarde met een spatie uit een keuzelijst nooit twee losse klassen oplevert en de CSS-regel (.tag.in-aanvraag) blijft matchen.
   function statusKlasse(s) { return pillKlasse(s).replace(/^p-/, ''); }
   function waNummer(t) { var d = String(t || '').replace(/\D/g, ''); if (d.indexOf('0031') === 0) d = d.slice(2); else if (d.charAt(0) === '0') d = '31' + d.slice(1); return d; }
   function vogBadge(v, metDatum) {  // metDatum: de afgiftedatum in de badge zelf (een title is op iOS onbereikbaar)
@@ -2096,12 +2116,12 @@
   }
   function talentRij(t) {
     var meta = [t.functies.join(', '), t.woonplaats, t.beperkt ? '' : (t.beschikbaarheidBevestigd ? 'bevestigd ' + kortDatum(t.beschikbaarheidBevestigd) : 'beschikbaarheid niet bevestigd'), t.plaatsingen ? t.plaatsingen + (t.plaatsingen === 1 ? ' plaatsing' : ' plaatsingen') : ''].filter(Boolean).map(esc).join(' · ');
-    return '<div class="rij klik" tabindex="0" data-crm-open="talent:' + esc(t.id) + '"><span class="avatar">' + esc(initialen(t.naam)) + '</span><div class="r-body"><div class="r-titel">' + esc(t.naam) + ' <span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span></div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
+    return '<div class="rij klik" tabindex="0" data-crm-open="talent:' + esc(t.id) + '"><span class="avatar">' + esc(initialen(t.naam)) + '</span><div class="r-body"><div class="r-titel">' + esc(t.naam) + ' <span class="tag ' + esc(statusKlasse(t.status)) + '">' + esc(t.status) + '</span></div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
       '<div class="r-rechts">' + vogBadge(t.vog) + (t.beoordeling && t.beoordeling.aantal ? '<div style="margin-top:4px">' + beoordelingKort(t.beoordeling) + '</div>' : '') + '</div></div>';
   }
   var TALENT_KOLOMMEN = [
     { veld: 'naam', label: 'Naam', html: function (t) { return '<b>' + esc(t.naam) + '</b>'; } }, { veld: 'functies', label: 'Functies', html: function (t) { return esc(t.functies.join(', ')); } },
-    { veld: 'woonplaats', label: 'Woonplaats', html: function (t) { return esc(t.woonplaats); } }, { veld: 'status', label: 'Status', html: function (t) { return '<span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span>'; } },
+    { veld: 'woonplaats', label: 'Woonplaats', html: function (t) { return esc(t.woonplaats); } }, { veld: 'status', label: 'Status', html: function (t) { return '<span class="tag ' + esc(statusKlasse(t.status)) + '">' + esc(t.status) + '</span>'; } },
     { veld: 'vogStatus', label: 'VOG', html: function (t) { return vogBadge(t.vog); } }, { veld: 'beoordelingGem', label: 'Beoordeling', html: function (t) { return beoordelingKort(t.beoordeling); } },
     { veld: 'plaatsingen', label: 'Plaatsingen', getal: true, html: function (t) { return esc(t.plaatsingen || ''); } },
     { veld: 'beschikbaarheidBevestigd', label: 'Bevestigd', html: function (t) { return t.beschikbaarheidBevestigd ? esc(kortDatum(t.beschikbaarheidBevestigd)) : '<span class="zacht">—</span>'; } },
@@ -2146,7 +2166,8 @@
           sluitVenster(); toast(t ? 'Profiel opgeslagen.' : 'Talent toegevoegd.');
           if (r.waarschuwing) setTimeout(function () { toast(r.waarschuwing); }, 2800);
           TAL.data = null;
-          if (CRM.detail && CRM.detail.soort === 'talent') herlaadDetail(); else if (!t) openTalent(r.id); else if (S.pWeergave === 'talent' && el('view-trajecten').classList.contains('actief')) renderTrajecten();
+          if (!t) openTalent(r.id);  // v7.3: een nieuw profiel opent altijd, ook als er al een talentdetail open stond (bijv. "Toch een nieuw profiel maken" vanuit een profiel)
+          else if (CRM.detail && CRM.detail.soort === 'talent') herlaadDetail(); else if (S.pWeergave === 'talent' && el('view-trajecten').classList.contains('actief')) renderTrajecten();
         }).catch(function (e) {
           var m = /\[talent:([^\]]+)\]/.exec(String(e && e.message)), oud = el('dubbelHint'); if (oud) oud.parentNode.removeChild(oud);
           if (m && el('vensterInhoud')) { el('vensterInhoud').insertAdjacentHTML('afterbegin', '<div class="kaart" id="dubbelHint" style="border-color:var(--oranje)"><b>Er bestaat al een profiel met dit e-mailadres of telefoonnummer.</b><div class="balk" style="margin-top:8px"><button class="knop klein" data-crm-open="talent:' + esc(m[1]) + '">Open dat profiel</button><button class="knop licht klein" data-talentforceer="1">Toch een nieuw profiel maken</button></div></div>'); el('vensterInhoud').scrollTop = 0; }
@@ -2277,8 +2298,8 @@
   function avgBlok(t) { return '<div class="blok"><div class="blok-kop">AVG</div><div class="hint">Toestemming ' + esc(t.toestemmingDatum ? kortDatum(t.toestemmingDatum) : 'onbekend') + (t.toestemmingGrondslag ? ' (' + esc(t.toestemmingGrondslag) + ')' : '') + (t.bewarenTot ? ' · bewaren tot ' + esc(kortDatum(t.bewarenTot)) : '') + '</div><div class="balk"><button class="knop licht klein" data-talentexport="' + esc(t.id) + '">Inzage-export</button><button class="knop licht klein gevaar" data-talentanonimiseer="' + esc(t.id) + '">Anonimiseren</button></div></div>'; }
   /* --- voorstellen: de matchscore per talent met uitleg; het talentteam kiest wie het voordraagt --- */
   function matchVenster(vid) {
-    formActie = null; openVenster('<div class="spinner" id="matchLaden">Talenten vergelijken</div>');
-    run('apiMatch', vid).then(function (M) { if (!el('matchLaden')) return; MATCH = { vid: vid, data: M, gekozen: {} }; el('vensterInhoud').innerHTML = matchHtml(M); }).catch(function () { sluitVenster(); });
+    formActie = null; openVenster('<div class="spinner" id="matchLaden">Talenten vergelijken</div>' + LADEN_ANNULEER);  // v7.3 (iOS-review O3)
+    run('apiMatch', vid).then(function (M) { if (!el('matchLaden')) return; MATCH = { vid: vid, data: M, gekozen: {} }; el('vensterInhoud').innerHTML = matchHtml(M); vensterNaam(); }).catch(function () { sluitVenster(); });  // v7.3 (iOS-review O2): naam van het venster
   }
   function matchHtml(M) {
     var v = M.vacature, p = M.project;
@@ -2495,7 +2516,7 @@
   }
   function formHtml(titel, velden, waarden, knop, actie, extra) {
     formActie = actie; waarden = waarden || {};
-    return '<div class="kop" style="margin-top:14px">' + esc(titel) + '</div>' + (extra || '') + '<div class="velden-2">' + velden.map(function (v) { return veldHtml(v, waarden[v.naam]); }).join('') + '</div>' +
+    return '<div class="kop" id="cf-formkop" style="margin-top:14px">' + esc(titel) + '</div>' + (extra || '') + '<div class="velden-2">' + velden.map(function (v) { return veldHtml(v, waarden[v.naam]); }).join('') + '</div>' +  /* v7.3 (iOS-review O2): de titel heeft een id (in het venster vf-titel) als naam van het dialoogvenster */
       '<div class="balk"><button class="knop" data-cf-opslaan="1">' + esc(knop || 'Opslaan') + '</button><button class="knop licht" data-cf-annuleer="1">Annuleren</button></div>';
   }
   function leesForm(root) { var o = {}; root.querySelectorAll('[data-cf]').forEach(function (e) { o[e.dataset.cf] = e.type === 'checkbox' ? e.checked : e.value.trim(); }); return o; }
@@ -2609,7 +2630,7 @@
   function schoolRij(s) {
     var meta = [s.eigenaar, s.personen ? s.personen + (s.personen === 1 ? ' persoon' : ' personen') : '', s.laatsteContact ? 'contact ' + kortDatum(s.laatsteContact) : ''].filter(Boolean).map(esc).join(' · ');
     return '<div class="rij klik" tabindex="0" data-crm-open="school:' + esc(s.id) + '"><span class="avatar">' + esc(initialen(s.naam)) + '</span><div class="r-body"><div class="r-titel">' + esc(s.naam) + (s.plaats ? ' <span class="zacht">· ' + esc(s.plaats) + '</span>' : '') + '</div>' +
-      (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div><div class="r-rechts">' + (s.status ? '<span class="tag ' + esc(s.status) + '">' + esc(s.status) + '</span>' : '') + (s.openWaarde ? '<div class="r-bedrag">' + euro(s.openWaarde) + '</div>' : '') + '</div></div>';
+      (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div><div class="r-rechts">' + (s.status ? '<span class="tag ' + esc(statusKlasse(s.status)) + '">' + esc(s.status) + '</span>' : '') + (s.openWaarde ? '<div class="r-bedrag">' + euro(s.openWaarde) + '</div>' : '') + '</div></div>';
   }
   function persoonRij(p, metSchool) {
     var meta = [p.functie, metSchool ? p.school : '', p.email, p.telefoon].filter(Boolean).map(esc).join(' · ');
@@ -2618,7 +2639,7 @@
   function kansRij(k, metSchool) {
     var meta = [esc(k.kans) + '%', k.verwachteSluiting ? 'sluiting ' + esc(kortDatum(k.verwachteSluiting)) : '', esc(k.eigenaar), k.stil ? '<b>' + esc(k.dagenStil) + ' dagen stil</b>' : '', k.fase === 'verloren' && k.verliesReden ? esc(k.verliesReden) : ''].filter(Boolean).join(' · ');
     return '<div class="rij klik" tabindex="0" data-crm-open="kans:' + esc(k.id) + '"><div class="r-body"><div class="r-titel">' + esc(metSchool && k.school ? k.school : k.naam) + (metSchool && k.school ? ' <span class="zacht">· ' + esc(k.naam) + '</span>' : '') + '</div><div class="r-meta">' + meta + '</div></div>' +
-      '<div class="r-rechts"><span class="tag ' + esc(k.fase) + '">' + esc(k.fase) + '</span>' + (k.waarde ? '<div class="r-bedrag">' + euro(k.waarde) + '</div>' : '') + '</div></div>';
+      '<div class="r-rechts"><span class="tag ' + esc(statusKlasse(k.fase)) + '">' + esc(k.fase) + '</span>' + (k.waarde ? '<div class="r-bedrag">' + euro(k.waarde) + '</div>' : '') + '</div></div>';
   }
   // v3.7: tik op de taak = bewerken; de gekoppelde school, persoon of kans is een link in de regel eronder
   function koppelLinks(t) { return [t.schoolId ? crmLink('school', t.schoolId, t.school) : '', t.persoonId ? crmLink('persoon', t.persoonId, t.persoon) : esc(t.persoon), t.kansId ? crmLink('kans', t.kansId, t.kans) : '', t.link && String(t.link).indexOf('talent:') === 0 ? crmLink('talent', String(t.link).slice(7), 'talentprofiel') : ''].filter(Boolean).join(' · '); }  // v5.0: taken over een talent (beoordelen, matchinggesprek) linken naar het profiel
@@ -2636,7 +2657,7 @@
     var meta = [esc(t.categorie), esc(t.eigenaar), deadlineTekst(t), tijdMeta(t), subMeta(t, sub), metKoppeling ? koppelLinks(t) : '', tagsHtml(t.tags)].filter(Boolean).join(' · ');  // v4.5: tijd en herhaling; v4.6: subtaken en tags
     return '<div class="rij veegbaar' + (sub ? ' sub' : '') + '" tabindex="0"><button class="vink" data-taakklaar="' + esc(t.id) + '" aria-label="Afvinken"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>' +
       '<div class="r-body" data-taakbewerk="' + esc(t.id) + '"><div class="r-titel">' + esc(t.tekst) + '</div>' + (meta ? '<div class="r-meta">' + meta + '</div>' : '') + '</div>' +
-      (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</div>';
+      (t.prio ? '<span class="tag ' + esc(statusKlasse(t.prio)) + '">' + esc(t.prio) + '</span>' : '') + '</div>';
   }
   function renderScholen() {
     var B = CRM.basis, q = CRM.zoek.toLowerCase();
@@ -3012,16 +3033,77 @@
       if (!CRM.detail || CRM.detail.id !== id) return;
       CRM.detail.data = r[0]; renderDetail();
       var kop = document.querySelector('#crmDetailScherm .d-naam h2'); if (kop) onthoudRecent(soort, id, kop.textContent);  // v6.8
-    }).catch(function () { if (CRM.detail && CRM.detail.id === id) d.innerHTML = terugKnop() + '<div class="leeg">Kon dit niet laden.</div>'; });
+      if (!zelfde) focusDetailKop();  // v7.3 (TB-9); v7.3 (iOS-review R1): alleen als het detail nieuw opengaat, niet bij herlaadDetail (die zet de focus zelf terug)
+    }).catch(function () { if (CRM.detail && CRM.detail.id === id) { d.innerHTML = terugKnop() + '<div class="leeg">Kon dit niet laden.</div>'; if (!zelfde) focusDetailKop(); } });
   }
-  function herlaadDetail() { if (CRM.detail) { var top = document.querySelector('main').scrollTop; openDetail(CRM.detail.soort, CRM.detail.id, false).then(function () { document.querySelector('main').scrollTop = top; }); } }
+  // v7.3 (TB-9): na het renderen krijgt de naam in de detailkop de focus (tabindex -1, geen ring, zonder scrollen): een schermlezer leest de naam,
+  // Tab gaat verder in het detail en Shift+Tab naar Terug. Zonder dit stond de focus na Enter op een rij op body. Lukt het laden niet: de Terug-knop.
+  function focusDetailKop() {
+    var d = el('crmDetailScherm'), k = d.querySelector('.d-naam h2') || d.querySelector('[data-crm-terug]'); if (!k) return;
+    if (k.tagName !== 'BUTTON' && !k.hasAttribute('tabindex')) k.setAttribute('tabindex', '-1');
+    focusStil(k);
+  }
+  // v7.3 (TB-9): bij Terug gaat de focus naar wat het detail opende (CRM.detailOpener, gezet in de klik-handler van data-crm-open). Is de lijst
+  // intussen opnieuw getekend (renderCrm, deskNaar), dan naar het element met dezelfde data-crm-open-waarde: liefst in het actieve scherm én van
+  // dezelfde soort (tag) als het origineel, want de chip "Recent" draagt dezelfde waarde als de rij; een asynchrone herlading krijgt twee kansen
+  // (350 ms en 1,5 s). Niets gevonden: main. Nooit afpakken van een element dat intussen focus kreeg.
+  function focusDetailOpener() {
+    var o = CRM.detailOpener; CRM.detailOpener = null; if (!o) return;
+    function zoek() {
+      if (zichtbaarEl(o.el)) return o.el;
+      var l = document.querySelectorAll('[data-crm-open="' + String(o.w || '').replace(/["\\]/g, '') + '"]'), v = document.querySelector('.view.actief'), tag = o.el ? o.el.tagName : '', inScherm = null, eerste = null;
+      for (var i = 0; i < l.length; i++) {
+        var e = l[i]; if (!zichtbaarEl(e) || (e.closest && e.closest('#venster'))) continue;
+        if (v && v.contains(e)) { if (e.tagName === tag) return e; if (!inScherm) inScherm = e; } else if (!eerste) eerste = e;
+      }
+      return inScherm || eerste;
+    }
+    function vrij() { var a = document.activeElement; return !a || a === document.body || a === document.querySelector('main'); }
+    function probeer(laatste) { if (!vrij()) return; var e = zoek(); if (e) focusStil(e); else if (laatste) focusStil(document.querySelector('main')); }
+    probeer(false); setTimeout(function () { probeer(false); }, 350); setTimeout(function () { probeer(true); }, 1500);
+  }
+  // v7.3 (iOS-review R1): herlaadDetail ververst hetzelfde detail (na opslaan, afvinken, een venster) en laat de focus waar hij was. Stond hij in het
+  // detail, dan komt hij na het hertekenen terug op hetzelfde element (herkend aan tag, id en data-attributen: de tab, de taakrij, de knop Bewerken),
+  // anders op de naam in de kop; stond hij elders (zijbalk, een venster, de composer die composerHerstel terugzet, body), dan blijft hij daar.
+  // Zonder dit sprong VoiceOver na elke bewerking naar de naam bovenaan en viel het toetsenbord op de telefoon dicht.
+  function herlaadDetail() {
+    if (!CRM.detail) return;
+    var m = document.querySelector('main'), top = m.scrollTop, d = el('crmDetailScherm'), a = document.activeElement, c = el('crmComposer');
+    var sleutel = a && a !== document.body && d.contains(a) && !(c && c.contains(a)) ? focusSleutel(a) : null;
+    openDetail(CRM.detail.soort, CRM.detail.id, false).then(function () {
+      m.scrollTop = top;
+      if (!sleutel) return;
+      var nu = document.activeElement; if (nu && nu !== document.body && nu !== m) return;  // iemand anders (een venster, composerHerstel) heeft de focus al
+      var e = zoekMetSleutel(d, sleutel);
+      if (!(e && focusStil(e))) focusDetailKop();
+    });
+  }
+  function focusSleutel(e) {
+    var k = { tag: e.tagName, id: e.id || '', data: [], tekst: '' };
+    for (var i = 0; i < e.attributes.length; i++) { var at = e.attributes[i]; if (at.name.indexOf('data-') === 0) k.data.push([at.name, at.value]); }
+    if (!k.id && !k.data.length) k.tekst = (e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    return k;
+  }
+  function zoekMetSleutel(root, k) {
+    if (k.id) { var byId = el(k.id); return byId && root.contains(byId) && zichtbaarEl(byId) ? byId : null; }
+    if (!k.data.length && !k.tekst) return null;  // niets om het aan te herkennen
+    var l = root.querySelectorAll(k.tag);
+    for (var i = 0; i < l.length; i++) {
+      var e = l[i], past = true;
+      for (var j = 0; j < k.data.length; j++) { if (e.getAttribute(k.data[j][0]) !== k.data[j][1]) { past = false; break; } }
+      if (past && k.tekst && (e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) !== k.tekst) past = false;
+      if (past && zichtbaarEl(e)) return e;
+    }
+    return null;
+  }
   function sluitDetail() {
     var terug = CRM.detail && (CRM.detail.soort === 'project' || CRM.detail.soort === 'talent') ? CRM.terugNaar : ''; CRM.terugNaar = '';  // v3.8: terug naar Projecten of Facturatie; v5.0: of het talentbestand
     if (terug) { CRM.detail = null; formActie = null; el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block';
-      if (isDesk()) deskNaar(terug); else wisselView(terug === 'facturatie' ? 'facturatie' : 'trajecten'); return; }
+      if (isDesk()) deskNaar(terug); else wisselView(terug === 'facturatie' ? 'facturatie' : 'trajecten'); focusDetailOpener(); return; }  // v7.3 (TB-9)
     CRM.detail = null; formActie = null;
     el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block';
     if (CRM.basis) renderCrm(); else laadRelaties();
+    focusDetailOpener();  // v7.3 (TB-9)
   }
   function kRij(k, v) { return (v === '' || v === undefined || v === null) ? '' : '<div class="k-rij"><span>' + esc(k) + '</span><span>' + v + '</span></div>'; }
   // v7.2: dood gewicht weg: veldenRijen en linkMail (nergens aangeroepen, 0 dekking)
@@ -3104,7 +3186,7 @@
     // v7.1: naam, dan één rustige rij: Bewerken, Link en Vastpinnen (iconen met een label voor schermlezers), Mail sturen.
     // "Activiteit loggen" staat niet meer hier maar als enige primaire knop in het midden, bij de historie.
     var D0 = CRM.detail, gepind = D0 ? isGepind(D0.soort, D0.id) : false;
-    return '<div class="d-naam"><span class="avatar">' + esc(initialen(o.avatar || o.naam)) + '</span><h2>' + esc(o.naam) + '</h2></div>' +
+    return '<div class="d-naam"><span class="avatar">' + esc(initialen(o.avatar || o.naam)) + '</span><h2 tabindex="-1">' + esc(o.naam) + '</h2></div>' +  // v7.3 (TB-9): krijgt na het openen de focus
       (o.sub ? '<div class="d-sub">' + o.sub + '</div>' : '') + (o.tags ? '<div class="tags" style="margin-top:6px">' + o.tags + '</div>' : '') +
       '<div class="d-knoppen">' + (o.alleenLezen ? '' : '<button class="knop-mini" data-composer="bewerk">Bewerken</button>') + (o.mail ? '<a class="knop-ic" href="mailto:' + esc(o.mail) + '" aria-label="Mail sturen" title="Mail sturen"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></a>' : '') +
       (D0 ? '<button class="knop-ic" data-linkkopie="' + esc(D0.soort + ':' + D0.id) + '" aria-label="Link kopiëren" title="Link kopiëren"><svg class="ic" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>' +
@@ -3116,7 +3198,7 @@
   function plaatsLink(adres) { return adres ? '<div>' + esc(adres) + ' <a href="https://maps.google.com/?q=' + encodeURIComponent(adres) + '">kaart</a></div>' : ''; }
   function projectRij(t) {
     return '<div class="rij klik" tabindex="0" data-crm-open="project:' + esc(t.id) + '"><div class="r-body"><div class="r-titel">' + esc(t.traject) + ' <span class="zacht">· ' + esc(t.schooljaar) + '</span></div><div class="r-meta">' + [t.am ? 'AM ' + t.am : '', t.adviseur ? 'adviseur ' + t.adviseur : '', t.gefactureerd ? 'gefactureerd: ' + t.gefactureerd : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
-      '<div class="r-rechts"><span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span>' + (t.omzet ? '<div class="r-bedrag">' + euro(t.omzet) + '</div>' : '') + '</div></div>';
+      '<div class="r-rechts"><span class="tag ' + esc(statusKlasse(t.status)) + '">' + esc(t.status) + '</span>' + (t.omzet ? '<div class="r-bedrag">' + euro(t.omzet) + '</div>' : '') + '</div></div>';
   }
   function documentRij(x) { return '<a class="rij doc" href="' + esc(x.url) + '"><span class="d-type ' + esc(x.type) + '">' + (TYPE_KORT[x.type] || 'DOC') + '</span><div class="r-body"><div class="r-titel">' + esc(x.titel) + '</div></div>' + LINK_SVG + '</a>'; }
   function samenvattingBlok() {
@@ -3136,10 +3218,10 @@
     el('crmDetailScherm').innerHTML = terugKnop() + '<div class="detail-3"><div class="d-links">' + links + '</div><div class="d-midden"><div class="composer" id="crmComposer"></div>' + midden + '</div><div class="d-rechts">' + rechts + '</div></div>';
   }
   function renderDetail() {
-    var D = CRM.detail, d = D.data, links, midden, rechts, hist;
+    var D = CRM.detail, d = D.data, links, midden, rechts, hist, composer = composerBewaar();  // v7.3 (H4): een open composer gaat mee
     if (D.soort === 'school') {
       var s = d.school, c = d.cijfers || {}, mails = [s.email].concat(d.personen.map(function (p) { return p.email; })).filter(function (e, i, a) { return e && a.indexOf(e) === i; });
-      links = linksKolom({ naam: s.naam, sub: [s.type, s.plaats, s.bestuur].filter(Boolean).map(esc).join(' · '), tags: (s.status ? '<span class="tag ' + esc(s.status) + '">' + esc(s.status) + '</span> ' : '') + tagsHtml(s.tags), mail: mails.join(','),
+      links = linksKolom({ naam: s.naam, sub: [s.type, s.plaats, s.bestuur].filter(Boolean).map(esc).join(' · '), tags: (s.status ? '<span class="tag ' + esc(statusKlasse(s.status)) + '">' + esc(s.status) + '</span> ' : '') + tagsHtml(s.tags), mail: mails.join(','),
         lijst: (s.telefoon ? '<div>' + linkTel(s.telefoon) + '<small>Algemeen</small></div>' : '') + d.personen.filter(function (p) { return p.telefoon; }).map(function (p) { return '<div>' + linkTel(p.telefoon) + '<small>' + esc(p.naam) + '</small></div>'; }).join('') +
           mails.map(mailLink).join('') + (s.website ? '<div>' + linkWeb(s.website) + '</div>' : '') + plaatsLink(s.adres),
         velden: veld('Eigenaar', esc(s.eigenaar)) + veld('Leerlingen', esc(s.leerlingen)) + Object.keys(s.velden || {}).map(function (k) { return veld(k, esc(s.velden[k])); }).join(''),
@@ -3176,7 +3258,7 @@
     } else if (D.soort === 'talent') {  // v5.0: talentprofiel. Volledig voor het talentteam; de accountmanager ziet alleen naam, functies, VOG, beoordelingen en zijn eigen plaatsingen.
       var tl = d.talent, R = d.rechten || {}, vol = !!R.vol, bo = tl.beoordeling || {};
       var contact = (tl.telefoon ? '<div>' + linkTel(tl.telefoon) + ' <a href="https://wa.me/' + esc(waNummer(tl.telefoon)) + '"' + (isDesk() ? ' target="_blank"' : '') + ' rel="noopener" data-walog="' + esc(tl.id) + '">WhatsApp</a></div>' : '') + (tl.email ? mailLink(tl.email) : '') + (vol && (tl.postcode || tl.woonplaats) ? '<div>' + esc([tl.postcode, tl.woonplaats].filter(Boolean).join(' ')) + '</div>' : '');
-      links = linksKolom({ naam: tl.naam, alleenLezen: !R.wijzigen, sub: [tl.functies.join(', '), (tl.sectoren || []).join(' / ')].filter(Boolean).map(esc).join(' · '), tags: '<span class="tag ' + esc(tl.status) + '">' + esc(tl.status) + '</span> ' + vogBadge(tl.vog) + ' ' + tagsHtml(tl.tags), mail: tl.email, lijst: contact,
+      links = linksKolom({ naam: tl.naam, alleenLezen: !R.wijzigen, sub: [tl.functies.join(', '), (tl.sectoren || []).join(' / ')].filter(Boolean).map(esc).join(' · '), tags: '<span class="tag ' + esc(statusKlasse(tl.status)) + '">' + esc(tl.status) + '</span> ' + vogBadge(tl.vog) + ' ' + tagsHtml(tl.tags), mail: tl.email, lijst: contact,
         velden: vol ? veld('Vakken', esc((tl.vakken || []).join(', '))) + veld('Opleiding', esc(tl.opleiding)) + veld('Bevoegdheid', esc(tl.bevoegdheid)) + veld('Vervoer', [tl.vervoer, tl.reisafstandKm ? 'tot ' + tl.reisafstandKm + ' km' : ''].filter(Boolean).map(esc).join(' · ')) + veld('Uren per week', tl.maxUrenWeek ? 'max ' + esc(tl.maxUrenWeek) : '') +
           veld('Beschikbaar', [tl.beschikbaarVanaf ? 'vanaf ' + kortDatum(tl.beschikbaarVanaf) : '', tl.beschikbaarTot ? 'tot ' + kortDatum(tl.beschikbaarTot) : ''].filter(Boolean).map(esc).join(' ')) + veld('Contractvorm', esc(tl.contractvorm)) + veld('Bron', esc(tl.bron)) + veld('XPS', esc(tl.xpsId)) + veld('AFAS', esc(tl.afasNummer)) +
           veld('Laatste contact', tl.laatsteContact ? esc(kortDatum(tl.laatsteContact)) : '') + veld('Status sinds', tl.statusSinds ? esc(kortDatum(tl.statusSinds)) : '') + Object.keys(tl.velden || {}).map(function (k) { return veld(k, esc(tl.velden[k])); }).join('') : veld('Plaatsingen', esc(tl.plaatsingen || 0)),
@@ -3189,7 +3271,7 @@
       var t = d.project, K = d.keuzes || {}, pr = d.rechten || { wijzigen: true, facturatie: true, facturatieWijzigen: true };
       t.magWijzigen = pr.wijzigen;
       links = linksKolom({ naam: t.traject + (t.schooljaar ? ' ' + t.schooljaar : ''), avatar: t.school, alleenLezen: !pr.wijzigen, sub: [d.school ? crmLink('school', d.school.id, d.school.naam) : esc(t.school), d.kans ? crmLink('kans', d.kans.id, 'kans: ' + d.kans.naam) : ''].filter(Boolean).join(' · '),
-        tags: '<span class="tag ' + esc(t.status) + '">' + esc(t.status) + '</span>', mail: d.school && d.school.email, logSoort: 'notitie',
+        tags: '<span class="tag ' + esc(statusKlasse(t.status)) + '">' + esc(t.status) + '</span>', mail: d.school && d.school.email, logSoort: 'notitie',
         velden: veld('Accountmanager', esc(t.am) || '<b style="color:var(--rood)">nog niet toegewezen</b>') + veld('Adviseur', esc(t.adviseur)) + talentscoutVeld(d) + veld('Periode', [t.start ? esc(kortDatum(t.start)) : '', t.eind ? esc(kortDatum(t.eind)) : ''].filter(Boolean).join(' – ')) +
           veld('Inzet', [t.ondersteuners ? esc(t.ondersteuners) + ' ondersteuner' + (Number(t.ondersteuners) === 1 ? '' : 's') : '', t.urenPerWeek ? esc(t.urenPerWeek) + ' u/wk' : ''].filter(Boolean).join(' · ')) + veld('Tarief', t.tarief ? euro(t.tarief) + '/u' : '') + veld('Omzet', t.omzet ? euro(t.omzet) : '') + veld('Bezetting', (d.bezetting || {}).nodig ? esc(d.bezetting.gevuld + ' van ' + d.bezetting.nodig + ' plekken gevuld') : '') + veld('Contactpersoon', esc(t.contactpersoon)) +
           veld('Contactgegevens', t.contactgegevens ? '<span style="white-space:pre-wrap">' + esc(t.contactgegevens) + '</span>' : '') + veld('Samenwerkingsvoorstel', t.voorstelUrl ? webLink(t.voorstelUrl, 'Openen') : '') + veld('Documenten', t.documentenUrl ? webLink(t.documentenUrl, 'Map openen') : '') + veld('XPS-project', esc(t.xpsProject)) +  // v4.0
@@ -3206,6 +3288,7 @@
       rechts = takenBlok(d.taken, '', true) + afsprakenBlok(d.tijdlijn);
     }
     zetDetail(links, midden, rechts);
+    composerHerstel(composer);  // v7.3 (H4)
   }
   // Facturatie van een project (zoals de kolommen in het monday-bord) met de termijnen eronder
   function facturatieBlok(t, facturen, K, alleenLezen) {  // v4.0: alleenLezen = een consultant ziet de facturatie van zijn project
@@ -3320,7 +3403,29 @@
         });
       }
     }
-    if (h) toonForm(doel, h);
+    if (h) { toonForm(doel, h); doel.setAttribute('data-soort', soort); }  // v7.3 (H4): onthouden welke composer open staat, voor composerBewaar
+  }
+  // v7.3 (H4): een half ingevulde inline composer (notitie, taak, kans, …) overleeft het hertekenen van het detail (taakLokaal/actLokaal → herteken →
+  // renderDetail, een andere tab, facturatie). Vóór het tekenen onthouden we soort, veldwaarden en cursor; erna opent dezelfde composer opnieuw met
+  // die waarden, alleen voor hetzelfde detail. De focus blijft waar hij was: toonForm mag hem niet in de composer trekken (telefoon: toetsenbord).
+  function composerBewaar() {
+    var c = el('crmComposer'), D = CRM.detail, soort = c && c.getAttribute('data-soort'), a = document.activeElement;
+    if (!soort || !D || !c.querySelector('[data-cf-opslaan]')) return null;
+    var b = { detail: D.soort + ':' + D.id, soort: soort, waarden: {}, focus: '', cursor: null };
+    c.querySelectorAll('[data-cf]').forEach(function (e) { b.waarden[e.dataset.cf] = e.type === 'checkbox' ? e.checked : e.value; });
+    if (a && c.contains(a) && a.dataset && a.dataset.cf) { b.focus = a.dataset.cf; try { b.cursor = [a.selectionStart, a.selectionEnd]; } catch (e) {} }
+    return b;
+  }
+  function composerHerstel(b) {
+    var D = CRM.detail; if (!b || !D || !D.data || D.soort + ':' + D.id !== b.detail) return;
+    var a = document.activeElement, m = document.querySelector('main'), top = m ? m.scrollTop : 0;
+    openComposer(b.soort);
+    var c = el('crmComposer'); if (!c || !c.getAttribute('data-soort')) return;
+    Object.keys(b.waarden).forEach(function (k) { var e = c.querySelector('[data-cf="' + k.replace(/["\\]/g, '') + '"]'); if (!e) return; if (e.type === 'checkbox') e.checked = !!b.waarden[k]; else e.value = b.waarden[k]; });
+    if (m) m.scrollTop = top;  // toonForm scrolt de composer in beeld; de gebruiker was misschien verder naar beneden
+    var f = b.focus ? c.querySelector('[data-cf="' + b.focus.replace(/["\\]/g, '') + '"]') : null;
+    if (f) { focusStil(f); if (b.cursor && typeof b.cursor[0] === 'number') { try { f.setSelectionRange(b.cursor[0], b.cursor[1]); } catch (e) {} } }
+    else if (c.contains(document.activeElement) && !(a && a !== document.body && focusStil(a))) document.activeElement.blur();  // net als vóór het hertekenen
   }
   // v3.3: tegelijk werken. Alleen de velden die jij wijzigde gaan mee, met _oud (zoals je ze laadde). Heeft iemand anders
   // hetzelfde veld intussen gewijzigd, dan meldt de backend dat en laden we het scherm opnieuw in plaats van stil te overschrijven.
@@ -3382,6 +3487,7 @@
       if (!inRelaties) {
         if (isDesk()) { if (soortO === 'project' || soortO === 'talent') { wisselView('relaties'); zetZijbalk(CRM.terugNaar || 'projecten'); } else deskNaar(soortO === 'kans' ? 'pipeline' : 'contacten'); } else { wisselView('relaties'); if ((soortO === 'project' || soortO === 'talent') && /^(projecten|bezetting|talent)$/.test(CRM.terugNaar || '')) telefoonTab('trajecten'); }
       }  // v3.0
+      CRM.detailOpener = { el: x, w: w };  // v7.3 (TB-9): krijgt bij Terug de focus terug
       openDetail(w.slice(0, i), w.slice(i + 1), true);
       return;
     }
@@ -3469,14 +3575,71 @@
   var POTLOOD = '<svg class="ic" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   function potloodKnop(attr, id) { return '<button class="t-bewerk" ' + attr + '="' + esc(id) + '" aria-label="Wijzigen">' + POTLOOD + '</button>'; }
   // Het venster heeft een eigen opslaan-actie en eigen veld-id's (vf-), zodat een open formulier op de pagina blijft werken.
-  var VENSTER = { actie: null };
+  var VENSTER = { actie: null, opener: null };  // v7.3 (TB-8): opener = het element dat het venster opende; krijgt bij sluiten de focus terug
+  // v7.3 (TB-8/TB-9): focus verplaatsen zonder te scrollen. Een element buiten het document of zonder focus() doet niets.
+  // v7.3 (iOS-review O4): Safari vóór 15 negeert preventScroll stilzwijgend (geen fout, dus de catch helpt niet); daarom onthouden we de scrollpositie
+  // van main, het venster en de pagina en zetten die terug als focus() toch gescrold heeft. Zo blijft het gedrag gelijk, ongeacht de iOS-versie.
+  function focusStil(e) {
+    if (!e || !e.focus || !document.contains(e)) return false;
+    var m = document.querySelector('main'), v = el('vensterInhoud'), mTop = m ? m.scrollTop : 0, vTop = v ? v.scrollTop : 0, wx = window.pageXOffset, wy = window.pageYOffset;
+    try { e.focus({ preventScroll: true }); } catch (x) { try { e.focus(); } catch (y) { return false; } }
+    if (m && m.scrollTop !== mTop) m.scrollTop = mTop;
+    if (v && v.scrollTop !== vTop) v.scrollTop = vTop;
+    if (window.pageYOffset !== wy || window.pageXOffset !== wx) { try { window.scrollTo(wx, wy); } catch (z) {} }
+    return document.activeElement === e;
+  }
+  function zichtbaarEl(e) { if (!e || !document.contains(e)) return false; var r = e.getBoundingClientRect(); return (r.width > 0 || r.height > 0) && !(e.closest && e.closest('[aria-hidden="true"]')); }
+  function vensterFocusbaar() {  // v7.3 (TB-8): de zichtbare, bedienbare elementen in het venster, in documentvolgorde
+    var l = el('venster').querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"]'), uit = [];
+    for (var i = 0; i < l.length; i++) { var e = l[i]; if (e.disabled || e.type === 'hidden' || e.getAttribute('tabindex') === '-1' || !zichtbaarEl(e)) continue; uit.push(e); }
+    return uit;
+  }
+  // v7.3 (TB-8): focus-trap — Tab en Shift+Tab lopen rond binnen het open venster (aria-modal); Escape blijft sluiten. De commandobalk (Ctrl+K)
+  // boven het venster houdt zijn eigen focus. Een datumveld met deelvelden telt als één stop; staat het als laatste, dan springt Tab een deelveld te vroeg.
+  function vensterTab(ev) {
+    if (el('palet') && el('palet').classList.contains('aan')) return;
+    var v = el('venster'), a = document.activeElement, l = vensterFocusbaar(), i = l.indexOf(a), binnen = !!(a && v.contains(a));
+    if (!l.length) { ev.preventDefault(); focusStil(el('vensterInhoud')); return; }
+    if (ev.shiftKey) { if (i === 0 || !binnen || a === el('vensterInhoud')) { ev.preventDefault(); focusStil(l[l.length - 1]); } }
+    else if (i === l.length - 1 || !binnen) { ev.preventDefault(); focusStil(l[0]); }
+  }
+  // v7.3 (iOS-review O1): in iOS Safari krijgt een knop bij een tik geen focus, dus document.activeElement is body (of main, dat tabindex -1 heeft).
+  // De capture-listener hieronder onthoudt daarom het laatst aangetikte bedienbare element; openVenster gebruikt dat als opener wanneer er geen
+  // echte focus is, mits de tik vers is (binnen een seconde, zodat een sneltoets later niet op een oude tik terugvalt) en niet in het venster zelf.
+  var LAATSTE_TIK = { el: null, t: 0 };
+  document.addEventListener('click', function (ev) {
+    var t = ev.target && ev.target.closest ? ev.target.closest('button, [tabindex], a[href], select, summary') : null;
+    if (t && !(t.closest && t.closest('#venster'))) LAATSTE_TIK = { el: t, t: Date.now() };
+  }, true);
+  function echteFocus(a) { return !!(a && a !== document.body && a !== document.querySelector('main') && a !== document.documentElement); }
   function openVenster(html) {
     var na = VENSTER.annuleer; VENSTER.annuleer = null; if (na) na();  // v6.4: een vorig venster dat zonder opslaan wordt vervangen, herstelt eerst zijn scherm
+    var act = document.activeElement;  // v7.3 (TB-8): wie opende het venster? Een venster dat vanuit een venster opent (bijv. een melding → project) houdt de eerste opener.
+    if (!(act && el('venster').contains(act))) VENSTER.opener = echteFocus(act) ? act : (LAATSTE_TIK.el && Date.now() - LAATSTE_TIK.t < 1000 && document.contains(LAATSTE_TIK.el) ? LAATSTE_TIK.el : null);  // v7.3 (iOS-review O1)
     VENSTER.actie = formActie; formActie = INLINE.actie;  // formHtml zette formActie voor het venster; die van de pagina terugzetten
     el('vensterInhoud').innerHTML = String(html).replace(/(id|for)="cf-/g, '$1="vf-'); el('venster').classList.add('aan'); document.body.classList.add('venster-open');
-    el('vensterInhoud').scrollTop = 0; pasVensterAan();
+    el('vensterInhoud').scrollTop = 0; pasVensterAan(); vensterNaam();
+    focusStil(el('vensterInhoud'));  // v7.3 (TB-8): de focus gaat het venster in (tabindex -1, geen ring); Tab komt dan bij het eerste veld
   }
-  function sluitVenster() { var na = VENSTER.annuleer; VENSTER.annuleer = null; el('venster').classList.remove('aan'); el('vensterInhoud').innerHTML = ''; document.body.classList.remove('venster-open'); VENSTER.actie = null; if (na) na(); }  // v6.4: annuleer = herstel na sluiten zonder opslaan
+  // v7.3 (iOS-review O2): het dialoogvenster krijgt een naam, anders kondigt VoiceOver een naamloos "dialoogvenster" aan nu de focus erin landt.
+  // De titel van formHtml (#vf-formkop, of de eerste .kop) wordt het label via aria-labelledby; een venster dat nog laadt heet naar zijn spinnertekst.
+  // v7.3: de kop heet bewust niet "titel": #cf-titel/#vf-titel zijn de velden "titel" van de agenda- en vacatureformulieren.
+  // Ook aanroepen nadat de inhoud vervangen is (meldingen, voorstellen).
+  function vensterNaam() {
+    var v = el('venster'), b = el('vensterInhoud'), k = el('vf-formkop') || b.querySelector('.kop'), sp = k ? null : b.querySelector('.spinner');
+    if (k && b.contains(k)) { if (!k.id) k.id = 'vf-formkop'; v.setAttribute('aria-labelledby', k.id); v.removeAttribute('aria-label'); return; }
+    v.removeAttribute('aria-labelledby'); v.setAttribute('aria-label', sp && (sp.textContent || '').trim() ? (sp.textContent || '').trim() : 'Venster');
+  }
+  function sluitVenster() {  // v6.4: annuleer = herstel na sluiten zonder opslaan
+    var na = VENSTER.annuleer, o = VENSTER.opener, stondOpen = el('venster').classList.contains('aan'); VENSTER.annuleer = null; VENSTER.opener = null;
+    el('venster').classList.remove('aan'); el('vensterInhoud').innerHTML = ''; document.body.classList.remove('venster-open'); VENSTER.actie = null; if (na) na();
+    if (stondOpen) focusTerugNaVenster(o);  // v7.3 (TB-8)
+  }
+  function focusTerugNaVenster(o) {  // v7.3 (TB-8): terug naar de opener als die er nog zichtbaar is, anders de naam in de detailkop, anders main
+    if (zichtbaarEl(o) && focusStil(o)) return;
+    var d = el('crmDetailScherm'), k = d.style.display !== 'none' && el('view-relaties').classList.contains('actief') ? d.querySelector('.d-naam h2') : null;
+    if (!(k && focusStil(k))) focusStil(document.querySelector('main'));
+  }
   // iOS: het toetsenbord verkleint vh niet; het venster volgt de zichtbare viewport, zodat Opslaan bereikbaar blijft
   function pasVensterAan() {
     var v = el('venster'), vv = window.visualViewport;
@@ -3731,8 +3894,9 @@
     }, '<div class="hint">Een nieuwe naam gaat mee in alle scholen, kansen, taken, activiteit en doelen van deze persoon.</div>'));
   }
   function beheerDoelen() {
-    openVenster('<div class="spinner">Laden</div>');
+    openVenster('<div class="spinner" id="doelLaden">Laden</div>' + LADEN_ANNULEER);  // v7.3 (iOS-review O3): Annuleren tijdens het laden; een intussen gesloten venster komt niet terug
     run('apiDoelen').then(function (r) {
+      if (!el('doelLaden')) return;
       BEHEER.doelen = r;
       var lijst = r.doelen.filter(function (d) { return d.doel; }).map(function (d) {
         var md = metriekDef(r, d.metric);
@@ -3834,6 +3998,7 @@
   el('venster').addEventListener('click', function (ev) { if (ev.target === el('venster')) sluitVenster(); });
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape' && el('venster').classList.contains('aan')) { sluitVenster(); return; }
+    if (ev.key === 'Tab' && el('venster').classList.contains('aan')) { vensterTab(ev); return; }  // v7.3 (TB-8): focus-trap
     // v4.5: sneltoetsen op desktop, zoals Todoist; nooit in een invoerveld of met een open venster
     if (!isDesk() || ev.metaKey || ev.ctrlKey || ev.altKey || el('venster').classList.contains('aan')) return;
     var tag = ((ev.target && ev.target.tagName) || '').toLowerCase(); if (tag === 'input' || tag === 'textarea' || tag === 'select' || (ev.target && ev.target.isContentEditable)) return;
@@ -4230,7 +4395,7 @@
   /* --- tabellen --- */
   var SCHOOL_KOLOMMEN = [
     { veld: 'naam', label: 'Naam', html: function (s) { return '<b>' + esc(s.naam) + '</b>'; } }, { veld: 'plaats', label: 'Plaats', html: function (s) { return esc(s.plaats); } },
-    { veld: 'status', label: 'Status', html: function (s) { return s.status ? '<span class="tag ' + esc(s.status) + '">' + esc(s.status) + '</span>' : ''; } },
+    { veld: 'status', label: 'Status', html: function (s) { return s.status ? '<span class="tag ' + esc(statusKlasse(s.status)) + '">' + esc(s.status) + '</span>' : ''; } },
     { veld: 'eigenaar', label: 'Eigenaar', html: function (s) { return esc(s.eigenaar); } }, { veld: 'personen', label: 'Personen', getal: true, html: function (s) { return esc(s.personen || ''); } },
     { veld: 'openWaarde', label: 'Open waarde', getal: true, html: function (s) { return s.openWaarde ? euro(s.openWaarde) : ''; } },
     { veld: 'laatsteContact', label: 'Laatste contact', html: function (s) { return s.laatsteContact ? esc(kortDatum(s.laatsteContact)) : '<span class="zacht">—</span>'; } },
@@ -4273,7 +4438,7 @@
         '<td>' + (t.ouderId ? '<span class="zacht">↳ </span>' : '') + '<b>' + esc(t.tekst) + '</b>' + (t.herhaling ? ' <span class="herhaal" title="' + esc(herhalingTekst(t.herhaling)) + '">↻</span>' : '') +
         (t.subtaken && t.subtaken.aantal ? ' <span class="zacht">' + esc(t.subtaken.af + '/' + t.subtaken.aantal) + '</span>' : '') + (t.ouderId && !sub ? ' <span class="zacht">· ' + esc(t.ouder || '') + '</span>' : '') + '</td>' +
         '<td>' + koppelLinks(t) + '</td><td>' + esc(t.categorie) + '</td><td>' + tagsHtml(t.tags) + '</td><td>' + esc(t.eigenaar) + '</td>' +
-        '<td>' + (t.deadline ? deadlineTekst(t) : '<span class="zacht">—</span>') + '</td><td>' + (t.tijd ? esc(t.tijd) : '<span class="zacht">—</span>') + '</td><td>' + (t.prio ? '<span class="tag ' + esc(t.prio) + '">' + esc(t.prio) + '</span>' : '') + '</td></tr>';  // v4.5: tijd en herhaling
+        '<td>' + (t.deadline ? deadlineTekst(t) : '<span class="zacht">—</span>') + '</td><td>' + (t.tijd ? esc(t.tijd) : '<span class="zacht">—</span>') + '</td><td>' + (t.prio ? '<span class="tag ' + esc(statusKlasse(t.prio)) + '">' + esc(t.prio) + '</span>' : '') + '</td></tr>';  // v4.5: tijd en herhaling
     }).join('') + '</tbody></table></div>';
   }
   function projectBord(lijst) {
@@ -5101,7 +5266,24 @@
       if (checkKoppeling()) startApp();
     });
   }
-  if ('serviceWorker' in navigator && !PORTAAL) { navigator.serviceWorker.register('sw.js').catch(function () {}); }  // v5.0: de browser van een talent hoeft de app-shell niet te bewaren
+  if ('serviceWorker' in navigator && !PORTAAL) {  // v5.0: de browser van een talent hoeft de app-shell niet te bewaren
+    // v7.3 (STORING-F-1): had deze pagina bij het laden al een controller, dan betekent een controllerchange dat een nieuwe versie net heeft
+    // overgenomen (skipWaiting + clients.claim in sw.js): één keer melden met een knop om te herladen. Nooit vanzelf herladen, een open venster
+    // of composer zou verloren gaan. Bij de eerste installatie (nog geen controller) komt controllerchange ook, maar is er niets te melden.
+    // v7.3 (iOS-review R2): niet via #toast (elke gewone toast overschreef de melding en ze kwam in deze paginasessie nooit terug), maar de eigen
+    // balk #updateBalk: blijft staan tot Herladen of Later; na Later komt hij terug zodra de app weer in beeld komt (visibilitychange), want op iOS
+    // standalone leeft een pagina dagenlang en draait anders de oude index.html tegen de nieuwe worker en backend.
+    var hadController = !!navigator.serviceWorker.controller, versieNieuw = false;
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+    var toonUpdateBalk = function () { var u = el('updateBalk'); if (u && versieNieuw) u.hidden = false; };
+    if (hadController) navigator.serviceWorker.addEventListener('controllerchange', function () { versieNieuw = true; toonUpdateBalk(); });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') toonUpdateBalk(); });
+    document.addEventListener('click', function (ev) {
+      var k = ev.target.closest('[data-update]'); if (!k) return;
+      if (k.getAttribute('data-update') === 'herladen') { location.reload(); return; }
+      el('updateBalk').hidden = true;  // later: tot de volgende keer dat de app in beeld komt
+    });
+  }
 </script>
 </body>
 </html>

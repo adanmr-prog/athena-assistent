@@ -1,4 +1,7 @@
 # Mock van de Apps Script-backend voor lokaal testen van index.html (zelfde origin: repo-root statisch + /api). Start: python3 test/mock_backend.py
+# v7.3 (FL-1): de mock houdt state vast; POST /api met {"fn":"_reset"} (of GET /reset) zet alle gegevens terug op de seed, zodat een tweede run
+# van test/test_app.py tegen dezelfde mock dezelfde uitgangsstand ziet. v7.3 (H2): {"fn":"_faal","args":["apiAgenda",1]} laat de volgende n
+# aanroepen van die api mislukken (ok:false met een Nederlandse melding, status 200), om de foutpaden van de app te testen; _reset wist dat ook.
 import json, datetime, uuid, copy, os, time
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from functools import partial
@@ -698,6 +701,20 @@ def handle_crm(fn, args):
 
 BREIN_UITGEVOERD = []
 INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt']}
+FAAL = {}  # v7.3 (H2): api-naam -> hoeveel aanroepen nog moeten mislukken (gezet met {"fn":"_faal","args":[naam, n]})
+# v7.3 (FL-1): de seed bevriezen zodra alle tabellen gevuld zijn. reset() zet elke lijst en dict in place terug (de handlers houden de modulevariabelen
+# bij naam vast), dus een draaiende mock begint daarna weer bij dezelfde uitgangsstand; ook HUIDIG (de ingelogde code) en FAAL gaan terug.
+_SEED = {k: copy.deepcopy(v) for k, v in list(globals().items()) if k.isupper() and isinstance(v, (list, dict))}
+def reset():
+    for k, v in _SEED.items():
+        doel = globals()[k]
+        if isinstance(doel, list): doel[:] = copy.deepcopy(v)
+        else: doel.clear(); doel.update(copy.deepcopy(v))
+    return {'ok': True, 'tabellen': len(_SEED)}
+def faal_zetten(args):
+    naam = str(args[0] if args else ''); n = int(args[1]) if len(args) > 1 and args[1] not in (None, '') else 1
+    if not naam: raise ValueError('Geef de naam van de api die moet mislukken.')
+    FAAL[naam] = max(0, n); return {'ok': True, 'faal': dict(FAAL)}
 
 
 def handle(fn, args):
@@ -742,8 +759,7 @@ def handle(fn, args):
         if a['soort'] == 'maak_offerte': return {'melding': 'Offerte staat klaar in Drive.', 'url': 'https://docs.google.com/document/d/x'}
         if a['soort'] == 'maak_conceptmail': return {'melding': 'Concept staat klaar in Gmail.', 'url': 'https://mail.google.com/mail/#drafts'}
         return {'melding': 'Taak aangemaakt: ' + a['invoer'].get('tekst', '')}
-    if fn == 'apiVraag':
-        return {'antwoord': 'Het uurtarief voor huiswerkbegeleiding bij Lyceum Demo is **€ 42** per uur, bij 8 uur per week [1]. In de prijzenlijst 2026-2027 staat een range van € 40 tot € 45 [2].', 'bronnen': [{'titel': 'Schooldossier Lyceum Demo', 'url': 'https://drive.google.com/', 'type': 'schooldossier'}, {'titel': 'Prijzenlijst 2026-2027', 'url': 'https://drive.google.com/', 'type': 'prijslijst'}]}
+    # v7.3: apiVraag, apiZetHuisstijl, apiTraject en apiNotitieToevoegen bestaan niet meer in Code.gs (K2); de app riep ze al niet aan
     if fn == 'apiReview':
         eerder = copy.deepcopy(REVIEW); eerder['datum'] = d(-1); eerder['samenvatting'] = 'Goedemorgen Menno. Een rustige dag gisteren.'
         return {'laatste': REVIEW, 'eerdere': [{'id': 'r0', 'datum': eerder['datum'], 'gemaaktOp': d(-1) + ' 05:01', 'samenvatting': eerder['samenvatting'], 'tellingen': {'gedaan': 1, 'blijvenLiggen': 0, 'vandaag': 3}}]}
@@ -759,8 +775,6 @@ def handle(fn, args):
         c = per_id(CONTENT)[args[0]['id']]; c.update({k: v for k, v in args[0].items() if k in ('onderwerp', 'tekst')}); return dict(c, magWijzigen=True)
     if fn == 'apiDocumentOpslaan':
         dd = per_id(DOCS)[args[0]]; dd.update(args[1]); return dd
-    if fn == 'apiZetHuisstijl':
-        HUIS[args[0]] = args[1]; return None
     if fn == 'apiMaakContent':
         c = {'id': uuid.uuid4().hex[:6], 'datum': nu(), 'type': args[0], 'typeNaam': {'linkedin': 'LinkedIn-post', 'mail': 'E-mail aan een school'}.get(args[0], args[0]), 'onderwerp': args[1], 'tekst': 'Onderwerp: ' + args[1] + '\n\nBeste [naam],\n\nDit is een voorbeeldtekst uit de mock-backend, in de toon van AthenaSchool.\n\nMet vriendelijke groet,\nMenno Adan\nAthenaSchool'}
         CONTENT.insert(0, c); return c
@@ -768,9 +782,6 @@ def handle(fn, args):
         ts = [dict(t, updates=len([a for a in ACTIVITEITEN if a.get('trajectId') == t['id']]), magWijzigen=eigen_project(t) and ik()['team'] != 'talent', bezetting=bezetting_van(t['id'])) for t in TRAJECTEN if eigen_project(t)]  # v4.0
         return {'trajecten': ts, 'am': ['Joris', 'Mees', 'Menno'], 'ik': ik(), 'gebruikers': GEBRUIKERS_NAMEN, 'schooljaar': INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027',
                 'filters': {'schooljaren': ['2026-2027', '2025-2026'], 'trajecten': sorted({t['traject'] for t in ts}), 'statussen': KEUZES['trajectStatussen'], 'verlenging': KEUZES['verlenging']}}
-    if fn == 'apiTraject':
-        t = [x for x in TRAJECTEN if x['id'] == args[0]][0]
-        return {'traject': t, 'documenten': [x for x in DOCS if x['school'] == t['school']], 'notities': [dict(n, soort='activiteit', door='Menno', onderwerp='', ruw=n['tekst']) for n in NOTITIES.get(t['id'], [])], 'kansen': [k for k in KANSEN if k['school'] == t['school']], 'school': {'naam': t['school'], 'plaats': t['plaats'], 'contactpersoon': t['contactpersoon'], 'email': 'contact@voorbeeld.nl', 'telefoon': '', 'status': 'klant', 'am': t['am']}}
     if fn == 'apiTrajectOpslaan':
         o = args[0]
         if o.get('id'):
@@ -784,8 +795,6 @@ def handle(fn, args):
         if o.get('schoolId'): o['school'] = per_id(SCHOLEN)[o['schoolId']]['naam']
         for _v in ('kansId', 'adviseur', 'soortFacturatie', 'gefactureerd', 'factuurDatum', 'vakanties', 'bijzonderheden', 'factuurnummer', 'am', 'schoolId', 'plaats', 'contactpersoon', 'samenvatting', 'start', 'eind'): o.setdefault(_v, '')
         TRAJECTEN.insert(0, o); return o
-    if fn == 'apiNotitieToevoegen':
-        n = {'id': uuid.uuid4().hex[:6], 'datum': nu(), 'tekst': args[1]}; NOTITIES.setdefault(args[0], []).insert(0, n); return dict(n, soort='activiteit', door='Menno', ruw=args[1], onderwerp='')
     if fn == 'apiStatus':
         return {'versie': '2.0', 'sheetUrl': 'https://docs.google.com/', 'mapUrl': 'https://drive.google.com/', 'model': 'claude-opus-5', 'effort': 'medium', 'claudeIngesteld': True, 'driveApi': False, 'laatsteIndex': d(0) + ' 04:01', 'laatsteReview': d(0) + ' 05:02', 'rapportEmail': 'menno@voorbeeld.nl', 'reviewTrigger': True, 'indexTrigger': True, 'tijdzone': 'Europe/Amsterdam',
                 'gebruiker': ik(), 'crmSyncTrigger': True, 'laatsteCrmSync': nu(), 'capsuleToken': True, 'capsuleMigratie': '',
@@ -831,6 +840,7 @@ class H(SimpleHTTPRequestHandler):
             if not MOCK_GOOGLE: return self.json({'ok': False, 'fout': 'geen inlogconfiguratie'}, 404)
             return self.json({'ok': True, 'inloggen': 'google', 'supabaseUrl': 'http://127.0.0.1:%d/supa' % SUPA_POORT, 'anonKey': 'anon-test', 'versie': '6.0'})
         if pad == '/api': return self.json({'ok': True, 'app': 'Athena Assistent (mock)', 'versie': '6.0'})
+        if pad == '/reset': return self.json(reset())  # v7.3 (FL-1): alle state terug op de seed
         if pad == '/supa/auth/v1/authorize':
             terug = (qs.get('redirect_to') or ['/'])[0]
             self.send_response(302); self.send_header('Location', terug + '#access_token=testtoken-menno&expires_in=3600&expires_at=%d&refresh_token=refresh-1&token_type=bearer' % (int(time.time()) + 3600)); self.end_headers(); return
@@ -841,10 +851,16 @@ class H(SimpleHTTPRequestHandler):
         if self.path.startswith('/supa/auth/v1/token'): return self.json({'access_token': 'testtoken-menno-vers', 'refresh_token': 'refresh-2', 'expires_in': 3600, 'expires_at': int(time.time()) + 3600, 'token_type': 'bearer'})  # v6.0: token vernieuwen
         if self.path.startswith('/supa/auth/v1/logout'): self.send_response(204); self.end_headers(); return
         body = json.loads(ruw)
+        if body.get('fn') == '_reset': return self.json(reset())  # v7.3 (FL-1): testhulp, zonder koppelcode
+        if body.get('fn') == '_faal':  # v7.3 (H2): testhulp: de volgende n aanroepen van een api mislukken
+            try: return self.json(faal_zetten(body.get('args') or []))
+            except Exception as e: return self.json({'ok': False, 'fout': str(e)})
         if body.get('portaal'): out = handle_portaal(str(body['portaal']), body.get('fn'), body.get('args') or [])  # v5.0: het portaal kent geen koppelcode
         else:
             code = TOKENS.get(body['token']) if body.get('token') else body.get('secret')  # v6.0: een sessietoken van de eigen server, of de koppelcode
             if code not in IKKEN: out = {'ok': False, 'fout': 'secret'}
+            elif FAAL.get(body.get('fn')):  # v7.3 (H2): een geplande storing op precies deze api
+                FAAL[body['fn']] -= 1; out = {'ok': False, 'fout': 'Tijdelijke storing in de mock (gepland door de test).'}
             else:
                 HUIDIG[0] = code
                 try: out = {'ok': True, 'result': handle(body.get('fn'), body.get('args') or [])}

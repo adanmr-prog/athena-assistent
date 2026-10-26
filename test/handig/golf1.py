@@ -1,5 +1,7 @@
 # v6.8–v7.0: handigheidjes in de demo (slepen, ongedaan maken, vegen, recent, toetsenbord, commandobalk, selectie, voorbeeld,
 # vervolgstap, link, tijdlijn, vastpinnen). Gebruik: python3 test/handig/golf1.py — eindigt met de regels OK/FOUT en exitcode 1 bij een FOUT.
+# v7.3: GOLF1_DATUM=yyyy-MM-dd laat de browser (app én demo-backend) op die dag draaien: Date wordt met een vaste afstand verschoven
+# (zoals test/tz_klok.js), alles tikt door. Zo is stap 3 (week op de telefoon) te bewijzen voor een zondag én een gewone weekdag.
 import os, sys, threading,functools,http.server,socketserver,sys
 from playwright.sync_api import sync_playwright
 class S(http.server.SimpleHTTPRequestHandler):
@@ -19,8 +21,14 @@ def muis(pg, sel, doel, dy=60):
 def toastklik(pg, naam):
     try: pg.click('#toast.aan [data-toastactie]', timeout=4000); pg.wait_for_timeout(1200); return True
     except Exception: ok(naam+' (geen toast-knop; toast=%r)' % pg.inner_text('#toast')[:80], False); return False
+DATUM=os.environ.get('GOLF1_DATUM','')  # v7.3: gefakete dag (10:00 lokale tijd), leeg = de systeemdatum
+KLOK="""(function(){var echt=Date,echtNow=Date.now,offset=new echt(%d,%d,%d,10,0).getTime()-echtNow();
+var P=new Proxy(echt,{construct:function(t,args,nt){if(!args.length)args=[echtNow()+offset];return Reflect.construct(t,args,nt===P?t:nt);},
+apply:function(t,thisArg,args){return String(new t(echtNow()+offset));},get:function(t,k){if(k==='now')return function(){return echtNow()+offset;};return Reflect.get(t,k);}});
+window.Date=P;})();"""
 def nieuw(b, rol, tel=False):
     c=b.new_context(viewport={'width':390,'height':844} if tel else {'width':1440,'height':900}, is_mobile=tel, has_touch=tel)
+    if DATUM: j,m,d=[int(x) for x in DATUM.split('-')]; c.add_init_script(KLOK % (j,m-1,d))  # v7.3: ook in het demo-iframe
     pg=c.new_page(); pg.on('pageerror',lambda e:fouten.append(rol+': '+str(e)))
     pg.goto(U+rol); pg.wait_for_selector('nav' if tel else '#zijbalk'); pg.wait_for_load_state('networkidle'); return c,pg
 with sync_playwright() as p:
@@ -55,15 +63,18 @@ with sync_playwright() as p:
     c,pg=nieuw(b,'femke',True); cdp=c.new_cdp_session(pg)
     pg.click('nav button[data-view="relaties"]'); pg.click('#crmTabs [data-crmtab="taken"]'); pg.click('[data-taakweergave="week"]'); pg.wait_for_selector('.weekblok [data-sleep^="taak:"]')
     r=pg.locator('.weekblok [data-sleep^="taak:"]').first; tid=r.get_attribute('data-sleep'); sel='.weekblok [data-sleep="%s"]'%tid; v=kol(pg,sel)
-    blokken=pg.eval_on_selector_all('.weekblok','l=>l.map(e=>e.getAttribute("data-sleepdoel"))'); naar=blokken[blokken.index(v)+1] if blokken.index(v)+1<len(blokken) else blokken[blokken.index(v)-1]
+    # v7.3: de richting hangt af van waar de taak staat: omlaag als er nog een dagblok onder is, anders (op zondag staat de eerste taak in het laatste blok) omhoog;
+    # de vinger gaat naar de rand van main, waar het scherm meeschuift (sleepRandScroll), en de taak moet hoe dan ook van dag veranderen
+    blokken=pg.eval_on_selector_all('.weekblok','l=>l.map(e=>e.getAttribute("data-sleepdoel"))'); omlaag=blokken.index(v)+1<len(blokken)
     pg.locator(sel).scroll_into_view_if_needed(); pg.wait_for_timeout(200)
-    a=pg.locator(sel).bounding_box(); mb=pg.evaluate("document.querySelector('main').getBoundingClientRect().bottom"); x,y=a['x']+170,a['y']+15
+    a=pg.locator(sel).bounding_box(); mr=pg.evaluate("(function(){var r=document.querySelector('main').getBoundingClientRect();return [r.top,r.bottom]})()"); x,y=a['x']+170,a['y']+15
+    rand=mr[1]-25 if omlaag else mr[0]+25
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y}]}); pg.wait_for_timeout(500)
-    for i in range(1,16): cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x,'y':y+(mb-25-y)*i/15}]}); pg.wait_for_timeout(30)
-    pg.wait_for_timeout(900)  # het scherm schuift aan de onderrand mee
+    for i in range(1,16): cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x,'y':y+(rand-y)*i/15}]}); pg.wait_for_timeout(30)
+    pg.wait_for_timeout(900)  # het scherm schuift aan de rand mee
     naar=pg.evaluate("SLEEP&&SLEEP.doel?SLEEP.doel.getAttribute('data-sleepdoel'):null")
     cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]}); pg.wait_for_timeout(1300)
-    ok('3 week telefoon: taak naar andere dag via onderrand (%s → %s)'%(v,naar), naar is not None and naar!=v and kol(pg,sel)==naar)
+    ok('3 week telefoon: taak naar andere dag via %s (%s → %s; blok %d van %d%s)'%('onderrand' if omlaag else 'bovenrand',v,naar,blokken.index(v)+1,len(blokken),', GOLF1_DATUM='+DATUM if DATUM else ''), naar is not None and naar!=v and kol(pg,sel)==naar)
     # 4: vegen in de lijst Vandaag (alle taken)
     pg.click('[data-taakweergave="alles"]'); pg.wait_for_selector('#crmInhoud .rij [data-taakklaar]')
     def veeg(rij, dx):
