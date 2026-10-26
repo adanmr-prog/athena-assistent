@@ -411,11 +411,11 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
   // fuzz FZ-3 t/m FZ-7: sleutels uit Object.prototype zijn geen keuze (ze gaven een functie of Object.prototype als tabel/actie en daarmee een TypeError)
   ['constructor', 'toString', '__proto__', 'hasOwnProperty'].forEach(function (s) {
     eis(/Onbekend soort/.test(faalt(LARS, 'apiVerwijder', s, 'tk2')) && /Onbekende tabel/.test(faalt(SOPHIE, 'apiExport', s)) && /Onbekend tabblad/.test(faalt(SOPHIE, 'apiExportAlles', s, 0, 50)) &&
-      /Onbekende actie/.test(faalt(FEMKE, 'apiBreinUitvoeren', { soort: s, invoer: { tekst: 'x' } })) && /Onbekend contenttype/.test(faalt(SOPHIE, 'apiMaakContent', s, 'Onderwerp')) && /Onbekende lijst/.test(faalt(SOPHIE, 'apiKeuzelijstOpslaan', s, [])) && /Onbekend huisstijlveld: /.test(faalt(SOPHIE, 'apiZetHuisstijl', s, 'x')),
+      /Onbekende actie/.test(faalt(FEMKE, 'apiBreinUitvoeren', { soort: s, invoer: { tekst: 'x' } })) && /Onbekend contenttype/.test(faalt(SOPHIE, 'apiMaakContent', s, 'Onderwerp')) && /Onbekende lijst/.test(faalt(SOPHIE, 'apiKeuzelijstOpslaan', s, [])) && /Onbekend huisstijlveld: /.test(faalt(SOPHIE, 'apiHuisstijlOpslaan', JSON.parse('{"' + s + '":"x"}'))),  // v7.3: apiZetHuisstijl is weg (K2); JSON.parse maakt van __proto__ een eigen sleutel, zoals doPost dat ook doet
       'geërfde sleutel "' + s + '" is geen soort, tabel, tabblad, actie, contenttype, lijst of huisstijlveld');
   });
   eis(/Onbekend tabblad \(leeg\)/.test(faalt(SOPHIE, 'apiExportAlles')) && /Onbekend tabblad \(leeg\)/.test(faalt(SOPHIE, 'apiExportAlles', '')) && roep(SOPHIE, 'apiExportAlles', 'Scholen', 0, 5).rijen.length === 5, 'apiExportAlles: zonder tabblad een melding met (leeg), niet undefined; een echt tabblad werkt');
-  eis(/Onbekend huisstijlveld: \(leeg\)/.test(faalt(SOPHIE, 'apiZetHuisstijl')) && /Onbekend huisstijlveld: kleur_x$/.test(faalt(SOPHIE, 'apiZetHuisstijl', 'kleur_x', '#000000')), 'apiZetHuisstijl: de melding noemt de sleutel of (leeg)');
+  eis(/Onbekend huisstijlveld: \(leeg\)/.test(faalt(SOPHIE, 'apiHuisstijlOpslaan', { '': 'x' })) && /Onbekend huisstijlveld: kleur_x$/.test(faalt(SOPHIE, 'apiHuisstijlOpslaan', { kleur_x: '#000000' })), 'apiHuisstijlOpslaan: de melding noemt de sleutel of (leeg)');  // v7.3: via apiHuisstijlOpslaan (apiZetHuisstijl is weg, K2)
   // rechten R2: ook lezen van een school of persoon volgt de rechtentabel (elk team heeft nu 'alles' op relaties.zien; alleen de tabel bepaalt dat)
   eis(!faalt(SEM, 'apiSchool', 's1') && !faalt(FEMKE, 'apiPersoon', 'p1') && !faalt(LARS, 'apiSchool', 's1'), 'apiSchool en apiPersoon: elk team mag lezen volgens de tabel');
   var oudRelaties = ctx.RECHTEN.relaties.talent; ctx.RECHTEN.relaties.talent = ['geen', 'geen'];
@@ -454,13 +454,226 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
 (function () {
   ctx.GEBRUIKER = null;
   var c1 = ctx.controleer();
-  eis(c1.indexOf('backend 7.2.1') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.2.1 en geen afwijkende koppen in de demo-sheet');
+  eis(c1.indexOf('backend 7.3') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.3 en geen afwijkende koppen in de demo-sheet');  // v7.3
   var b = ctx.blad('Scholen'), kop = ctx.TABELLEN.Scholen, was = b.getRange(1, 2, 1, 1).getValues()[0][0];
   b.getRange(1, 2, 1, 1).setValues([['schoolnaam']]);
   var c2 = ctx.controleer(), regel = c2.split('\n').filter(function (r) { return r.indexOf('- Scholen:') === 0; })[0] || '';
   eis(regel.indexOf('AFWIJKENDE KOP (kolom 2: "schoolnaam" moet "' + kop[1] + '" zijn)') > 0, 'controleer(): een hernoemde kop wordt gemeld met positie, gevonden en verwachte naam');
   b.getRange(1, 2, 1, 1).setValues([[was]]);
   eis(ctx.controleer().indexOf('AFWIJKENDE KOP') < 0, 'controleer(): na herstel van de kop geen melding meer');
+})();
+
+/* ---- v7.3: schrijfpaden (K3) — tracks, hernoemen, schooljaar, doelen, termijnen, meldingen, documenten, teksten, huisstijl, inrichten, Capsule ---- */
+var YARA = 'demo-yara';
+function tel(tab, fn) { return ctx.lees(tab).filter(fn).length; }
+(function () {
+  // tracks: opslaan (management) → starten → stoppen → verwijderen; een ander team komt er niet bij
+  var tr = roep(SOPHIE, 'apiTrackOpslaan', { naam: 'Rooktest-track', omschrijving: 'Twee stappen', stappen: [{ tekst: 'Rooktest stap 1', categorie: 'bellen', dagenNaStart: 0, prio: 'hoog' }, { tekst: 'Rooktest stap 2', categorie: 'onzin', dagenNaStart: 3 }] });
+  var track = tr.filter(function (t) { return t.naam === 'Rooktest-track'; })[0];
+  eis(!!track && track.stappen.length === 2 && track.stappen[1].categorie === 'overig' && track.stappen[1].prio === 'midden' && tr.some(function (t) { return t.id === 'std-lead'; }), 'apiTrackOpslaan: de nieuwe track staat in de lijst (onbekende categorie → overig, prio → midden), de standaardtracks blijven');
+  eis(/management/i.test(faalt(LARS, 'apiTrackOpslaan', { naam: 'x', stappen: [{ tekst: 'y' }] })) && /Naam/.test(faalt(SOPHIE, 'apiTrackOpslaan', { stappen: [{ tekst: 'y' }] })) && /minstens één stap/.test(faalt(SOPHIE, 'apiTrackOpslaan', { naam: 'x', stappen: [] })), 'apiTrackOpslaan: alleen management; naam en minstens één stap verplicht');
+  var st = roep(LARS, 'apiTrackStart', track.id, { schoolId: 's1' }, plusDagen(1));
+  var runRijen = acties().filter(function (a) { return a.bron === 'track' && /^Rooktest stap/.test(a.tekst); }), runId = runRijen[0] && runRijen[0].trackRunId;
+  eis(st.aantal === 2 && st.track === 'Rooktest-track' && runRijen.length === 2 && !!runId && runRijen.every(function (a) { return a.trackRunId === runId && a.eigenaar === 'Lars Visser' && a.schoolId === 's1' && a.status === 'open'; }) && runRijen.filter(function (a) { return a.tekst === 'Rooktest stap 2'; })[0].deadline === plusDagen(4), 'apiTrackStart: twee open taken voor de starter, met dezelfde run en deadlines vanaf de startdatum');
+  eis(/toegang/.test(faalt(FEMKE, 'apiTrackStart', track.id, { kansId: 'k7' }, plusDagen(1))) && /Koppel/.test(faalt(LARS, 'apiTrackStart', track.id, {}, plusDagen(1))) && /niet gevonden/.test(faalt(LARS, 'apiTrackStart', 'geen-track', { schoolId: 's1' })), 'apiTrackStart: een track op de kans van een ander team geeft "toegang"; zonder koppeling of met een onbekende track een duidelijke melding');
+  eis(/toegang/.test(faalt(FEMKE, 'apiTrackStoppen', runId)) && acties().filter(function (a) { return a.trackRunId === runId && a.status !== 'af'; }).length === 2, 'apiTrackStoppen: een ander team stopt de track niet (de taken blijven staan)');
+  roep(LARS, 'apiActieKlaar', runRijen[0].id);
+  var stop = roep(LARS, 'apiTrackStoppen', runId), rest = acties().filter(function (a) { return a.trackRunId === runId; });
+  eis(stop.aantal === 1 && rest.length === 1 && rest[0].status === 'af' && ctx.lees('Activiteiten').some(function (a) { return /Track gestopt \(1 open taken/.test(a.onderwerp) && a.schoolId === 's1'; }), 'apiTrackStoppen: alleen de open taak van de run gaat weg, de afgevinkte blijft; tijdlijnregel op de school');
+  eis(roep(LARS, 'apiTrackStoppen', runId).aantal === 0 && /Geen track/.test(faalt(LARS, 'apiTrackStoppen', '')), 'apiTrackStoppen: nog eens stoppen doet niets; zonder run een melding');
+  eis(/management/i.test(faalt(LARS, 'apiTrackVerwijderen', track.id)), 'apiTrackVerwijderen: alleen management');
+  var na = roep(SOPHIE, 'apiTrackVerwijderen', track.id);
+  eis(!na.some(function (t) { return t.id === track.id; }) && na.some(function (t) { return t.id === 'std-lead'; }) && roep(LARS, 'apiTaken').tracks.length === na.length, 'apiTrackVerwijderen: de track is weg, de standaardtracks blijven; apiTaken geeft dezelfde lijst');
+
+  // tags en eigen velden hernoemen: aantal = het aantal geraakte rijen volgens de Sheet
+  var TAGTABS = ['Scholen', 'Personen', 'Kansen', 'Acties', 'Talenten'], VELDTABS = ['Scholen', 'Personen', 'Kansen', 'Talenten'];
+  var metTag = function (tag) { var n = 0; TAGTABS.forEach(function (t) { n += tel(t, function (r) { return ctx.tagsUit(r.tags).map(ctx.klein).indexOf(tag) >= 0; }); }); return n; };
+  var nRooster = metTag('rooster'), hr = roep(SOPHIE, 'apiTagHernoem', 'Rooster', 'rooster-proef');
+  eis(nRooster >= 2 && hr.aantal === nRooster && metTag('rooster') === 0 && metTag('rooster-proef') === nRooster, 'apiTagHernoem: aantal = de rijen die de tag droegen (' + nRooster + '), de oude tag is overal weg en de nieuwe staat erop');
+  eis(roep(SOPHIE, 'apiTagHernoem', 'rooster-proef', 'rooster').aantal === nRooster && metTag('rooster') === nRooster && roep(SOPHIE, 'apiTagHernoem', 'bestaat-niet', 'x').aantal === 0 && /Welke tag/.test(faalt(SOPHIE, 'apiTagHernoem', '', 'x')) && /management/i.test(faalt(LARS, 'apiTagHernoem', 'rooster', 'x')), 'apiTagHernoem: terug hernoemen, onbekende tag raakt niets, lege tag en een ander team worden geweigerd');
+  roep(SOPHIE, 'apiSchoolOpslaan', { id: 's1', velden: { proefveld: 'ja' } }); roep(SOPHIE, 'apiPersoonOpslaan', { id: 'p1', velden: { proefveld: 'ook', ander: 1 } });
+  var metVeld = function (k) { var n = 0; VELDTABS.forEach(function (t) { n += tel(t, function (r) { return Object.prototype.hasOwnProperty.call(ctx.veldenUit(r.velden), k); }); }); return n; };
+  var hv = roep(SOPHIE, 'apiVeldHernoem', 'proefveld', 'proefveld2');
+  eis(hv.aantal === 2 && metVeld('proefveld') === 0 && metVeld('proefveld2') === 2 && ctx.veldenUit(ctx.vind('Personen', 'p1').velden).ander === 1 && roep(SOPHIE, 'apiVelden').velden.some(function (v) { return v.naam === 'proefveld2' && v.aantal === 2; }), 'apiVeldHernoem: beide rijen hernoemd, andere velden blijven, apiVelden telt het nieuwe veld');
+  eis(roep(SOPHIE, 'apiVeldHernoem', 'proefveld2', '').aantal === 2 && metVeld('proefveld2') === 0 && /Welk veld/.test(faalt(SOPHIE, 'apiVeldHernoem', '', 'x')) && /management/i.test(faalt(LARS, 'apiVeldHernoem', 'ander', 'x')), 'apiVeldHernoem: leeg = het veld overal weghalen; lege naam en een ander team worden geweigerd');
+
+  // schooljaar vastzetten: normaliseren, teruglezen, ongeldig, alleen management, weer automatisch
+  var sjAuto = ctx.schooljaarOpDatum(), sjVast = (Number(sjAuto.slice(0, 4)) + 1) + '-' + (Number(sjAuto.slice(0, 4)) + 2);
+  eis(roep(SOPHIE, 'apiSchooljaarOpslaan', "'" + sjVast.slice(2, 4) + "/'" + sjVast.slice(7, 9)).schooljaar === sjVast && roep(LARS, 'apiInstellingen').schooljaarHandmatig === sjVast && roep(LARS, 'apiInstellingen').schooljaar === sjVast && roep(LARS, 'apiTrajecten').schooljaar === sjVast, "apiSchooljaarOpslaan: '" + sjVast.slice(2, 4) + "/'" + sjVast.slice(7, 9) + ' wordt ' + sjVast + ' en geldt meteen overal');
+  eis(/als 2027-2028/.test(faalt(SOPHIE, 'apiSchooljaarOpslaan', '2027-2029')) && /als 2027-2028/.test(faalt(SOPHIE, 'apiSchooljaarOpslaan', 'volgend jaar')) && /management/i.test(faalt(FEMKE, 'apiSchooljaarOpslaan', '')) && roep(LARS, 'apiInstellingen').schooljaar === sjVast, 'apiSchooljaarOpslaan: ongeldige waarden en een ander team worden geweigerd zonder iets te wijzigen');
+  eis(roep(SOPHIE, 'apiSchooljaarOpslaan', '').schooljaar === sjAuto && roep(LARS, 'apiInstellingen').schooljaarHandmatig === '', 'apiSchooljaarOpslaan: leeg = weer automatisch op datum');
+
+  // doelen: zetten, teruglezen in apiDoelen en in het rapport, rechten
+  var dl = roep(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'kwartaal', metric: 'gesprekken', doel: 17 });
+  var dRij = dl.doelen.filter(function (d) { return d.eigenaar === 'Lars Visser' && d.periode === 'kwartaal' && d.metric === 'gesprekken'; });
+  eis(dRij.length === 1 && dRij[0].doel === 17 && dRij[0].id === 'lars-visser-kwartaal-gesprekken' && roep(LARS, 'apiDoelen').doelen.some(function (d) { return d.id === dRij[0].id; }) && roep(LARS, 'apiRapport', 'kwartaal', '', 0).perPersoon.filter(function (p) { return p.naam === 'Lars Visser'; })[0].doelen.gesprekken === 17, 'apiDoelOpslaan: één rij met een stabiel id, zichtbaar in apiDoelen van de eigenaar en als doel in zijn rapport');
+  eis(roep(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'kwartaal', metric: 'gesprekken', doel: 20 }).doelen.filter(function (d) { return d.id === dRij[0].id; })[0].doel === 20 && tel('Doelen', function (d) { return d.id === dRij[0].id; }) === 1, 'apiDoelOpslaan: dezelfde persoon, periode en maatstaf overschrijft (geen tweede rij)');
+  eis(/teamlead/.test(faalt(FEMKE, 'apiDoelOpslaan', { eigenaar: 'Femke de Wit', periode: 'maand', metric: 'gesprekken', doel: 3 })) && /management/.test(faalt(IRIS, 'apiDoelOpslaan', { eigenaar: 'bedrijf', periode: 'schooljaar', metric: 'omzet', doel: 1 })) && /Kies een persoon/.test(faalt(SOPHIE, 'apiDoelOpslaan', { periode: 'maand', metric: 'gesprekken' })) && /Onbekende maatstaf/.test(faalt(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'maand', metric: 'onzin' })), 'apiDoelOpslaan: een medewerker zet geen doelen, bedrijfsdoelen alleen het management; persoon en maatstaf verplicht');
+  eis(!faalt(YARA, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'week', metric: 'gesprekken', doel: 4 }) && /teamlead/.test(faalt(YARA, 'apiDoelOpslaan', { eigenaar: 'Femke de Wit', periode: 'week', metric: 'gesprekken', doel: 4 })), 'apiDoelOpslaan: een teamlead zet doelen voor zijn eigen team, niet voor een ander team');
+
+  // termijnen in één keer: som = contractwaarde (in centen), tweede aanroep maakt geen dubbele
+  var jaar = Number(plusDagen(0).slice(0, 4)), pF = roep(SOPHIE, 'apiTrajectOpslaan', { school: 'Rooktest Facturatieschool', traject: 'Termijnen', start: jaar + '-09-01', eind: (jaar + 1) + '-06-30', contractwaarde: '10000,01', omzet: 9000, am: 'Femke de Wit' });
+  var f1 = roep(FEMKE, 'apiFacturenMaken', pF.id, { per: 'maand' }), somF = f1.reduce(function (s, f) { return s + Math.round(f.bedrag * 100); }, 0);
+  eis(f1.length === 10 && somF === 1000001 && f1.every(function (f) { return f.status === 'nog te doen' && f.trajectId === pF.id && f.door === 'Femke de Wit'; }) && /^September/.test(f1[0].omschrijving) && /^Juni/.test(f1[9].omschrijving), 'apiFacturenMaken: tien maandtermijnen (juli en augustus overgeslagen) die in centen precies optellen tot de contractwaarde, niet tot de omzet');
+  eis(roep(FEMKE, 'apiFacturenMaken', pF.id, { per: 'maand' }).length === 10 && tel('Facturen', function (f) { return f.trajectId === pF.id; }) === 10, 'apiFacturenMaken: een tweede aanroep maakt geen dubbele termijnen');
+  var fE = roep(FEMKE, 'apiFacturenMaken', pF.id, { per: 'eenmalig', omschrijving: 'Hele contract vooraf' });
+  eis(fE.length === 11 && fE.some(function (f) { return f.omschrijving === 'Hele contract vooraf' && Math.round(f.bedrag * 100) === 1000001; }), 'apiFacturenMaken: eenmalig = één termijn met het hele contract');
+  eis(/toegang/.test(faalt(LARS, 'apiFacturenMaken', pF.id, { per: 'maand' })) && /toegang/.test(faalt(RUBEN, 'apiFacturenMaken', pF.id, { per: 'maand' })) && /start- en einddatum/.test(faalt(SOPHIE, 'apiFacturenMaken', losP.id, { per: 'maand' })), 'apiFacturenMaken: consultant en een andere AM komen er niet bij; zonder start en eind een melding');
+
+  // meldingen gelezen: alleen de eigen rijen
+  var ongelezen = function (naam) { return tel('Meldingen', function (m) { return m.voor === naam && !m.gelezen; }); };
+  roep(SOPHIE, 'apiTaakOpslaan', { tekst: 'Rooktest melding voor Femke', eigenaar: 'Femke de Wit' }); roep(SOPHIE, 'apiTaakOpslaan', { tekst: 'Rooktest melding voor Lars', eigenaar: 'Lars Visser' });
+  var fVoor = ongelezen('Femke de Wit'), lVoor = ongelezen('Lars Visser'), mg = roep(FEMKE, 'apiMeldingenGelezen');
+  eis(fVoor >= 2 && lVoor >= 1 && mg.aantal === fVoor && ongelezen('Femke de Wit') === 0 && ongelezen('Lars Visser') === lVoor && roep(FEMKE, 'apiMeldingen').every(function (m) { return m.gelezen === true; }) && roep(LARS, 'apiCrm').meldingen === lVoor, 'apiMeldingenGelezen: zet alleen de eigen ongelezen meldingen (' + fVoor + ') op gelezen; die van een ander blijven ongelezen');
+  eis(roep(FEMKE, 'apiMeldingenGelezen').aantal === 0, 'apiMeldingenGelezen: tweede keer niets meer te doen');
+
+  // document corrigeren, tekst wijzigen, huisstijl opslaan en teruglezen
+  var doc0 = ctx.lees('Documenten')[0], dOp = roep(SOPHIE, 'apiDocumentOpslaan', doc0.id, { type: 'werkwijze', school: 'Esdoorn Lyceum' }), corr = ctx.instelling('documentCorrecties') || {};
+  eis(dOp.id === doc0.id && dOp.type === 'werkwijze' && dOp.school === 'Esdoorn Lyceum' && ctx.vind('Documenten', doc0.id).type === 'werkwijze' && roep(SOPHIE, 'apiKennisbank').documenten.some(function (d) { return d.id === doc0.id && d.type === 'werkwijze' && d.school === 'Esdoorn Lyceum'; }) && Object.keys(corr).some(function (k) { return corr[k].type === 'werkwijze' && corr[k].school === 'Esdoorn Lyceum'; }), 'apiDocumentOpslaan: type en school staan in de Sheet, in de kennisbank en als correctie in Instellingen');
+  eis(/Onbekend type/.test(faalt(SOPHIE, 'apiDocumentOpslaan', doc0.id, { type: 'roman' })) && /niet gevonden/.test(faalt(SOPHIE, 'apiDocumentOpslaan', 'geen-doc', { type: 'overig' })) && /verwacht tekst/.test(faalt(SOPHIE, 'apiDocumentOpslaan', doc0.id, { school: { naam: 'x' } })), 'apiDocumentOpslaan: onbekend type, onbekend document en een object als school worden geweigerd');
+  var ct = roep(LARS, 'apiMaakContent', 'linkedin', 'Rooktest onderwerp', 'kort'), cw = roep(LARS, 'apiContentOpslaan', { id: ct.id, onderwerp: ' Rooktest gewijzigd ', tekst: 'Nieuwe tekst.' });
+  eis(ct.id && ct.typeNaam === 'LinkedIn-post' && cw.onderwerp === 'Rooktest gewijzigd' && cw.tekst === 'Nieuwe tekst.' && cw.door === 'Lars Visser' && ctx.vind('Content', ct.id).tekst === 'Nieuwe tekst.' && roep(LARS, 'apiHuisstijl').recent.some(function (c) { return c.id === ct.id && c.magWijzigen === true; }) && roep(FEMKE, 'apiHuisstijl').recent.some(function (c) { return c.id === ct.id && c.magWijzigen === false; }), 'apiContentOpslaan: de maker wijzigt zijn tekst (getrimd), die staat in de Sheet en bij recent met magWijzigen alleen voor hem');
+  eis(/Alleen wie de tekst maakte/.test(faalt(FEMKE, 'apiContentOpslaan', { id: ct.id, tekst: 'Gekaapt' })) && /leeg/.test(faalt(LARS, 'apiContentOpslaan', { id: ct.id, tekst: '  ' })) && /niet gevonden/.test(faalt(LARS, 'apiContentOpslaan', { id: 'geen' })) && !faalt(SOPHIE, 'apiContentOpslaan', { id: ct.id, onderwerp: 'Door management' }) && ctx.vind('Content', ct.id).tekst === 'Nieuwe tekst.', 'apiContentOpslaan: een ander niet, een lege tekst niet, het management wel');
+  var hs = roep(SOPHIE, 'apiHuisstijlOpslaan', { toon: 'Rooktest toon\nTweede regel', kleur_accent: '#ABCDEF' });
+  eis(hs.velden.toon === 'Rooktest toon\nTweede regel' && hs.toon.length === 2 && hs.velden.kleur_accent === '#ABCDEF' && hs.kleuren.filter(function (k) { return k.gebruik === 'accent'; })[0].hex === '#ABCDEF' && roep(LARS, 'apiHuisstijl').velden.toon === 'Rooktest toon\nTweede regel' && hs.magBewerken === true && roep(LARS, 'apiHuisstijl').magBewerken === false, 'apiHuisstijlOpslaan: meerdere velden in één keer, teruglezen via apiHuisstijl (toon als regels, kleur in de kleurenlijst); bewerken alleen management');
+  eis(/Kleur als #RRGGBB/.test(faalt(SOPHIE, 'apiHuisstijlOpslaan', { kleur_primair: 'paars' })) && /management/i.test(faalt(LARS, 'apiHuisstijlOpslaan', { toon: 'x' })) && /verwacht tekst/.test(faalt(SOPHIE, 'apiHuisstijlOpslaan', { toon: ['x'] })) && roep(LARS, 'apiHuisstijl').velden.kleur_primair === '#66306E' && roep(LARS, 'apiHuisstijl').velden.toon === 'Rooktest toon\nTweede regel', 'apiHuisstijlOpslaan: een ongeldige kleur, een lijst als waarde en een ander team worden geweigerd zonder iets te wijzigen');
+  roep(SOPHIE, 'apiHuisstijlOpslaan', { toon: ctx.HUISSTIJL_STANDAARD.toon, kleur_accent: ctx.HUISSTIJL_STANDAARD.kleur_accent });
+
+  // inrichten is idempotent
+  var voorI = { Personen: ctx.lees('Personen').length, Scholen: ctx.lees('Scholen').length, Kansen: ctx.lees('Kansen').length };
+  var in1 = roep(SOPHIE, 'apiCrmInrichten'), in2 = roep(SOPHIE, 'apiCrmInrichten');
+  eis(['personen', 'kansen', 'trajecten', 'notities', 'eigenaren'].every(function (k) { return typeof in1[k] === 'number' && in2[k] === 0; }) && ctx.lees('Personen').length === voorI.Personen + in1.personen && ctx.lees('Scholen').length === voorI.Scholen && ctx.lees('Kansen').length === voorI.Kansen && /management/i.test(faalt(FEMKE, 'apiCrmInrichten')), 'apiCrmInrichten: idempotent (de tweede run doet niets), geen nieuwe scholen of kansen, alleen management');
+
+  // Capsule-migratie met een minimale fictieve export (verzonnen school, geen echte gegevens): elke stap tot volgende = null
+  var oudFetch = ctx.UrlFetchApp.fetch, CAP = {
+    milestones: [{ id: 1, name: 'Lead', probability: 10, displayOrder: 1, daysUntilStale: 14, pipeline: { name: 'Scholen' } }, { id: 2, name: 'Gesprek', probability: 25, displayOrder: 2, daysUntilStale: 10, pipeline: { name: 'Scholen' } },
+      { id: 3, name: 'Voorstel', probability: 50, displayOrder: 3, daysUntilStale: 7, pipeline: { name: 'Scholen' } }, { id: 4, name: 'Onderhandeling', probability: 75, displayOrder: 4, daysUntilStale: 7, pipeline: { name: 'Scholen' } }, { id: 5, name: 'Won', complete: true, probability: 100 }],
+    parties: [{ id: 10, type: 'organisation', name: 'Capsule Proefschool', addresses: [{ street: 'Proefstraat 1', zip: '1234 AB', city: 'Proefstad' }], websites: [{ service: 'URL', address: 'www.proefschool.example' }], owner: { name: 'Lars Visser' }, about: 'Uit Capsule', createdAt: '2025-01-05T10:00:00Z', tags: [{ name: 'Capsule' }], fields: [{ definition: { name: 'Bestuur' }, value: 'Stichting Proef' }] },
+      { id: 11, type: 'person', firstName: 'Piet', lastName: 'Proef', jobTitle: 'Rector', organisation: { id: 10 }, emailAddresses: [{ address: 'Piet@proefschool.example' }], owner: { name: 'Lars Visser' }, createdAt: '2025-01-06T10:00:00Z' }],
+    opportunities: [{ id: 20, name: 'Proefkans', party: { id: 10 }, milestone: { id: 2 }, value: { amount: 5000 }, probability: 25, owner: { name: 'Lars Visser' }, description: 'Uit Capsule', createdAt: '2025-02-01T10:00:00Z' }],
+    kases: [{ id: 30, name: 'Proefproject', party: { id: 10 }, status: 'OPEN', openedOn: '2025-09-01', owner: { name: 'Femke de Wit' }, description: 'Uit Capsule', createdAt: '2025-08-20T10:00:00Z' }],
+    tasks: [{ id: 40, description: 'Proeftaak', party: { id: 11 }, dueOn: plusDagen(3), status: 'OPEN', category: { name: 'Call' }, owner: { name: 'Lars Visser' }, createdAt: '2025-09-02T10:00:00Z', opportunity: { id: 20 } }],
+    entries: [{ id: 50, type: 'note', party: { id: 10 }, entryAt: '2025-09-03T09:00:00Z', creator: { name: 'Lars Visser' }, content: 'Proefnotitie uit Capsule', kase: { id: 30 } }]
+  };
+  ctx.UrlFetchApp.fetch = function (url, o) {
+    if (!/api\.capsulecrm\.com/.test(url)) return oudFetch(url, o);
+    var pad = /api\/v2\/([a-z]+)/.exec(url)[1], data = {}; data[pad] = CAP[pad] || [];
+    return { getResponseCode: function () { return 200; }, getContentText: function () { return JSON.stringify(data); }, getHeaders: function () { return {}; } };
+  };
+  try {
+    eis(/CAPSULE_TOKEN/.test(faalt(SOPHIE, 'apiCapsuleMigratie', 'mijlpalen', 1)), 'apiCapsuleMigratie: zonder token een duidelijke melding');
+    ctx._demoProps.CAPSULE_TOKEN = 'demo-token';
+    var stap = { stap: 'mijlpalen', pagina: 1 }, stappen = [], rondes = 0;
+    while (stap && rondes++ < 10) { var cr = roep(SOPHIE, 'apiCapsuleMigratie', stap.stap, stap.pagina); stappen.push(cr.stap + ':' + cr.aantal); stap = cr.volgende; }
+    eis(stappen.join(' ') === 'mijlpalen:4 partijen:2 kansen:1 projecten:1 taken:1 historie:1' && stap === null, 'apiCapsuleMigratie: alle stappen na elkaar, met per stap het aantal rijen, tot volgende null is (' + stappen.join(' ') + ')');
+    var cs = ctx.vind('Scholen', 'cap-o10'), cp = ctx.vind('Personen', 'cap-p11'), ck = ctx.vind('Kansen', 'cap-k20'), cc = ctx.vind('Trajecten', 'cap-c30'), ctk = ctx.vind('Acties', 'cap-t40'), ce = ctx.vind('Activiteiten', 'cap-e50');
+    eis(!!cs && cs.naam === 'Capsule Proefschool' && cs.plaats === 'Proefstad' && cs.eigenaar === 'Lars Visser' && cs.status === 'lead' && cs.tags === 'capsule' && ctx.veldenUit(cs.velden).Bestuur === 'Stichting Proef' && String(cs.capsuleId) === '10', 'Capsule: organisatie → school met plaats, eigenaar, tags, eigen veld en capsuleId');
+    eis(!!cp && cp.schoolId === 'cap-o10' && cp.email === 'piet@proefschool.example' && cp.functie === 'Rector' && !!ck && ck.schoolId === 'cap-o10' && ck.fase === 'gesprek' && Number(ck.waarde) === 5000 && ck.eigenaar === 'Lars Visser', 'Capsule: persoon aan de school gekoppeld (e-mail klein); kans met fase uit de mijlpaal en waarde');
+    eis(!!cc && cc.status === 'bezig' && cc.school === 'Capsule Proefschool' && cc.schoolId === 'cap-o10' && cc.am === 'Femke de Wit' && cc.schooljaar === '2025-2026' && !!ctk && ctk.categorie === 'bellen' && ctk.kansId === 'cap-k20' && ctk.persoonId === 'cap-p11' && ctk.schoolId === 'cap-o10' && ctk.bron === 'capsule' && ctk.status === 'open', 'Capsule: project (open = bezig, schooljaar uit de startdatum) en taak (categorie uit de Capsule-categorie, gekoppeld aan kans, persoon en school)');
+    eis(!!ce && ce.type === 'notitie' && ce.trajectId === 'cap-c30' && ce.schoolId === 'cap-o10' && ce.bron === 'capsule' && roep(SOPHIE, 'apiStatus').capsuleMigratie !== '' && ctx.lees('Mijlpalen').map(function (m) { return m.mijlpaal; }).join() === 'lead,gesprek,voorstel,onderhandeling', 'Capsule: historie op de tijdlijn van het project; de migratiedatum in apiStatus; mijlpalen zoals de pipeline van Capsule');
+    eis(/management/i.test(faalt(FEMKE, 'apiCapsuleMigratie', 'mijlpalen', 1)) && /Onbekende stap/.test(faalt(SOPHIE, 'apiCapsuleMigratie', 'onzin', 1)), 'apiCapsuleMigratie: alleen management; een onbekende stap wordt geweigerd');
+  } finally { ctx.UrlFetchApp.fetch = oudFetch; delete ctx._demoProps.CAPSULE_TOKEN; }
+})();
+
+/* ---- v7.3 (K3): lees-api's die alleen de golden master raakte — één gerichte controle op de vorm van het antwoord ---- */
+(function () {
+  var dz = roep(LARS, 'apiDoelen');
+  eis(dz.doelen instanceof Array && dz.doelen.length > 0 && dz.doelen.every(function (d) { return d.eigenaar === 'Lars Visser' || d.eigenaar === 'bedrijf' || d.eigenaar === 'team:consultancy'; }) && dz.metrics instanceof Array && dz.periodes.join() === ctx.DOEL_PERIODES.join() && dz.magZetten === false && roep(YARA, 'apiDoelen').magZetten === true && roep(YARA, 'apiDoelen').eigenaren.some(function (e) { return e.waarde === 'team:consultancy'; }), 'apiDoelen: een medewerker ziet alleen zijn eigen doelen, die van zijn team en de bedrijfsdoelen en mag niets zetten; de teamlead wel, met zijn team als eigenaar');
+  var hm = roep(SOPHIE, 'apiHomeMails');
+  eis(hm.length === 4 && hm.map(function (m) { return m.dagen; }).sort().join() === '3,4,5,6' && hm.every(function (m) { return m.onderwerp && m.van && /mail\.google\.com/.test(m.link); }), 'apiHomeMails: de onbeantwoorde mails met het aantal kalenderdagen (3, 4, 5, 6), afzender en link');
+  var hs = roep(LARS, 'apiHuisstijl');
+  eis(hs.velden.bedrijf === 'AthenaSchool' && hs.kleuren.length === 5 && hs.kleuren.every(function (k) { return /^#[0-9A-Fa-f]{6}$/.test(k.hex); }) && hs.types.length === Object.keys(ctx.CONTENT_TYPES).length && hs.toon instanceof Array && hs.zinnen.every(function (z) { return z.titel && z.tekst; }) && hs.recent.length <= 12, 'apiHuisstijl: velden, vijf kleuren als #RRGGBB, de contenttypes, toon en zinnen als lijsten, hoogstens twaalf recente teksten');
+  var kb = roep(LARS, 'apiKennisbank');
+  eis(kb.documenten.length === ctx.lees('Documenten').length && kb.documenten.every(function (d) { return d.id && d.titel && 'woorden' in d && !('tekst' in d); }) && typeof kb.tellingen === 'object' && 'laatsteIndex' in kb && 'mapUrl' in kb, 'apiKennisbank: alle documenten zonder de volledige tekst, met tellingen, laatste index en map');
+  var ml = roep(SOPHIE, 'apiMeldingen');
+  eis(ml instanceof Array && ml.length <= 50 && ml.every(function (m, i) { return m.id && typeof m.gelezen === 'boolean' && 'link' in m && m.door !== 'Sophie de Graaf' && (i === 0 || String(ml[i - 1].datum) >= String(m.datum)); }), 'apiMeldingen: hoogstens vijftig eigen meldingen, nieuwste eerst, nooit een melding aan jezelf');
+  var rp = roep(LARS, 'apiRapport', 'maand', '', 0);
+  eis(rp.perPersoon.length === 1 && rp.perPersoon[0].naam === 'Lars Visser' && typeof rp.totaal === 'object' && rp.van <= rp.tot && ['forecast', 'trechter', 'winst', 'redenen', 'stil'].every(function (k) { return k in rp; }) && roep(SOPHIE, 'apiRapport', 'maand', '', 0).perPersoon.length > 1, 'apiRapport: een medewerker krijgt alleen zijn eigen cijfers (met forecast, trechter, winst, redenen en stille kansen), het management iedereen');
+  var rn = roep(SOPHIE, 'apiReviewNu');
+  eis(rn.id && rn.datum && rn.gemaaktOp && typeof rn.samenvatting === 'string' && rn.gedaan instanceof Array && rn.blijvenLiggen instanceof Array && rn.vandaag instanceof Array && rn.tellingen.gedaan === rn.gedaan.length && rn.tellingen.vandaag === rn.vandaag.length, 'apiReviewNu: een review met gedaan, blijven liggen, vandaag en kloppende tellingen');
+  var rv = roep(SOPHIE, 'apiReview'), rvF = roep(FEMKE, 'apiReview');  // de seed heeft een review van 05:30 vandaag: in een tijdzone waar het nog vroeger is, staat die als laatste, dus alleen de volgorde op gemaaktOp telt
+  eis(rv.laatste && rv.laatste.id && rv.laatste.tellingen && rv.laatste.gedaan instanceof Array && [rv.laatste].concat(rv.eerdere).some(function (r) { return r.id === rn.id; }) && rv.eerdere.every(function (r) { return r.id && r.datum && r.tellingen && !('gedaan' in r) && String(r.gemaaktOp) <= String(rv.laatste.gemaaktOp); }) && [rvF.laatste].concat(rvF.eerdere).every(function (r) { return !r || r.id !== rn.id; }), 'apiReview: de laatste review volledig (nieuwste gemaaktOp), eerdere alleen met samenvatting en tellingen; een ander ziet jouw review niet');
+  var vl = roep(SOPHIE, 'apiVelden');
+  eis(vl.velden instanceof Array && vl.tags.length > 0 && vl.tags.every(function (t, i) { return t.naam === t.naam.toLowerCase() && t.aantal >= 1 && (i === 0 || vl.tags[i - 1].naam <= t.naam); }) && vl.tags.some(function (t) { return t.naam === 'rooster'; }), 'apiVelden: tags in gebruik, klein, gesorteerd en met aantallen; eigen velden als lijst');
+  var br = roep(SOPHIE, 'apiBrein', 'Maak een taak om de administratie van Kompas College te bellen', []);
+  eis(typeof br.antwoord === 'string' && br.bronnen instanceof Array && br.acties.length === 1 && br.acties[0].soort === 'maak_taak' && br.acties[0].id && br.acties[0].invoer.tekst && !acties().some(function (a) { return a.tekst === br.acties[0].invoer.tekst; }), 'apiBrein: de assistent stelt een actie voor (maak_taak) maar voert haar niet uit; uitvoeren gaat via apiBreinUitvoeren');
+  var cs = roep(SOPHIE, 'apiCrmSync');
+  eis(typeof cs.mails === 'number' && typeof cs.afspraken === 'number' && typeof cs.bijgewerkt === 'number' && roep(SOPHIE, 'apiCrmSync').mails === 0, 'apiCrmSync: tellingen; een tweede run koppelt dezelfde mails niet nog eens');
+  eis(/In de demo staat dit uit/.test(faalt(SOPHIE, 'apiIndexeer')), 'apiIndexeer: in de demo is Drive uitgezet; de melding is Nederlands en noemt de reden');
+  var trn = roep(SOPHIE, 'apiTalentRunNu');
+  eis(['vog', 'peiling', 'slapend', 'bewaartermijn', 'geocoderen', 'aanmeldingen'].every(function (k) { return k in trn; }) && /management/i.test(faalt(IRIS, 'apiTalentRunNu')), 'apiTalentRunNu: de dagelijkse run met de hand geeft elke stap terug; alleen management');
+  var sv = roep(SOPHIE, 'apiSchoolSamenvatting', 's1');
+  eis(typeof sv.tekst === 'string' && sv.tekst.length > 20 && /^\d{4}-\d{2}-\d{2}/.test(String(sv.gemaakt)) && /niet gevonden/.test(faalt(SOPHIE, 'apiSchoolSamenvatting', 'geen-school')), 'apiSchoolSamenvatting: een tekst met tijdstempel; een onbekende school een melding');
+})();
+
+/* ---- v7.3 (K2): beheerfuncties apiArchiveer en apiImporteer (geen knop in de app; via doPost, alleen management) ---- */
+(function () {
+  ctx.GEBRUIKER = null;
+  ctx.schrijf('Activiteiten', { id: 'act-oud-rooktest', type: 'notitie', datum: plusDagen(-400) + ' 10:00', door: 'Sophie de Graaf', schoolId: 's1', onderwerp: 'Oude notitie (rooktest)', bron: 'app', aangemaakt: plusDagen(-400) + ' 10:00' });
+  var grens = plusDagen(-365), jong = tel('Activiteiten', function (a) { var d = String(a.datum).slice(0, 10); return !(d && d < grens); });
+  eis(/management/i.test(faalt(FEMKE, 'apiArchiveer')) && !!ctx.vind('Activiteiten', 'act-oud-rooktest'), 'apiArchiveer: een ander team komt er niet bij en er verandert niets');
+  var ar = roep(SOPHIE, 'apiArchiveer');
+  eis(ar.gearchiveerd >= 1 && ar.over === jong && !ctx.vind('Activiteiten', 'act-oud-rooktest') && !!ctx.vind('Activiteiten_archief', 'act-oud-rooktest') && ctx.lees('Activiteiten').every(function (a) { var d = String(a.datum).slice(0, 10); return !(d && d < grens); }) && typeof ar.uren === 'number', 'apiArchiveer: activiteit ouder dan een jaar gaat naar Activiteiten_archief, de rest blijft (' + ar.over + ' rijen)');
+  eis(roep(SOPHIE, 'apiArchiefTijdlijn', 'school', 's1').some(function (a) { return a.id === 'act-oud-rooktest'; }) && roep(SOPHIE, 'apiArchiveer').gearchiveerd === 0, 'apiArchiveer: het archief is via apiArchiefTijdlijn op te vragen; een tweede run archiveert niets');
+  var imp1 = roep(SOPHIE, 'apiImporteer', 'scholen', [{ naam: 'Importschool Noord', plaats: 'Proefstad', status: 'lead' }, { naam: 'Importschool Zuid', plaats: 'Proefdorp' }]), sN = ctx.vind('Scholen', 'importschool-noord');
+  eis(imp1.ingevoegd === 2 && imp1.bijgewerkt === 0 && imp1.ongewijzigd === 0 && !!sN && sN.naam === 'Importschool Noord' && sN.status === 'lead', 'apiImporteer: twee nieuwe scholen met een stabiel id uit de naam');
+  var imp2 = roep(SOPHIE, 'apiImporteer', 'scholen', [{ naam: 'Importschool Noord', plaats: 'Proefstad', status: 'lead' }, { naam: 'Importschool Zuid', plaats: 'Proefstad' }]);
+  eis(imp2.ingevoegd === 0 && imp2.bijgewerkt === 1 && imp2.ongewijzigd === 1 && ctx.vind('Scholen', 'importschool-zuid').plaats === 'Proefstad' && tel('Scholen', function (s) { return /^Importschool/.test(s.naam); }) === 2, 'apiImporteer: een herhaalde import werkt bij in plaats van te dupliceren en telt ongewijzigde rijen apart');
+  eis(/management/i.test(faalt(FEMKE, 'apiImporteer', 'scholen', [{ naam: 'Gekaapt' }])) && !ctx.lees('Scholen').some(function (s) { return s.naam === 'Gekaapt'; }) && /scholen, trajecten, kansen of acties/.test(faalt(SOPHIE, 'apiImporteer', 'talenten', [])) && /lijst/.test(faalt(SOPHIE, 'apiImporteer', 'scholen', {})), 'apiImporteer: alleen management ("Alleen het management kan dit."); alleen de vier tabellen; rijen moet een lijst zijn');
+})();
+
+/* ---- v7.3 (H1): apiTrajectOpslaan — rondreis over elk bewerkbaar veld, en de whitelist tegenover trajectVelden() in index.html ---- */
+(function () {
+  var code = fs.readFileSync(process.env.CODE_GS || path.join(R, 'backend/Code.gs'), 'utf8');
+  var wl = /function apiTrajectOpslaan\(obj\) \{[\s\S]*?var velden = \[([\s\S]*?)\], schoon = \{\}/.exec(code);
+  var whitelist = wl ? (wl[1].replace(/\/\/[^\n]*/g, '').match(/'([A-Za-z]+)'/g) || []).map(function (s) { return s.replace(/'/g, ''); }) : [];
+  eis(whitelist.length >= 30 && whitelist.indexOf('xpsProject') >= 0 && whitelist.indexOf('contractwaarde') >= 0, 'whitelist van apiTrajectOpslaan gelezen uit Code.gs (' + whitelist.length + ' velden)');
+  var html = fs.readFileSync(path.join(R, 'index.html'), 'utf8'), fm = /function trajectVelden\(t\) \{([\s\S]*?)\n  \}\n/.exec(html);
+  var appVelden = [], rx = /naam: '([A-Za-z]+)'|kies\('([A-Za-z]+)'/g, m;
+  while (fm && (m = rx.exec(fm[1]))) appVelden.push(m[1] || m[2]);
+  var UITZONDERINGEN_APP = {};  // veldnaam in trajectVelden → reden waarom hij niet in de whitelist hoeft (bijv. alleen weergave); nu geen
+  var ontbreekt = appVelden.filter(function (v) { return whitelist.indexOf(v) < 0 && !UITZONDERINGEN_APP[v]; });
+  eis(appVelden.length >= 25 && !ontbreekt.length, 'elk veld van trajectVelden() in index.html (' + appVelden.length + ') staat in de whitelist van apiTrajectOpslaan' + (ontbreekt.length ? ' — ONTBREEKT IN DE BACKEND: ' + ontbreekt.join(', ') : ''));
+  var sj = ctx.huidigSchooljaar(), jaar = Number(sj.slice(0, 4));
+  var W = { schoolId: 's1', plaats: 'Proefplaats', traject: 'Rondreis traject', schooljaar: sj, start: jaar + '-09-07', eind: (jaar + 1) + '-06-21', status: 'opstart', ondersteuners: 3, urenPerWeek: 18, tarief: 47.5, omzet: 12345, contactpersoon: 'Contact Rondreis', am: 'Femke de Wit', samenvatting: 'Samenvatting rondreis',
+    kansId: 'k1', adviseur: 'Lars Visser', soortFacturatie: 'achteraf', gefactureerd: 'nee', factuurDatum: jaar + '-10-31', vakanties: 'doorbetaald', bijzonderheden: 'Bijzonderheden rondreis', factuurnummer: 'F-RONDREIS-1',
+    contactgegevens: 'Contact Rondreis, 06-00000000', voorstelUrl: 'https://docs.google.com/document/d/rondreis', documentenUrl: 'https://drive.google.com/drive/folders/rondreis', verlenging: 'nog bespreken', xpsProject: '10.999', talentscout: 'Sem de Boer', contractwaarde: 13000.5 };
+  var pr = roep(SOPHIE, 'apiTrajectOpslaan', W), terug = roep(SOPHIE, 'apiProject', pr.id).project, mis = [];
+  Object.keys(W).forEach(function (k) { var v = terug[k]; if (['contractwaarde', 'tarief', 'omzet', 'urenPerWeek'].indexOf(k) >= 0 ? Number(v) !== Number(W[k]) : String(v) !== String(W[k])) mis.push(k + '=' + JSON.stringify(v)); });
+  eis(!mis.length && terug.school === 'Esdoorn Lyceum', 'rondreis: elk veld uit de whitelist komt via apiProject terug zoals opgeslagen (school uit de gekozen CRM-school)' + (mis.length ? ' — AFWIJKEND: ' + mis.join(', ') : ''));
+  var vrij = roep(SOPHIE, 'apiTrajectOpslaan', { id: pr.id, school: 'Vrije schoolnaam', _oud: { school: 'Esdoorn Lyceum' } });
+  eis(vrij.school === 'Vrije schoolnaam' && roep(SOPHIE, 'apiProject', pr.id).project.school === 'Vrije schoolnaam', 'rondreis: ook de vrije schoolnaam (zonder schoolId) wordt bewaard');
+  var nietInWl = Object.keys(W).concat(['id', 'school']).filter(function (k) { return whitelist.indexOf(k) < 0; }), wlNiet = whitelist.filter(function (k) { return !(k in W) && k !== 'id' && k !== 'school'; });
+  eis(!nietInWl.length && !wlNiet.length, 'rondreis: de testwaarden dekken precies de whitelist' + (wlNiet.length ? ' — NIET GETEST: ' + wlNiet.join(', ') : '') + (nietInWl.length ? ' — NIET IN WHITELIST: ' + nietInWl.join(', ') : ''));
+  eis(/verwacht tekst/.test(faalt(SOPHIE, 'apiTrajectOpslaan', { id: pr.id, samenvatting: { tekst: 'x' } })) && roep(SOPHIE, 'apiProject', pr.id).project.samenvatting === 'Samenvatting rondreis' && /Onbekende waarde voor gefactureerd/.test(faalt(SOPHIE, 'apiTrajectOpslaan', { id: pr.id, gefactureerd: 'misschien' })), 'rondreis: een object in een tekstveld en een waarde buiten de keuzelijst worden geweigerd zonder te schrijven');
+})();
+
+/* ---- v7.3 (TZ-6): dagenSinds in kalenderdagen ---- */
+(function () {
+  var CtxDate = vm.runInContext('Date', ctx), nuC = new CtxDate(), kal = function (n, u, mi) { return new CtxDate(nuC.getFullYear(), nuC.getMonth(), nuC.getDate() + n, u, mi); };
+  eis(ctx.dagenSinds(ctx.datumTijdStr(kal(-1, 23, 30))) === 1 && ctx.dagenSinds(ctx.datumTijdStr(kal(0, 0, 10))) === 0 && ctx.dagenSinds(ctx.datumTijdStr(kal(-2, 23, 59))) === 2 && ctx.dagenSinds(ctx.datumStr(kal(-7, 12, 0))) === 7 && ctx.dagenSinds(ctx.datumTijdStr(kal(1, 0, 5))) === -1 && ctx.dagenSinds('') === null, 'dagenSinds rekent in kalenderdagen: gisteren 23:30 = 1, vandaag 00:10 = 0, eergisteren 23:59 = 2, morgen 00:05 = -1');
+  var k7 = ctx.vind('Kansen', 'k7'), ku = roep(SOPHIE, 'apiKans', 'k7').kans;
+  eis(ku.dagenStil === Math.round((ctx.middag(nuC) - ctx.middag(ctx.parseDatum(k7.laatsteContact))) / 86400000), 'dagenStil van een kans is het verschil in kalenderdagen met het laatste contact');
+})();
+
+/* ---- v7.3 (FZ-8): tekstIn — een object of lijst in een vrij tekstveld wordt geweigerd en schrijft niets ---- */
+(function () {
+  var MELD = /Dit veld verwacht tekst\./, gooit = function (v) { try { ctx.tekstIn(v); return false; } catch (e) { return MELD.test(e.message); } };
+  var voor = { Acties: ctx.lees('Acties').length, Activiteiten: ctx.lees('Activiteiten').length, Kandidaat: JSON.stringify(ctx.vind('Kandidaten', 'c1')), Taskforce: String(ctx.vind('Trajecten', 't4').taskforce) };
+  eis(ctx.tekstIn(undefined) === '' && ctx.tekstIn(null) === '' && ctx.tekstIn('  x  ') === 'x' && ctx.tekstIn(12) === '12' && gooit({}) && gooit(['a']) && gooit({ tekst: 'x' }), 'tekstIn: leeg voor null en undefined, getrimde tekst, een object of lijst geeft "Dit veld verwacht tekst."');
+  eis(MELD.test(faalt(LARS, 'apiTaakOpslaan', { tekst: 'Proef', notitie: { a: 1 } })) && MELD.test(faalt(LARS, 'apiTaakOpslaan', { tekst: ['Proef'] })) && MELD.test(faalt(LARS, 'apiActieToevoegen', { id: 'x' }, 'midden', plusDagen(1))) && ctx.lees('Acties').length === voor.Acties, 'taken: een object als tekst of notitie wordt geweigerd en er komt geen rij bij');
+  eis(MELD.test(faalt(LARS, 'apiActiviteitToevoegen', { vorm: 'call', schoolId: 's1', onderwerp: { x: 1 } })) && MELD.test(faalt(LARS, 'apiAfspraakPlannen', { titel: 'Proef', start: plusDagen(3) + 'T10:00', schoolId: 's1', locatie: { adres: 'x' } })) && MELD.test(faalt(LARS, 'apiAfspraakPlannen', { titel: 'Proef', start: plusDagen(3) + 'T10:00', schoolId: 's1', notitie: ['x'] })) && ctx.lees('Activiteiten').length === voor.Activiteiten && ctx._demoAgenda.every(function (e) { return e.getTitle() !== 'Proef'; }), 'activiteiten en afspraken: onderwerp, locatie en notitie moeten tekst zijn; niets in de Sheet of de agenda');
+  eis(MELD.test(faalt(BAS, 'apiTaskforceOpslaan', 't4', { hulpvraag: [{}] })) && String(ctx.vind('Trajecten', 't4').taskforce) === voor.Taskforce && MELD.test(faalt(SOPHIE, 'apiKandidaatOpslaan', { id: 'c1', notitie: { onbekend: 1 } })) && JSON.stringify(ctx.vind('Kandidaten', 'c1')) === voor.Kandidaat, 'taskforce en kandidaat: hulpvraag en notitie moeten tekst zijn; de rij blijft ongewijzigd');
+  eis(MELD.test(faalt(IRIS, 'apiBeoordelingOpslaan', { talentId: 'tl16', oordeel: 'goed', tekst: [{}] })) && MELD.test(faalt(IRIS, 'apiVoorstellen', 'v3', ['tl24'], { id: 'x' })) && MELD.test(faalt(SOPHIE, 'apiTrackOpslaan', { naam: [{}], stappen: [{ tekst: 'x' }] })) && MELD.test(faalt(SOPHIE, 'apiMaakContent', 'linkedin', {}, 'kort')) && MELD.test(faalt(SOPHIE, 'apiSchoolOpslaan', { id: 's1', notities: { x: 1 } })) && MELD.test(faalt(LARS, 'apiKansOpslaan', { id: 'k7', volgendeActie: ['x'] })) && MELD.test(faalt(SEM, 'apiTalentOpslaan', { id: 'tl1', notitie: { x: 1 } })) && MELD.test(faalt(SOPHIE, 'apiHuisstijlOpslaan', { toon: { x: 1 } })), 'beoordeling, voordracht, track, tekst, school, kans, talent en huisstijl: elk vrij tekstveld weigert een object');
+})();
+
+/* ---- v7.3 (R4): apiTalentOpslaan controleert met de rij, zodat een rijniveau ook daar geldt ---- */
+(function () {
+  var oudR = ctx.RECHTEN.talenten.accountmanagement; ctx.RECHTEN.talenten.accountmanagement = ['eigen', 'eigen'];
+  try {
+    eis(!faalt(FEMKE, 'apiTalentOpslaan', { id: 'tl3', opleiding: 'Pabo (rooktest)' }) && ctx.vind('Talenten', 'tl3').opleiding === 'Pabo (rooktest)' && /toegang/.test(faalt(FEMKE, 'apiTalentOpslaan', { id: 'tl15', opleiding: 'Gekaapt' })) && ctx.vind('Talenten', 'tl15').opleiding !== 'Gekaapt', 'met rijniveau eigen wijzigt de AM alleen een talent uit zijn eigen projecten (tl3, kandidaat bij Femke), niet tl15');  // tl1 heeft hierboven bewust een dubbel profiel gekregen (forceer), daarom tl3
+  } finally { ctx.RECHTEN.talenten.accountmanagement = oudR; }
+  eis(/toegang/.test(faalt(FEMKE, 'apiTalentOpslaan', { id: 'tl1', opleiding: 'x' })) && /toegang/.test(faalt(FEMKE, 'apiTalentOpslaan', { voornaam: 'Nieuw', toestemmingDatum: plusDagen(0) })), 'met de echte tabel (AM: geen) blijft wijzigen en aanmaken voor de AM dicht');
 })();
 
 /* ---- bestaande schermen blijven werken ---- */

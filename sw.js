@@ -1,5 +1,7 @@
 /* Athena Assistent — service worker: HTML network-first (cache als fallback), statische shell cache-first, API altijd via netwerk */
-var CACHE = 'athena-assistent-v7.2';  // bump bij elke release (zie /release)
+var CACHE = 'athena-assistent-v7.3';  // bump bij elke release (zie /release)
+// v7.3 (iOS-review R2): de app luistert op controllerchange en toont dan de vaste balk #updateBalk (Herladen / Later); deze worker neemt met
+// skipWaiting + clients.claim meteen over en herlaadt nooit zelf, zodat een open venster of composer niet verloren gaat.
 var SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 var NET_TIMEOUT_MS = 3000;  // v1.0: bij trage verbinding na 3 s de gecachte shell tonen; het netwerk werkt op de achtergrond door
 

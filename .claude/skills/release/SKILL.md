@@ -17,7 +17,7 @@ Voer de stappen in volgorde uit. Stop bij een fout en meld wat er misging.
    ```bash
    echo '{"tool_input":{"file_path":"index.html"}}' | bash .claude/hooks/check-index.sh
    ```
-   Exitcode 0 is vereist. Is `backend/Code.gs` of iets in `server/` gewijzigd, draai dan ook `node server/test/server_test.js` en `node server/test/security_test.js` (ALLES GOED) en `node server/dekking.js` (exitcode 0); is `TABELLEN` gewijzigd, genereer dan `supabase/migrations/0001_init.sql` opnieuw met `node server/schema.js --sql`.
+   Exitcode 0 is vereist. Is `index.html` gewijzigd, draai dan ook `python3 test/test_app.py` (v7.3: start en stopt de mock op 8765 zelf, of zet een draaiende mock terug op de seed; eindigt met ALLES GOED en exitcode 0, anders FOUTEN: n en exitcode 1). Is `backend/Code.gs` of iets in `server/` gewijzigd, draai dan ook `node server/test/server_test.js` en `node server/test/security_test.js` (ALLES GOED) en `node server/dekking.js` (exitcode 0); is `TABELLEN` gewijzigd, genereer dan `supabase/migrations/0001_init.sql` opnieuw met `node server/schema.js --sql`.
 5. **Commit en push.** Alleen de gewijzigde app-bestanden. Titel: `vX.Y: <korte omschrijving in het Nederlands>`. Push naar de huidige branch met `git push -u origin <branch>`.
 6. **Melden.** Vat samen: versie, cache-naam, gewijzigde bestanden. Vermeld dat gebruikers de PWA één keer volledig moeten sluiten en heropenen om de nieuwe service worker te activeren.
 

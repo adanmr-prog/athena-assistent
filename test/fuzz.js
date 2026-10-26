@@ -101,7 +101,7 @@ function vreemdId(tab, rol, rnd) { var r = vreemdeRij(tab, rol, rnd); return r ?
 
 // welk soort waarde hoort bij deze parameternaam (voor type-verwisselingen en de generieke basis)
 var ID_TAB = { trajectId: 'Trajecten', talentId: 'Talenten', vacatureId: 'Vacatures', kansId: 'Kansen', schoolId: 'Scholen', persoonId: 'Personen', kandidaatId: 'Kandidaten', trackRunId: 'Acties' };
-var ID_TAB_API = { apiTraject: 'Trajecten', apiProject: 'Trajecten', apiSchool: 'Scholen', apiSchoolSamenvatting: 'Scholen', apiPersoon: 'Personen', apiKans: 'Kansen', apiTaak: 'Acties', apiActieKlaar: 'Acties',
+var ID_TAB_API = { apiProject: 'Trajecten', apiSchool: 'Scholen',  // v7.3: apiTraject is weg (K2) apiSchoolSamenvatting: 'Scholen', apiPersoon: 'Personen', apiKans: 'Kansen', apiTaak: 'Acties', apiActieKlaar: 'Acties',
   apiTaakHeropen: 'Acties', apiTalent: 'Talenten', apiTalentPortaalLink: 'Talenten', apiTalentExport: 'Talenten', apiTalentAnonimiseer: 'Talenten', apiTalentDocumentLink: 'TalentDocumenten', apiDocumentOpslaan: 'Documenten' };
 var OBJ_TAB = { apiTrajectOpslaan: 'Trajecten', apiGebruikerOpslaan: 'Gebruikers', apiSchoolOpslaan: 'Scholen', apiPersoonOpslaan: 'Personen', apiActiviteitOpslaan: 'Activiteiten', apiKansOpslaan: 'Kansen', apiTaakOpslaan: 'Acties',
   apiDoelOpslaan: 'Doelen', apiContentOpslaan: 'Content', apiVacatureOpslaan: 'Vacatures', apiKandidaatOpslaan: 'Kandidaten', apiFactuurOpslaan: 'Facturen', apiTalentOpslaan: 'Talenten', apiTalentDocumentOpslaan: 'TalentDocumenten',
@@ -124,13 +124,9 @@ function keuzelijstWaarden(k) { try { return ctx.keuzelijst(k).map(function (w) 
 var BASIS = {
   apiActieKlaar: function (rol) { return [eigenId('Acties', rol)]; },
   apiActieToevoegen: function () { return ['Fuzz-taak', 'midden', plusDagen(2), { tijd: '09:30', categorie: 'overig' }]; },
-  apiVraag: function () { return ['Welke scholen hebben een lopend project?']; },
-  apiZetHuisstijl: function () { return ['toon', 'Warm, concreet en zonder jargon.']; },
-  apiMaakContent: function () { return [eerste(ctx.CONTENT_TYPES), 'Start NT2-ondersteuning bij een nieuwe school', 'kort'];  },
-  apiTraject: function (rol) { return [eigenId('Trajecten', rol)]; },
+  apiMaakContent: function () { return [eerste(ctx.CONTENT_TYPES), 'Start NT2-ondersteuning bij een nieuwe school', 'kort'];  },  // v7.3: apiVraag, apiZetHuisstijl, apiTraject en apiNotitieToevoegen zijn weg (K2)
   apiProject: function (rol) { return [eigenId('Trajecten', rol)]; },
   apiTrajectOpslaan: function (rol) { var t = eigenRij('Trajecten', rol); return [{ id: t.id, samenvatting: 'Fuzz-samenvatting', _oud: { samenvatting: t.samenvatting } }]; },
-  apiNotitieToevoegen: function (rol) { return [eigenId('Trajecten', rol), 'Fuzz-notitie']; },
   apiExportAlles: function () { return ['Scholen', 0, 50]; },
   apiGebruikerOpslaan: function () { var g = kopie(SEEDRIJEN.Gebruikers[1]); return [{ id: g.id, naam: g.naam, email: g.email, team: g.team, rol: g.rol, actief: 'ja' }, false]; },
   apiMijlpalenOpslaan: function () { return [[{ pipeline: 'Scholen', mijlpaal: 'gesprek', volgorde: 1, kans: 20, dagenNorm: 14 }, { pipeline: 'Scholen', mijlpaal: 'voorstel', volgorde: 2, kans: 50, dagenNorm: 14 }]]; },

@@ -3,14 +3,16 @@
 // dataset-schrijven), welke raken de tests aan (grep van data-xxx in test/*.py, test/handig/*.py, test/*.js) en hoe is de dekking per sectie
 // (de /* ===== ... ===== */-koppen van het script, op basis van de functie waarin de string staat).
 // Gebruik: node test/handelingen.js  → test/shots/robuust/handelingen.md en handelingen.json; per controle "ok   ..." of "FOUT ...";
-// eindigt met "ALLES GOED" (exitcode 0) of "FOUTEN: n" (exitcode 1). Een FOUT is een dode handler: afgevangen in een listener, nergens uitgezonden.
-// Dood markup (uitgezonden, nergens afgevangen) en handelingen zonder test zijn informatie, geen fout.
+// eindigt met "ALLES GOED" (exitcode 0) of "FOUTEN: n" (exitcode 1). Een FOUT is een dode handler: afgevangen in een listener, nergens uitgezonden,
+// of (v7.3, H4/H5) meer dan MAX_ZONDER_TEST handelingen zonder enige test; de lijst zonder test wordt altijd geprint (test/handig/golf4.py doorloopt
+// de handelingen die geen andere test raakt). Dood markup (uitgezonden, nergens afgevangen) is informatie, geen fout.
 // Geen afhankelijkheden: eigen tokenizer (strings, commentaar, regex-literals, accolades). Staat acorn toevallig in node_modules, dan dient hij
 // alleen als kruiscontrole van de tokenizer.
 'use strict';
 var fs = require('fs'), path = require('path');
 var R = path.join(__dirname, '..'), UIT = path.join(R, 'test/shots/robuust');
 var START = Date.now(), fouten = 0, waarschuwingen = [];
+var MAX_ZONDER_TEST = 20;  // v7.3 (H4/H5): drempel voor handelingen zonder enige test (was 58 van 157 vóór golf4.py)
 function eis(ok, wat) { console.log((ok ? 'ok   ' : 'FOUT ') + wat); if (!ok) fouten++; }
 function info(wat) { console.log('info ' + wat); }
 function waarschuw(wat) { waarschuwingen.push(wat); console.log('let  ' + wat); }
@@ -273,6 +275,8 @@ info('dood markup (uitgezonden, nergens in JS of CSS gebruikt): ' + doodMarkup.l
 if (dodeLezers.length) info('dode lezers (in JS gelezen, nergens uitgezonden): ' + dodeLezers.map(function (n) { return 'data-' + n; }).join(', '));
 if (losseCss.length) info('losse CSS-selectors (nooit uitgezonden): ' + losseCss.map(function (n) { return 'data-' + n; }).join(', '));
 info('handelingen zonder enige test: ' + zonderTest.length + ' van ' + handelingen.length + ' (' + Math.round(100 * (handelingen.length - zonderTest.length) / Math.max(1, handelingen.length)) + '% gedekt); via selector ' + handelingen.filter(function (n) { return ATTR[n].vorm === 'selector' && !ATTR[n].testTotaal; }).length + ' van ' + handelingen.filter(function (n) { return ATTR[n].vorm === 'selector'; }).length + ', alleen dataset ' + handelingen.filter(function (n) { return ATTR[n].vorm === 'dataset' && !ATTR[n].testTotaal; }).length + ' van ' + handelingen.filter(function (n) { return ATTR[n].vorm === 'dataset'; }).length);
+// v7.3 (H4/H5): de lijst altijd printen en de drempel bewaken; een nieuwe handeling hoort meteen een test te krijgen (meestal in test/handig/golf4.py)
+eis(zonderTest.length <= MAX_ZONDER_TEST, 'hoogstens ' + MAX_ZONDER_TEST + ' handelingen zonder test: nu ' + zonderTest.length + (zonderTest.length ? ' → ' + zonderTest.map(function (n) { return 'data-' + n; }).join(', ') : ''));
 info('secties met de laagste dekking (minstens 3 handelingen): ' + secties.filter(function (s) { return s.handelingen.length >= 3; }).slice(0, 4).map(function (s) { return s.naam + ' ' + s.dekking + '% (' + s.getest.length + '/' + s.handelingen.length + ')'; }).join('; '));
 
 /* ---- schrijven: json en markdown ---- */

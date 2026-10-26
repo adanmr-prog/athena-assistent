@@ -256,7 +256,7 @@ function kort(b) { return b.replace(/^test\//, '').replace(/^server\//, 'server/
 function testCel(obj) { var k = Object.keys(obj); return k.length ? k.map(function (b) { return kort(b) + ' ×' + obj[b].length; }).join(', ') : '—'; }
 function appCel(a) { var d = []; if (a.direct.length) d.push('run ×' + a.direct.length); if (a.indirect.length) d.push('indirect ×' + a.indirect.length); if (a.portaal.length) d.push('runPortaal ×' + a.portaal.length); return d.join(', ') || '—'; }
 var md = [];
-md.push('# Kruistabel API-oppervlak (v7.2)', '', 'Gemaakt ' + new Date().toISOString().slice(0, 16) + 'Z door `node test/kruistabel.js`, puur uit de broncode.', '',
+md.push('# Kruistabel API-oppervlak (v7.3)', '', 'Gemaakt ' + new Date().toISOString().slice(0, 16) + 'Z door `node test/kruistabel.js`, puur uit de broncode.', '',  // v7.3: apiVraag, apiZetHuisstijl, apiTraject en apiNotitieToevoegen zijn weg (K2); de rooktest dekt de schrijfpaden (K3)
   '- App (`index.html`): ' + APP_NAMEN.length + ' api-namen, waarvan ' + APP_RUN.length + ' via `run()` (direct of via een variabele/naamlijst) en ' + APP_PORTAAL.length + ' via `runPortaal()`.',
   '- Backend (`backend/Code.gs`): ' + Object.keys(BACKEND).length + ' `function api…(`; `PORTAAL_FUNCTIES` = ' + PORTAAL_FUNCTIES.join(', ') + '; ' + TRIGGERS.length + ' triggers; assistent: ' + BREIN_LEES.length + ' leestools en ' + BREIN_ACTIES.length + ' acties.',
   '- Mock (`test/mock_backend.py`): ' + Object.keys(MOCK).length + ' functies met `if fn == …`.',

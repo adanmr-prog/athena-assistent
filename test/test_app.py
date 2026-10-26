@@ -1,13 +1,119 @@
 # Browsertest van alle zes schermen tegen test/mock_backend.py (Playwright, Chromium uit /opt/pw-browsers).
-import os, sys, json
+# v7.3 (FL-1): de test start de mock zelf op poort 8765 (MOCK_CSP=1) als die poort vrij is en stopt hem aan het eind; draait er al een mock, dan
+# zet hij die eerst terug op de seed ({"fn":"_reset"}), zodat een tweede run dezelfde uitgangsstand ziet. Los starten (CLAUDE.md) blijft werken.
+# v7.3 (FL-7): eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1); een mislukte assert geeft een traceback en exitcode 1.
+import os, sys, json, time, atexit, subprocess, urllib.request
 from playwright.sync_api import sync_playwright
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shots'); os.makedirs(OUT, exist_ok=True)  # draai eerst: python3 test/mock_backend.py
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, 'test', 'shots'); os.makedirs(OUT, exist_ok=True)
+POORT = 8765; BASIS = 'http://127.0.0.1:%d' % POORT
 meldingen = []
 exe = '/opt/pw-browsers/chromium' if os.path.isfile('/opt/pw-browsers/chromium') else '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+T0 = time.time()
+
+# ---- v7.3 (FL-1): mock starten of terugzetten ---------------------------------------------------------------------------
+def mock_post(body):  # de testhulpen van de mock (_reset, _faal) spreken zonder koppelcode
+    with urllib.request.urlopen(urllib.request.Request(BASIS + '/api', data=json.dumps(body).encode(), method='POST'), timeout=5) as r: return json.loads(r.read())
+def mock_antwoordt():
+    try:
+        with urllib.request.urlopen(BASIS + '/api', timeout=1) as r: return r.status == 200 and 'mock' in json.loads(r.read()).get('app', '')
+    except Exception: return False
+mock_proc = None; KLAAR = {'ok': False}
+def _einde():  # bij elk einde, ook na een uitzondering: de eigen mock stoppen en de uitslag afmaken
+    if mock_proc is not None:
+        try: mock_proc.terminate(); mock_proc.wait(timeout=5)
+        except Exception: pass
+    if not KLAAR['ok']: print('FOUTEN: 1 (de test brak af met een uitzondering, zie hierboven; %.0f s)' % (time.time() - T0))
+atexit.register(_einde)
+if mock_antwoordt():
+    r = mock_post({'fn': '_reset'})
+    if not r.get('ok'): print('FOUT de mock op poort %d kent geen _reset (oude mock?): herstart hem — %s' % (POORT, r)); sys.exit(1)
+    print('mock op poort %d draait al: gegevens teruggezet op de seed (%s tabellen)' % (POORT, r.get('tabellen')))
+else:
+    mock_proc = subprocess.Popen([sys.executable, os.path.join(ROOT, 'test', 'mock_backend.py')], env=dict(os.environ, MOCK_POORT=str(POORT), MOCK_CSP='1'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(50):
+        if mock_antwoordt(): break
+        time.sleep(0.2)
+    else: print('FOUT de mock start niet op poort %d' % POORT); sys.exit(1)
+    print('mock gestart op poort %d (MOCK_CSP=1); wordt aan het eind gestopt' % POORT)
+
+API_LOG = []  # v7.3: elk POST /api van de hoofdpagina als {fn, args}, voor de scenario's die tellen welke api's de app aanroept
+def log_api(r):
+    if r.method == 'POST' and r.url.startswith(BASIS + '/api'):
+        try: API_LOG.append(json.loads(r.post_data or '{}'))
+        except Exception: pass
+def api_vanaf(n, *fns): return [x for x in API_LOG[n:] if x.get('fn') in fns]
+def eerste_arg(x): return x['args'][0] if isinstance(x.get('args'), list) and x['args'] and isinstance(x['args'][0], dict) else {}
+
 def sleep_naar(pg, kaart, kolom):  # v6.7: kaart met de muis naar een andere kolom slepen
     a = pg.locator(kaart).bounding_box(); b = pg.locator(kolom).bounding_box()
     pg.mouse.move(a['x'] + 20, a['y'] + 15); pg.mouse.down(); pg.mouse.move(a['x'] + 40, a['y'] + 30, steps=4)
     pg.mouse.move(b['x'] + b['width'] / 2, b['y'] + 80, steps=10); pg.mouse.up(); pg.wait_for_timeout(500)
+
+# ---- v7.3: scenario's voor de gefixte hotspots H2, H3 en H4 (docs/robuust-v7.2.md §5) ---------------------------------------
+def scenario_week_opnieuw(pg):
+    # v7.3 (H2): de mock laat één apiAgenda-aanroep mislukken → de weekweergave toont "Kon de week niet laden" met Opnieuw proberen
+    # (data-weekopnieuw) in plaats van een eeuwige spinner; klikken laadt de week alsnog. Zonder data-weekopnieuw (v4.6) blijft dit hangen.
+    assert mock_post({'fn': '_faal', 'args': ['apiAgenda', 1]}).get('ok'), 'de mock kent _faal'
+    n0 = len(API_LOG)
+    pg.click('[data-weeknav="0"]'); pg.wait_for_selector('#crmInhoud [data-weekopnieuw]')
+    assert pg.locator('.weekblok').count() == 0 and pg.locator('#crmInhoud .spinner').count() == 0 and 'Kon de week niet laden' in pg.inner_text('#crmInhoud'), 'bij een fout geen weekblokken en geen spinner, wel de melding'
+    assert pg.locator('[data-weeknav]').count() == 3, 'de weeknavigatie blijft staan bij een fout'
+    pg.click('#crmInhoud [data-weekopnieuw]'); pg.wait_for_selector('.weekblok'); pg.wait_for_timeout(200)
+    assert pg.locator('.weekblok').count() == 7 and pg.locator('[data-weekopnieuw]').count() == 0, 'Opnieuw proberen rendert de week'
+    assert len(api_vanaf(n0, 'apiAgenda')) == 2, 'één mislukte en één geslaagde aanroep van apiAgenda: ' + repr([x['fn'] for x in API_LOG[n0:]])
+    pg.screenshot(path=OUT + '/15e_taken_week_opnieuw.png', full_page=True)
+
+def scenario_rapport_cache(pg):
+    # v7.3 (H3): renderRapport toont .rteams voor het management en haalt de activiteit (apiActiviteiten) uit de cache bij een andere maatstaf
+    # (0 extra aanroepen); een andere periode haalt hem precies één keer opnieuw. Wordt gedraaid op het team consultancy, periode maand.
+    assert pg.locator('#crmBalk .rteams').count() == 1 and pg.locator('#crmBalk .rteams [data-rteam]').count() == 4, '.rteams voor het management: Alle teams en drie teams'
+    n0 = len(API_LOG)
+    pg.click('#crmInhoud [data-rmetric="conversie"]'); pg.wait_for_selector('#crmInhoud .kop:has-text("Verloop") small:has-text("Conversie")'); pg.wait_for_selector('#rapportActiviteit .t-item'); pg.wait_for_timeout(400)
+    assert len(api_vanaf(n0, 'apiActiviteiten')) == 0, 'een andere maatstaf haalt de activiteit niet opnieuw op (cache): ' + repr([x['fn'] for x in API_LOG[n0:]])
+    n1 = len(API_LOG)
+    pg.click('[data-crmpreset="kwartaal"]'); pg.wait_for_selector('.periode-nav .p-label:has-text("Q4")'); pg.wait_for_selector('#rapportActiviteit .t-item'); pg.wait_for_timeout(400)
+    n_act = len(api_vanaf(n1, 'apiActiviteiten'))
+    assert n_act == 1, 'een andere periode haalt de activiteit één keer opnieuw op, kreeg %d: %s' % (n_act, repr([x['fn'] for x in API_LOG[n1:]]))
+    assert pg.locator('#crmBalk .rteams .chip.aan[data-rteam="consultancy"]').count() == 1, 'het gekozen team blijft aan na de periodewissel'
+    pg.click('[data-crmpreset="maand"]'); pg.wait_for_selector('#crmInhoud .kop:has-text("Verloop per maand")'); pg.wait_for_selector('#rapportActiviteit .t-item')  # terug naar maand voor de stappen hierna
+
+def scenario_venster_boven_composer(pg):
+    # v7.3 (H4): opslaan vanuit een bewerkvenster bóven een gevulde inline composer in het schooldetail: het venster voert zíjn actie uit
+    # (VENSTER.actie → apiTaakOpslaan met het id van de taak) en niet die van de composer (formActie → apiActiviteitToevoegen); daarna slaat de
+    # composer de notitie op via zijn eigen api en staat de activiteit in de tijdlijn. Zonder de v3.7-fix deelden venster en pagina één formActie.
+    # Na het opslaan hertekent de app het hele detail (taakLokaal → herteken → renderDetail); sinds v7.3 bewaart composerBewaar/composerHerstel de open
+    # composer met zijn tekst over dat hertekenen heen (zonder die fix kwam de composer leeg terug en was de half getypte notitie weg).
+    pg.select_option('[data-logvorm]', 'notitie'); pg.wait_for_selector('#crmComposer #cf-tekst'); pg.fill('#crmComposer #cf-tekst', 'Notitie begonnen vóór het venster')
+    n0 = len(API_LOG)
+    pg.locator('#crmDetailScherm [data-taakbewerk="tk3b"]').click(); pg.wait_for_selector('#venster.aan #vf-tekst')
+    assert pg.input_value('#venster #vf-tekst') == 'Zaal reserveren', 'het venster toont de subtaak'
+    pg.fill('#venster #vf-tekst', 'Zaal reserveren (uit het venster)'); pg.click('#venster [data-cf-opslaan]')
+    pg.wait_for_selector('#venster.aan', state='detached'); pg.wait_for_selector('#toast.aan:has-text("Taak opgeslagen")'); pg.wait_for_selector('#crmDetailScherm .rij:has-text("(uit het venster)")')
+    pg.wait_for_timeout(300)
+    aanroepen = [(x['fn'], eerste_arg(x).get('id')) for x in api_vanaf(n0, 'apiTaakOpslaan', 'apiActiviteitToevoegen')]
+    assert aanroepen == [('apiTaakOpslaan', 'tk3b')], 'het venster slaat alleen de taak op, de notitie niet: ' + repr(aanroepen)
+    assert pg.locator('#crmComposer #cf-tekst').count() == 1, 'de composer staat na het opslaan van de taak nog open (v7.3: composerHerstel na renderDetail)'
+    assert pg.input_value('#crmComposer #cf-tekst') == 'Notitie begonnen vóór het venster', 'de notitietekst staat na het opslaan van de taak nog in de composer: ' + repr(pg.input_value('#crmComposer #cf-tekst'))
+    assert pg.get_attribute('#crmComposer', 'data-soort') == 'log:notitie' and pg.locator('#venster.aan').count() == 0, 'de herstelde composer is dezelfde soort en het venster is dicht'
+    n1 = len(API_LOG)
+    pg.click('#crmComposer [data-cf-opslaan]'); pg.wait_for_selector('.t-item:has-text("Notitie begonnen vóór het venster")'); pg.wait_for_timeout(200)
+    aanroepen = [(x['fn'], eerste_arg(x).get('tekst')) for x in api_vanaf(n1, 'apiTaakOpslaan', 'apiActiviteitToevoegen')]
+    assert aanroepen == [('apiActiviteitToevoegen', 'Notitie begonnen vóór het venster')], 'de composer slaat de notitie op via zijn eigen api: ' + repr(aanroepen)
+    assert pg.locator('#crmComposer #cf-tekst').count() == 0, 'de composer sluit na het opslaan'
+
+def scenario_nieuw_naast_venster(pg):
+    # v7.3 (H4): het formulier op de pagina (#crmNieuw, nieuwe taak) overleeft een bewerkvenster dat ernaast opent én opslaat, en houdt zijn eigen
+    # Opslaan-actie: eerst slaat het venster tk2 op (met id), daarna maakt het paginaformulier de nieuwe taak (zonder id, met de getypte tekst).
+    pg.click('[data-crmnieuw="taak"]'); pg.wait_for_selector('#crmNieuw #cf-tekst'); pg.fill('#crmNieuw #cf-tekst', 'Half getypte taak naast het venster')
+    n0 = len(API_LOG)
+    pg.click('[data-taakbewerk="tk2"]'); pg.wait_for_selector('#venster.aan #vf-tekst'); pg.fill('#venster #vf-tekst', 'Kennismakingsmail Montessori Demo (venster)'); pg.click('#venster [data-cf-opslaan]')
+    pg.wait_for_selector('#venster.aan', state='detached'); pg.wait_for_selector('#crmInhoud .rij:has-text("(venster)")')
+    assert pg.input_value('#crmNieuw #cf-tekst') == 'Half getypte taak naast het venster', 'het paginaformulier overleeft het venster met zijn tekst'
+    pg.click('#crmNieuw [data-cf-opslaan]'); pg.wait_for_selector('#crmInhoud .rij:has-text("Half getypte taak naast het venster")'); pg.wait_for_timeout(300)
+    aanroepen = [(eerste_arg(x).get('id') or None, eerste_arg(x).get('tekst')) for x in api_vanaf(n0, 'apiTaakOpslaan')]
+    assert aanroepen == [('tk2', 'Kennismakingsmail Montessori Demo (venster)'), (None, 'Half getypte taak naast het venster')], 'venster en pagina slaan elk hun eigen taak op: ' + repr(aanroepen)
+    assert pg.locator('#crmNieuw #cf-tekst').count() == 0, 'het paginaformulier sluit na het opslaan'
 
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=exe, headless=True)
@@ -16,6 +122,7 @@ with sync_playwright() as p:
     page.on('console', lambda m: meldingen.append((m.type, m.text, m.location.get('url', ''))) if m.type in ('error', 'warning') else None)
     page.on('pageerror', lambda e: meldingen.append(('pageerror', str(e))))
     page.on('response', lambda r: meldingen.append(('http', str(r.status) + ' ' + r.url)) if r.status >= 400 else None)
+    page.on('request', log_api)  # v7.3
     page.goto('http://127.0.0.1:8765/'); page.wait_for_timeout(800)
     page.screenshot(path=OUT + '/00_koppel.png')
     page.fill('#apiInput', 'http://127.0.0.1:8765/api'); page.fill('#codeInput', 'test123'); page.click('#codeOpslaan')
@@ -136,6 +243,7 @@ with sync_playwright() as p:
     page.select_option('[data-logvorm]', 'notitie'); page.fill('#crmComposer #cf-tekst', 'Notitie naast het venster')  # v3.7: een open formulier blijft werken na het venster
     page.locator('.t-item [data-actbewerk]').first.click(); page.wait_for_selector('#venster.aan'); page.click('#venster [data-cf-annuleer]')
     page.click('#crmComposer [data-cf-opslaan]'); page.wait_for_selector('.t-item:has-text("Notitie naast het venster")')
+    scenario_venster_boven_composer(page)  # v7.3 (H4): opslaan vanuit het venster bóven een gevulde composer
     page.screenshot(path=OUT + '/12_school_detail.png', full_page=True)
     page.click('[data-dtab="projecten"]'); page.wait_for_selector('#dTab [data-crm-open^="project:"]'); page.click('[data-dtab="historie"]')  # v3.8: tabs, samenvatting, filters
     page.click('[data-samenvatting]'); page.wait_for_selector('.samenvatting')
@@ -189,7 +297,9 @@ with sync_playwright() as p:
     page.select_option('#tfTag', 'evaluatie'); page.wait_for_timeout(200); assert page.locator('.weekblok .rij:has-text("Teamuitje plannen")').count() == 0 and page.locator('.weekblok').count() == 7, 'de weekweergave volgt het tagfilter'; page.select_option('#tfTag', ''); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/15d_taken_week.png', full_page=True)
     page.click('[data-weeknav="1"]'); page.wait_for_selector('.weekblok'); page.click('[data-weeknav="0"]'); page.wait_for_selector('.weekblok'); assert page.locator('.weekblok').count() == 7, 'weeknavigatie'
+    scenario_week_opnieuw(page)  # v7.3 (H2): mislukte weekaanroep → Opnieuw proberen
     page.click('[data-taakweergave="alles"]'); page.wait_for_selector('[data-taakklaar="tk3"]')
+    scenario_nieuw_naast_venster(page)  # v7.3 (H4): het paginaformulier overleeft een venster dat opslaat
     page.click('[data-crmnieuw="taak"]'); page.fill('#cf-snel', 'Offerte surveillance maken morgen om 11:00'); page.wait_for_timeout(100)
     assert page.input_value('#cf-tekst') == 'Offerte surveillance maken' and page.input_value('#cf-tijd') == '11:00', 'snelinvoer vult de velden van het formulier'
     page.click('[data-cf-opslaan]'); page.wait_for_selector('.rij:has-text("Offerte surveillance maken")'); page.wait_for_timeout(150)
@@ -213,6 +323,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/16_rapport.png', full_page=True)
     print('horizontale scroll (rapport):', page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
     page.wait_for_selector('#rapportActiviteit .t-item')  # v3.3: activiteit per gebruiker
+    scenario_rapport_cache(page)  # v7.3 (H3): .rteams en de activiteit-cache in renderRapport
     # v4.4: periodes met stap, verschil met de periode ervoor, verloop per periode en alle teams
     assert page.locator('#crmBalk [data-crmpreset]').count() == 6, 'zes periodes'
     assert page.locator('#crmInhoud .tegel .t-verschil').count() > 0, 'verschil met de vorige periode op de tegels'
@@ -453,3 +564,7 @@ with sync_playwright() as p:
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')
+print('api-aanroepen van de hoofdpagina: %d, looptijd %.0f s' % (len(API_LOG), time.time() - T0))
+KLAAR['ok'] = True
+print('ALLES GOED' if not meldingen else 'FOUTEN: %d' % len(meldingen))  # v7.3 (FL-7)
+sys.exit(1 if meldingen else 0)
