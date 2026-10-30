@@ -324,7 +324,7 @@ function demoVul() {
     kand('c4', 'v5', 't2', 'Tim Verhoeven', M.iris, 'geplaatst', { voorgesteld: -60, gesprek: -57, geselecteerd: -55, 'klaar voor start': -49, geplaatst: -45 }, inzet('tl4', 4, 'Huiswerkbegeleider', sjStart, sjEind, 12, 'Di en do 14:00-17:00')),
     kand('c5', 'v5', 't2', 'Nina Jacobs', M.sem, 'geplaatst', { voorgesteld: -59, gesprek: -56, geselecteerd: -55, 'klaar voor start': -50, geplaatst: -45 }, inzet('tl5', 5, 'Huiswerkbegeleider', sjStart, sjEind, 12, 'Di en do 14:00-17:00', { bron: 'eigen netwerk' })),
     kand('c6', 'v2', 't3', 'Daan Kuipers', M.sem, 'gesprek', { voorgesteld: -6, gesprek: -3 }, inzet('tl6', 6, 'Examentrainer wiskunde en Nederlands', (j1 + 1) + '-03-01', (j1 + 1) + '-05-15', 10, 'Woensdagmiddag en meivakantie', { gesprek: dt(3, '11:00') })),
-    kand('c7', 'v2', 't3', 'Lotte van Dam', M.iris, 'voorgesteld', { voorgesteld: -2 }, inzet('tl7', 7, 'Examentrainer wiskunde en Nederlands', (j1 + 1) + '-03-01', (j1 + 1) + '-05-15', 10, 'Woensdagmiddag en meivakantie', { bron: 'LinkedIn' })),
+    kand('c7', 'v2', 't3', 'Lotte Vredenburg', M.iris, 'voorgesteld', { voorgesteld: -2 }, inzet('tl7', 7, 'Examentrainer wiskunde en Nederlands', (j1 + 1) + '-03-01', (j1 + 1) + '-05-15', 10, 'Woensdagmiddag en meivakantie', { bron: 'LinkedIn' })),
     kand('c8', 'v3', 't4', 'Fatima Aydin', M.sem, 'klaar voor start', { voorgesteld: -13, gesprek: -11, geselecteerd: -9, academy: -8, contract: -5, vog: -3, 'klaar voor start': -2 }, inzet('tl8', 8, 'NT2-ondersteuner', d(21), sjEind, 16, 'Ma t/m do 9:00-13:00')),
     kand('c9', 'v3', 't4', 'Jesse Vos', M.sem, 'contract', { voorgesteld: -12, gesprek: -11, geselecteerd: -10, contract: -9 }, inzet('tl9', 9, 'NT2-ondersteuner', d(21), sjEind, 16, 'Ma t/m do 9:00-13:00')),
     kand('c10', 'v3', 't4', 'Mila Bakker', M.iris, 'afgewezen', { voorgesteld: -13, gesprek: -11, afgewezen: -10 }, inzet('tl10', 10, 'NT2-ondersteuner', d(21), sjEind, 16, 'Ma t/m do 9:00-13:00')),
@@ -348,7 +348,7 @@ function demoVul() {
     ['tl4', 'Tim', 'Verhoeven', 'Amersfoort', '3811 GH', 'huiswerkbegeleider', 'vo', 'wiskunde,natuurkunde', 'student natuurkunde, 2e jaar', STUDENT, 'actief', 'website', 'min-max', 'fiets', 12, 12, -30, -8, '', ''],
     ['tl5', 'Nina', 'Jacobs', 'Amersfoort', '3812 JK', 'huiswerkbegeleider,examentrainer', 'vo', 'nederlands,geschiedenis', 'student geschiedenis, 3e jaar', MIDDAG, 'actief', 'eigen netwerk', 'min-max', 'fiets', 15, 16, -9, -4, '', ''],
     ['tl6', 'Daan', 'Kuipers', 'Haarlem', '2011 LM', 'examentrainer', 'vo', 'wiskunde', 'master wiskunde, afgestudeerd', MIDDAG, 'actief', 'xps-bestand', 'zzp', 'ov', 35, 10, -3, -3, '', 'Alleen examenperiodes.'],
-    ['tl7', 'Lotte', 'van Dam', 'Haarlem', '2012 NP', 'examentrainer,huiswerkbegeleider', 'vo', 'nederlands', 'lerarenopleiding Nederlands, 2e jaar', '020|020|020|020|000|000|000', 'actief', 'linkedin', 'min-max', 'fiets', 10, 12, -2, -2, '', ''],
+    ['tl7', 'Lotte', 'Vredenburg', 'Haarlem', '2012 NP', 'examentrainer,huiswerkbegeleider', 'vo', 'nederlands', 'lerarenopleiding Nederlands, 2e jaar', '020|020|020|020|000|000|000', 'actief', 'linkedin', 'min-max', 'fiets', 10, 12, -2, -2, '', ''],
     ['tl8', 'Fatima', 'Aydin', 'Rotterdam', '3011 QR', 'nt2-ondersteuner,onderwijsondersteuner', 'isk,vo', 'nederlands', 'nt2-certificaat, pabo', OCHTEND, 'actief', 'website', 'min-max', 'ov', 20, 24, -4, -2, 'nt2', 'Spreekt Turks en Arabisch.'],
     ['tl9', 'Jesse', 'Vos', 'Schiedam', '3111 ST', 'nt2-ondersteuner', 'isk', 'nederlands', 'nt2-cursus (bezig)', OCHTEND, 'actief', 'sollicitatie', 'min-max', 'auto', 25, 20, -11, -1, 'nt2', ''],
     ['tl10', 'Mila', 'Bakker', 'Delft', '2611 UV', 'onderwijsondersteuner', 'vo,po', 'engels', 'pabo, 3e jaar', SCHOOLDAG, 'actief', 'website', 'min-max', 'fiets', 15, 24, -15, -10, '', ''],
@@ -361,7 +361,7 @@ function demoVul() {
     ['tl17', 'Lucas', 'Mulder', 'Gouda', '2801 JK', 'huiswerkbegeleider', 'vo', 'economie,wiskunde', 'student economie, 2e jaar', MIDDAG, 'actief', 'website', 'min-max', 'fiets', 10, 12, -40, -40, '', ''],
     ['tl18', 'Noa', 'Hendriks', 'Ede', '6711 LM', 'onderwijsondersteuner', 'vo,so', '', 'pabo, afgestudeerd', SCHOOLDAG, 'slapend', 'xps-bestand', 'min-max', 'auto', 35, 32, -230, -220, '', ''],
     ['tl19', 'Amir', 'Haddad', 'Arnhem', '6811 NP', 'nt2-ondersteuner', 'isk', 'nederlands', 'nt2-certificaat', OCHTEND, 'actief', 'xps-bestand', 'ovo', 'ov', 40, 24, -18, -12, 'nt2', ''],
-    ['tl20', 'Fleur', 'Jansen', 'Zwolle', '8011 QR', 'examentrainer', 'vo', 'wiskunde', 'student wiskunde, 3e jaar', MIDDAG, 'aangemeld', 'website', '', '', '', '', null, -2, '', ''],
+    ['tl20', 'Fleur', 'Wolterbeek', 'Zwolle', '8011 QR', 'examentrainer', 'vo', 'wiskunde', 'student wiskunde, 3e jaar', MIDDAG, 'aangemeld', 'website', '', '', '', '', null, -2, '', ''],
     ['tl21', 'Bram', 'Smits', 'Deventer', '7411 ST', 'surveillant', 'vo', '', 'havo', FLEX, 'slapend', 'xps-bestand', 'min-max', 'ov', 30, 16, -260, -250, '', ''],
     ['tl22', 'Isa', 'Bosman', 'Nijmegen', '6511 UV', 'onderwijsondersteuner', 'po', 'rekenen,nederlands', 'pabo, 2e jaar', OCHTEND, 'gescreend', 'website', 'min-max', 'fiets', 15, 16, -8, -5, '', 'Kennismaking gehad; start na de herfstvakantie mogelijk.'],
     ['tl23', 'Milan', 'Prins', "'s-Hertogenbosch", '5211 WX', 'studentdocent', 'vo', 'economie', 'lerarenopleiding economie, 2e jaar', DIDO, 'aangemeld', 'linkedin', '', 'ov', 30, 16, null, -4, '', ''],
@@ -514,7 +514,7 @@ function demoVul() {
     if (vakantie(new Date(b0.getFullYear(), b0.getMonth(), 5))) continue;
     var tr = mnd % 2 ? 't8' : 't11', vid = 'vh' + (-mnd), amN = tr === 't8' ? M.ruben : M.bas, scout = mnd % 2 ? M.sem : M.iris, ttf = 9 + Math.round(toeval(mnd) * 12);
     oudeVac.push({ id: vid, trajectId: tr, titel: 'Vervanging ondersteuner', aantal: 1, dagen: 'Volgens rooster', urenPerWeek: 16, start: d(dag0 + ttf + 3), eind: (j1) + '-06-30', profiel: 'Vervanger voor een ondersteuner die stopt', status: 'ingevuld', aangemaakt: dt(dag0 + 2), ingevuld: dt(dag0 + 2 + ttf), door: amN });
-    oudeKand.push(kand('ch' + (-mnd) + 'a', vid, tr, ['Lieke', 'Omar', 'Sanne', 'Milan', 'Esra', 'Bram', 'Yasmin', 'Joris', 'Femke', 'Stijn'][-mnd - 2] + ' ' + ['Bosman', 'Haddou', 'Willems', 'de Jong', 'Kaya', 'Smits', 'Benali', 'Peters', 'Prins', 'Maas'][-mnd - 2], scout, 'klaar voor start',
+    oudeKand.push(kand('ch' + (-mnd) + 'a', vid, tr, ['Lieke', 'Omar', 'Sanne', 'Milan', 'Esra', 'Bram', 'Yasmin', 'Joris', 'Femke', 'Stijn'][-mnd - 2] + ' ' + ['Bosman', 'Haddou', 'Willems', 'de Jong', 'Kaya', 'Smits', 'Benali', 'Kroeskamp', 'Prins', 'Maas'][-mnd - 2], scout, 'klaar voor start',
       { voorgesteld: dag0 + 3, gesprek: dag0 + 5, geselecteerd: dag0 + 7, contract: dag0 + ttf - 2, 'klaar voor start': dag0 + 2 + ttf }));
     oudeKand.push(kand('ch' + (-mnd) + 'b', vid, tr, ['Noah', 'Iris', 'Daan', 'Zoë', 'Luuk', 'Mila', 'Thijs', 'Anna', 'Rayan', 'Eva'][-mnd - 2] + ' ' + ['Vermeer', 'Koster', 'Hendriks', 'Mulder', 'Brouwer', 'Dekker', 'Visser', 'Jansen', 'Amrani', 'Bakker'][-mnd - 2], scout === M.sem ? M.iris : M.sem,
       toeval(mnd * 3) < 0.5 ? 'afgewezen' : 'reserve', toeval(mnd * 3) < 0.5 ? { voorgesteld: dag0 + 4, gesprek: dag0 + 6, afgewezen: dag0 + 8 } : { voorgesteld: dag0 + 4, gesprek: dag0 + 6, reserve: dag0 + 9 }));
@@ -555,7 +555,7 @@ function demoVul() {
     taak('tk11', 'VOG Jesse Vos nabellen', M.sem, -1, 'hoog', 'bellen', { schoolId: 's4', trajectId: 't4', link: 'talent:tl9' }),
     // v5.0: de accountmanager beoordeelt zes weken na de start en daarna elk kwartaal (herhalende taak met een link naar het profiel); het talentteam screent een aanmelding
     taak('tk20', 'Beoordeel Jasmijn Kok bij Esdoorn Lyceum', M.femke, 12, 'midden', 'opvolgen', { schoolId: 's1', trajectId: 't1', link: 'talent:tl3', bron: 'bezetting', herhaling: { eenheid: 'maand', interval: 3, tot: sjEind } }),
-    taak('tk21', 'Kennismaking Fleur Jansen (aanmelding examentrainer)', M.iris, 2, 'midden', 'bellen', { link: 'talent:tl20' }),
+    taak('tk21', 'Kennismaking Fleur Wolterbeek (aanmelding examentrainer)', M.iris, 2, 'midden', 'bellen', { link: 'talent:tl20' }),
     taak('tk12', 'Bestand doorzoeken op examentrainers wiskunde', M.iris, 2, 'midden', 'overig', { schoolId: 's3', trajectId: 't3' }),
     taak('tk13', 'Kwartaalcijfers voorbereiden voor het MT', M.sophie, 3, 'midden', 'overig', {}),
     taak('tk14', 'Verlengingsgesprekken inplannen met de accountmanagers', M.sophie, 7, 'midden', 'afspraak', {}),
@@ -587,13 +587,13 @@ function demoVul() {
     meld(M.sophie, 'Fatima Aydin is klaar voor start bij ISK Havenstad.', 'project:t4', -2),
     meld(M.bas, 'Fatima Aydin is klaar voor start bij ISK Havenstad.', 'project:t4', -2),
     meld(M.ruben, 'Nieuwe kandidaat voor Rekenondersteuner bij Kompas College: Sara Peeters. Plan het matchinggesprek.', 'project:t9', -1),
-    meld(M.femke, 'Nieuwe kandidaat voor Examentrainer wiskunde en Nederlands bij Scholengroep Duinrand: Lotte van Dam.', 'project:t3', -2),
+    meld(M.femke, 'Nieuwe kandidaat voor Examentrainer wiskunde en Nederlands bij Scholengroep Duinrand: Lotte Vredenburg.', 'project:t3', -2),
     meld(M.sem, 'Nieuwe vacature: Rekenondersteuner (2×) bij Kompas College, start over 4 weken.', 'project:t9', -5),
     meld(M.iris, 'Nieuwe vacature: Rekenondersteuner (2×) bij Kompas College, start over 4 weken.', 'project:t9', -5),
     meld(M.lars, 'Bezetting ISK Havenstad: 1 van 2 plekken gevuld.', 'project:t4', -2),
     // v5.0: aanmeldingen en beoordelingen komen bij het talentteam binnen
-    meld(M.iris, 'Nieuwe aanmelding: Fleur Jansen (examentrainer)', 'talent:tl20', -2),
-    meld(M.sem, 'Nieuwe aanmelding: Fleur Jansen (examentrainer)', 'talent:tl20', -2),
+    meld(M.iris, 'Nieuwe aanmelding: Fleur Wolterbeek (examentrainer)', 'talent:tl20', -2),
+    meld(M.sem, 'Nieuwe aanmelding: Fleur Wolterbeek (examentrainer)', 'talent:tl20', -2),
     meld(M.iris, 'Zoë Kaya is door Ruben Smit beoordeeld als niet geschikt bij College Veldzicht.', 'talent:tl24', -150, true)
   ]);
 

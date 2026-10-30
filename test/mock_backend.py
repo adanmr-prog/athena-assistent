@@ -16,6 +16,7 @@ TOKENS = {'testtoken-menno': 'test123', 'testtoken-menno-vers': 'test123', 'test
 vandaag = datetime.date.today()
 def d(n): return (vandaag + datetime.timedelta(days=n)).isoformat()
 def nu(): return datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+def iso_week(n): j, w, _ = (vandaag + datetime.timedelta(days=n)).isocalendar(); return '%d-W%02d' % (j, w)  # v7.4: ISO-week zoals isoWeekStr in Code.gs
 FIN_MAAND = '2026-10'  # v7.2: de huidige maand van apiFinancien (maanden[2] van het standaardschooljaar); BEVRIEZING onthoudt de laatste bevriezing, zodat de knop "Prognose vastleggen" na één keer verdwijnt
 BEVRIEZING = {'maand': ''}
 
@@ -126,9 +127,9 @@ for _t in TRAJECTEN:
     for _v in ('contactgegevens', 'voorstelUrl', 'documentenUrl', 'verlenging', 'xpsProject'): _t.setdefault(_v, '')
 TRAJECTEN[0].update({'contactgegevens': 'Anna de Vries\n06-12345678\na.devries@voorbeeldcollege.nl', 'voorstelUrl': 'https://docs.google.com/document/d/voorbeeld', 'documentenUrl': 'https://drive.google.com/drive/folders/voorbeeld', 'verlenging': 'voorstel verstuurd'})
 TRAJECTEN[1].update({'verlenging': 'nog bespreken'})
-TRAJECTEN[0].update({'soortFacturatie': 'vooraf', 'gefactureerd': 'ja', 'vakanties': 'doorbetaald', 'factuurnummer': '20210009', 'adviseur': 'Menno'})
+TRAJECTEN[0].update({'soortFacturatie': 'vooraf', 'gefactureerd': 'ja', 'vakanties': 'doorbetaald', 'factuurnummer': '99990001', 'adviseur': 'Menno'})
 TRAJECTEN[1].update({'soortFacturatie': 'achteraf', 'gefactureerd': 'nee', 'vakanties': 'niet doorbetaald', 'bijzonderheden': 'Wachten op akkoord'})
-FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'bedrag': 20370, 'datum': d(-2), 'status': 'verzonden', 'factuurnummer': '20210009', 'bijzonderheden': 'op basis van 38 weken', 'exactId': '', 'door': 'Menno'},
+FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'bedrag': 20370, 'datum': d(-2), 'status': 'verzonden', 'factuurnummer': '99990001', 'bijzonderheden': 'op basis van 38 weken', 'exactId': '', 'door': 'Menno'},
             {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
 KEUZES = {'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
 # v4.0: twee gebruikers. test123 = Menno (management), am123 = Joris (accountmanager): ziet geen pipeline, alleen zijn eigen projecten en facturatie
@@ -333,7 +334,12 @@ def handle_talent(fn, args):
     if fn == 'apiTalentAnonimiseer':
         t = per_id(TALENTEN)[args[0]]; t.update({'voornaam': 'Verwijderd', 'achternaam': 'profiel', 'naam': 'Verwijderd profiel', 'email': '', 'telefoon': '', 'postcode': '', 'notitie': '', 'status': 'uitgeschreven'}); return talent_uit(t, False)
     if fn == 'apiTalentRunNu': return {'vog': 'niet vandaag (1 mei en 1 juni)', 'peiling': 0, 'slapend': 0, 'bewaartermijn': 0, 'geocoderen': 0, 'aanmeldingen': '0 nieuw, 0 bestaand, 0 mails'}
-    if fn == 'apiTalentUrenImport': return {'bestanden': 1, 'regels': 12, 'weken': 1, 'onbekend': [], 'kandidatenBijgewerkt': 0, 'overgeslagen': []}
+    # v7.4: de vorm van urenImport in Code.gs (tellingen, overgeslagen per reden, onbekend en dubbel met aantal diensten, genegeerde kolommen, fouten per bestand)
+    if fn == 'apiTalentUrenImport': return {'bestanden': 1, 'regels': 14, 'gelezen': 14, 'gekoppeld': 8, 'weekregels': 3, 'weken': 1, 'ongewijzigd': 0, 'kandidatenBijgewerkt': 0,
+        'overgeslagen': {'status': 3, 'toekomst': 1, 'oud': 0, 'geenTalent': 1, 'dubbeleNaam': 1, 'geenUren': 0, 'geenDatum': 0},
+        'onbekend': [{'xpsId': 'x9998', 'email': '', 'naam': 'Sanne Voorbeeld', 'diensten': 1}], 'onbekendAantal': 1, 'dubbel': [{'naam': 'Eva de Vries', 'diensten': 1, 'talenten': 2}], 'dubbelAantal': 1,
+        'genegeerdeKolommen': [{'kolom': 'Salaris (totaal)', 'hint': 'loongegevens: worden nooit gelezen of bewaard; laat deze kolom uit de export'}, {'kolom': 'Projectleider', 'hint': ''}],
+        'nietGelezen': [], 'fouten': [], 'archiefVanaf': iso_week(-182), 'archiefWeken': 26, 'sinds': d(-7) + ' 06:05'}
     return None
 def handle_portaal(token, fn, args):
     t = next((x for x in TALENTEN if x['portaalToken'] and x['portaalToken'] == token), None)
@@ -810,9 +816,14 @@ def handle(fn, args):
         if not beheer(): geen_toegang()
         if not str(args[0] if args else '').strip(): raise ValueError('Het bestand is leeg.')
         o = args[1] if len(args) > 1 and isinstance(args[1], dict) else {}
-        return {'van': d(-30), 'tot': d(-1), 'gekoppeld': 2, 'toegepast': bool(o.get('toepassen')),
+        # v7.4: ook betaald (volgens Exact of openstaand bedrag), deels betaald, creditnota's, meldingen, gelezen kolommen en de peildatum
+        return {'van': d(-30), 'tot': d(-1), 'gekoppeld': 2, 'toegepast': bool(o.get('toepassen')), 'peildatum': o.get('peildatum') or d(0),
+                'kolommen': {'factuurnummer': 'Factuurnummer', 'datum': 'Factuurdatum', 'bedrag': 'Bedrag', 'betaald': 'Betaaldatum'},
                 'bijgewerkt': [{'nummer': 'F2026-001', 'waar': 'Lyceum Demo · termijn 1', 'wat': 'verzonden, betaald'}],
-                'afwijkend': [], 'alleenAthena': [], 'alleenExact': [{'nummer': 'F9999', 'datum': d(-3), 'bedrag': 125000}]}
+                'betaald': [{'nummer': 'F2026-001', 'waar': 'Lyceum Demo · termijn 1', 'datum': d(-2), 'bedrag': 195000, 'bron': 'betaaldatum'}],
+                'deelsBetaald': [{'nummer': 'F2026-002', 'waar': 'Lyceum Demo · termijn 2', 'bedrag': 108000, 'open': 50000}],
+                'creditnotas': [{'nummer': 'F2026-010', 'origineel': 'F2026-003', 'bedrag': -93600, 'datum': d(-1), 'waar': 'Lyceum Demo · termijn 3', 'inAthena': True}],
+                'meldingen': [], 'afwijkend': [], 'alleenAthena': [], 'alleenExact': [{'nummer': 'F9999', 'datum': d(-3), 'bedrag': 125000, 'creditnota': False}]}
     return handle_crm(fn, args)
 
 # v6.2: met MOCK_CSP=1 gaat de Content-Security-Policy uit vercel.json mee met de app (zoals Vercel die stuurt), met de nep-Supabase

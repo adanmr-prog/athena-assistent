@@ -241,6 +241,7 @@
   [data-taakbewerk] { cursor: pointer; }
   .veld.breed { grid-column: 1 / -1; }
   .veld input, .veld select, .veld textarea { min-width: 0; }
+  .veld input[type=date] { -webkit-appearance: none; appearance: none; min-height: 42px; }  /* v7.4 (iOS-review): ook in een gewoon veld (zoals de Exact-peildatum) maakt iOS een leeg datumveld anders lager; 42 px = een tekstveld ernaast */
   .veld.vinkje label { display: flex; gap: 8px; align-items: center; font-size: var(--fs-tekst); font-weight: 600; color: var(--inkt); }
   .veld.vinkje input { width: auto; }
   .t-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--lijn); }
@@ -400,6 +401,7 @@
   body.desk .avatar { width: 24px; height: 24px; font-size: var(--fs-klein); }
   body.desk .veld label { font-size: var(--fs-klein); }
   body.desk .veld input, body.desk .veld select, body.desk .veld textarea { padding: 6px 9px; border-radius: 8px; }
+  body.desk .veld input[type=date] { min-height: 33px; }  /* v7.4 (iOS-review): iPad in landschap; gelijk aan een tekstveld op desktop */
   body.desk .dtabel { font-size: var(--fs-zacht); }
   body.desk .dtabel th { padding: 6px 10px; font-size: var(--fs-klein); }
   body.desk .dtabel td { padding: 6px 10px; }
@@ -1740,12 +1742,18 @@
     if (t.ondersteuners) return html ? esc(t.ondersteuners) : t.ondersteuners + ' ond.';
     return html ? '<span class="zacht">—</span>' : '';
   }
+  // v7.4 (iOS-review): lange lijsten begrenzen zoals scholen en personen (telefoon 200, desktop 500 zoals deskTabel): elke toetsaanslag tekent
+  // de lijst opnieuw, en honderden rijen per keer zijn op een iPhone merkbaar traag. De rest vind je met zoeken of filteren.
+  function begrensdeRijen(lijst, rij, max) {
+    max = max || (isDesk() ? 500 : 200);
+    return lijst.slice(0, max).map(function (x) { return rij(x); }).join('') + (lijst.length > max ? '<div class="hint">De eerste ' + max + ' staan hier. Zoek of filter om de rest te zien.</div>' : '');
+  }
   function projectGroep(sleutel, titel, kleur, lijst, T, dichtStandaard) {
     if (!lijst.length) return '';
     var open = S.pOpen[sleutel] === undefined ? !dichtStandaard : S.pOpen[sleutel];
     var kop = '<h3 data-pgroep="' + esc(sleutel) + '"><span class="pijl" style="color:' + kleur + '">' + (open ? '▾' : '▸') + '</span>' + esc(titel) + ' <small>' + lijst.length + (lijst.length === 1 ? ' project' : ' projecten') + '</small></h3>';
     if (!open) return '<div class="f-groep p-groep">' + kop + '</div>';
-    if (!isDesk()) return '<div class="f-groep p-groep">' + kop + lijst.map(function (t) { return projectKaart(t, T); }).join('') + '</div>';
+    if (!isDesk()) return '<div class="f-groep p-groep">' + kop + begrensdeRijen(lijst, function (t) { return projectKaart(t, T); }) + '</div>';  // v7.4 (iOS-review): begrensd
     return '<div class="f-groep p-groep">' + kop + '<div class="tabel-scroll" tabindex="0" role="region" aria-label="Tabel"><table class="ftabel" style="border-left-color:' + kleur + '"><thead><tr><th>Project</th><th>Persoon</th><th>Status</th><th>Start</th><th>Eind</th><th>Contactpersoon</th><th>Samenwerkingsvoorstel</th><th>Documenten</th><th>Bezetting</th><th>Updates</th><th>Verlenging</th></tr></thead><tbody>' +
       lijst.map(function (t) { return projectBordRij(t, T); }).join('') + '</tbody></table></div></div>';
   }
@@ -1786,7 +1794,7 @@
     var leeg = '<div class="leeg">' + (T.trajecten.length ? 'Niets gevonden.' : 'Nog geen projecten. Een gewonnen kans wordt vanzelf een project.') + '</div>';
     if (w === 'bord') { el('trajectLijst').innerHTML = projectBord(lijst); return; }
     if (w === 'tijdlijn') { el('trajectLijst').innerHTML = projectTijdlijn(lijst); return; }  // v7.0  // v3.0
-    if (w === 'lijst') { el('trajectLijst').innerHTML = lijst.length ? lijst.map(trajectRij).join('') : leeg; return; }
+    if (w === 'lijst') { el('trajectLijst').innerHTML = lijst.length ? begrensdeRijen(lijst, trajectRij) : leeg; return; }  // v7.4 (iOS-review): begrensd
     var h;
     if (w === 'verlenging') {
       var vl = (T.filters.verlenging || []).slice(), kleur = { 'nog bespreken': '#FDAB3D', 'voorstel verstuurd': '#0086C0', verlengd: '#00C875', stopt: '#DF2F4A' };
@@ -1826,13 +1834,14 @@
     var stats = (K && K.kandidaatStatussen) || [], alle = [];
     vacs.forEach(function (v) { (v.kandidaten || []).forEach(function (k) { alle.push({ k: k, v: v }); }); });
     if (!alle.length) return '<div class="leeg">Geen kandidaten bij deze vacatures.</div>';
+    var max = isDesk() ? 60 : 30;  // v7.4 (iOS-review): per kolom begrensd; bij "Alle vacatures" zijn het er honderden. De teller blijft het totaal.
     var kol = function (st) {
       var ks = alle.filter(function (x) { return x.k.status === st; });
-      return '<div class="kolom" data-sleepdoel="kandidaat:' + esc(st) + '"><h3>' + esc(st) + '</h3><div class="k-som">' + ks.length + '</div>' + (ks.length ? ks.map(function (x) {
+      return '<div class="kolom" data-sleepdoel="kandidaat:' + esc(st) + '"><h3>' + esc(st) + '</h3><div class="k-som">' + ks.length + '</div>' + (ks.length ? ks.slice(0, max).map(function (x) {
         var k = x.k, v = x.v, magW = !!v.magKandidaten;
         return '<div class="kaartje' + (magW ? ' sleepbaar" tabindex="0" data-sleep="kandidaat:' + esc(k.id) + '" data-kandidaat="' + esc(k.id) + '" data-vid="' + esc(v.id) + '"' : '"') + '><b>' + esc(k.naam) + '</b>' + (k.vog ? ' ' + vogBadge(k.vog) : '') +
           '<div class="r-meta">' + [v.titel, v.project && v.project.school, k.dagenInStatus ? k.dagenInStatus + ' d' : ''].filter(Boolean).map(esc).join(' · ') + '</div></div>';
-      }).join('') : '<div class="leeg" style="padding:8px 2px;font-size:var(--fs-zacht)">Leeg</div>') + '</div>';
+      }).join('') + (ks.length > max ? '<div class="hint">En nog ' + (ks.length - max) + '. Zoek of filter om ze te zien.</div>' : '') : '<div class="leeg" style="padding:8px 2px;font-size:var(--fs-zacht)">Leeg</div>') + '</div>';
     };
     return '<div class="bord" tabindex="0" role="region" aria-label="Kandidaten per status">' + stats.map(kol).join('') + '</div>' +
       '<div class="hint">' + (isDesk() ? 'Sleep een kandidaat naar een andere status, of klik om te bewerken.' : 'Houd een kandidaat even vast en sleep naar een andere status; tik om te bewerken.') + '</div>';
@@ -2015,7 +2024,8 @@
     }).catch(function () { sluitVenster(); });
   }
   function laadTrajecten() { run('apiTrajecten').then(function (T) { S.trajecten = T; renderTrajecten(); }).catch(function () { el('trajectLijst').innerHTML = '<div class="leeg">Kon de projecten niet laden.</div>'; }); }
-  el('trajectZoek').addEventListener('input', function () { S.filters.zoek = el('trajectZoek').value.trim(); renderTrajecten(); });
+  var trajectZoekTimer = null;  // v7.4 (iOS-review): tekenen ±150 ms na de laatste toetsaanslag; de zoektekst zelf meteen (filters tekenen er direct mee)
+  el('trajectZoek').addEventListener('input', function () { S.filters.zoek = el('trajectZoek').value.trim(); clearTimeout(trajectZoekTimer); trajectZoekTimer = setTimeout(renderTrajecten, 150); });
   ['fSchooljaar', 'fTraject', 'fStatus'].forEach(function (id) {
     el(id).addEventListener('change', function () { S.filters[{ fSchooljaar: 'schooljaar', fTraject: 'traject', fStatus: 'status' }[id]] = el(id).value; renderTrajecten(); });
   });
@@ -2111,7 +2121,7 @@
     if (R.vol && (T.benaderen || []).length) h += '<div class="kop">Vandaag benaderen <small>' + T.benaderen.length + '</small></div>' + T.benaderen.map(function (b) { return '<div class="rij klik" tabindex="0" data-crm-open="talent:' + esc(b.id) + '"><div class="r-body"><div class="r-titel">' + esc(b.naam) + '</div><div class="r-meta">' + esc(b.redenen.join(' · ')) + '</div></div></div>'; }).join('');
     h += '<div class="kop">Talenten <small>' + lijst.length + '</small></div>';
     if (!lijst.length) h += '<div class="leeg">' + (T.talenten.length ? 'Niets gevonden met deze filters.' : R.vol ? 'Nog geen talenten. Voeg het eerste profiel toe, of koppel het aanmeldformulier (zie backend/README.md).' : 'Hier komen de talenten die voor jouw projecten zijn voorgedragen of geplaatst.') + '</div>';
-    else h += isDesk() ? deskTabel(TALENT_KOLOMMEN, lijst, 'talent') : lijst.map(talentRij).join('');
+    else h += isDesk() ? deskTabel(TALENT_KOLOMMEN, lijst, 'talent') : begrensdeRijen(lijst, talentRij);  // v7.4 (iOS-review): op de telefoon de eerste 200
     el('trajectLijst').innerHTML = h;
   }
   function talentRij(t) {
@@ -3540,7 +3550,7 @@
       else if (b === 'keuzelijsten') beheerKeuzelijsten();  // v3.7
       else if (b === 'tags') beheerTagsVelden();
       else if (b === 'talentrun') { x.disabled = true; run('apiTalentRunNu').then(function (r) { x.disabled = false; toast('Talentrun klaar: ' + Object.keys(r).map(function (k) { return k + ' ' + r[k]; }).join(', ')); }).catch(function () { x.disabled = false; }); }  // v5.0
-      else if (b === 'urenimport') { x.disabled = true; run('apiTalentUrenImport').then(function (r) { x.disabled = false; toast(r.bestanden + (r.bestanden === 1 ? ' bestand' : ' bestanden') + ', ' + r.regels + ' regels, ' + r.weken + ' weken' + (r.onbekend.length ? ' · ' + r.onbekend.length + ' onbekende accounts' : '') + (r.kandidatenBijgewerkt ? ' · ' + r.kandidatenBijgewerkt + ' kandidaten op geplaatst' : '')); }).catch(function () { x.disabled = false; }); }  // v5.0
+      else if (b === 'urenimport') { x.disabled = true; run('apiTalentUrenImport').then(function (r) { x.disabled = false; formActie = null; openVenster(urenImportHtml(r)); }).catch(function () { x.disabled = false; }); }  // v5.0; v7.4: de uitkomst in een venster (tellingen, overgeslagen per reden, onbekend, dubbel, genegeerde kolommen)
       else if (b === 'inrichten') { if (window.confirm('Contactpersonen, eigenaren en notities uit de oude velden overzetten naar het CRM? Dit kan veilig vaker.')) run('apiCrmInrichten').then(function (r) { toast(r.personen + ' personen, ' + r.kansen + ' kansen en ' + r.notities + ' notities overgezet.'); crmVerouderd(); laadCrmBasis(); }); }
       else if (b === 'capsule') { if (window.confirm('Alle scholen, personen, kansen, projecten, taken en historie uit Capsule ophalen? Dit duurt een paar minuten; laat de app open.')) capsuleMigratie('mijlpalen', 1, {}); }
     }
@@ -4213,31 +4223,63 @@
   function exactVenster() {
     var F = FIN.data || {}, k = F.exactKolommen || {}, veld = function (n, l) { return '<div class="veld"><label for="vf-ek-' + n + '">' + esc(l) + '</label><input id="vf-ek-' + n + '" data-exactkol="' + n + '" value="' + esc(k[n] || '') + '"></div>'; };
     formActie = null; FIN.exactTekst = ''; FIN.exactNaam = '';
-    openVenster('<div class="kop" style="margin-top:14px">Afstemmen met Exact</div><div class="hint">Kies een export van verkoopfacturen uit Exact Online (csv). Facturen worden op factuurnummer gekoppeld; de factuurdatum wordt de verzenddatum en een betaaldatum zet de termijn op betaald. Eerst controleren, dan pas toepassen.</div>' +
+    openVenster('<div class="kop" style="margin-top:14px">Afstemmen met Exact</div><div class="hint">Kies een export van verkoopfacturen (csv, één regel per factuur). Facturen worden op factuurnummer gekoppeld; de factuurdatum wordt de verzenddatum en een betaaldatum zet de termijn op betaald. Zonder betaaldatum telt Open = 0 als betaald op de peildatum. Een creditnota zet de oorspronkelijke termijn terug. Eerst controleren, dan pas toepassen.</div>' +  // v7.4
       '<div class="veld breed"><label for="vf-exactbestand">Exportbestand (.csv)</label><input type="file" id="vf-exactbestand" accept=".csv,text/csv,text/plain"></div>' +
-      '<div class="kop">Kolomnamen in de export</div><div class="velden-2">' + veld('factuurnummer', 'Factuurnummer') + veld('datum', 'Factuurdatum') + veld('bedrag', 'Bedrag') + veld('betaald', 'Betaaldatum (optioneel)') + '</div>' +
+      '<div class="veld"><label for="vf-exactpeil">Peildatum van de export (optioneel)</label><input type="date" id="vf-exactpeil"></div>' +  // v7.4: de datum voor "betaald volgens openstaand bedrag"; leeg = vandaag
+      '<div class="kop">Kolomnamen in de export</div><div class="hint">De facturatie-export (Datum, Factuurnummer, Totaal, Open) wordt vanzelf herkend. Een naam die je hier wijzigt, gaat voor.</div><div class="velden-2">' + veld('factuurnummer', 'Factuurnummer') + veld('datum', 'Factuurdatum') + veld('bedrag', 'Bedrag') + veld('betaald', 'Betaaldatum (optioneel)') + '</div>' +
       '<div id="exactUit"></div><div class="balk"><button class="knop" data-exactcontrole="1" disabled>Controleren</button><button class="knop licht" data-exacttoepassen="1" disabled>Toepassen</button><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>');
   }
-  function exactKolommenUitVenster() { var k = {}; document.querySelectorAll('#vensterInhoud [data-exactkol]').forEach(function (x) { if (x.value.trim()) k[x.getAttribute('data-exactkol')] = x.value.trim(); }); return k; }
+  function exactKolommenUitVenster() { var k = {}; document.querySelectorAll('#vensterInhoud [data-exactkol]').forEach(function (x) { if (x.value.trim() && x.value.trim() !== String(x.defaultValue || '').trim()) k[x.getAttribute('data-exactkol')] = x.value.trim(); }); return k; }  // v7.4: alleen wat de beheerder wijzigde gaat voor; de rest herkent de backend zelf
   function exactUitHtml(u) {
     var lijst = function (titel, l, f) { return l.length ? '<details' + (l.length <= 5 ? ' open' : '') + '><summary>' + esc(titel) + ' (' + l.length + ')</summary>' + l.slice(0, 50).map(function (x) { return '<div class="rij"><div class="r-body"><div class="r-meta">' + f(x) + '</div></div></div>'; }).join('') + (l.length > 50 ? '<div class="hint">en ' + (l.length - 50) + ' meer</div>' : '') + '</details>' : ''; };
-    return '<div class="kaart" style="margin-top:12px"><div><b>' + esc(u.gekoppeld) + '</b> facturen gekoppeld' + (u.van ? ' (periode ' + esc(kortDatum(u.van)) + ' t/m ' + esc(kortDatum(u.tot)) + ')' : '') + (u.toegepast ? ', ' + esc(u.bijgewerkt.length) + ' bijgewerkt.' : '; ' + esc(u.bijgewerkt.length) + (u.bijgewerkt.length === 1 ? ' termijn krijgt' : ' termijnen krijgen') + ' een datum of status uit Exact.') + '</div>' +
-      lijst('Wordt bijgewerkt', u.bijgewerkt, function (x) { return esc(x.nummer + ' · ' + x.waar + ' · ' + x.wat); }) +
-      lijst('Bedrag wijkt af', u.afwijkend, function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · Athena ' + finBedrag(x.athena, '€ 0') + ', Exact ' + finBedrag(x.exact, '€ 0'); }) +
-      lijst('Alleen in Exact', u.alleenExact, function (x) { return esc(x.nummer + ' · ' + kortDatum(x.datum)) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
-      lijst('Alleen in Athena (in dezelfde periode)', u.alleenAthena, function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
-      (!u.afwijkend.length && !u.alleenExact.length && !u.alleenAthena.length ? '<div class="hint">Geen verschillen.</div>' : '') + '</div>';
+    var L = function (n) { return u[n] instanceof Array ? u[n] : []; }, K = u.kolommen && typeof u.kolommen === 'object' ? u.kolommen : {};  // v7.4: een oudere backend kent de nieuwe lijsten nog niet
+    var kolNamen = { factuurnummer: 'factuurnummer', datum: 'factuurdatum', bedrag: 'bedrag', betaald: 'betaaldatum', open: 'openstaand', debiteur: 'debiteur' }, gelezen = Object.keys(kolNamen).filter(function (n) { return K[n]; }).map(function (n) { return kolNamen[n] + ' ← ' + K[n]; });
+    return '<div class="kaart" style="margin-top:12px"><div><b>' + esc(u.gekoppeld) + '</b> facturen gekoppeld' + (u.van ? ' (periode ' + esc(kortDatum(u.van)) + ' t/m ' + esc(kortDatum(u.tot)) + ')' : '') + (u.toegepast ? ', ' + esc(L('bijgewerkt').length) + ' bijgewerkt.' : '; ' + esc(L('bijgewerkt').length) + (L('bijgewerkt').length === 1 ? ' termijn krijgt' : ' termijnen krijgen') + ' een datum of status uit Exact.') + '</div>' +
+      (gelezen.length ? '<div class="hint">Gelezen kolommen: ' + esc(gelezen.join(', ')) + '</div>' : '') +
+      L('meldingen').map(function (m) { return '<div class="hint">' + esc(m) + '</div>'; }).join('') +
+      lijst('Wordt bijgewerkt', L('bijgewerkt'), function (x) { return esc(x.nummer + ' · ' + x.waar + ' · ' + x.wat); }) +
+      lijst('Betaald volgens Exact', L('betaald'), function (x) { return esc(x.nummer + ' · ' + (x.waar || '') + ' · betaald ' + kortDatum(x.datum) + (x.bron === 'open' ? ' (openstaand € 0; datum = peildatum)' : '')) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
+      lijst('Deels betaald', L('deelsBetaald'), function (x) { return esc(x.nummer + (x.waar ? ' · ' + x.waar : '')) + ' · ' + finBedrag(x.open, '€ 0') + ' open van ' + finBedrag(x.bedrag, '€ 0'); }) +
+      lijst('Creditnota\'s', L('creditnotas'), function (x) { return esc(x.nummer + ' crediteert ' + x.origineel + (x.waar ? ' · ' + x.waar : '') + (x.inAthena ? ' · termijn gaat terug' : ' · origineel niet in Athena')) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
+      lijst('Bedrag wijkt af', L('afwijkend'), function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · Athena ' + finBedrag(x.athena, '€ 0') + ', Exact ' + finBedrag(x.exact, '€ 0'); }) +
+      lijst('Alleen in Exact', L('alleenExact'), function (x) { return esc(x.nummer + ' · ' + kortDatum(x.datum) + (x.creditnota ? ' · creditnota zonder origineel' : '')) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
+      lijst('Alleen in Athena (in dezelfde periode)', L('alleenAthena'), function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
+      (!L('afwijkend').length && !L('alleenExact').length && !L('alleenAthena').length && !L('deelsBetaald').length && !L('creditnotas').length ? '<div class="hint">Geen verschillen.</div>' : '') + '</div>';
   }
   function exactDraai(toepassen, knop) {
     if (!FIN.exactTekst) { toast('Kies eerst het exportbestand.'); return; }
     if (toepassen && !window.confirm('De termijnen bijwerken met de datums en statussen uit Exact?')) return;
     knop.disabled = true;
-    run('apiExactImport', FIN.exactTekst, { kolommen: exactKolommenUitVenster(), toepassen: toepassen }).then(function (u) {
+    var peil = el('vf-exactpeil'), opties = { kolommen: exactKolommenUitVenster(), toepassen: toepassen };
+    if (peil && peil.value) opties.peildatum = peil.value;  // v7.4
+    run('apiExactImport', FIN.exactTekst, opties).then(function (u) {
       if (!el('exactUit')) return;
       el('exactUit').innerHTML = exactUitHtml(u); knop.disabled = false;
       var t = el('vensterInhoud').querySelector('[data-exacttoepassen]'); if (t) t.disabled = toepassen;
       if (toepassen) { toast(u.bijgewerkt.length + ' termijnen bijgewerkt uit Exact.'); FIN.data = null; FACT.data = null; laadFinancien(); }
     }).catch(function () { knop.disabled = false; });
+  }
+  // v7.4: de uitkomst van "XPS-uren importeren": wat gelezen en gekoppeld is, wat is overgeslagen en waarom, wie onbekend of dubbel is en welke kolommen genegeerd zijn
+  function urenImportHtml(r) {
+    r = r || {};
+    var n = function (x) { return Number(x) || 0; }, L = function (k) { return r[k] instanceof Array ? r[k] : []; }, O = r.overgeslagen && typeof r.overgeslagen === 'object' && !(r.overgeslagen instanceof Array) ? r.overgeslagen : {};
+    var rij = function (t) { return '<div class="rij"><div class="r-body"><div class="r-meta">' + t + '</div></div></div>'; };
+    var blok = function (titel, l, f, totaal) { totaal = Math.max(n(totaal), l.length); return l.length ? '<details' + (l.length <= 5 ? ' open' : '') + '><summary>' + esc(titel) + ' (' + esc(totaal) + ')</summary>' + l.map(function (x) { return rij(f(x)); }).join('') + (totaal > l.length ? '<div class="hint">en ' + esc(totaal - l.length) + ' meer</div>' : '') + '</details>' : ''; };
+    var REDEN = [['status', 'status afwezig, ziek, geannuleerd of reserve'], ['toekomst', 'dienst in de toekomst'], ['oud', 'ouder dan ' + (n(r.archiefWeken) || 26) + ' weken'], ['geenTalent', 'geen talent gevonden'], ['dubbeleNaam', 'naam hoort bij meer talenten'], ['geenUren', 'gewerkt zonder uren'], ['geenDatum', 'geen datum of week']];
+    var over = REDEN.filter(function (x) { return n(O[x[0]]); }), somOver = over.reduce(function (t, x) { return t + n(O[x[0]]); }, 0), b = n(r.bestanden), w = n(r.weken);
+    var h = '<div class="kop" style="margin-top:14px">XPS-uren ingelezen</div>';
+    if (!b && !L('fouten').length && !L('nietGelezen').length) h += '<div class="hint">Geen nieuwe bestanden in de map XPS-export' + (r.sinds ? ' sinds ' + esc(r.sinds) : '') + '.</div>';
+    h += '<div class="kaart"><div><b>' + esc(b) + '</b> ' + (b === 1 ? 'bestand' : 'bestanden') + ', <b>' + esc(n(r.gelezen || r.regels)) + '</b> regels gelezen, <b>' + esc(n(r.gekoppeld)) + '</b> gekoppeld aan een talent.</div>' +
+      '<div>' + esc(n(r.weekregels)) + ' weekregels over ' + esc(w) + (w === 1 ? ' week' : ' weken') + (n(r.ongewijzigd) ? ' (' + esc(n(r.ongewijzigd)) + ' ongewijzigd)' : '') + (n(r.kandidatenBijgewerkt) ? ', ' + esc(n(r.kandidatenBijgewerkt)) + ' kandidaten op geplaatst' : '') + '.</div>' +
+      (r.archiefVanaf ? '<div class="hint">Alleen gewerkte diensten van week ' + esc(r.archiefVanaf) + ' tot en met vandaag tellen mee.</div>' : '') + '</div>';
+    if (L('fouten').length || L('nietGelezen').length) h += '<div class="kop">Niet ingelezen</div>' + L('fouten').map(function (f) { return rij('<b>' + esc(f.bestand) + '</b>: ' + esc(f.melding)); }).join('') + L('nietGelezen').map(function (f) { return rij(esc(f) + ': dit bestand kon niet worden gelezen (csv, Google Sheet of Excel met de Drive API).'); }).join('');
+    if (over.length) h += '<div class="kop">Overgeslagen (' + esc(somOver) + ')</div>' + over.map(function (x) { return rij(esc(x[1]) + ': <b>' + esc(n(O[x[0]])) + '</b>'); }).join('');
+    if (L('onbekend').length || L('dubbel').length) h += '<div class="kop">Nog niet te koppelen</div>' +
+      blok('Onbekend in het talentbestand', L('onbekend'), function (o) { return esc([o.naam || '(geen naam)', o.xpsId ? 'account ' + o.xpsId : '', o.email || ''].filter(Boolean).join(' · ')) + ' · ' + esc(n(o.diensten)) + (n(o.diensten) === 1 ? ' dienst' : ' diensten'); }, r.onbekendAantal) +
+      blok('Naam hoort bij meer talenten', L('dubbel'), function (o) { return esc(o.naam) + ' · ' + esc(n(o.diensten)) + (n(o.diensten) === 1 ? ' dienst' : ' diensten') + ' · ' + esc(n(o.talenten)) + ' talenten'; }, r.dubbelAantal) +
+      '<div class="hint">Vul bij het talent het XPS-accountnummer of het e-mailadres in; op naam koppelt Athena alleen als de naam bij precies één talent hoort.</div>';
+    if (L('genegeerdeKolommen').length) h += '<div class="kop">Genegeerde kolommen</div>' + L('genegeerdeKolommen').map(function (g) { return rij(esc(g.kolom) + (g.hint ? ': ' + esc(g.hint) : '')); }).join('');
+    return h + '<div class="balk"><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>';
   }
   function termijnVenster(tid, fid) {
     var K = keuzesApp(), f = fid && fid !== 'nieuw' ? factuurLokaal(fid) : null, w = f ? kopie(f) : { status: (K.factuurStatussen || ['nog te doen'])[0] };
