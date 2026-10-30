@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '7.3';  // v7.3: open punten uit docs/robuust-v7.2.md §5 (tekstIn, kalenderdagen, beperkte kans, dode api's weg); houd gelijk aan de release (zie /release); controleer() print dit als eerste regel
+var VERSIE = '7.4';  // v7.4: XPS-dienstenexport en Exact-afstemming werken met de echte exports; houd gelijk aan de release (zie /release); controleer() print dit als eerste regel
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -1818,8 +1818,10 @@ function archiveer() {
   return { gearchiveerd: oud.length, over: houden.length, uren: uren };
 }
 // v5.0: weekuren ouder dan 26 weken naar TalentUren_archief (zelfde aanpak: eerst het archief schrijven, dan het tabblad in één keer herschrijven)
+var UREN_ARCHIEF_WEKEN = 26;  // v7.4: één archiefvenster voor het archiveren en voor de urenimport (oudere diensten worden niet meer ingelezen)
+function urenArchiefGrens(vandaag) { var d = parseDatum(vandaag || datumStr(new Date())); return isoWeekStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() - UREN_ARCHIEF_WEKEN * 7, 12)); }  // kalenderdagen
 function archiveerUren() {
-  var grens = isoWeekStr(plusDagen(-26 * 7)), alle = lees('TalentUren');  // v7.2: kalenderdagen
+  var grens = urenArchiefGrens(), alle = lees('TalentUren');  // v7.2: kalenderdagen; v7.4: via urenArchiefGrens
   var oud = alle.filter(function (u) { return u.week && String(u.week) < grens; });
   if (!oud.length) return 0;
   schrijfVeel('TalentUren_archief', oud);
@@ -4113,44 +4115,194 @@ function apiVoorstellen(vacatureId, talentIds, notitie) {
 }
 
 /* ----- Weekuren uit XPS (export in de Drive-map XPS-export; CSV, Google Sheet of Excel via de Drive API) ----- */
-
-var XPS_KOLOMMEN_STANDAARD = { xpsId: ['accountnummer', 'account nr', 'accountnr', 'medewerkernummer', 'medewerker nr', 'account id', 'accountid', 'nummer'], email: ['e-mail', 'email', 'e-mailadres'], naam: ['naam', 'medewerker', 'account'],
-  project: ['projectnummer', 'project nr', 'project', 'projectnaam'], week: ['week', 'weeknummer'], datum: ['datum', 'dag'], uren: ['uren', 'klokuren', 'aantal uren', 'gewerkt'], status: ['status'], noShow: ['no-show', 'no show', 'noshow', 'niet verschenen'], laat: ['late afmelding', 'laat afgemeld', 'afgemeld'] };
-function xpsKolommen() { var eigen = instelling('xpsKolommen'), uit = {}; Object.keys(XPS_KOLOMMEN_STANDAARD).forEach(function (k) { uit[k] = XPS_KOLOMMEN_STANDAARD[k].slice(); }); if (eigen && typeof eigen === 'object') Object.keys(eigen).forEach(function (k) { uit[k] = [].concat(eigen[k]).map(klein); }); return uit; }
+// v7.4: naast de weekexport (Accountnummer; Naam; E-mail; Projectnummer; Week; Uren; Status) ook de export per dienst
+// (Datum; Datum: Van; Datum: Tot; Gewerkte tijd; Uitgevoerd door; Omschrijving; Status; Project; Projectleider; Salaris …), bij voorkeur met Accountnummer,
+// E-mail en Projectnummer erbij. Beide worden per talent × ISO-week × project opgeteld. Zie backend/README.md, sectie XPS-uren.
+var XPS_KOLOMMEN_STANDAARD = { xpsId: ['accountnummer', 'account nr', 'accountnr', 'medewerkernummer', 'medewerker nr', 'account id', 'accountid', 'nummer'], email: ['e-mail', 'email', 'e-mailadres'],
+  naam: ['naam', 'uitgevoerd door', 'medewerker', 'flexkracht', 'account'],  // v7.4: 'Uitgevoerd door' uit de dienstenexport
+  projectNummer: ['projectnummer', 'project nr', 'projectnr', 'project id'],  // v7.4: het nummer los van de projectnaam (koppelt exact op Trajecten.xpsProject)
+  project: ['project', 'projectnaam'], week: ['week', 'weeknummer'], datum: ['datum', 'dag'], uren: ['uren', 'gewerkte tijd', 'klokuren', 'aantal uren', 'gewerkt'], status: ['status'],
+  noShow: ['no-show', 'no show', 'noshow', 'niet verschenen'], laat: ['late afmelding', 'laat afgemeld', 'afgemeld'] };
+var XPS_LOON = /salaris|loon|tarief/, XPS_PRIVE = /bsn|burgerservice|iban|geboorte/;  // v7.4: zulke kolommen worden nooit gelezen of bewaard (AVG; loon hoort niet in het talentbestand)
+// v7.4: statussen per soort (deel van de tekst, zonder hoofdletters en accenten); instelbaar met Instellingen xpsStatussen = {"noShow": […], "laat": […], "negeren": […]}.
+// Een dienst telt alleen als gewerkt als de status op geen van deze lijkt; 'ziek' wordt altijd genegeerd, wat de instelling ook zegt (AVG: geen gezondheid per persoon).
+var XPS_STATUSSEN_STANDAARD = { noShow: ['no-show', 'no show', 'noshow', 'niet verschenen'], laat: ['laat', 'late afmelding'], negeren: ['afwezig', 'ziek', 'geannuleerd', 'reserve'] };
+function xpsKolommen() {
+  var eigen = instelling('xpsKolommen'), uit = {};
+  Object.keys(XPS_KOLOMMEN_STANDAARD).forEach(function (k) { uit[k] = XPS_KOLOMMEN_STANDAARD[k].slice(); });
+  if (eigen && typeof eigen === 'object' && !(eigen instanceof Array)) Object.keys(XPS_KOLOMMEN_STANDAARD).forEach(function (k) {  // v7.4: alleen bekende sleutels, alleen tekst (uitMap)
+    var l = uitMap(eigen, k); if (l === undefined || l === null) return;
+    l = [].concat(l).filter(function (x) { return (typeof x === 'string' || typeof x === 'number') && String(x).trim(); }).map(klein); if (l.length) uit[k] = l;
+  });
+  return uit;
+}
+function xpsStatussen() {
+  var eigen = instelling('xpsStatussen'), uit = {};
+  Object.keys(XPS_STATUSSEN_STANDAARD).forEach(function (k) {
+    var l = eigen && typeof eigen === 'object' && !(eigen instanceof Array) ? uitMap(eigen, k) : undefined;
+    uit[k] = (l instanceof Array ? l : XPS_STATUSSEN_STANDAARD[k]).filter(function (x) { return typeof x === 'string' && x.trim(); }).map(function (x) { return klein(zonderAccenten(x)); });
+  });
+  return uit;
+}
+// 'gewerkt', 'noShow', 'laat', 'negeren' of 'ziek' (telt als negeren, maar een vlag no-show/laat mag hem nooit per persoon zichtbaar maken)
+function xpsStatusSoort(status, S) {
+  var s = klein(zonderAccenten(status)), past = function (l) { return l.some(function (x) { return s.indexOf(x) >= 0; }); };
+  if (!s) return 'gewerkt';
+  if (/ziek/.test(s)) return 'ziek';
+  if (past(S.noShow)) return 'noShow';
+  if (past(S.laat)) return 'laat';
+  if (past(S.negeren)) return 'negeren';
+  return 'gewerkt';
+}
 function kolomIndex(kop, namen) {
   var k = kop.map(klein);
   for (var i = 0; i < namen.length; i++) { var j = k.indexOf(klein(namen[i])); if (j >= 0) return j; }
   for (var i2 = 0; i2 < namen.length; i2++) for (var j2 = 0; j2 < k.length; j2++) if (k[j2].indexOf(klein(namen[i2])) >= 0) return j2;
   return -1;
 }
+// v7.4: de kolommen van een urenexport in twee rondes: eerst exacte namen voor alle velden, dan een deel van de naam in een kolom die nog vrij is.
+// Zo wordt 'Projectleider' geen project en 'Projectnummer' geen accountnummer. Loon- en privékolommen doen nooit mee.
+function xpsKolomIndexen(kop, M) {
+  var k = kop.map(function (h) { return klein(zonderAccenten(h)); }), c = {}, bezet = {};
+  var vrij = function (j) { return !bezet[j] && k[j] && !XPS_LOON.test(k[j]) && !XPS_PRIVE.test(k[j]); };
+  Object.keys(M).forEach(function (sl) {
+    c[sl] = -1;
+    for (var i = 0; i < M[sl].length && c[sl] < 0; i++) { var j = k.indexOf(klein(zonderAccenten(M[sl][i]))); if (j >= 0 && vrij(j)) { c[sl] = j; bezet[j] = sl; } }
+  });
+  Object.keys(M).forEach(function (sl) {
+    if (c[sl] >= 0) return;
+    for (var i = 0; i < M[sl].length && c[sl] < 0; i++) { var n = klein(zonderAccenten(M[sl][i])); if (!n) continue; for (var j = 0; j < k.length; j++) if (vrij(j) && k[j].indexOf(n) >= 0) { c[sl] = j; bezet[j] = sl; break; } }
+  });
+  return c;
+}
 function waar(v) { return v === true || /^(ja|yes|true|1|x)$/i.test(String(v || '').trim()); }
 function parseDatumNl(s) { var m = /^(\d{1,2})-(\d{1,2})-(\d{4})/.exec(String(s || '').trim()); return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), 12) : null; }
-function weekUit(w, datum) {
+function weekUit(w, datum, vandaag) {
   var s = String(w || '').trim(), m;
   if ((m = /^(\d{4})-?W?(\d{1,2})$/i.exec(s))) return m[1] + '-W' + ('0' + Number(m[2])).slice(-2);
-  if ((m = /^(\d{1,2})$/.exec(s))) return new Date().getFullYear() + '-W' + ('0' + Number(m[1])).slice(-2);
+  if ((m = /^(\d{1,2})$/.exec(s))) return weekVanNummer(Number(m[1]), vandaag);  // v7.4: de laatste week met dat nummer (in januari is week 52 die van vorig jaar)
   var d = datum instanceof Date ? datum : (parseDatum(String(datum || '').slice(0, 10)) || parseDatumNl(datum));
   return d ? isoWeekStr(d) : '';
 }
+function weekVanNummer(nr, vandaag) {
+  var d = parseDatum(vandaag || datumStr(new Date())), j = d.getFullYear(), w = function (x) { return x + '-W' + ('0' + nr).slice(-2); };
+  return w(j) > isoWeekStr(d) ? w(j - 1) : w(j);
+}
+// v7.4: een datum uit een export (Date uit een Sheet, jjjj-mm-dd, d-m-jjjj, d/m/jjjj, d.m.jjjj of een Excel-datumgetal) als yyyy-MM-dd; anders ''
+function exportDag(v) {
+  if (v instanceof Date) return isNaN(v.getTime()) ? '' : datumStr(v);
+  var s = String(v == null ? '' : v).trim(), m; if (!s) return '';
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) return geldigeDag(Number(m[1]), Number(m[2]), Number(m[3]));
+  if ((m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/.exec(s))) return geldigeDag(Number(m[3]), Number(m[2]), Number(m[1]));
+  if (/^\d{5}(\.\d+)?$/.test(s)) { var n = Math.floor(Number(s)); if (n > 20000 && n < 80000) return datumStr(new Date(1899, 11, 30 + n, 12)); }  // Excel telt dagen vanaf 30-12-1899
+  return '';
+}
+function geldigeDag(j, m, d) { var x = new Date(j, m - 1, d, 12); return x.getFullYear() === j && x.getMonth() === m - 1 && x.getDate() === d ? datumStr(x) : ''; }
+// v7.4: uren als getal, '5,5', '5.5', 'u:mm' of een tijd uit een Sheet
+function urenGetal(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  if (v instanceof Date) return isNaN(v.getTime()) ? 0 : v.getHours() + v.getMinutes() / 60;
+  var s = String(v == null ? '' : v).trim(), m = /^(\d+):(\d{2})$/.exec(s);
+  if (m) return Number(m[1]) + Number(m[2]) / 60;
+  var n = Number(s.replace(',', '.')); return isFinite(n) ? n : 0;
+}
+function naamSleutel(s) { return zonderAccenten(String(s == null ? '' : s)).toLowerCase().replace(/\s+/g, ' ').trim(); }  // v7.4: volledige naam, kleine letters, enkele spaties, zonder accenten
+function urenOvergeslagenLeeg() { return { status: 0, toekomst: 0, oud: 0, geenTalent: 0, dubbeleNaam: 0, geenUren: 0, geenDatum: 0 }; }
+// v7.4: id van een weekregel: de slug van talent|week|project; een lange projectnaam wordt afgekort met een controlegetal, zodat twee projecten met hetzelfde begin niet botsen
+function urenId(sleutel) {
+  var s = zonderAccenten(String(sleutel).toLowerCase()).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!s) return nieuwId();
+  if (s.length <= 60) return s;
+  var h = 5381; for (var i = 0; i < sleutel.length; i++) h = ((h << 5) + h + sleutel.charCodeAt(i)) | 0;
+  return s.slice(0, 52) + '-' + ('000000' + (h >>> 0).toString(36)).slice(-7);
+}
+// v7.4: project uit de urenexport → project in Athena. Projectnummer exact op xpsProject; anders de projectnaam: eerst exact, dan het langste xpsProject
+// (minstens 5 tekens) dat in de naam voorkomt. Zo kan de beheerder een vast deel van de XPS-projectnaam (zonder de periode) als xpsProject invullen.
+function projectKoppelaar(trajecten) {
+  var exact = {}, delen = [], cache = {};
+  (trajecten || []).forEach(function (t) { var x = naamSleutel(t.xpsProject); if (!x) return; exact['p' + x] = t; if (x.length >= 5) delen.push({ x: x, t: t }); });
+  delen.sort(function (a, b) { return b.x.length - a.x.length; });
+  return function (nummer, tekst) {
+    var n = naamSleutel(nummer), s = naamSleutel(tekst), k = 'c' + n + '|' + s;
+    if (k in cache) return cache[k];
+    var t = (n && exact['p' + n]) || (s && exact['p' + s]) || null;
+    for (var i = 0; !t && s && i < delen.length; i++) if (s.indexOf(delen[i].x) >= 0) t = delen[i].t;
+    return (cache[k] = t);
+  };
+}
+function xpsFout(melding) { var e = new Error(melding); e.xpsExport = true; return e; }
 // Rijen (eerste rij = kop) → weekaggregaten per talent, week en project. Zuiver (geen Sheet), dus los te testen.
-function urenUitRijen(rijen, talenten) {
-  if (!rijen || rijen.length < 2) return { regels: [], onbekend: [], aantalRegels: 0 };
-  var kop = rijen[0].map(String), M = xpsKolommen(), c = {}; Object.keys(M).forEach(function (k) { c[k] = kolomIndex(kop, M[k]); });
-  if (c.uren < 0 && c.status < 0) throw new Error('Geen kolom met uren of status gevonden; stel xpsKolommen in (Instellingen) of controleer de export.');
-  var perXps = {}, perEmail = {}; talenten.forEach(function (t) { if (t.xpsId) perXps[klein(t.xpsId)] = t; if (t.email) perEmail[klein(t.email)] = t; });
-  var agg = {}, onbekend = {}, n = 0, cel = function (r, k) { return c[k] >= 0 ? r[c[k]] : ''; };
+// v7.4: alleen een gewerkte dienst (datum t/m vandaag, binnen het archiefvenster, status niet afwezig/ziek/geannuleerd/reserve) telt mee met zijn uren;
+// koppeling op accountnummer, dan e-mail, dan een volledige naam die bij precies één talent hoort. Wat niet meetelt, wordt per reden geteld.
+// opties: { vandaag: 'yyyy-MM-dd' (standaard vandaag), trajecten: [...] (zet trajectId), statussen: xpsStatussen() }
+function urenUitRijen(rijen, talenten, opties) {
+  opties = opties && typeof opties === 'object' ? opties : {};
+  var vandaag = /^\d{4}-\d{2}-\d{2}$/.test(String(opties.vandaag || '')) ? opties.vandaag : datumStr(new Date()), grens = urenArchiefGrens(vandaag);
+  var uit = { regels: [], onbekend: [], onbekendAantal: 0, dubbel: [], dubbelAantal: 0, aantalRegels: 0, gelezen: 0, gekoppeld: 0, weekregels: 0, overgeslagen: urenOvergeslagenLeeg(), genegeerdeKolommen: [], kolommen: {}, archiefVanaf: grens };
+  if (!rijen || rijen.length < 2) return uit;
+  var kop = rijen[0].map(function (h) { return String(h == null ? '' : h).trim(); }), c = xpsKolomIndexen(kop, xpsKolommen());
+  if (c.uren < 0 && c.status < 0) throw xpsFout('Geen kolom met uren of status gevonden; stel xpsKolommen in (Instellingen) of controleer de export.');
+  if (c.xpsId < 0 && c.email < 0 && c.naam < 0) throw xpsFout('Dit bestand heeft geen kolom om uren aan talenten te koppelen (accountnummer, e-mail of naam). Vraag XPS de export met accountnummer, of stel xpsKolommen in.');
+  Object.keys(c).forEach(function (k) { if (c[k] >= 0) uit.kolommen[k] = kop[c[k]]; });
+  kop.forEach(function (h, j) {
+    if (!h || Object.keys(c).some(function (k) { return c[k] === j; })) return;
+    var n = klein(zonderAccenten(h));
+    uit.genegeerdeKolommen.push({ kolom: h, hint: XPS_LOON.test(n) ? 'loongegevens: worden nooit gelezen of bewaard; laat deze kolom uit de export' : XPS_PRIVE.test(n) ? 'persoonsgegevens die niet in Athena horen: nooit gelezen; laat deze kolom uit de export' : /omschrijving|opmerking|notitie/.test(n) ? 'vrije tekst: niet gelezen' : '' });
+  });
+  var S = opties.statussen || xpsStatussen(), koppel = opties.trajecten ? projectKoppelaar(opties.trajecten) : null, dezeWeek = isoWeekStr(parseDatum(vandaag));
+  var perXps = {}, perEmail = {}, perNaam = {};
+  (talenten || []).forEach(function (t) {
+    if (t.xpsId) perXps['x' + klein(t.xpsId)] = t; if (t.email) perEmail['e' + klein(t.email)] = t;
+    var n = naamSleutel([t.voornaam, t.achternaam].filter(Boolean).join(' ')); if (n) (perNaam['n' + n] = perNaam['n' + n] || []).push(t);
+  });
+  var agg = {}, volgorde = [], onbekend = {}, dubbel = {}, over = uit.overgeslagen, n = 0, gekoppeld = 0, dagC = {}, weekC = {}, statusC = {}, naamC = {};
+  var cel = function (r, k) { var v = c[k] >= 0 ? r[c[k]] : ''; return v == null ? '' : v; };
   for (var i = 1; i < rijen.length; i++) {
     var r = rijen[i]; if (!r || !r.some(function (x) { return x !== '' && x != null; })) continue; n++;
-    var xps = klein(cel(r, 'xpsId')), email = klein(cel(r, 'email')), t = (xps && perXps[xps]) || (email && perEmail[email]) || null;
-    if (!t) { var sleutel = xps || email || klein(cel(r, 'naam')); if (sleutel) onbekend[sleutel] = { xpsId: xps, email: email, naam: String(cel(r, 'naam') || '') }; continue; }
-    var week = weekUit(cel(r, 'week'), cel(r, 'datum')); if (!week) continue;
-    var project = String(cel(r, 'project') || '').trim(), key = t.id + '|' + week + '|' + project, a = agg[key] = agg[key] || { id: slug(key), talentId: t.id, xpsId: t.xpsId || xps, xpsProject: project, week: week, uren: 0, diensten: 0, noShows: 0, lateAfmeldingen: 0 };
-    var status = klein(cel(r, 'status')), uren = Number(String(cel(r, 'uren') || '0').replace(',', '.')) || 0;
-    if (/no.?show|niet verschenen/.test(status) || waar(cel(r, 'noShow'))) a.noShows++;
-    else if (/laat|late|afmeld|afgemeld/.test(status) || waar(cel(r, 'laat'))) a.lateAfmeldingen++;
-    else { a.diensten++; a.uren += uren; }
+    // 1. datum en week: geen datum, in de toekomst of ouder dan het archiefvenster telt niet
+    var ruw = cel(r, 'datum'), dag = '', week = '';
+    if (ruw !== '') { var dk = 'd' + (ruw instanceof Date ? ruw.getTime() : String(ruw)); dag = dk in dagC ? dagC[dk] : (dagC[dk] = exportDag(ruw)); }
+    if (dag) week = weekC['w' + dag] || (weekC['w' + dag] = isoWeekStr(parseDatum(dag)));
+    else week = weekUit(cel(r, 'week'), '', vandaag);
+    if (!week) { over.geenDatum++; continue; }
+    if (dag ? dag > vandaag : week > dezeWeek) { over.toekomst++; continue; }
+    if (week < grens) { over.oud++; continue; }
+    // 2. status: afwezig, ziek, geannuleerd en reserve tellen niet (alleen in het totaal 'status', nooit per persoon)
+    var sk = 's' + String(cel(r, 'status')), soort = sk in statusC ? statusC[sk] : (statusC[sk] = xpsStatusSoort(cel(r, 'status'), S));
+    if (soort !== 'ziek' && soort !== 'negeren') { if (waar(cel(r, 'noShow'))) soort = 'noShow'; else if (waar(cel(r, 'laat'))) soort = 'laat'; }
+    if (soort === 'ziek' || soort === 'negeren') { over.status++; continue; }
+    // 3. talent: accountnummer, dan e-mail, dan een volledige naam die bij precies één talent hoort (en geen ander accountnummer heeft)
+    var xpsRuw = String(cel(r, 'xpsId')).trim(), xps = klein(xpsRuw), email = klein(cel(r, 'email')), naamRuw = String(cel(r, 'naam')).trim();
+    var t = (xps && perXps['x' + xps]) || (email && perEmail['e' + email]) || null, ns = '';
+    if (!t && naamRuw) {
+      ns = ('n' + naamRuw) in naamC ? naamC['n' + naamRuw] : (naamC['n' + naamRuw] = naamSleutel(naamRuw));
+      var kand = ns ? perNaam['n' + ns] : null;
+      if (kand && kand.length > 1) { over.dubbeleNaam++; var dbl = dubbel['n' + ns] = dubbel['n' + ns] || { naam: naamRuw, diensten: 0, talenten: kand.length }; dbl.diensten++; continue; }
+      if (kand && !(xps && kand[0].xpsId && klein(kand[0].xpsId) !== xps)) t = kand[0];
+    }
+    if (!t) {
+      over.geenTalent++; var sl = xps ? 'x' + xps : email ? 'e' + email : ns ? 'n' + ns : '';
+      if (sl) { var o = onbekend[sl] = onbekend[sl] || { xpsId: xps, email: email, naam: naamRuw, diensten: 0 }; o.diensten++; }
+      continue;
+    }
+    // 4. uren: een gewerkte dienst zonder uren telt niet
+    var uren = urenGetal(cel(r, 'uren'));
+    if (soort === 'gewerkt' && c.uren >= 0 && !(uren > 0)) { over.geenUren++; continue; }
+    var pNr = String(cel(r, 'projectNummer')).trim(), pTekst = String(cel(r, 'project')).trim(), project = pNr || pTekst, key = t.id + '|' + week + '|' + project, a = agg['a' + key];
+    if (!a) {
+      a = agg['a' + key] = { id: urenId(key), talentId: t.id, xpsId: t.xpsId || (/\d/.test(xpsRuw) && !/\s/.test(xpsRuw) ? xpsRuw : ''), xpsProject: project, week: week, uren: 0, diensten: 0, noShows: 0, lateAfmeldingen: 0 };  // nooit een naam als xpsId
+      if (koppel) { var tr = koppel(pNr, pTekst); a.trajectId = tr ? tr.id : ''; }
+      volgorde.push(a);
+    }
+    gekoppeld++;
+    if (soort === 'noShow') a.noShows++; else if (soort === 'laat') a.lateAfmeldingen++; else { a.diensten++; a.uren += uren; }
   }
-  return { regels: Object.keys(agg).map(function (k) { var a = agg[k]; a.uren = Math.round(a.uren * 100) / 100; return a; }), onbekend: Object.keys(onbekend).map(function (k) { return onbekend[k]; }), aantalRegels: n };
+  var lijst = function (o) { return Object.keys(o).map(function (k) { return o[k]; }).sort(function (x, y) { return y.diensten - x.diensten || String(x.naam).localeCompare(String(y.naam)); }); };
+  var onb = lijst(onbekend), dub = lijst(dubbel);
+  uit.regels = volgorde.map(function (a) { a.uren = Math.round(a.uren * 100) / 100; return a; });
+  uit.onbekend = onb.slice(0, 50); uit.onbekendAantal = onb.length; uit.dubbel = dub.slice(0, 50); uit.dubbelAantal = dub.length;
+  uit.aantalRegels = uit.gelezen = n; uit.gekoppeld = gekoppeld; uit.weekregels = uit.regels.length;
+  return uit;
 }
 function rijenVanBestand(f) {
   var mime = f.getMimeType(), naam = klein(f.getName());
@@ -4172,28 +4324,46 @@ function plaatsingenUitUren(regels) {
   if (wijz.length) schrijfVeel('Kandidaten', wijz);
   return wijz.length;
 }
+// v7.4: elk bestand apart (een bestand zonder koppelkolom geeft een fout in 'fouten', de rest gaat door); alleen gewijzigde weekregels worden geschreven,
+// zodat een volledige export elke week opnieuw kan zonder de Sheet rij voor rij te herschrijven. Na een fout schuift LAATSTE_URENIMPORT niet op,
+// zodat hetzelfde bestand na het aanpassen van xpsKolommen opnieuw wordt gelezen. Is geen enkel bestand te lezen, dan volgt de fout zelf.
 function urenImport() {
-  var map = xpsExportMap(), sinds = P.getProperty('LAATSTE_URENIMPORT') || '', talenten = lees('Talenten'), stats = { bestanden: 0, regels: 0, weken: 0, onbekend: [], kandidatenBijgewerkt: 0, overgeslagen: [] }, alle = [];
+  var map = xpsExportMap(), sinds = P.getProperty('LAATSTE_URENIMPORT') || '', talenten = lees('Talenten'), opties = { trajecten: lees('Trajecten'), statussen: xpsStatussen(), vandaag: datumStr(new Date()) };
+  var stats = { bestanden: 0, regels: 0, gelezen: 0, gekoppeld: 0, weekregels: 0, weken: 0, ongewijzigd: 0, overgeslagen: urenOvergeslagenLeeg(), onbekend: [], onbekendAantal: 0, dubbel: [], dubbelAantal: 0,
+    genegeerdeKolommen: [], kandidatenBijgewerkt: 0, nietGelezen: [], fouten: [], archiefVanaf: urenArchiefGrens(opties.vandaag), archiefWeken: UREN_ARCHIEF_WEKEN, sinds: sinds }, perRegel = {};
+  var samen = function (doel, lijst, sleutel) { lijst.forEach(function (o) { var k = sleutel(o), hit = doel.filter(function (x) { return sleutel(x) === k; })[0]; if (hit) hit.diensten += o.diensten; else doel.push(o); }); };
   var it = map.getFiles();
   while (it.hasNext()) {
     var f = it.next(); if (sinds && datumTijdStr(f.getLastUpdated()) <= sinds) continue;
     var rijen = rijenVanBestand(f);
-    if (!rijen) { stats.overgeslagen.push(f.getName()); continue; }
-    var r = urenUitRijen(rijen, talenten); stats.bestanden++; stats.regels += r.aantalRegels; alle = alle.concat(r.regels);
-    r.onbekend.forEach(function (o) { if (!stats.onbekend.some(function (x) { return x.xpsId === o.xpsId && x.email === o.email && x.naam === o.naam; })) stats.onbekend.push(o); });
+    if (!rijen) { stats.nietGelezen.push(f.getName()); continue; }
+    var r;
+    try { r = urenUitRijen(rijen, talenten, opties); } catch (e) { if (!e.xpsExport) throw e; stats.fouten.push({ bestand: f.getName(), melding: e.message }); continue; }
+    stats.bestanden++; stats.regels += r.gelezen; stats.gelezen += r.gelezen; stats.gekoppeld += r.gekoppeld;
+    r.regels.forEach(function (a) { perRegel[a.id] = a; });  // dezelfde week in twee bestanden: het laatst gelezen bestand telt (geen dubbele uren)
+    Object.keys(r.overgeslagen).forEach(function (k) { stats.overgeslagen[k] += r.overgeslagen[k]; });
+    samen(stats.onbekend, r.onbekend, function (o) { return o.xpsId + '|' + o.email + '|' + naamSleutel(o.naam); }); stats.onbekendAantal += r.onbekendAantal;
+    samen(stats.dubbel, r.dubbel, function (o) { return naamSleutel(o.naam); }); stats.dubbelAantal += r.dubbelAantal;
+    r.genegeerdeKolommen.forEach(function (g) { if (!stats.genegeerdeKolommen.some(function (x) { return x.kolom === g.kolom; })) stats.genegeerdeKolommen.push(g); });
   }
+  if (stats.fouten.length && !stats.bestanden) throw new Error(stats.fouten.map(function (x) { return x.bestand + ': ' + x.melding; }).join(' '));
+  var alle = Object.keys(perRegel).map(function (k) { return perRegel[k]; });
   if (alle.length) metLock(function () {
-    var tMap = {}; lees('Trajecten').forEach(function (t) { if (t.xpsProject) tMap[klein(t.xpsProject)] = t; });
-    alle.forEach(function (a) { var t = tMap[klein(a.xpsProject)]; a.trajectId = t ? t.id : ''; a.geimporteerd = nu(); });
-    schrijfVeel('TalentUren', alle);
+    var oud = perId(lees('TalentUren')), tekst = ['talentId', 'xpsProject', 'trajectId', 'week'], getal = ['uren', 'diensten', 'noShows', 'lateAfmeldingen'];
+    var nieuw = alle.filter(function (a) { var o = oud[a.id]; return !o || tekst.some(function (v) { return String(o[v] == null ? '' : o[v]) !== String(a[v] == null ? '' : a[v]); }) || getal.some(function (v) { return (Number(o[v]) || 0) !== (Number(a[v]) || 0); }); });
+    stats.ongewijzigd = alle.length - nieuw.length;
+    nieuw.forEach(function (a) { a.geimporteerd = nu(); });
+    if (nieuw.length) schrijfVeel('TalentUren', nieuw);
     stats.kandidatenBijgewerkt = plaatsingenUitUren(alle);
   });
-  stats.weken = uniek(alle.map(function (a) { return a.week; })).length;
-  P.setProperty('LAATSTE_URENIMPORT', nu());
+  stats.weekregels = alle.length; stats.weken = uniek(alle.map(function (a) { return a.week; })).length;
+  stats.onbekend.sort(function (x, y) { return y.diensten - x.diensten; }); stats.onbekend = stats.onbekend.slice(0, 50);
+  stats.dubbel.sort(function (x, y) { return y.diensten - x.diensten; }); stats.dubbel = stats.dubbel.slice(0, 50);
+  if (!stats.fouten.length) P.setProperty('LAATSTE_URENIMPORT', nu());
   return stats;
 }
 function apiTalentUrenImport() { if (niveau('talenten', 'wijzigen') !== 'alles') throw new Error('Daar heb je geen toegang toe.'); return urenImport(); }
-function talentUrenTrigger() { try { urenImport(); } catch (e) { Logger.log('Urenimport mislukt: ' + e); } }
+function talentUrenTrigger() { try { var s = urenImport(); if (s.fouten.length) Logger.log('Urenimport: ' + s.fouten.map(function (x) { return x.bestand + ': ' + x.melding; }).join(' ')); } catch (e) { Logger.log('Urenimport mislukt: ' + e); } }
 
 /* ----- Rapport talentnetwerk ----- */
 
@@ -4546,8 +4716,8 @@ function maandagVanWeek(w) {
   return datumStr(new Date(ma.getTime() + (Number(m[2]) - 1) * 7 * 86400000));
 }
 function geleverdVan(t, uren) {
-  var tarief = centen(t.tarief), u = {}; if (!tarief) return u;
-  uren.forEach(function (r) { var m = maandVan(maandagVanWeek(r.week)); if (m) u[m] = (u[m] || 0) + Math.round((Number(r.uren) || 0) * tarief); });
+  var tarief = centen(t.tarief), u = {}, dezeWeek = isoWeekStr(new Date()); if (!tarief) return u;
+  uren.forEach(function (r) { if (String(r.week) > dezeWeek) return; var m = maandVan(maandagVanWeek(r.week)); if (m) u[m] = (u[m] || 0) + Math.round((Number(r.uren) || 0) * tarief); });  // v7.4: geleverd is gewerkt: geen weken in de toekomst (een urenimport van vóór v7.4 telde geplande diensten mee)
   return u;
 }
 function leegReeks() { var r = {}; FIN_REEKSEN.concat(['prognoseToen']).forEach(function (k) { r[k] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; }); return r; }
@@ -4628,49 +4798,126 @@ function financienTrigger() { GEBRUIKER = null; try { financienBevriezen(); } ca
 function apiFinancienBevriezen() { alleenBeheerder(); return financienBevriezen(); }
 
 // Afstemming met Exact Online: een export van verkoopfacturen (csv) koppelt op factuurnummer en zet de verzend- en betaaldatum.
-// Kolomnamen instelbaar (Instellingen exactKolommen), want het formaat van de export verschilt per administratie. ⚠️ Nog niet getest op een echte export.
-function exactKolommen() { var k = instelling('exactKolommen'), u = {}; Object.keys(EXACT_KOLOMMEN).forEach(function (x) { u[x] = (k && k[x]) || EXACT_KOLOMMEN[x]; }); return u; }
-function bedragIn(s) { s = String(s == null ? '' : s).replace(/[€\s]/g, ''); if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); else s = s.replace(/,/g, ''); var n = Number(s); return isFinite(n) ? Math.round(n * 100) : null; }
-function datumUitExport(s) { s = String(s || '').trim(); var d = parseDatum(s) || parseDatumNl(s.replace(/\//g, '-')); return d ? datumStr(d) : ''; }
+// Kolomnamen instelbaar (Instellingen exactKolommen), want het formaat van de export verschilt per administratie.
+// v7.4: getoetst aan de echte facturatie-export (Datum; Factuurnummer; Betreft; …; Debiteur; Debiteurnummer; …; Totaal; Leeftijd; Open; …): die wordt zonder
+// toewijzing herkend. Zonder betaaldatum geldt Open = 0 als betaald (datum = peildatum), behalve bij een gecrediteerde factuur. Een creditnota
+// (negatief bedrag) koppelt aan de factuur van dezelfde debiteur met hetzelfde bedrag tot 60 dagen eerder; bij toepassen gaat die termijn terug naar
+// de eerste status. Het rapport Openstaande posten (één regel per relatie) wordt herkend en geweigerd. Uitleg voor de boekhouder: backend/README.md.
+var EXACT_ANDERE_NAMEN = { factuurnummer: ['Factuurnummer', 'Factuurnr', 'Factuurnr.'], datum: ['Factuurdatum', 'Datum'], bedrag: ['Bedrag', 'Totaal', 'Totaalbedrag'], betaald: ['Betaaldatum', 'Datum betaald'],
+  open: ['Open', 'Openstaand', 'Openstaand bedrag'], debiteur: ['Debiteur', 'Debiteurnaam', 'Relatie', 'Klant'], debiteurNummer: ['Debiteurnummer', 'Debiteurnr', 'Relatiecode'], omschrijving: ['Betreft', 'Omschrijving'] };  // v7.4: in deze volgorde na de ingestelde naam
+var EXACT_VERPLICHT = ['factuurnummer', 'datum', 'bedrag'], EXACT_CREDIT_DAGEN = 60;
+function exactKolommen() { var k = instelling('exactKolommen'), u = {}; Object.keys(EXACT_KOLOMMEN).forEach(function (x) { var v = k && typeof k === 'object' ? uitMap(k, x) : undefined; u[x] = (typeof v === 'string' && v) || EXACT_KOLOMMEN[x]; }); return u; }
+function bedragIn(s) {
+  s = String(s == null ? '' : s).replace(/[€\s]/g, '');
+  if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');  // v7.4: 1.950 is duizend negenhonderdvijftig, niet 1,95
+  else s = s.replace(/,/g, '');
+  var n = Number(s); return isFinite(n) ? Math.round(n * 100) : null;
+}
+function datumUitExport(s) { return exportDag(s); }  // v7.4: dezelfde datumlezer als de urenimport (ook d.m.jjjj en een Excel-datumgetal)
+// v7.4: het Exact-rapport Openstaande posten: kopregels ('Administratie: …', 'Openstaande posten …') en de kolommen 'Code + Naam' en 'Openstaand'
+function isOpenstaandePosten(tekst) {
+  var kop = String(tekst).split(/\r?\n/).slice(0, 15).map(function (l) { return klein(l.replace(/"/g, '')); });
+  var codeNaam = kop.some(function (l) { return /(^|[;,\t])\s*code \+ naam\s*([;,\t]|$)/.test(l) && /openstaand/.test(l); });
+  return codeNaam || (kop.some(function (l) { return /openstaande posten/.test(l); }) && kop.some(function (l) { return /^\s*administratie\s*:/.test(l); }));
+}
+function zelfdeDebiteur(a, b) {
+  if (a.debiteurNummer && b.debiteurNummer && klein(a.debiteurNummer) === klein(b.debiteurNummer)) return true;
+  return !!(a.debiteur && b.debiteur && naamSleutel(a.debiteur) === naamSleutel(b.debiteur));
+}
 function apiExactImport(tekst, opties) {
-  alleenBeheerder(); opties = opties || {};
+  alleenBeheerder(); opties = opties && typeof opties === 'object' ? opties : {};
   tekst = String(tekst || '').replace(/^﻿/, ''); if (!tekst.trim()) throw new Error('Het bestand is leeg.');
   if (tekst.length > 3 * 1024 * 1024) throw new Error('Het bestand is groter dan 3 MB; exporteer een kortere periode.');
-  var kol = exactKolommen(); if (opties.kolommen && typeof opties.kolommen === 'object') Object.keys(EXACT_KOLOMMEN).forEach(function (x) { if (opties.kolommen[x]) kol[x] = String(opties.kolommen[x]).trim(); });
-  var rijen = Utilities.parseCsv(tekst, (tekst.split('\n')[0] || '').indexOf(';') >= 0 ? ';' : ','), kop = (rijen[0] || []).map(function (h) { return String(h).trim(); });
-  var idx = {}; Object.keys(kol).forEach(function (x) { idx[x] = kop.map(klein).indexOf(klein(kol[x])); });
-  var mist = ['factuurnummer', 'datum', 'bedrag'].filter(function (x) { return idx[x] < 0; });
+  if (isOpenstaandePosten(tekst)) throw new Error('Dit is het Exact-rapport Openstaande posten: dat heeft één regel per relatie. Voor de afstemming is een export per factuur nodig met factuurnummer, factuurdatum, bedrag en betaaldatum, als csv met de kolomnamen op de eerste regel.');
+  var peilIn = opties.peildatum === undefined || opties.peildatum === null ? '' : String(opties.peildatum).trim();
+  if (peilIn && !/^\d{4}-\d{2}-\d{2}$/.test(peilIn)) throw new Error('Ongeldige peildatum; gebruik jjjj-mm-dd.');
+  var peil = datumIn(peilIn) || datumStr(new Date());
+  // kolommen: een opgegeven naam gaat voor (en moet bestaan); anders de ingestelde naam, de standaardnaam of een bekende andere naam
+  var opgeslagen = instelling('exactKolommen'); if (!opgeslagen || typeof opgeslagen !== 'object') opgeslagen = {};
+  var expliciet = {}; if (opties.kolommen && typeof opties.kolommen === 'object') Object.keys(EXACT_ANDERE_NAMEN).forEach(function (x) { var v = uitMap(opties.kolommen, x); if (v !== undefined && v !== null && typeof v !== 'object' && String(v).trim()) expliciet[x] = String(v).trim(); });
+  var rijen = Utilities.parseCsv(tekst, (tekst.split('\n')[0] || '').indexOf(';') >= 0 ? ';' : ','), kop = (rijen[0] || []).map(function (h) { return String(h).trim(); }), kk = kop.map(klein);
+  var idx = {}, kol = {}, gevonden = {}, meldingen = [];
+  Object.keys(EXACT_ANDERE_NAMEN).forEach(function (x) {
+    idx[x] = -1;
+    if (expliciet[x]) { kol[x] = expliciet[x]; idx[x] = kk.indexOf(klein(expliciet[x])); if (idx[x] < 0 && EXACT_VERPLICHT.indexOf(x) < 0) meldingen.push('Kolom ' + expliciet[x] + ' niet gevonden; overgeslagen.'); }
+    else {
+      var namen = [uitMap(opgeslagen, x), uitMap(EXACT_KOLOMMEN, x)].concat(EXACT_ANDERE_NAMEN[x]).filter(function (n) { return typeof n === 'string' && n.trim(); });
+      kol[x] = namen[0] || '';
+      for (var i = 0; i < namen.length && idx[x] < 0; i++) { var j = kk.indexOf(klein(namen[i])); if (j >= 0) { idx[x] = j; kol[x] = kop[j]; } }
+    }
+    if (idx[x] >= 0) gevonden[x] = kop[idx[x]];
+  });
+  var mist = EXACT_VERPLICHT.filter(function (x) { return idx[x] < 0; });
   if (mist.length) throw new Error('Kolom niet gevonden: ' + mist.map(function (x) { return kol[x]; }).join(', ') + '. Kolommen in het bestand: ' + kop.join(', ') + '. Pas de kolomnamen aan.');
-  var exact = {}, datums = [];
+  var exact = {}, nummers = [], datums = [];
   rijen.slice(1).forEach(function (r) {
-    var nr = String(r[idx.factuurnummer] || '').trim(); if (!nr) return;
-    var x = { nummer: nr, datum: datumUitExport(r[idx.datum]), bedrag: bedragIn(r[idx.bedrag]), betaald: idx.betaald >= 0 ? datumUitExport(r[idx.betaald]) : '' };
-    if (exact[nr]) { exact[nr].bedrag = (exact[nr].bedrag || 0) + (x.bedrag || 0); if (x.betaald > exact[nr].betaald) exact[nr].betaald = x.betaald; } else exact[nr] = x;  // meerdere regels per factuur: optellen
+    var cel = function (x) { return idx[x] >= 0 ? String(r[idx[x]] == null ? '' : r[idx[x]]).trim() : ''; }, nr = cel('factuurnummer'); if (!nr) return;
+    var x = { nummer: nr, datum: datumUitExport(cel('datum')), bedrag: bedragIn(cel('bedrag')), betaald: idx.betaald >= 0 ? datumUitExport(cel('betaald')) : '', open: cel('open') !== '' ? bedragIn(cel('open')) : null,
+      debiteur: cel('debiteur'), debiteurNummer: cel('debiteurNummer') }, e = exact['n' + nr];
+    if (e) { e.bedrag = (e.bedrag || 0) + (x.bedrag || 0); if (x.betaald > e.betaald) e.betaald = x.betaald; if (x.open !== null) e.open = (e.open || 0) + x.open; }  // meerdere regels per factuur: optellen
+    else { exact['n' + nr] = x; nummers.push(x); }
     if (x.datum) datums.push(x.datum);
   });
+  // v7.4: creditnota's → het origineel bij dezelfde debiteur, zelfde bedrag, factuurdatum tot 60 dagen eerder (de meest recente); elk origineel één keer.
+  // ⚠️ Bij gelijke kandidaten gaat een factuur met Open 0 voor (een gecrediteerde factuur staat op 0) en dan een lager factuurnummer dan de creditnota
+  // (nummers lopen door): zo wint niet de gecorrigeerde factuur die op dezelfde dag als de creditnota is gemaakt.
+  var gecrediteerd = {}, origineelVan = {};
+  nummers.filter(function (c) { return c.bedrag !== null && c.bedrag < 0; }).sort(function (a, b) { return String(a.datum).localeCompare(String(b.datum)) || a.nummer.localeCompare(b.nummer); }).forEach(function (c) {
+    if (!c.datum) return;
+    var na = function (x) { var a = Number(x.nummer), b = Number(c.nummer); return isFinite(a) && isFinite(b) && a > b ? 1 : 0; }, open = function (x) { return x.open === 0 ? 0 : 1; };
+    var vanaf = plusDagenVan(c.datum, -EXACT_CREDIT_DAGEN), o = nummers.filter(function (x) { return x !== c && x.bedrag === -c.bedrag && !gecrediteerd['n' + x.nummer] && x.datum && x.datum <= c.datum && x.datum >= vanaf && zelfdeDebiteur(x, c); })
+      .sort(function (a, b) { return (open(a) - open(b)) || (na(a) - na(b)) || b.datum.localeCompare(a.datum) || b.nummer.localeCompare(a.nummer); })[0];
+    if (o) { gecrediteerd['n' + o.nummer] = c; origineelVan['n' + c.nummer] = o; }
+  });
   datums.sort();
-  var van = datums[0] || '', tot = datums[datums.length - 1] || '', tMap = perId(lees('Trajecten')), gezien = {}, uit = { gekoppeld: 0, bijgewerkt: [], afwijkend: [], alleenExact: [], alleenAthena: [], van: van, tot: tot, kolommen: kol, toegepast: !!opties.toepassen };
-  var wijz = [];
+  var van = datums[0] || '', tot = datums[datums.length - 1] || '', tMap = perId(lees('Trajecten')), gezien = {}, waarVan = {}, eersteStatus = keuzelijst('factuurStatussen')[0], openAlsBetaald = idx.open >= 0 && idx.betaald < 0, volgensOpen = 0;
+  var uit = { gekoppeld: 0, bijgewerkt: [], afwijkend: [], alleenExact: [], alleenAthena: [], betaald: [], deelsBetaald: [], creditnotas: [], meldingen: meldingen, van: van, tot: tot, kolommen: gevonden, peildatum: peil, toegepast: !!opties.toepassen };
+  var wijz = [], credits = [];
   lees('Facturen').forEach(function (f) {
     var nr = String(f.factuurnummer || '').trim(), t = tMap[f.trajectId] || {}, waar = (t.school || '') + ' · ' + (t.traject || '') + ' · ' + (f.omschrijving || '');
     if (!nr) return;
-    var x = exact[nr];
+    var x = exact['n' + nr];
     if (!x) { var v = verzondenVan(f); if (v && (!van || (v.datum >= van && v.datum <= tot))) uit.alleenAthena.push({ nummer: nr, waar: waar, bedrag: centen(f.bedrag) }); return; }
-    gezien[nr] = 1; uit.gekoppeld++;
+    gezien['n' + nr] = 1; waarVan['n' + nr] = waar; uit.gekoppeld++;
+    var c = gecrediteerd['n' + nr];
+    if (c) {  // v7.4: gecrediteerd: terug naar de eerste status, zonder factuurnummer en datums; beide nummers komen op de tijdlijn van het project
+      wijz.push({ id: f.id, status: eersteStatus, factuurnummer: '', verzonden: '', betaald: '' }); credits.push({ f: f, t: t, origineel: nr, credit: c });
+      uit.bijgewerkt.push({ nummer: nr, waar: waar, wat: 'gecrediteerd met ' + c.nummer + ': terug naar ' + eersteStatus + ', zonder factuurnummer' });
+      return;
+    }
     if (x.bedrag !== null && x.bedrag !== centen(f.bedrag)) uit.afwijkend.push({ nummer: nr, waar: waar, athena: centen(f.bedrag), exact: x.bedrag });
-    var nieuw = { id: f.id }, veranderd = [];
+    var nieuw = { id: f.id }, veranderd = [], betaaldOp = x.betaald, doorOpen = false;
+    if (!betaaldOp && openAlsBetaald && x.open === 0 && x.bedrag > 0) { doorOpen = true; if (f.status !== 'betaald' && !f.betaald) betaaldOp = peil; }  // ⚠️ v7.4: geen betaaldatum in de export: Open 0 = betaald op de peildatum
     if (x.datum && datumIn(f.verzonden) !== x.datum) { nieuw.verzonden = x.datum; veranderd.push('verzonden ' + x.datum); }
-    if (x.betaald && datumIn(f.betaald) !== x.betaald) { nieuw.betaald = x.betaald; veranderd.push('betaald ' + x.betaald); }
-    var status = x.betaald ? 'betaald' : (['nog te doen', 'aangemaakt'].indexOf(f.status) >= 0 ? 'verzonden' : f.status);
+    if (betaaldOp && datumIn(f.betaald) !== betaaldOp) {
+      nieuw.betaald = betaaldOp; veranderd.push('betaald ' + betaaldOp + (doorOpen ? ' (volgens openstaand bedrag; datum = peildatum)' : ''));
+      uit.betaald.push({ nummer: nr, waar: waar, datum: betaaldOp, bedrag: x.bedrag, bron: doorOpen ? 'open' : 'betaaldatum' }); if (doorOpen) volgensOpen++;
+    }
+    var status = betaaldOp || doorOpen ? 'betaald' : (['nog te doen', 'aangemaakt'].indexOf(f.status) >= 0 ? 'verzonden' : f.status);
     if (status !== f.status) { nieuw.status = status; veranderd.push('status ' + status); }
     if (veranderd.length) { wijz.push(nieuw); uit.bijgewerkt.push({ nummer: nr, waar: waar, wat: veranderd.join(', ') }); }
   });
-  Object.keys(exact).forEach(function (nr) { if (!gezien[nr]) uit.alleenExact.push({ nummer: nr, datum: exact[nr].datum, bedrag: exact[nr].bedrag }); });
+  nummers.forEach(function (x) {
+    var o = origineelVan['n' + x.nummer];
+    if (o) { uit.creditnotas.push({ nummer: x.nummer, origineel: o.nummer, bedrag: x.bedrag, datum: x.datum, waar: waarVan['n' + o.nummer] || '', inAthena: !!gezien['n' + o.nummer] }); return; }
+    if (gecrediteerd['n' + x.nummer]) return;
+    if (x.open !== null && x.bedrag !== null && x.open > 0 && x.open < x.bedrag) uit.deelsBetaald.push({ nummer: x.nummer, waar: waarVan['n' + x.nummer] || '', bedrag: x.bedrag, open: x.open });  // v7.4: de status blijft verzonden
+    if (!gezien['n' + x.nummer]) uit.alleenExact.push({ nummer: x.nummer, datum: x.datum, bedrag: x.bedrag, creditnota: x.bedrag !== null && x.bedrag < 0 });
+  });
+  if (volgensOpen) meldingen.push(volgensOpen + (volgensOpen === 1 ? ' factuur' : ' facturen') + ' betaald volgens openstaand bedrag; datum = peildatum (' + peil + ').');
+  if (openAlsBetaald) meldingen.push('Geen kolom met de betaaldatum: Open = 0 telt als betaald, behalve bij een factuur met een creditnota.');
+  var zonder = uit.alleenExact.filter(function (x) { return x.creditnota; }).length;
+  if (zonder) meldingen.push(zonder + (zonder === 1 ? ' creditnota heeft' : ' creditnota\'s hebben') + ' geen oorspronkelijke factuur in dit bestand; exporteer een periode die ook de factuur bevat.');
   if (opties.toepassen) metLock(function () {
     if (wijz.length) schrijfVeel('Facturen', wijz);
-    if (opties.kolommen) zetInstelling('exactKolommen', kol);
+    if (Object.keys(expliciet).length) { var bewaar = exactKolommen(); Object.keys(expliciet).forEach(function (x) { bewaar[x] = expliciet[x]; }); zetInstelling('exactKolommen', bewaar); }
+    credits.forEach(function (c) {
+      schrijf('Activiteiten', { type: 'notitie', datum: nu(), door: ikNaam(), schoolId: c.t.schoolId || '', trajectId: c.f.trajectId || '', bron: 'exact', aangemaakt: nu(), onderwerp: 'Factuur ' + c.origineel + ' gecrediteerd met ' + c.credit.nummer,
+        tekst: 'Termijn ' + (c.f.omschrijving || '') + ': factuur ' + c.origineel + ' (' + euroTekst(-c.credit.bedrag) + ') is gecrediteerd met creditnota ' + c.credit.nummer + (c.credit.datum ? ' van ' + c.credit.datum : '') + '. De termijn staat weer op ' + eersteStatus + ', zonder factuurnummer en datums.' });
+    });
     schrijf('Activiteiten', { type: 'notitie', datum: nu(), door: ikNaam(), bron: 'exact', aangemaakt: nu(), onderwerp: 'Exact-import: ' + uit.gekoppeld + ' gekoppeld, ' + wijz.length + ' bijgewerkt',
-      tekst: 'Periode ' + van + ' t/m ' + tot + '. Alleen in Exact: ' + uit.alleenExact.length + '. Alleen in Athena: ' + uit.alleenAthena.length + '. Bedrag wijkt af: ' + uit.afwijkend.length + '.' });
+      tekst: 'Periode ' + van + ' t/m ' + tot + '. Alleen in Exact: ' + uit.alleenExact.length + '. Alleen in Athena: ' + uit.alleenAthena.length + '. Bedrag wijkt af: ' + uit.afwijkend.length + '. Betaald: ' + uit.betaald.length + '. Deels betaald: ' + uit.deelsBetaald.length + '. Creditnota\'s: ' + uit.creditnotas.length + '.' });
   });
   return uit;
 }

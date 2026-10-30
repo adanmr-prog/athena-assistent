@@ -441,7 +441,7 @@ with sync_playwright() as p:
     page.click('.zb-item[data-desk="facturatie"]'); page.wait_for_selector('.ftabel [data-pveld="gefactureerd"]')  # v3.8: facturatiebord
     page.select_option('.ftabel [data-pveld="gefactureerd"][data-pid="t2"]', 'ja'); page.wait_for_selector('.ftabel select.pill.p-ja[data-pid="t2"]')
     page.click('[data-factopen="t1"]'); page.wait_for_selector('tr.f-sub [data-fstatus="f2"]'); page.select_option('[data-fstatus="f2"]', 'aangemaakt'); page.wait_for_timeout(300)
-    page.fill('.ftabel [data-pveld="factuurnummer"][data-pid="t2"]', '20210010'); page.press('.ftabel [data-pveld="factuurnummer"][data-pid="t2"]', 'Tab'); page.wait_for_timeout(300)
+    page.fill('.ftabel [data-pveld="factuurnummer"][data-pid="t2"]', '99990002'); page.press('.ftabel [data-pveld="factuurnummer"][data-pid="t2"]', 'Tab'); page.wait_for_timeout(300)
     page.screenshot(path=OUT + '/29_desk_facturatie.png')
     # v6.5: Financiën per schooljaar, school en project
     page.click('.zb-item[data-desk="financien"]'); page.wait_for_selector('table.fin [data-finopen]')

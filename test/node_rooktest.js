@@ -234,9 +234,11 @@ eis(/0 nieuw, 1 bestaand/.test(ctx.aanmeldingenRun()) && ctx.lees('Activiteiten'
 var geo = ctx.geocodeerRun();
 eis(geo >= 1 && Number(ctx.lees('Talenten').filter(function (t) { return t.id === lieke.id; })[0].lat) > 50, 'geocodeerRun vult de ligging van nieuwe profielen (PDOK)');
 
-var rij = [['Accountnummer', 'Naam', 'E-mail', 'Projectnummer', 'Week', 'Uren', 'Status'], ['X5001', 'Eva de Wit', '', '10.880', '2026-W40', '7,5', 'Gewerkt'], ['X5001', 'Eva de Wit', '', '10.880', '2026-W40', '8', 'Gewerkt'], ['X5001', 'Eva de Wit', '', '10.880', '2026-W40', '0', 'No-show'], ['', '', 'tim.verhoeven@mail.example', '10.887', '40', '6', 'Gewerkt'], ['X7777', 'Onbekend', '', '10.880', '2026-W40', '4', 'Gewerkt']];
+// v7.4: weken ten opzichte van vandaag (een week in de toekomst of ouder dan het archiefvenster telt sinds v7.4 niet meer); een los weeknummer is de laatste week met dat nummer
+var wkT = ctx.isoWeekStr(ctx.plusDagen(-14)), wkTnr = String(Number(wkT.slice(6)));
+var rij = [['Accountnummer', 'Naam', 'E-mail', 'Projectnummer', 'Week', 'Uren', 'Status'], ['X5001', 'Eva de Wit', '', '10.880', wkT, '7,5', 'Gewerkt'], ['X5001', 'Eva de Wit', '', '10.880', wkT, '8', 'Gewerkt'], ['X5001', 'Eva de Wit', '', '10.880', wkT, '0', 'No-show'], ['', '', 'tim.verhoeven@mail.example', '10.887', wkTnr, '6', 'Gewerkt'], ['X7777', 'Onbekend', '', '10.880', wkT, '4', 'Gewerkt']];
 var ur = ctx.urenUitRijen(rij, ctx.lees('Talenten')), e40 = ur.regels.filter(function (x) { return x.talentId === 'tl1'; })[0];
-eis(ur.aantalRegels === 5 && ur.regels.length === 2 && e40.uren === 15.5 && e40.diensten === 2 && e40.noShows === 1 && e40.week === '2026-W40' && ur.regels.some(function (x) { return x.talentId === 'tl4' && x.week === new Date().getFullYear() + '-W40'; }) && ur.onbekend.length === 1 && ur.onbekend[0].xpsId === 'x7777', 'urenUitRijen: per talent, week en project; match op XPS-nummer of e-mail; no-show apart; onbekende accounts gemeld');
+eis(ur.aantalRegels === 5 && ur.regels.length === 2 && e40.uren === 15.5 && e40.diensten === 2 && e40.noShows === 1 && e40.week === wkT && ur.regels.some(function (x) { return x.talentId === 'tl4' && x.week === wkT; }) && ur.onbekend.length === 1 && ur.onbekend[0].xpsId === 'x7777', 'urenUitRijen: per talent, week en project; match op XPS-nummer of e-mail; no-show apart; onbekende accounts gemeld');
 eis(/Geen kolom/.test((function () { try { ctx.urenUitRijen([['a', 'b'], ['1', '2']], []); return ''; } catch (e) { return e.message; } })()), 'een export zonder uren- of statuskolom wordt geweigerd met een duidelijke melding');
 ctx.GEBRUIKER = null; var imp = ctx.urenImport(), wk1 = ctx.isoWeekStr(ctx.plusDagen(-7));
 eis(imp.bestanden === 1 && imp.regels === 8 && imp.onbekend.length === 1 && imp.onbekend[0].naam === 'Onbekend Account' && ctx.lees('TalentUren').some(function (u) { return u.talentId === 'tl3' && u.week === wk1 && Number(u.lateAfmeldingen) === 1 && Number(u.diensten) === 1 && u.trajectId === 't1'; }), 'urenImport leest de weekexport uit de Drive-map XPS-export: uren per week, late afmelding, project gekoppeld, onbekend account gemeld');
@@ -454,7 +456,7 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
 (function () {
   ctx.GEBRUIKER = null;
   var c1 = ctx.controleer();
-  eis(c1.indexOf('backend 7.3') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.3 en geen afwijkende koppen in de demo-sheet');  // v7.3
+  eis(c1.indexOf('backend 7.4') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.4 en geen afwijkende koppen in de demo-sheet');  // v7.3; v7.4: versie mee omhoog
   var b = ctx.blad('Scholen'), kop = ctx.TABELLEN.Scholen, was = b.getRange(1, 2, 1, 1).getValues()[0][0];
   b.getRange(1, 2, 1, 1).setValues([['schoolnaam']]);
   var c2 = ctx.controleer(), regel = c2.split('\n').filter(function (r) { return r.indexOf('- Scholen:') === 0; })[0] || '';
@@ -675,6 +677,135 @@ function tel(tab, fn) { return ctx.lees(tab).filter(fn).length; }
   } finally { ctx.RECHTEN.talenten.accountmanagement = oudR; }
   eis(/toegang/.test(faalt(FEMKE, 'apiTalentOpslaan', { id: 'tl1', opleiding: 'x' })) && /toegang/.test(faalt(FEMKE, 'apiTalentOpslaan', { voornaam: 'Nieuw', toestemmingDatum: plusDagen(0) })), 'met de echte tabel (AM: geen) blijft wijzigen en aanmaken voor de AM dicht');
 })();
+
+/* ---- v7.4: imports — XPS-dienstenexport (koppeling, statussen, tijdvenster, loonkolommen, projectnaam) en Exact-afstemming (facturatie-export, Open, creditnota's, rapport) ---- */
+(function () { try {
+  var V = '2026-10-30', TAL = ctx.lees('Talenten'), lijst = function (x) { return vm.runInContext('(function (x) { return JSON.parse(x); })', ctx)(JSON.stringify(x)); };  // rijen als arrays uit de context (instanceof)
+  var KOP = ['Datum', 'Datum: Van', 'Datum: Tot', 'Gewerkte tijd', 'Uitgevoerd door', 'Omschrijving', 'Status', 'Project', 'Projectleider', 'Salaris (eenheid)', 'Salaris (totaal)'];
+  var dienst = function (datum, uren, naam, status, project, extra) { return [datum, datum + ' 08:30', datum + ' 15:00', uren, naam, 'Ondersteuning', status, project || 'Kompas College | Huiswerkbegeleiding (01-08-2026 ~ 31-07-2027)', 'Bas Meijer', '17,50', '99,99'].concat(extra || []); };
+  var fout = function (f) { try { f(); return ''; } catch (e) { return String(e.message); } };
+  // 1. het verzonnen voorbeeldbestand: kolommen herkend, statussen, toekomst, naam, onbekend, geen uren, loonkolommen genegeerd
+  var vb = ctx.Utilities.parseCsv(fs.readFileSync(path.join(R, 'test/voorbeelden/xps_diensten.csv'), 'utf8'), ';');
+  var u = ctx.urenUitRijen(vb, TAL, { vandaag: V, trajecten: ctx.lees('Trajecten') }), O = u.overgeslagen, eva = u.regels.filter(function (x) { return x.talentId === 'tl1'; })[0];
+  eis(u.kolommen.xpsId === 'Accountnummer' && u.kolommen.naam === 'Uitgevoerd door' && u.kolommen.uren === 'Gewerkte tijd' && u.kolommen.project === 'Project' && u.kolommen.projectNummer === 'Projectnummer' && u.kolommen.datum === 'Datum' && !('uren' in u.kolommen && /salaris/i.test(u.kolommen.uren)), 'XPS-dienstenexport: kolommen herkend (Uitgevoerd door = naam, Gewerkte tijd = uren, Project en niet Projectleider)');
+  eis(u.gelezen === 15 && u.gekoppeld === 6 && O.status === 6 && O.toekomst === 1 && O.geenTalent === 1 && O.geenUren === 1 && O.oud === 0 && O.dubbeleNaam === 0 && u.weekregels === u.regels.length, 'XPS-dienstenexport: gelezen, gekoppeld en overgeslagen per reden (status, toekomst, geen talent, geen uren) tellen op');
+  eis(eva && eva.uren === 13 && eva.diensten === 2 && eva.week === '2026-W43' && eva.trajectId === 't1' && u.regels.some(function (x) { return x.talentId === 'tl5' && x.diensten === 1 && x.uren === 3.25; }) && !u.regels.some(function (x) { return x.talentId === 'tl2' && x.diensten > 1; }), 'XPS-dienstenexport: alleen gewerkte diensten tellen (Afwezig (ziek), Geannuleerd en Reserve niet); per talent × ISO-week × project; Nina via haar unieke naam');
+  eis(u.onbekend.length === 1 && u.onbekend[0].naam === 'Sanne Voorbeeld' && u.onbekend[0].diensten === 1 && u.onbekendAantal === 1, 'XPS-dienstenexport: een onbekend talent komt in de lijst onbekend met het aantal diensten');
+  var gen = u.genegeerdeKolommen.map(function (g) { return g.kolom; }), json = JSON.stringify(u);
+  eis(gen.indexOf('Salaris (eenheid)') >= 0 && gen.indexOf('Salaris (totaal)') >= 0 && u.genegeerdeKolommen.filter(function (g) { return /^Salaris/.test(g.kolom); }).every(function (g) { return /loongegevens/.test(g.hint) && /uit de export/.test(g.hint); }) && gen.indexOf('Projectleider') >= 0 && json.indexOf('113,75') < 0 && json.indexOf('113.75') < 0 && json.indexOf('17,50') < 0, 'XPS-dienstenexport: salariskolommen worden genegeerd (met hint om ze uit de export te laten) en hun waarden staan nergens in het resultaat');
+  eis(!/ziek/i.test(json), 'XPS-dienstenexport: "Afwezig (ziek)" komt nergens per persoon in het resultaat (AVG), alleen in het totaal overgeslagen.status');
+  // 2. koppeling: accountnummer → e-mail → unieke naam; dubbele naam en onbekend; nooit een naam als xpsId
+  var talenten = TAL.concat([{ id: 'tlx1', voornaam: 'Eva', achternaam: 'de Wit' }, { id: 'tlx2', voornaam: 'Zonder', achternaam: 'Nummer' }]);
+  var k = ctx.urenUitRijen(lijst([KOP.concat(['Accountnummer', 'E-mail']),
+    dienst('2026-10-26', '6', 'Iemand Anders', 'Ingeroosterd', '', ['X5003', '']),                       // accountnummer wint van de naam
+    dienst('2026-10-26', '5,5', 'A. Yilmaz', 'Ingeroosterd', '', ['', 'Ali.Yilmaz@mail.example']),         // e-mail
+    dienst('2026-10-27', '4', '  tim   VERHOEVEN ', 'Ingeroosterd', '', ['', '']),                         // naam: kleine letters, enkele spaties
+    dienst('2026-10-27', '4', 'Zoe Kaya', 'Ingeroosterd', '', ['', '']),                                     // naam zonder accent (Zoë Kaya)
+    dienst('2026-10-27', '4', 'Eva de Wit', 'Ingeroosterd', '', ['', '']),                                   // twee talenten met deze naam
+    dienst('2026-10-28', '4', 'Eva de Wit', 'Ingeroosterd', '', ['', '']),
+    dienst('2026-10-27', '4', 'Piet Onbekend', 'Ingeroosterd', '', ['', '']),
+    dienst('2026-10-27', '4', 'Daan Kuipers', 'Ingeroosterd', '', ['X4444', '']),                           // naam past, maar ander accountnummer: niet koppelen
+    dienst('2026-10-27', '4', 'Zonder Nummer', 'Ingeroosterd', '', ['', ''])]), talenten, { vandaag: V });
+  var regel = function (id) { return k.regels.filter(function (x) { return x.talentId === id; })[0]; };
+  eis(regel('tl3') && regel('tl3').uren === 6 && regel('tl2') && regel('tl2').uren === 5.5 && regel('tl4') && regel('tl24') && !regel('tl1') && !regel('tlx1') && !regel('tl6'), 'koppeling: accountnummer, dan e-mail (hoofdletters maken niet uit), dan een unieke volledige naam (spaties, hoofdletters en accenten genormaliseerd)');
+  eis(k.overgeslagen.dubbeleNaam === 2 && k.dubbel.length === 1 && k.dubbel[0].naam === 'Eva de Wit' && k.dubbel[0].diensten === 2 && k.dubbel[0].talenten === 2, 'koppeling: een naam die bij twee talenten hoort wordt niet gekoppeld en staat onder dubbel (naam + aantal diensten)');
+  eis(k.overgeslagen.geenTalent === 2 && k.onbekend.some(function (o) { return o.naam === 'Piet Onbekend' && o.diensten === 1; }) && k.onbekend.some(function (o) { return o.xpsId === 'x4444' && o.naam === 'Daan Kuipers'; }), 'koppeling: onbekend talent en een naam met een ander accountnummer komen onder onbekend');
+  eis(regel('tlx2') && regel('tlx2').xpsId === '' && regel('tl4').xpsId === 'X5004' && k.regels.every(function (x) { return !/\s/.test(x.xpsId); }), 'koppeling op naam schrijft nooit een naam in xpsId (leeg zonder accountnummer, anders het nummer van het talent)');
+  // 3. geen koppelkolom = duidelijke fout; geen stille nul
+  eis(fout(function () { ctx.urenUitRijen(lijst([['Datum', 'Gewerkte tijd', 'Status', 'Project'], ['2026-10-26', '6', 'Ingeroosterd', 'x']]), TAL, { vandaag: V }); }) === 'Dit bestand heeft geen kolom om uren aan talenten te koppelen (accountnummer, e-mail of naam). Vraag XPS de export met accountnummer, of stel xpsKolommen in.', 'een export zonder accountnummer, e-mail of naam geeft de Nederlandse fout in plaats van 0 regels');
+  // 4. statussen: standaard en via Instellingen xpsStatussen; ziek nooit per persoon
+  var st = function () { return ctx.urenUitRijen(lijst([KOP.concat(['Accountnummer']), dienst('2026-10-26', '4', 'x', 'No-show', '', ['X5007']), dienst('2026-10-26', '4', 'x', 'Te laat afgemeld', '', ['X5007']), dienst('2026-10-27', '4', 'x', 'Afwezig', '', ['X5007']), dienst('2026-10-28', '4', 'x', 'Afwezig (ziek)', '', ['X5007']), dienst('2026-10-29', '4', 'x', 'Ingeroosterd', '', ['X5007'])]), TAL, { vandaag: V }); };
+  var s1 = st(), r1 = s1.regels[0];
+  eis(s1.regels.length === 1 && r1.noShows === 1 && r1.lateAfmeldingen === 1 && r1.diensten === 1 && r1.uren === 4 && s1.overgeslagen.status === 2, 'statussen standaard: no-show en te laat afgemeld apart, Afwezig en Afwezig (ziek) overgeslagen, Ingeroosterd in het verleden = gewerkt');
+  ctx.zetInstelling('xpsStatussen', { noShow: ['no-show', 'afwezig'] });
+  var s2 = st(); ctx.zetInstelling('xpsStatussen', null);
+  eis(s2.regels[0].noShows === 2 && s2.overgeslagen.status === 1 && s2.regels[0].lateAfmeldingen === 1 && st().regels[0].noShows === 1, 'xpsStatussen {noShow:["no-show","afwezig"]} vervangt de standaardlijst: Afwezig telt als no-show, Afwezig (ziek) blijft overgeslagen (ziek nooit per persoon); zonder instelling weer standaard');
+  // 5. tijdvenster: toekomst en ouder dan het archiefvenster tellen niet
+  var oudD = ctx.datumStr(new (vm.runInContext('Date', ctx))(2026, 9, 30 - 7 * (ctx.UREN_ARCHIEF_WEKEN + 4), 12));
+  var tv = ctx.urenUitRijen(lijst([KOP.concat(['Accountnummer']), dienst('2026-10-31', '4', 'x', 'Ingeroosterd', '', ['X5007']), dienst(oudD, '4', 'x', 'Ingeroosterd', '', ['X5007']), dienst('30-10-2026', '4', 'x', 'Ingeroosterd', '', ['X5007'])]), TAL, { vandaag: V });
+  eis(tv.overgeslagen.toekomst === 1 && tv.overgeslagen.oud === 1 && tv.regels.length === 1 && tv.regels[0].uren === 4 && tv.regels[0].week === '2026-W44' && tv.archiefVanaf === ctx.urenArchiefGrens(V), 'tijdvenster: morgen = toekomst, ouder dan ' + ctx.UREN_ARCHIEF_WEKEN + ' weken = oud; vandaag (ook als dd-mm-jjjj) telt mee');
+  // 6. loonkolommen nooit gelezen, ook niet als xpsKolommen ze aanwijst
+  ctx.zetInstelling('xpsKolommen', { uren: ['salaris (totaal)'] });
+  var sal = ctx.urenUitRijen(lijst([KOP.concat(['Accountnummer']), dienst('2026-10-26', '4', 'x', 'Ingeroosterd', '', ['X5007'])]), TAL, { vandaag: V }); ctx.zetInstelling('xpsKolommen', null);
+  eis(!sal.kolommen.uren && sal.regels[0].uren === 0, 'xpsKolommen die uren op een salariskolom zet, wordt genegeerd: loon wordt nooit gelezen');
+  // 7. projectkoppeling: projectnummer exact, anders het langste xpsProject (≥ 5 tekens) in de projectnaam
+  var P = ctx.projectKoppelaar([{ id: 'tp1', xpsProject: 'Kompas College | Huiswerkbegeleiding' }, { id: 'tp2', xpsProject: 'Kompas' }, { id: 'tp3', xpsProject: 'Komp' }, { id: 'tp4', xpsProject: '10.887' }]);
+  eis((P('', 'Kompas College | Huiswerkbegeleiding (01-08-2026 ~ 31-07-2027)') || {}).id === 'tp1' && (P('', 'Kompas  college | basisvaardigheden') || {}).id === 'tp2' && P('', 'Komp x') === null && (P('10.887', 'Iets anders') || {}).id === 'tp4' && (P('99.999', 'kompas college | huiswerkbegeleiding') || {}).id === 'tp1', 'projectkoppeling: projectnummer exact; anders de projectnaam exact of het langste vaste deel (minstens 5 tekens)');
+  // 8. urenImport uit de Drive-map: gewerkt telt, geannuleerd/ziek/toekomst niet; Financiën geleverd en plaatsing rekenen alleen met gewerkte uren
+  var CD = vm.runInContext('Date', ctx), nuC = new CD(), wk = ctx.isoWeekStr(ctx.plusDagen(-7)), ma = ctx.maandagVanWeek(wk), dag = function (n) { return ctx.plusDagenVan(ma, n); }, map = ctx.xpsExportMap();
+  var sjVan = function (d) { var j = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)); return m >= 8 ? j + '-' + (j + 1) : (j - 1) + '-' + j; }, sj = sjVan(ma), mi = ctx.schooljaarMaanden(sj).indexOf(ma.slice(0, 7));
+  var geleverd = function () { return roep(SOPHIE, 'apiFinancien', sj).scholen.reduce(function (n, s) { return n + s.projecten.filter(function (p) { return p.id === 't2'; }).reduce(function (m, p) { return m + p.reeksen.geleverd[mi]; }, 0); }, 0); };
+  ctx.schrijfVeel('Kandidaten', [{ id: 'c74a', talentId: 'tl11', trajectId: 't2', vacatureId: 'v74', naam: 'Thijs Brouwer', status: ctx.KANDIDAAT_KLAAR, statusHistorie: '{}' }, { id: 'c74b', talentId: 'tl12', trajectId: 't2', vacatureId: 'v74', naam: 'Sara Peeters', status: ctx.KANDIDAAT_KLAAR, statusHistorie: '{}' }]);
+  var voorG = geleverd(), csv = KOP.concat(['Accountnummer', 'Projectnummer']).join(';') + '\n' + [dienst(dag(0), '4', 'Thijs Brouwer', 'Ingeroosterd', '', ['X5011', '10.887']), dienst(dag(1), '4', 'Thijs Brouwer', 'Geannuleerd (klant)', '', ['X5011', '10.887']), dienst(dag(2), '4', 'Thijs Brouwer', 'Afwezig (ziek)', '', ['X5011', '10.887']),
+    dienst(ctx.datumStr(ctx.plusDagen(1)), '4', 'Thijs Brouwer', 'Ingeroosterd', '', ['X5011', '10.887']), dienst(dag(0), '6', 'Sara Peeters', 'Geannuleerd (intern)', '', ['X5012', '10.887']), dienst(dag(1), '6', 'Sara Peeters', 'Afwezig', '', ['X5012', '10.887'])].map(function (r) { return r.join(';'); }).join('\n');
+  ctx.P.setProperty('LAATSTE_URENIMPORT', '');
+  var gBest = map.createFile(ctx.Utilities.newBlob(csv, 'text/csv', 'xps-diensten-v74.csv')), imp4 = ctx.urenImport(), tu = ctx.lees('TalentUren').filter(function (x) { return x.talentId === 'tl11' && x.week === wk; });
+  eis(imp4.fouten.length === 0 && imp4.overgeslagen.status >= 3 && imp4.overgeslagen.toekomst >= 1 && tu.length === 1 && Number(tu[0].uren) === 4 && Number(tu[0].diensten) === 1 && tu[0].trajectId === 't2' && !ctx.lees('TalentUren').some(function (x) { return x.talentId === 'tl12' && x.week === wk; }) && imp4.ongewijzigd >= 1, 'urenImport: van de dienstenexport telt alleen de gewerkte dienst (4 uur); geannuleerd, ziek en toekomst niet; ongewijzigde weekregels worden niet opnieuw geschreven');
+  eis(geleverd() - voorG === 4 * 42 * 100, 'Financiën: geleverd telt alleen de gewerkte uren (4 × € 42), geen geannuleerde of zieke diensten');
+  var wkT2 = ctx.isoWeekStr(ctx.plusDagen(14)), maT2 = ctx.maandagVanWeek(wkT2), sjT2 = sjVan(maT2), miT2 = ctx.schooljaarMaanden(sjT2).indexOf(maT2.slice(0, 7)), gelT2 = function () { return roep(SOPHIE, 'apiFinancien', sjT2).scholen.reduce(function (n, s) { return n + s.projecten.filter(function (p) { return p.id === 't2'; }).reduce(function (m, p) { return m + p.reeksen.geleverd[miT2]; }, 0); }, 0); };
+  var voorT2 = gelT2(); ctx.schrijfVeel('TalentUren', [{ id: 'tu74-toekomst', talentId: 'tl11', xpsProject: '10.887', trajectId: 't2', week: wkT2, uren: 10, diensten: 1, noShows: 0, lateAfmeldingen: 0 }]);
+  eis(gelT2() === voorT2, 'Financiën: een weekregel in de toekomst (uit een import van vóór v7.4) telt niet als geleverd');
+  ctx.verwijderRijen('TalentUren', function (x) { return x.id === 'tu74-toekomst'; });
+  eis(ctx.vind('Kandidaten', 'c74a').status === 'geplaatst' && ctx.vind('Kandidaten', 'c74b').status === ctx.KANDIDAAT_KLAAR, 'plaatsing uit de uren: wie gewerkt heeft wordt geplaatst, wie alleen geannuleerde of afwezige diensten heeft niet');
+  var fut = ctx.lees('TalentUren').filter(function (x) { return x.talentId === 'tl11'; }), alleTU = JSON.stringify(ctx.lees('TalentUren'));
+  eis(fut.every(function (x) { return String(x.week) <= ctx.isoWeekStr(nuC); }) && alleTU.indexOf('99,99') < 0 && alleTU.indexOf('99.99') < 0 && ctx.TABELLEN.TalentUren.every(function (c) { return !/salaris|loon|tarief/i.test(c); }), 'urenImport: geen weken in de toekomst opgeslagen en geen loonwaarden in TalentUren');
+  // 9. een bestand zonder koppelkolom: naast een goed bestand een fout in 'fouten' (en LAATSTE_URENIMPORT schuift niet op); alleen dat bestand = de fout zelf via de api
+  var it = map.getFiles(); while (it.hasNext()) it.next().setTrashed(true);
+  ctx.P.setProperty('LAATSTE_URENIMPORT', '');
+  var slecht = map.createFile(ctx.Utilities.newBlob('Datum;Gewerkte tijd;Status;Project\n' + dag(0) + ';4;Ingeroosterd;10.887', 'text/csv', 'xps-zonder-sleutel.csv')), goed = map.createFile(ctx.Utilities.newBlob(csv, 'text/csv', 'xps-diensten-v74b.csv'));
+  var deels = ctx.urenImport();
+  eis(deels.bestanden === 1 && deels.fouten.length === 1 && deels.fouten[0].bestand === 'xps-zonder-sleutel.csv' && /geen kolom om uren aan talenten te koppelen/.test(deels.fouten[0].melding) && !ctx.P.getProperty('LAATSTE_URENIMPORT'), 'urenImport: een bestand zonder koppelkolom staat in fouten; de rest wordt ingelezen en LAATSTE_URENIMPORT schuift niet op');
+  goed.setTrashed(true);
+  eis(/^xps-zonder-sleutel\.csv: Dit bestand heeft geen kolom om uren aan talenten te koppelen/.test(faalt(IRIS, 'apiTalentUrenImport')), 'XPS-uren importeren met alleen zo\'n bestand geeft de fout zelf (geen stille nul)');
+  slecht.setTrashed(true); gBest.setTrashed(true);
+  // 10. een los weeknummer is de laatste week met dat nummer (in januari is week 52 die van vorig jaar)
+  eis(ctx.weekVanNummer(52, '2027-01-06') === '2026-W52' && ctx.weekVanNummer(1, '2027-01-06') === '2027-W01' && ctx.weekVanNummer(44, '2026-10-30') === '2026-W44' && ctx.weekVanNummer(45, '2026-10-30') === '2025-W45', 'weekVanNummer: een los weeknummer ligt nooit in de toekomst');
+  // 11. prestatie: 100.000 verzonnen diensten verwerken (doel < 20 s; Apps Script heeft 6 minuten)
+  var groot = [KOP.concat(['Accountnummer', 'Projectnummer'])], STS = ['Ingeroosterd', 'Ingeroosterd', 'Ingeroosterd', 'Ingeroosterd', 'Ingeroosterd', 'Ingeroosterd', 'Ingeroosterd', 'Ingeroosterd', 'Afwezig', 'Geannuleerd (klant)'];
+  for (var gi = 0; gi < 100000; gi++) groot.push(dienst(ctx.plusDagenVan(V, -(gi % 400) + 20), String(3 + gi % 6) + ',5', 'Talent ' + (gi % 900), STS[gi % 10], 'School ' + (gi % 60) + ' | Ondersteuning (01-08-2026 ~ 31-07-2027)', ['X' + (6000 + gi % 900), '']));
+  var gt = lijst(groot), t0 = Date.now(), gr = ctx.urenUitRijen(gt, TAL.concat(Array.apply(null, Array(900)).map(function (_, i) { return { id: 'tg' + i, voornaam: 'Talent', achternaam: String(i), xpsId: 'X' + (6000 + i) }; })), { vandaag: V, trajecten: ctx.lees('Trajecten') }), dt = (Date.now() - t0) / 1000;
+  eis(gr.gelezen === 100000 && gr.gekoppeld > 0 && gr.overgeslagen.oud > 0 && gr.overgeslagen.toekomst > 0 && dt < 20, 'prestatie: 100.000 diensten in ' + dt.toFixed(2) + ' s verwerkt (doel < 20 s)');
+} catch (e) { eis(false, 'v7.4 urenimport: onverwachte fout ' + e.message); } })();
+
+(function () { try {
+  var dd = function (n) { return plusDagen(n).split('-').reverse().join('-'); }, P = plusDagen(-1);
+  ctx.schrijfVeel('Facturen', [['77400001', 1000, -20], ['77400002', 2000, -18], ['77400003', 300, -10], ['77400006', 777, -30], ['77400005', 400, -75]].map(function (x, i) { return { id: 'fx74-' + i, trajectId: 't1', omschrijving: 'Proef v7.4 ' + x[0], bedrag: x[1], datum: plusDagen(x[2]), status: 'verzonden', factuurnummer: x[0], verzonden: plusDagen(x[2]) }; }));
+  var KOPF = 'Datum;Factuurnummer;Betreft;Referentie / betalingskenmerk;Debiteur;Debiteurnummer;Aan;Totaal;Leeftijd;Open;Debiteur Exact ID';
+  var r = function (dag, nr, deb, debnr, tot, open) { return ['"' + dd(dag) + '"', nr, 'Proef', '', deb, debnr, 'adm@school.example', tot, '0', open, ''].join(';'); };
+  var csv = KOPF + '\n' + [r(-20, '77400001', 'Esdoorn Lyceum', '10001', '1000,00', '0,00'), r(-18, '77400002', 'Esdoorn Lyceum', '10001', '2000,00', '500,00'), r(-10, '77400003', 'Esdoorn Lyceum', '10001', '300,00', '0,00'),
+    r(-5, '77400009', 'Esdoorn Lyceum', '10001', '-300,00', '0,00'), r(-4, '77400010', 'Esdoorn Lyceum', '10001', '-123,00', '0,00'), r(-30, '77400006', 'Kompas College', '10002', '777,00', '0,00'), r(-15, '77400007', 'Kompas College', '10002', '777,00', '0,00'),
+    r(-12, '77400008', 'Kompas College', '10002', '-777,00', '0,00'), r(-75, '77400005', 'Esdoorn Lyceum', '10001', '400,00', '0,00'), r(-3, '77400011', 'Esdoorn Lyceum', '10001', '-400,00', '0,00'), r(-3, '77400012', 'Lyceum Valkenoord', '10006', '400,00', '400,00'),
+    r(-6, '77400013', 'Waterpoort College', '10007', '500,00', '0,00'), r(-6, '77400015', 'Waterpoort College', '10007', '-500,00', '0,00'), r(-6, '77400016', 'Waterpoort College', '10007', '500,00', '500,00')].join('\n');  // gecorrigeerde factuur op de dag van de creditnota
+  var c = roep(SOPHIE, 'apiExactImport', csv, { peildatum: P }), nrs = function (l) { return l.map(function (x) { return x.nummer; }); };
+  eis(c.kolommen.factuurnummer === 'Factuurnummer' && c.kolommen.datum === 'Datum' && c.kolommen.bedrag === 'Totaal' && c.kolommen.open === 'Open' && c.kolommen.debiteur === 'Debiteur' && c.kolommen.omschrijving === 'Betreft' && !c.kolommen.betaald && !c.toegepast, 'Exact: het factuurformaat (Datum, Totaal, Betreft, Debiteur, Open) wordt zonder kolomtoewijzing herkend');
+  var b1 = c.betaald.filter(function (x) { return x.nummer === '77400001'; })[0];
+  eis(b1 && b1.datum === P && b1.bron === 'open' && c.meldingen.some(function (m) { return /betaald volgens openstaand bedrag; datum = peildatum/.test(m); }) && nrs(c.betaald).indexOf('77400003') < 0, 'Exact: zonder betaaldatum telt Open = 0 als betaald op de peildatum (met melding); een gecrediteerde factuur met Open 0 niet');
+  var dl = c.deelsBetaald.filter(function (x) { return x.nummer === '77400002'; })[0];
+  eis(dl && dl.open === 50000 && dl.bedrag === 200000 && nrs(c.betaald).indexOf('77400002') < 0, 'Exact: 0 < Open < bedrag staat onder deels betaald met het openstaande bedrag');
+  var cr = function (n) { return c.creditnotas.filter(function (x) { return x.nummer === n; })[0]; };
+  eis(cr('77400009') && cr('77400009').origineel === '77400003' && cr('77400009').inAthena && cr('77400009').bedrag === -30000 && cr('77400008') && cr('77400008').origineel === '77400007' && !cr('77400008').inAthena && !cr('77400011') && !cr('77400010'), 'Exact: een creditnota koppelt aan dezelfde debiteur, hetzelfde bedrag, tot 60 dagen eerder, de meest recente (77400007, niet 77400006); 75 dagen is te oud');
+  eis(cr('77400015') && cr('77400015').origineel === '77400013' && nrs(c.alleenExact).indexOf('77400016') >= 0 && nrs(c.alleenExact).indexOf('77400013') < 0, 'Exact: een gecorrigeerde factuur op de dag van de creditnota (hoger nummer, nog open) wordt niet als origineel gekozen: Open 0 en het lagere nummer gaan voor');
+  var ae = function (n) { return c.alleenExact.filter(function (x) { return x.nummer === n; })[0]; };
+  eis(ae('77400010') && ae('77400010').creditnota === true && ae('77400011') && ae('77400011').creditnota === true && !ae('77400009') && !ae('77400008') && !ae('77400007') && ae('77400012') && ae('77400012').creditnota === false && c.meldingen.some(function (m) { return /2 creditnota's hebben geen oorspronkelijke factuur/.test(m); }), 'Exact: gekoppelde creditnota\'s en hun originelen staan niet onder Alleen in Exact; een creditnota zonder origineel wel, gemarkeerd');
+  eis(ctx.lees('Facturen').filter(function (f) { return f.id === 'fx74-2'; })[0].factuurnummer === '77400003', 'Exact: controleren verandert niets');
+  var toe = roep(SOPHIE, 'apiExactImport', csv, { peildatum: P, toepassen: true }), F = function (id) { return ctx.lees('Facturen').filter(function (f) { return f.id === id; })[0]; };
+  eis(F('fx74-0').status === 'betaald' && ctx.datumIn(F('fx74-0').betaald) === P && F('fx74-1').status === 'verzonden' && !F('fx74-1').betaald, 'Exact toepassen: Open 0 → betaald op de peildatum; deels betaald blijft verzonden');
+  var eerste = ctx.keuzelijst('factuurStatussen')[0], fc = F('fx74-2'), act = ctx.lees('Activiteiten').filter(function (a) { return a.trajectId === 't1' && a.bron === 'exact' && /77400003/.test(a.onderwerp + a.tekst) && /77400009/.test(a.onderwerp + a.tekst); });
+  eis(fc.status === eerste && !fc.factuurnummer && !fc.verzonden && !fc.betaald && act.length === 1 && toe.toegepast, 'Exact toepassen: de gecrediteerde termijn gaat terug naar "' + eerste + '" zonder factuurnummer en datums; beide nummers staan in een activiteit op het project');
+  var nog = roep(SOPHIE, 'apiExactImport', csv, { peildatum: plusDagen(0), toepassen: true });
+  eis(ctx.datumIn(F('fx74-0').betaald) === P && F('fx74-2').status === eerste && ctx.lees('Activiteiten').filter(function (a) { return a.trajectId === 't1' && /77400009/.test(a.onderwerp + a.tekst); }).length === 1 && !nog.bijgewerkt.some(function (x) { return x.nummer === '77400001'; }), 'Exact opnieuw toepassen: de betaaldatum schuift niet naar de nieuwe peildatum en de creditnota wordt niet nog eens verwerkt');
+  // een opgegeven kolomnaam wint; anders gaat de standaardnaam vóór een andere naam
+  var twee = 'Factuurnummer;Factuurdatum;Datum;Bedrag\n77400001;' + dd(-20) + ';' + dd(-19) + ';1000,00';
+  eis(roep(SOPHIE, 'apiExactImport', twee, {}).kolommen.datum === 'Factuurdatum' && roep(SOPHIE, 'apiExactImport', twee, { kolommen: { datum: 'Datum' } }).kolommen.datum === 'Datum', 'Exact: een opgegeven kolomtoewijzing wint; zonder toewijzing de ingestelde of standaardnaam');
+  // het rapport Openstaande posten: herkend, met de uitleg wat wel nodig is
+  var rapport = 'Administratie: 999 - Voorbeeld BV;;\nDatum: 01-09-2026 (fictief);;\nOpenstaande posten debiteuren;;\n;;\nRelatie;;\n;;\nCode + Naam;Gemiddeld aantal dagen tot betaling;Openstaand\n10001 Esdoorn Lyceum;33;1950\nTotaal;;1950';
+  var rf = faalt(SOPHIE, 'apiExactImport', rapport, {});
+  eis(/^Dit is het Exact-rapport Openstaande posten: dat heeft één regel per relatie\. Voor de afstemming is een export per factuur nodig met factuurnummer, factuurdatum, bedrag en betaaldatum, als csv met de kolomnamen op de eerste regel\.$/.test(rf) && /Openstaande posten/.test(faalt(SOPHIE, 'apiExactImport', 'Code + Naam;Gemiddeld aantal dagen tot betaling;Openstaand\n10001 X;3;10', {})), 'Exact: het rapport Openstaande posten (kopregels of Code + Naam / Openstaand) geeft een duidelijke fout');
+  eis(/Ongeldige peildatum/.test(faalt(SOPHIE, 'apiExactImport', csv, { peildatum: 'gisteren' })) && ctx.bedragIn('1.950') === 195000 && ctx.bedragIn('-936,00') === -93600 && ctx.bedragIn('1950') === 195000 && ctx.bedragIn('1.950,50') === 195050, 'Exact: ongeldige peildatum geweigerd; bedragen met duizendtalpunt, decimaalkomma en minteken');
+  // het verzonnen voorbeeldbestand in het factuurformaat
+  var vf = roep(SOPHIE, 'apiExactImport', fs.readFileSync(path.join(R, 'test/voorbeelden/facturen_export.csv'), 'utf8'), {});
+  eis(vf.creditnotas.length === 1 && vf.creditnotas[0].nummer === '20261060' && vf.creditnotas[0].origineel === '20261052' && vf.deelsBetaald.some(function (x) { return x.nummer === '20261051' && x.open === 50000; }) && nrs(vf.alleenExact).indexOf('20261055') >= 0 && nrs(vf.alleenExact).indexOf('20261061') >= 0 && nrs(vf.alleenExact).indexOf('20261060') < 0, 'voorbeeld facturen_export.csv: creditnota-paar, deels betaald en alleen in Exact');
+} catch (e) { eis(false, 'v7.4 Exact-afstemming: onverwachte fout ' + e.message); } })();
 
 /* ---- bestaande schermen blijven werken ---- */
 ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });
