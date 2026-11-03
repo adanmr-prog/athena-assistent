@@ -4555,12 +4555,30 @@ function aanmeldingenRun() {
 // v7.4.1: kolommen die nooit gelezen worden (AVG, zoals XPS_PRIVE in v7.4): geboortedatum, BSN/sofinummer, IBAN/rekeningnummer, ID/paspoort, nationaliteit,
 // salaris/loon/tarief/beloning, gezondheid/ziekte/medisch/huisarts. Getoetst op de kern van de kop; een privéwoord in de toelichting telt alleen als de kern
 // geen naam-, contact- of adresveld is ('Volledige naam (zoals op je ID)' is een naam). AANMELD_PRIVE_WOORD alleen als los woord ('id', niet 'beschikbaarheid').
-var AANMELD_PRIVE = /geboorte|birth|geb datum|gebdatum|bsn|burgerservice|sofi|citizen|iban|rekeningn|bankrekening|bank account|bankgegevens|paspoort|passport|identiteit|identity|legitimatie|nationaliteit|nationality|salaris|salary|loon|wage|tarief|vergoeding|beloning|gezondheid|health|ziek|medisch|medical|medic|huisarts|beperking|handicap|allergie|religie|geloof/;
-var AANMELD_PRIVE_WOORD = /(^| )(id|rate|bruto|netto)( |$)/;
-var AANMELD_PRIVE_NIET = /ziektevervang[a-z]*|ziekteverlofvervang[a-z]*/g;  // v7.4.1: werk, geen gezondheid ('Op welke dagen ben je beschikbaar voor ziektevervanging?')
-function priveWoord(t) { t = String(t || '').replace(AANMELD_PRIVE_NIET, ' '); return AANMELD_PRIVE.test(t) || AANMELD_PRIVE_WOORD.test(t); }
-// v7.4.1 (AVG): vrije tekst die Athena bewaart ('Niet herkend', een ander toestemmingsantwoord) zonder gezondheid, BSN, IBAN en dergelijke
-function zonderPrive(s) { return priveWoord(aanmeldWoorden(s)) ? '[weggelaten: privégegevens]' : s; }
+var AANMELD_PRIVE = /geboorte|birth|geb datum|gebdatum|bsn|burgerservice|citizen|iban|rekeningn|bankrekening|bank account|bankgegevens|paspoort|passport|identiteit|identity|legitimatie|nationaliteit|nationality|salaris|salary|loon|wage|tarief|vergoeding|beloning|gezondheid|health|medisch|medical|medic|huisarts|beperking|handicap|allergie|religie|geloof/;
+var AANMELD_PRIVE_WOORD = /(^| )(id|rate|bruto|netto|sofi|sofinummer|sofinr)( |$)/;  // v7.4.1 ronde 4: 'sofi' alleen als woord ('Sofi-nummer'), niet in 'filosofie'
+// v7.4.1 ronde 4: 'ziek' alleen als het over de aanmelder gaat, niet over invallen of vervangen bij ziekte van een docent ('Wanneer ben je beschikbaar? (ook voor
+// invallen bij ziekte)', 'ziektevervanging', 'Beschikbaarheid bij ziekte of verlof van docenten'); 'ziekteverlof' alleen blijft privé
+function ziekOverZelf(t) { return /ziek|sick|illness/.test(t) && !/inval|vervang|docent|leerkracht|leraar|leraren|collega|teacher/.test(t.replace(/invalid[a-z]*/g, ' ')); }
+function priveWoord(t) { t = String(t || ''); return AANMELD_PRIVE.test(t) || AANMELD_PRIVE_WOORD.test(t) || ziekOverZelf(t); }
+// v7.4.1 ronde 4 (AVG): bijzondere persoonsgegevens in vrije tekst (art. 9-10 AVG): gezondheid, religie, strafrecht, seksuele geaardheid, afkomst, politiek en
+// vakbond. Getoetst op de woorden ('burn-out' = 'burn out'): BEGIN = een woord begint met de stam ('zwangerschapsverlof'), HEEL = alleen als heel woord
+// ('add', niet 'address'), DEEL = ook midden in een woord ('kleurenblind', 'fysiotherapie', 'functiebeperking'). 'ziek' via ziekOverZelf (priveWoord).
+var AANMELD_BIJZONDER_BEGIN = new RegExp('(^| )(burn ?out|overspann|zwanger|adhd|autis|dyslex|dyslect|depress|angst|chronisch|slechthorend|slechtziend|doof|doven|psycholo|psychiat|' +
+  'psychisch|psychose|medicijn|medicatie|diabet|epilep|kanker|astma|migraine|invalid|pregnan|disab|anxiety|religi|geloof|gelovig|moslim|islam|christen|christelijk|katholiek|' +
+  'protestant|hindoe|boeddh|jood|joods|moskee|kerk|gebed|ramadan|halal|kosher|koosjer|muslim|christian|jewish|strafbla|veroordeel|justitie|politie|gevangen|detentie|' +
+  'reclassering|criminal|convict|police|seksu|geaard|homo|lesbi|bisek|transgender|lhbt|lgbt|etnic|etnisch|afkomst|huidskleur|politiek|vakbond|vakbew)');
+var AANMELD_BIJZONDER_HEEL = /(^| )(add|ras|gay|hiv|aids)( |$)/, AANMELD_BIJZONDER_DEEL = /beperking|handicap|therap|rolstoel|hoofddoek|blind/;
+function bijzonderWoord(w) { return AANMELD_BIJZONDER_BEGIN.test(w) || AANMELD_BIJZONDER_HEEL.test(w) || AANMELD_BIJZONDER_DEEL.test(w); }
+// v7.4.1 ronde 4 (AVG): één filter voor elke vrije tekst die Athena uit een antwoord bewaart ('Niet herkend', een ander toestemmingsantwoord, de toestemmingstekst):
+// per onderdeel hoogstens 60 tekens, en met een privéwoord (AANMELD_PRIVE) of een bijzonder persoonsgegeven nooit de tekst zelf
+var AANMELD_NIET_OVERGENOMEN = '(eigen antwoord, niet overgenomen)';
+function vrijeTekst(s) {
+  var t = tekstIn(typeof s === 'string' ? s : String(s == null ? '' : s)).replace(/\s+/g, ' '), w = aanmeldWoorden(t);
+  if (!w) return '';
+  if (priveWoord(w) || bijzonderWoord(w)) return AANMELD_NIET_OVERGENOMEN;
+  return t.length > 60 ? t.slice(0, 59) + '…' : t;
+}
 var AANMELD_PERSOON = ['voornaam', 'tussenvoegsel', 'achternaam', 'naam', 'email', 'telefoon', 'contact', 'postcode', 'woonplaats'];
 // v7.4.1: woorden in een kop die op een ander slaan dan de aanmelder (een school, referent, begeleider, ouder of noodcontact) of op iets anders dan het profiel
 var AANMELD_ANDER = ['school', 'opleiding', 'universiteit', 'pabo', 'instelling', 'referent', 'referentie', 'contactpersoon', 'nood', 'ouder', 'moeder', 'vader', 'voogd',
@@ -4570,13 +4588,27 @@ var AANMELD_ANDER = ['school', 'opleiding', 'universiteit', 'pabo', 'instelling'
 // training of evaluatie. Niet 'opleiding' of 'nieuwsbrief': 'Welke opleiding volg je?' en 'Wil je de nieuwsbrief?' staan ook in een aanmeldformulier.
 var AANMELD_ANDER_FORMULIER = ['naam van je school', 'naam van de school', 'naam school', 'schoolnaam', 'naam van je organisatie', 'organisatie', 'bedrijf', 'bedrijfsnaam',
   'instelling', 'collega', 'collegas', 'informatieavond', 'evaluatie', 'tevreden', 'tevredenheid', 'training', 'workshop', 'cursus', 'deelnemer', 'deelnemers',
-  'hoeveel personen', 'company', 'organisation', 'organization', 'colleague', 'colleagues', 'satisfied', 'evaluation', 'feedback'];
+  'hoeveel personen', 'company', 'organisation', 'organization', 'colleague', 'colleagues', 'satisfied', 'evaluation', 'feedback', 'namens', 'offerte', 'on behalf'];  // v7.4.1 ronde 4: namens, offerte
 // v7.4.1: vraag- en stopwoorden (kosten 1 punt in de score) en ontkenningen (de woorden erna tellen niet: 'Persoonlijk e-mailadres (niet je schoolmail)')
 var AANMELD_STOP = ['wat', 'is', 'je', 'jouw', 'jij', 'jou', 'uw', 'u', 'mijn', 'ik', 'de', 'het', 'een', 'van', 'voor', 'op', 'in', 'aan', 'met', 'bij', 'naar', 'om', 'te', 'en', 'of',
   'welk', 'welke', 'waar', 'wanneer', 'hoe', 'wie', 'kunnen', 'kun', 'kan', 'kunt', 'we', 'wij', 'ons', 'ben', 'bent', 'heb', 'hebt', 'wil', 'wilt', 'graag', 'bijv', 'bijvoorbeeld',
   'optioneel', 'verplicht', 'eigen', 'persoonlijk', 'persoonlijke', 'dus', 'zoals', 'vul', 'hier', 'geef', 'ga', 'werken', 'doen', 'bereiken', 'bereikbaar', 'mag', 'mogen', 'nog',
   'ook', 'zijn', 'die', 'dat', 'your', 'what', 'the', 'a', 'an', 'to', 'do', 'you', 'can', 'please', 'enter', 'are', 'which', 'for', 'and', 'or', 'my', 'i'];
 var AANMELD_NEE = ['niet', 'geen', 'zonder', 'excl', 'exclusief', 'behalve', 'not', 'no', 'without', 'except'];
+// v7.4.1 ronde 4: een witte lijst voor e-mail, telefoon, contact en naam (ook een tweede kolom): de kern van de kop bestaat alleen uit woorden over de aanmelder
+// zelf, vraag- en stopwoorden (AANMELD_STOP), een ontkenning, een nummer of een losse letter ('1a.', 'B.'). Elk ander woord (stagedocent, teamleider, referee,
+// manager, school, ouder, noodcontact, delen, toestemming) maakt er geen contact- of naamkolom van: 'E-mailadres van je stagedocent' is niet het adres van het talent.
+var AANMELD_ZELF = ['email', 'emailadres', 'mail', 'mailadres', 'adres', 'address', 'telefoon', 'telefoonnummer', 'tel', 'telnr', 'nummer', 'nr', 'mobiel', 'mobiele',
+  'mobile', 'gsm', '06', 'whatsapp', 'phone', 'telephone', 'cell', 'cellphone', 'number', 'contact', 'contactgegevens', 'contactinformatie', 'contactnummer', 'gegevens',
+  'persoonsgegevens', 'informatie', 'details', 'naam', 'namen', 'voornaam', 'voornamen', 'roepnaam', 'achternaam', 'tussenvoegsel', 'tussenvoegsels', 'tussenv', 'voorvoegsel',
+  'familienaam', 'volledige', 'volledig', 'heet', 'name', 'names', 'first', 'firstname', 'last', 'lastname', 'surname', 'full', 'given', 'family', 'prive', 'how', 'reach',
+  'waarop', 'waarmee', 'via', 'vraag', 'question', 'achter', 'voor', 'bereiken', 'bereikbaar', 'personal', 'own', 'zodat', 'bellen', 'bel', 'mailen', 'appen', 'sms', 'call',
+  'overdag', 'best', 'beste', 'liefst', 'makkelijkst', 'incl', 'inclusief', 'aanmelder', 'kandidaat', 'sollicitant', 'applicant', 'thuis', 'werk', 'zakelijk',
+  'bevestiging', 'confirmation', 'correspondentie'];
+var AANMELD_ZELF_BEGIN = /^(telefoon|telnr|email|mail|mobiel|gsm|whatsapp|phone)/;
+function kernOverZelf(kern) {
+  return kern.every(function (w) { return AANMELD_ZELF.indexOf(w) >= 0 || AANMELD_ZELF_BEGIN.test(w) || AANMELD_STOP.indexOf(w) >= 0 || AANMELD_NEE.indexOf(w) >= 0 || /^\d+[a-z]?$/.test(w) || w.length === 1; });
+}
 var AANMELD_ONTKEND = ['niet', 'geen', 'not', 'no', 'never', 'nooit'];  // v7.4.1: in de kern van functies of sector = de omgekeerde vraag ('… wil je liever niet doen?')
 // v7.4.1: meer kolommen voor functies of sector: noemt er één een wens, dan tellen alleen die ('Welke functie zoek je?' naast 'Welke functie heb je?')
 var AANMELD_WENS = ['wil', 'wilt', 'zoek', 'zoekt', 'gewenst', 'gewenste', 'voorkeur', 'interesse', 'liefst', 'graag', 'desired', 'preferred', 'want', 'would like',
@@ -4585,27 +4617,30 @@ var AANMELD_WENS = ['wil', 'wilt', 'zoek', 'zoekt', 'gewenst', 'gewenste', 'voor
 // vanaf vier letters het begin zijn van een langer woord ('telefoon' past op 'telefoonnummer', 'naam' niet op 'voornaam'); niet = een kop met zo'n woord is
 // nooit dit veld (vanaf vijf letters ook als achterdeel: 'werkervaring', 'hogeschool'; in de toelichting alleen als die zegt van wie het veld is, zie
 // aanmeldNiet); zwakNiet = alleen 'niet' zolang de kern geen woord uit 'tenzij' heeft (uren zonder dagen, het huidige werk zonder een wens); ontkend = een ontkenning in de kern maakt het de omgekeerde vraag;
-// enkel = één kolom; contact = één vraag voor e-mail of telefoon ('Hoe kunnen we je bereiken?'), per rij gelezen als beide.
+// enkel = één kolom; contact = één vraag voor e-mail of telefoon ('Hoe kunnen we je bereiken?'), per rij gelezen als beide. v7.4.1 ronde 4: zelf = alleen
+// een kop over de aanmelder zelf (kernOverZelf); achterdeel = een sterk woord van vijf letters of meer telt ook als achterdeel ('Voorkeursdagen').
 var AANMELD_VELDEN = {
   tijdstempel: { exact: ['datum', 'date', 'ingevuld op', 'aangemeld op'], sterk: ['tijdstempel', 'timestamp'], enkel: true },
-  email: { sterk: ['email', 'emailadres', 'mail', 'mailadres', 'email adres', 'email address'], niet: AANMELD_ANDER },
+  email: { sterk: ['email', 'emailadres', 'mail', 'mailadres', 'email adres', 'email address'], niet: AANMELD_ANDER, zelf: true },
   telefoon: { sterk: ['telefoon', 'telefoonnummer', 'contactnummer', 'welk nummer', 'mobiel', 'mobiele', 'mobile', 'phone', 'gsm', 'tel', 'telnr', '06', 'whatsapp'], zwak: ['nummer', 'number'],
-    niet: AANMELD_ANDER.concat(['huis', 'postcode', 'student', 'klant', 'lid', 'lidmaatschap', 'registratie', 'kvk', 'btw', 'big', 'vog', 'kenteken', 'personeel', 'rekening']) },
+    niet: AANMELD_ANDER.concat(['huis', 'postcode', 'student', 'klant', 'lid', 'lidmaatschap', 'registratie', 'kvk', 'btw', 'big', 'vog', 'kenteken', 'personeel', 'rekening']), zelf: true },
   contact: { exact: ['contact', 'contactgegevens', 'contactinformatie', 'contact details'], sterk: ['hoe kunnen we je bereiken', 'hoe ben je bereikbaar', 'bereikbaar',
     'how can we reach you', 'how can we contact you', 'email of telefoon', 'email of telefoonnummer', 'telefoon of email', 'telefoonnummer of email', 'email en telefoonnummer',
-    'telefoonnummer en email', 'email or phone', 'phone or email'], niet: AANMELD_ANDER.concat(['voorkeur', 'moment', 'momenten', 'wanneer', 'tijd', 'dag', 'dagen']) },  // v7.4.1
-  voornaam: { sterk: ['voornaam', 'voornamen', 'roepnaam', 'first name', 'firstname', 'given name'], niet: AANMELD_ANDER },
-  tussenvoegsel: { sterk: ['tussenvoegsel', 'tussenv', 'voorvoegsel'], niet: AANMELD_ANDER },
-  achternaam: { sterk: ['achternaam', 'last name', 'lastname', 'surname', 'familienaam', 'family name'], niet: AANMELD_ANDER },
+    'telefoonnummer en email', 'email or phone', 'phone or email'], niet: AANMELD_ANDER.concat(['voorkeur', 'moment', 'momenten', 'wanneer', 'tijd', 'dag', 'dagen']), zelf: true },  // v7.4.1
+  voornaam: { sterk: ['voornaam', 'voornamen', 'roepnaam', 'first name', 'firstname', 'given name'], niet: AANMELD_ANDER, zelf: true },
+  tussenvoegsel: { sterk: ['tussenvoegsel', 'tussenv', 'voorvoegsel'], niet: AANMELD_ANDER, zelf: true },
+  achternaam: { sterk: ['achternaam', 'last name', 'lastname', 'surname', 'familienaam', 'family name'], niet: AANMELD_ANDER, zelf: true },
   naam: { sterk: ['naam', 'volledige naam', 'voor en achternaam', 'voor achternaam', 'voornaam en achternaam', 'voornaam achternaam', 'hoe heet je', 'heet je', 'name', 'full name',
     'your name', 'first and last name', 'name and surname', 'name surname', 'achternaam voornaam', 'achternaam en voornaam', 'surname first name', 'last name first name'],
-    niet: AANMELD_ANDER },  // v7.4.1: 'Achternaam, voornaam' is één naamkolom ('Jansen, Piet', zie aanmeldNaam)
+    niet: AANMELD_ANDER, zelf: true },  // v7.4.1: 'Achternaam, voornaam' is één naamkolom ('Jansen, Piet', zie aanmeldNaam)
   postcode: { sterk: ['postcode', 'post code', 'postal code', 'zip', 'zipcode'], zwak: ['adres', 'woonadres', 'address'], niet: AANMELD_ANDER.concat(['werk', 'stage']) },
   woonplaats: { sterk: ['woonplaats', 'plaats', 'city', 'stad', 'town', 'gemeente', 'waar woon je', 'woon je', 'where do you live'], zwak: ['woon', 'wonen'],
-    niet: AANMELD_ANDER.concat(['werk', 'stage', 'studeer', 'studie', 'study', 'regio', 'voorkeur', 'postcode', 'geboorte']) },
+    niet: AANMELD_ANDER.concat(['werk', 'stage', 'studeer', 'studie', 'study', 'regio', 'voorkeur', 'postcode', 'geboorte', 'adres', 'woonadres', 'straat', 'huisnummer',
+      'address', 'street']) },  // v7.4.1 ronde 4: 'Je woonadres (straat + huisnummer)' is geen woonplaats
   // v7.4.1: wat iemand al doet of deed ('… heb je al eens gedaan?', 'Previous job', 'In welk type onderwijs werk je op dit moment?') is geen wens, tenzij de
   // vraag ook een wens noemt ('… werk je het liefst?'); de omgekeerde vraag ('Welke werkzaamheden wil je liever niet doen?') ook niet (ontkend)
-  functies: { sterk: ['functie', 'werkzaamheden', 'rol', 'rollen', 'role', 'position', 'job', 'soort werk', 'type werk', 'welk werk'], ontkend: true,
+  functies: { exact: ['wat wil je doen', 'wat zou je willen doen', 'wat wil je graag doen', 'what would you like to do'],  // v7.4.1 ronde 4
+    sterk: ['functie', 'werkzaamheden', 'rol', 'rollen', 'role', 'position', 'job', 'soort werk', 'type werk', 'welk werk', 'interesse', 'interesses'], ontkend: true,
     niet: ['beschikbaar', 'wanneer', 'dag', 'dagen', 'uur', 'uren', 'vak', 'vakken', 'ervaring', 'huidige', 'huidig', 'current', 'momenteel', 'nu', 'vorige', 'eerder', 'werkgever'],
     zwakNiet: ['gedaan', 'al eens', 'ooit', 'vroeger', 'gewerkt', 'previous', 'werk je'], tenzij: AANMELD_WENS },
   sector: { sterk: ['sector', 'onderwijssector', 'type onderwijs', 'soort onderwijs', 'welk onderwijs', 'onderwijstype', 'onderwijsvorm', 'schooltype', 'type school', 'soort school'],
@@ -4613,7 +4648,7 @@ var AANMELD_VELDEN = {
     niet: ['functie', 'werkzaamheden', 'beschikbaar', 'ervaring', 'opleiding', 'diploma', 'hoogst', 'hoogste', 'genoten', 'gevolgd', 'afgerond', 'highest', 'level', 'degree', 'beschrijf', 'studie', 'studeer'],
     zwakNiet: ['werk je', 'gewerkt', 'gedaan', 'huidige', 'huidig', 'current', 'momenteel', 'vorige', 'eerder', 'previous', 'vroeger'], tenzij: AANMELD_WENS },
   beschikbaarheid: { sterk: ['beschikbaar', 'availability', 'available', 'dagen', 'dagdelen', 'welke dag', 'wanneer kun je', 'wanneer kan je', 'wanneer wil je', 'rooster', 'when can you',
-    'momenten', 'welke momenten', 'wanneer heb je tijd'],
+    'momenten', 'welke momenten', 'wanneer heb je tijd', 'voorkeursdag', 'voorkeursdagen'], achterdeel: true,  // v7.4.1 ronde 4: ook als achterdeel ('voorkeursdagen', 'werkdagen')
     // niet: een andere vraag over tijd, of de omgekeerde vraag ('Op welke dagen ben je niet beschikbaar?', 'Op welke dagen heb je college?', '… werk je al?'), ook als raster
     niet: ['vanaf', 'start', 'starten', 'begin', 'beginnen', 'datum', 'ben je niet', 'kun je niet', 'kan je niet', 'kan ik niet', 'heb je geen',
       'dagen niet', 'dag niet', 'wanneer niet', 'niet beschikbaar', 'not available', 'unavailable', 'onbeschikbaar', 'bezet', 'heb je college', 'heb je les', 'heb je lessen',
@@ -4666,6 +4701,21 @@ function termPlek(woorden, term) {
   return -1;
 }
 function heeftTerm(woorden, term) { return termPlek(woorden, term) >= 0; }
+// v7.4.1 ronde 4: zoals termPlek, maar voor de score van een kop: tussen de woorden van de term mogen hoogstens twee vraag- of stopwoorden staan ('Which type of
+// school …' = 'type school', 'soort van werk' = 'soort werk'). Geeft de plekken van de woorden van de term, of null.
+function kopPlek(woorden, term) {
+  var t = term.split(' '), n = t.length, past = function (w, j) { return w === t[j] || (j === n - 1 && t[j].length >= 4 && w.indexOf(t[j]) === 0); };
+  for (var i = 0; i + n <= woorden.length; i++) {
+    if (!past(woorden[i], 0)) continue;
+    var plek = [i], k = i + 1;
+    for (var j = 1; j < n && plek; j++) {
+      for (var tussen = 0; k < woorden.length && tussen < 2 && !past(woorden[k], j) && AANMELD_STOP.indexOf(woorden[k]) >= 0; tussen++) k++;
+      if (k < woorden.length && past(woorden[k], j)) plek.push(k++); else plek = null;
+    }
+    if (plek) return plek;
+  }
+  return null;
+}
 // Voor 'niet'-woorden ook als achterdeel van een samenstelling (vanaf vijf letters): 'stagebegeleider', 'hogeschool', 'werkervaring', 'oproepcontract'
 function heeftNiet(woorden, term) {
   return heeftTerm(woorden, term) || (term.indexOf(' ') < 0 && term.length >= 5 && woorden.some(function (w) { return w.length > term.length && w.slice(-term.length) === term; }));
@@ -4685,6 +4735,10 @@ function aanmeldKop(h) {
   var k = { kern: totOntkenning(woordenVan(d.kern)), toel: [], eigenaar: [], tekst: (aanmeldWoorden(d.kern) + ' ' + rij).trim(), toelTekst: aanmeldWoorden(d.toel) };
   d.toel.split(' , ').forEach(function (t) { var w = totOntkenning(woordenVan(t)); k.toel = k.toel.concat(w); if (w.length && toelVanEigenaar(w)) k.eigenaar.push(w); });
   if (!k.kern.length) { k.kern = k.toel; k.toel = []; k.eigenaar = []; k.tekst = (k.toelTekst + ' ' + rij).trim(); k.toelTekst = ''; }
+  // v7.4.1 ronde 4: 'Naam (voornaam)' en 'Naam (achternaam)': bij een kale naamvraag beslist de toelichting welk deel van de naam het is
+  var toelW = woordenVan(d.toel).join(' ');
+  if (/^(naam|name)$/.test(k.kern.filter(function (w) { return AANMELD_STOP.indexOf(w) < 0; }).join(' ')) &&
+    ['voornaam', 'tussenvoegsel', 'achternaam'].some(function (v) { return uitMap(AANMELD_VELDEN, v).sterk.indexOf(toelW) >= 0; })) { k.kern = toelW.split(' '); k.toel = []; k.eigenaar = []; }
   k.raster = m ? rasterSleutel(k, m[2]) : null;  // v7.4.1: het rijlabel zoals het is ('Ma t/m vr', 'Ma-vr', '8.30 - 12.00 uur')
   if (m && !k.raster && rij) k.kern = k.kern.concat(rij.split(' '));  // geen raster: de rij hoort bij de vraag
   k.woorden = k.kern.join(' ');
@@ -4706,10 +4760,16 @@ function aanmeldNiet(def, k) {
 }
 function aanmeldScore(def, k) {
   if (!k.kern.length || aanmeldNiet(def, k)) return 0;
+  if (def.zelf && !kernOverZelf(k.kern)) return 0;  // v7.4.1 ronde 4: de witte lijst (stagedocent, referee, manager, delen met scholen)
   if ((def.exact || []).concat(def.sterk || []).indexOf(k.woorden) >= 0) return 100;
   var gedekt = {}, sterk = 0, zwak = false, straf = 0;
-  var dek = function (t) { var p = termPlek(k.kern, t); if (p >= 0) t.split(' ').forEach(function (x, i) { gedekt[p + i] = true; }); return p >= 0; };
-  (def.sterk || []).forEach(function (t) { if (dek(t)) sterk = Math.max(sterk, t.split(' ').length); });
+  var dek = function (t, achter) {
+    var p = kopPlek(k.kern, t);
+    if (!p && achter && t.indexOf(' ') < 0 && t.length >= 5) k.kern.some(function (w, i) { if (w.length > t.length && w.slice(-t.length) === t) { p = [i]; return true; } return false; });
+    if (p) p.forEach(function (x) { gedekt[x] = true; });
+    return !!p;
+  };
+  (def.sterk || []).forEach(function (t) { if (dek(t, def.achterdeel)) sterk = Math.max(sterk, t.split(' ').length); });
   (def.zwak || []).forEach(function (t) { if (dek(t)) zwak = true; });
   if (!sterk && !zwak) return 0;
   k.kern.forEach(function (w, i) { if (!gedekt[i]) straf += AANMELD_STOP.indexOf(w) >= 0 || AANMELD_NEE.indexOf(w) >= 0 || /^\d+$/.test(w) ? 1 : 6; });
@@ -4746,8 +4806,10 @@ function aanmeldKolommen(kop) {
   // v7.4.1: een kale 'Functie' naast 'Werkgever' is de huidige baan, geen wens
   if (!c.functiesWens && koppen.some(function (k) { return k && (heeftTerm(k.kern, 'werkgever') || heeftTerm(k.kern, 'employer')); })) c.functies = [];
   // v7.4.1: beslissend zijn de beste toestemmingsvraag en elke andere over het talentbestand (privacy, gegevens, bewaren); een vraag voor een ander doel
-  // ('Toestemming om je cv te delen met scholen') beslist niet en komt als notitie bij het profiel
-  c.toestemmingAnder = c.toestemming.filter(function (j, i) { return i > 0 && !TOESTEMMING_BESTAND.some(function (t) { return heeftTerm(koppen[j].kern, t); }); });
+  // ('Toestemming om je cv te delen met scholen') beslist niet en komt als notitie bij het profiel. v7.4.1 ronde 4: noemt een van de vragen het talentbestand,
+  // dan is elke vraag zonder zo'n woord een ander doel, ook als die hoger scoort of eerst staat ('Toestemming om je te bellen' naast de privacyvraag)
+  var overBestand = function (j) { return TOESTEMMING_BESTAND.some(function (t) { return heeftTerm(koppen[j].kern, t); }); }, metBestand = c.toestemming.some(overBestand);
+  c.toestemmingAnder = c.toestemming.filter(function (j, i) { return (i > 0 || metBestand) && !overBestand(j); });
   c.toestemming = c.toestemming.filter(function (j) { return c.toestemmingAnder.indexOf(j) < 0; });
   return c;
 }
@@ -4759,15 +4821,18 @@ function aanmeldWens(kolommen, koppen) {
   var wens = kolommen.filter(function (j) { return AANMELD_WENS.some(function (t) { return heeftTerm(koppen[j].kern, t); }); });
   return wens.length ? wens : kolommen.slice(0, 1);
 }
-// v7.4.1: een aanmeldformulier heeft een contactkolom en iets dat bij een talent hoort: een vraag naar werkzaamheden, sector, beschikbaarheid, postcode of
-// woonplaats, een telefoon, een gesplitste naam, alleen kolommen die Athena kent ('E-mailadres', 'Hoe heet je?', 'Toestemming'), of een toestemmingsvraag
-// zonder onbekende vraag over een ander ('Naam', 'E-mail', 'Opmerkingen', 'Toestemming'). Een aanmelding voor een informatieavond of een evaluatie in
-// dezelfde Sheet ('Je naam', 'Naam van je school', 'Functie', 'Met hoeveel collega's kom je?') dus niet. Het tabblad Aanmeldingen is van Athena zelf.
-// v7.4.1: true, false (geen contactkolom of een duidelijk ander formulier) of 'twijfel' (dan een fout en een melding: niet stil overslaan)
+// v7.4.1: een aanmeldformulier heeft een contactkolom en iets dat bij een talent hoort. v7.4.1 ronde 4: zeker met een talentspecifieke vraag (werkzaamheden,
+// sector of beschikbaarheid). Zonder zo'n vraag is een formulier dat naar een school of organisatie vraagt ('Naam van je school', 'Namens welke school of
+// organisatie neem je contact op?', 'Met hoeveel collega's kom je?') een ander formulier (offerte, contact, informatieavond, evaluatie), tenzij het ook naar
+// het eigen adres vraagt (postcode of woonplaats: een privépersoon, zoals een scholier die zijn school noemt). Zonder zulke tekens telt wat al gold: een
+// telefoon, een gesplitste naam, een postcode of woonplaats, alleen kolommen die Athena kent ('E-mailadres', 'Hoe heet je?', 'Toestemming'), of een
+// toestemmingsvraag ('Naam', 'E-mail', 'Opmerkingen', 'Toestemming'). Het tabblad met de naam Aanmeldingen is van Athena zelf.
+// true, false (geen contactkolom of een duidelijk ander formulier, stil: alleen in het logboek) of 'twijfel' (dan een fout en een melding: niet stil overslaan)
 function aanmeldTabblad(c, naam) {
   if (!c.email.length && !c.telefoon.length && !c.contact.length) return false;
-  if (/^aanmeldingen/i.test(naam) || c.raster.length || c.beschikbaarheid.length || c.sector.length || c.functiesWens || c.postcode.length || c.woonplaats.length ||
-    c.telefoon.length || (c.voornaam.length && c.achternaam.length) || !c.onbekend || (c.toestemming.length && !c.anderOnbekend)) return true;
+  if (/^aanmeldingen$/i.test(String(naam).trim()) || c.raster.length || c.beschikbaarheid.length || c.sector.length || c.functiesWens) return true;
+  if (c.anderOnbekend && !c.postcode.length && !c.woonplaats.length) return false;  // v7.4.1 ronde 4: offerte- of contactformulier van een school
+  if (c.postcode.length || c.woonplaats.length || c.telefoon.length || (c.voornaam.length && c.achternaam.length) || !c.onbekend || (c.toestemming.length && !c.anderOnbekend)) return true;
   return c.anderOnbekend ? false : 'twijfel';
 }
 
@@ -4779,10 +4844,13 @@ function celTekst(v) { if (v instanceof Date) return isNaN(v.getTime()) ? '' : d
 function celIngevuld(v) { return v === true || (typeof v !== 'boolean' && celTekst(v) !== ''); }
 function celVerwerkt(v) { return celIngevuld(v) && !/^(false|onwaar|nee|neen|no|0|nog niet|niet verwerkt)$/i.test(celTekst(v)); }
 function aanmeldEerste(r, kolommen, fn) { for (var i = 0; i < kolommen.length; i++) { var x = fn(r[kolommen[i]]); if (x) return x; } return ''; }
-// v7.4.1: alleen rond de eerste '@' zoeken (een lange cel zonder adres kost anders seconden)
+// v7.4.1: alleen rond de eerste '@' zoeken (een lange cel zonder adres kost anders seconden). v7.4.1 ronde 4: vóór het adres mag geen letter (ook geen é of ë)
+// of cijfer staan: van 'renée.bakker@…' maakt Athena geen ander adres ('e.bakker@…') dat de welkomstmail met portaallink krijgt, maar laat het leeg
 function emailUitCel(v) {
-  var s = klein(celTekst(v)), i = s.indexOf('@'), m = i < 0 ? null : /[a-z0-9._%+'-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/.exec(s.slice(Math.max(0, i - 64), i + 256));
-  return m ? m[0] : '';
+  var s = klein(celTekst(v)), i = s.indexOf('@'), van = Math.max(0, i - 64), deel = i < 0 ? '' : s.slice(van, i + 256), m = i < 0 ? null : /[a-z0-9._%+'-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/.exec(deel);
+  if (!m) return '';
+  var voor = m.index > 0 ? deel.charAt(m.index - 1) : van > 0 ? s.charAt(van - 1) : '';
+  return voor && (/[0-9]/.test(voor) || voor.toLowerCase() !== voor.toUpperCase()) ? '' : m[0];
 }
 // Telefoonnummer uit een cel: ook als getal zonder voorloopnul (Sheets maakt van 0612345678 het getal 612345678, van +316… 316…), '+31 (0)6' en 0031;
 // v7.4.1: twee nummers in één cel ('06 12345248 / 06 87654321', een nieuwe regel, 'of'): het eerste geldige. Geen nummer → ''
@@ -4825,10 +4893,14 @@ function aanmeldNaam(voor, tussen, achter, vol) {
 }
 function eindigtOp(s, eind) { s = klein(s); eind = klein(eind); return !!eind && s.length > eind.length + 1 && s.slice(-eind.length - 1) === ' ' + eind; }
 // v7.4.1 (AVG): toestemming is een witte lijst: 'ja', 'nee', 'onduidelijk' of 'leeg'. Ja = een aangevinkt vakje (true), een datum, of tekst met een ja-woord
-// (ja, akkoord, toestemming, agree, consent, ok, mag, eens, ✓, x) zonder ontkenning. Een ontkenning (nee, niet, geen, no, not, n't, bezwaar, oneens, misschien,
-// weiger…, afwijz…, declin…, intrek…, ✗, ❌) maakt het nee; 'geen bezwaar' en 'no objection' zijn ja. Tekst tussen haakjes is uitleg en na de eerste zin telt
-// niets ('Ik geef toestemming (bij geen toestemming …)', 'I agree. We don't share your data.'). De rest ('-', '?', 'onbekend', 'volgt') is onduidelijk = geen toestemming.
-var TOESTEMMING_JA = /(^| )(ja|jazeker|jawel|yes|yep|yeah|j|y|ok|oke|okay|prima|goed|mag|eens|stem|true|waar|1|x)( |$)|(^| )(akkoord|agree|accept|geaccepteerd|toestemming|consent|instem|ingestemd)/;
+// (ja, akkoord, toestemming, agree, consent, ok, mag, eens, wel, gegeven, getekend, aangevinkt, ✓, x) zonder ontkenning. Een ontkenning (nee, niet, geen, no,
+// not, n't, bezwaar, oneens, misschien, weiger…, afwijz…, declin…, intrek…, ✗, ❌) maakt het nee; 'geen bezwaar' en 'no objection' zijn ja. Tekst tussen haakjes
+// is uitleg. v7.4.1 ronde 4: alleen de hoofdzin beslist. Het antwoord wordt geknipt bij een zinseinde, een komma of puntkomma en een voegwoord (en, maar, dat,
+// tot, om, and, that, until …); het eerste stuk met een ja- of nee-woord beslist ('Ik geef toestemming … en weet dat ik die altijd kan intrekken', 'Ik ga akkoord,
+// mijn gegevens worden niet gedeeld' en 'Ja, ik geef toestemming; je gegevens worden nooit verkocht' zijn ja; 'Nee', 'Niet akkoord', 'Ik ga niet akkoord', 'Ik
+// geef geen toestemming' en 'I do not agree' nee). De rest ('-', '?', 'onbekend', 'volgt', '… gelezen en begrepen') is onduidelijk = geen toestemming.
+var TOESTEMMING_JA = /(^| )(ja|jazeker|jawel|yes|yep|yeah|j|y|ok|oke|okay|prima|goed|mag|eens|stem|true|waar|wel|1|x)( |$)|(^| )(akkoord|agree|accept|geaccepteerd|toestemming|consent|instem|ingestemd|gegeven|getekend|ondertekend|aangevinkt|verkregen)/;
+var TOESTEMMING_GRENS = /[.!?](?:\s|$)|\n|\s*[,;]\s*|\s(?:en|maar|want|omdat|dat|die|tot|totdat|zodat|als|wanneer|waarbij|waarna|mits|om|and|but|that|which|until|because|so|as|if|when|while)\s/;
 var TOESTEMMING_NEE = /(^| )(nee|neen|nein|non|no|nope|niet|geen|not|never|nooit|dont|doesnt|false|onwaar|0|n|bezwaar|oneens|misschien|maybe|twijfel|later)( |$)|n't( |$)|(^| )(weiger|afwijz|afgewez|declin|refus|disagre|intrek|ingetrok|trek|verwijder|uitschrijf|uitschrijv|afmeld)/;
 function toestemmingOordeel(v) {
   if (v === true || (v instanceof Date && !isNaN(v.getTime()))) return 'ja';
@@ -4836,10 +4908,13 @@ function toestemmingOordeel(v) {
   if (v === false) return 'nee';
   if (!ruw) return 'leeg';
   if (/[\u2717\u2718\u00d7\u274c\u26d4]/.test(ruw)) return 'nee';  // ✗ ✘ × ❌ ⛔
-  var t = zonderAccenten(ruw).toLowerCase().replace(/[\u2018\u2019`\u00b4]/g, "'").replace(/\([^)]*\)/g, ' ').split(/[.!?](?:\s|$)|\n/)[0]
-    .replace(/[^a-z0-9']+/g, ' ').replace(/(^| )(geen|no) (bezwaar|probleem|objection|objections|problem)( |$)/g, ' akkoord ').trim();
-  if (TOESTEMMING_NEE.test(t)) return 'nee';
-  if (TOESTEMMING_JA.test(t) || /[\u2713\u2714\u2611\u2705]/.test(ruw) || exportDag(ruw)) return 'ja';  // ✓ ✔ ☑ ✅ of de datum van de toestemming
+  if (/[\u2713\u2714\u2611\u2705]/.test(ruw) || exportDag(ruw)) return 'ja';  // ✓ ✔ ☑ ✅ of de datum van de toestemming
+  var delen = (' ' + zonderAccenten(ruw).toLowerCase().replace(/[\u2018\u2019`\u00b4]/g, "'").replace(/\([^)]*\)/g, ' ').slice(0, 1000) + ' ').split(TOESTEMMING_GRENS);
+  for (var i = 0; i < delen.length; i++) {
+    var t = delen[i].replace(/[^a-z0-9']+/g, ' ').replace(/(^| )(geen|no) (bezwaar|probleem|objection|objections|problem)( |$)/g, ' akkoord ').trim();
+    if (TOESTEMMING_NEE.test(t)) return 'nee';
+    if (TOESTEMMING_JA.test(t)) return 'ja';
+  }
   return 'onduidelijk';
 }
 function toestemmingGegeven(v) { return toestemmingOordeel(v) === 'ja'; }
@@ -4858,16 +4933,17 @@ function rijToestemming(r, kolommen) {
 }
 
 /* Antwoorden met meer keuzes: functies en sector */
-// Gescheiden door , ; / & + een nieuwe regel of het woord en/of (zo voegt Google Forms selectievakjes samen); [{ tekst, sep }] met het scheidingsteken ervoor
+// Gescheiden door , ; / & + een nieuwe regel of het woord en/of (zo voegt Google Forms selectievakjes samen); [{ tekst, sep }] met het scheidingsteken ervoor.
+// v7.4.1 ronde 4: ook een zinseinde ('Surveillance: nee. Huiswerkbegeleiding: ja')
 function antwoordDelen(tekst) {
-  var stukken = String(tekst || '').split(/(\s*[,;\/\n&+]\s*|\s+(?:en|of|and|or)\s+)/i), uit = [];
+  var stukken = String(tekst || '').split(/(\s*[,;\/\n&+]\s*|[.!?]\s+|\s+(?:en|of|and|or)\s+)/i), uit = [];
   for (var i = 0; i < stukken.length; i += 2) { var t = stukken[i].trim(); if (t) uit.push({ tekst: t, sep: i ? stukken[i - 1] : '' }); }
   return uit;
 }
 // Per deel de codes (perDeel krijgt de woorden); niet herkende delen blijven in hun eigen tekst bewaard (aaneengesloten delen samen, 'Andere:' weg).
 // v7.4.1: een deel met een ontkenning ('Geen mbo', 'Alles behalve surveillance', 'Liever geen huiswerkbegeleiding') geeft geen code en blijft bewaard;
 // een ontkenning tussen haakjes geldt alleen voor de haakjes ('VO (geen praktijkonderwijs)' = vo)
-var ANTWOORD_NEE = ['niet', 'geen', 'behalve', 'uitgezonderd', 'excl', 'exclusief', 'not', 'no', 'except'];
+var ANTWOORD_NEE = ['niet', 'geen', 'behalve', 'uitgezonderd', 'excl', 'exclusief', 'not', 'no', 'except', 'nee', 'neen', 'nope'];  // v7.4.1 ronde 4: 'surveillance nee'
 function deelOntkend(t) { return woordenVan(t).some(function (w) { return ANTWOORD_NEE.indexOf(w) >= 0; }); }
 function antwoordLezen(tekst, perDeel) {
   var codes = [], niet = [], vorigeNiet = false;
@@ -4919,6 +4995,8 @@ function dagVanWoord(w, ruim) {
 }
 // Een woord als dagdelen: [0] ochtend, [1] middag, [2] avond, [0, 1] overdag; ook meervoud en 's ochtends ('ochtends', 'sochtends'); anders null
 function delenVanWoord(w) {
+  var m = /^tijd([01])([01])([01])$/.exec(w), u = [];  // v7.4.1 ronde 4: een tijd uit beschZinnen ('8.30-12.00' → tijd100)
+  if (m) { for (var e = 0; e < 3; e++) if (m[e + 1] === '1') u.push(e); return u.length ? u : null; }
   if (/^s?(ochtend(en|s)?|morgens|mornings?)$/.test(w)) return [0];
   if (/^s?(middag(en|s)?|namiddag(en)?|afternoons?)$/.test(w)) return [1];
   if (/^s?(avond(en|s)?|evenings?)$/.test(w)) return [2];
@@ -4975,24 +5053,72 @@ function rasterWaarde(s) {
   return -1;
 }
 // Eén rastercel in r. Rij = dag(en): de cel noemt dagdelen of Ja/Nee; rij = dagdeel: de cel noemt dagen (ook 'ma, wo') of Ja/Nee; rij = dag + dagdeel: Ja/Nee/Liever niet.
-// v7.4.1: een cel die Athena niet kent komt in 'niet' (de lijst 'Niet herkend' van de rij)
+// v7.4.1: een cel die Athena niet kent komt in 'niet' (de lijst 'Niet herkend' van de rij). v7.4.1 ronde 4: rij = dag en de cel noemt dagdelen: elk dagdeel
+// met zijn eigen waarde (rasterDelen: 'Ochtend niet' = 0, 'Middag liever niet' = 1, '8.30 - 12.00' = ochtend); alleen ontkende dagdelen = de rest van de dag
 function rasterCel(r, sl, cel, niet) {
-  var s = celTekst(cel), v = rasterWaarde(s), delen = [], dagen = [];
+  var s = celTekst(cel), v = rasterWaarde(s), dd, dagen = [];
   if (!s) return;
-  beschZinnen(s).join(' ').split(/[^a-z0-9]+/).forEach(function (w) { var d = dagVanWoord(w, true); delen = delen.concat(delenVanWoord(w) || []); dagen = dagen.concat(d ? [d.dag] : dagenVanGroep(w) || []); });
-  if (v < 0 && !(sl.deel < 0 && delen.length) && !(!sl.dagen.length && dagen.length)) { if (niet && niet.indexOf(s) < 0) niet.push(s); }
+  dd = rasterDelen(s);
+  beschZinnen(s).join(' ').split(/[^a-z0-9]+/).forEach(function (w) { var d = dagVanWoord(w, true); dagen = dagen.concat(d ? [d.dag] : dagenVanGroep(w) || []); });
+  if (v < 0 && !(sl.deel < 0 && dd.length) && !(!sl.dagen.length && dagen.length)) { if (niet && niet.indexOf(s) < 0) niet.push(s); }
   if (v < 0) v = 0;
   if (sl.dagen.length && sl.deel >= 0) { sl.dagen.forEach(function (d) { r[DAGEN_KORT[d]][sl.deel] = v; }); return; }
-  if (sl.dagen.length) { sl.dagen.forEach(function (d) { if (delen.length) delen.forEach(function (e) { r[DAGEN_KORT[d]][e] = 2; }); else zetDagdelen(r, d, null, v); }); return; }
+  if (sl.dagen.length) {
+    sl.dagen.forEach(function (d) {
+      if (!dd.length) { zetDagdelen(r, d, null, v); return; }
+      if (!dd.some(function (x) { return x.v; })) zetDagdelen(r, d, null, 2);  // 'Ochtend niet': ochtend en middag, zonder de ochtend
+      dd.forEach(function (x) { r[DAGEN_KORT[d]][x.deel] = x.v; });
+    });
+    return;
+  }
   if (dagen.length) dagen.forEach(function (d) { r[DAGEN_KORT[d]][sl.deel] = 2; }); else [0, 1, 2, 3, 4].forEach(function (d) { r[DAGEN_KORT[d]][sl.deel] = v; });
 }
-// De beschikbaarheid van een rij: de rasterkolommen samen; zonder ingevuld raster de eerste tekstkolom waar iets uit komt
+// v7.4.1 ronde 4: de dagdelen in een cel, per deelzin: [{ deel, v }] met v = 0 bij een ontkenning ervoor of erna ('Ochtend niet', "Niet 's avonds", 'Behalve
+// de avond'), 1 bij 'liever niet', anders 2. Een tijd telt als dagdeel ('8.30 - 12.00, 12.30 - 16.00' = ochtend en middag).
+function rasterDelen(s) {
+  var uit = [];
+  beschZinnen(s).forEach(function (zin) {
+    var tk = beschTokens(zin);
+    tk.forEach(function (t, i) {
+      if (t.soort !== 'deel') return;
+      var v = 2, k, buren = [];
+      for (k = i - 1; k >= 0 && BESCH_VUL_DEEL.indexOf(tk[k].w) >= 0; k--);
+      buren.push(tk[k]);
+      for (k = i + 1; k < tk.length && BESCH_VUL_DEEL.indexOf(tk[k].w) >= 0; k++);
+      buren.push(tk[k]);
+      buren.forEach(function (x) { if (x && (x.soort === 'nee' || (x.soort === 'modus' && x.modus === 0))) v = 0; else if (x && x.soort === 'modus' && v) v = 1; });
+      t.delen.forEach(function (e) { uit.push({ deel: e, v: v }); });
+    });
+  });
+  return uit;
+}
+// De beschikbaarheid van een rij: de rasterkolommen samen; zonder ingevuld raster de eerste tekstkolom waar iets uit komt. v7.4.1 ronde 4: noemt de ene
+// tekstkolom alleen dagen ('Maandag, Woensdag') en een andere alleen dagdelen ('Middag, Avond'), dan die dagdelen op die dagen (beschSamen); een tekst
+// waar geen raster uit komt ('Flexibel, bel me even') komt in 'niet' (de lijst 'Niet herkend'): Athena verzint er geen dagen bij
 function aanmeldBeschikbaarheid(r, c, niet) {
-  var raster = beschikbaarheidUit({}), gevuld = false;
+  var raster = beschikbaarheidUit({}), gevuld = false, teksten = [], dagen, delen;
   c.raster.forEach(function (k) { if (celTekst(r[k.j])) { gevuld = true; rasterCel(raster, k, r[k.j], niet); } });
-  if (gevuld) return raster;
-  for (var i = 0; i < c.beschikbaarheid.length; i++) { var b = beschikbaarheidUitTekst(celTekst(r[c.beschikbaarheid[i]])); if (rasterGevuld(b)) return b; }
-  return raster;
+  c.beschikbaarheid.forEach(function (j) {
+    var t = celTekst(r[j]), b;
+    if (!t || !aanmeldWoorden(t) || TOESTEMMING_NVT.test(t)) return;
+    b = beschikbaarheidUitTekst(t);
+    if (rasterGevuld(b)) teksten.push({ r: b, noemt: beschNoemt(t) }); else if (niet && niet.indexOf(t) < 0) niet.push(t);
+  });
+  if (gevuld || !teksten.length) return raster;
+  dagen = teksten.filter(function (x) { return x.noemt.dag && !x.noemt.deel; })[0]; delen = teksten.filter(function (x) { return !x.noemt.dag && x.noemt.deel; })[0];
+  return dagen && delen ? beschSamen(dagen.r, delen.r) : teksten[0].r;
+}
+// v7.4.1 ronde 4: noemt een tekst dagen en/of dagdelen? { dag, deel }
+function beschNoemt(tekst) {
+  var uit = { dag: false, deel: false };
+  beschZinnen(String(tekst).slice(0, 2000)).forEach(function (zin) { beschTokens(zin).forEach(function (t) { if (t.soort === 'dag') uit.dag = true; if (t.soort === 'deel') uit.deel = true; }); });
+  return uit;
+}
+// v7.4.1 ronde 4: de dagen uit de ene kolom met de dagdelen uit de andere (die gelden voor de werkdagen); 'liever niet' (1) van een van beide blijft 1
+function beschSamen(dagR, deelR) {
+  var uit = beschikbaarheidUit({}), patroon = [0, 1, 2].map(function (e) { return Math.max.apply(null, [0, 1, 2, 3, 4].map(function (d) { return deelR[DAGEN_KORT[d]][e]; })); });
+  DAGEN_KORT.forEach(function (d) { var dag = Math.max.apply(null, dagR[d]); if (dag) uit[d] = patroon.map(function (v) { return v ? Math.min(v, dag) : 0; }); });
+  return uit;
 }
 // v7.4.1: vrije tekst → raster. Kent bereiken ('ma t/m vr', 'maandag tot en met donderdag', 'ma-wo'), groepen (werkdagen, doordeweeks, weekend, de hele
 // week, elke dag), aaneengeschreven ('maandagochtend'), meervoud ('ochtenden'), 's middags, overdag, hele dag, 'liever niet' (1) en 'behalve' (0), ook
@@ -5009,14 +5135,16 @@ function beschikbaarheidUitTekst(tekst) {
   return rasterGevuld(r) || !/(^| )werk( |$)/.test(zinnen.join(' ')) ? r : beschTekstPas(zinnen, false);
 }
 function beschTekstPas(zinnen, werkBezet) {
-  var r = beschikbaarheidUit({}), staat = { vorige: [], genoemd: [], werkBezet: werkBezet };
+  var r = beschikbaarheidUit({}), staat = { vorige: [], genoemd: [], werkBezet: werkBezet, uitgesteld: [] };
   zinnen.forEach(function (zin) { beschZin(r, beschTokens(zin), staat); });
+  staat.uitgesteld.forEach(function (e) { DAGEN_KORT.forEach(function (d) { r[d][e] = 0; }); });  // v7.4.1 ronde 4: 'Ochtenden niet, middagen wel'
   return r;
 }
 // Kleine letters zonder accenten; vaste uitdrukkingen worden één merkwoord (tm = bereik, dagelijks, overdag, lieverniet, behalve); dan per deelzin
 function beschZinnen(tekst) {
   return zonderAccenten(String(tekst == null ? '' : tekst)).replace(/([.!?])\s+(?=[A-Z])/g, '$1\n').toLowerCase()  // v7.4.1: 'Maandag en dinsdag. Woensdag …'
     .replace(/[‘’`´]/g, "'").replace(/[–—]/g, '-').replace(/[()]/g, ',')  // v7.4.1: '(niet in de toetsweek)' is een eigen deelzin
+    .replace(BESCH_TIJD, tijdMerkwoord)  // v7.4.1 ronde 4: '8.30-12.00', 'vanaf 13.00 uur' en 'tot 12 uur' worden een dagdeel (tijd100 …)
     .replace(/\b([a-z]+dag)-\s*(en|of)\s+([a-z]+dag)(ochtend|morgen|middag|avond)/g, '$1$4 $2 $3$4')  // 'maandag- en dinsdagochtend'
     .replace(/t\s*\/\s*m\b|t\.e\.m\.?/g, ' tm ').replace(/\b(tot en met|tot|until|through)\b/g, ' tm ')
     .replace(/\b([a-z]+day|mon|tues?|wed|thu|thurs?|fri|sat|sun)\s+to\b/g, '$1 tm')  // v7.4.1: 'Monday to Friday' (alleen 'to' na een dag)
@@ -5028,6 +5156,20 @@ function beschZinnen(tekst) {
     .replace(/\b(liever niet|liever geen|bij voorkeur niet|rather not|preferably not|misschien|eventueel|zo nodig|indien nodig|if needed|maybe)\b/g, ' lieverniet ')
     .replace(/\b(behalve|uitgezonderd|except|niet op|not on)\b/g, ' behalve ')
     .split(/[,;\n]+/);
+}
+// v7.4.1 ronde 4: een tijd of tijdvak → het merkwoord 'tijd' met drie cijfers (ochtend tot 12 uur, middag tot 17 uur, avond): een bereik ('8.30-12.00', '9 tot
+// 12 uur') = de dagdelen die het overlapt; vanaf of na ('vanaf 13.00 uur') = dat dagdeel en later tot 17 uur (een avond alleen als de tijd zelf 's avonds is);
+// tot of voor ('tot 12 uur') = de dagdelen tot die tijd; een losse tijd ('Maandag 8.30') zoals vanaf. Een tijd heeft minuten of 'uur', 'u' of 'h' ('2-3 dagen' niet;
+// een kaal bereik als '9-12' alleen tussen 6 en 23 uur). 1 tot 5 uur is 's middags. Niet: '10-12 uur per week' (een aantal uren) en 'niet voor 10 uur' (een
+// uitzondering, zie neeToelichting).
+var BESCH_TIJD = /\b(vanaf|na|from|after|tot|voor|until|before|till)?\s*\b(\d{1,2})(?:[.:](\d{2}))?\s*(uur|u|h)?\b(?:\s*(-|tot|t\/m|to|until)\s*(\d{1,2})(?:[.:](\d{2}))?\s*(uur|u|h)?\b)?/g;
+function tijdMerkwoord(x, voor, h1, m1, u1, tm, h2, m2, u2, plek, s) {
+  var uur = function (h, m) { h = Number(h); if (h > 0 && h < 6) h += 12; return h + (Number(m) || 0) / 60; }, a = uur(h1, m1), b = h2 === undefined ? -1 : uur(h2, m2), van, tot;
+  if (!(m1 || u1 || m2 || u2) && !(tm === '-' && !voor && Number(h1) >= 6 && Number(h2) > Number(h1) && Number(h2) <= 23)) return x;
+  if (a > 24 || b > 24 || /^\s*(per|pw|p\/w|a week)\b/.test(s.slice(plek + x.length)) || /(niet|not|geen)\s*$/.test(s.slice(0, plek))) return x;
+  if (b >= 0) { van = a; tot = b; } else if (/^(tot|voor|until|before|till)$/.test(voor || '')) { van = 0; tot = a; } else { van = a; tot = a < 17 ? 17 : 24; }
+  var merk = [[0, 12], [12, 17], [17, 24]].map(function (d) { return van < d[1] && tot > d[0] ? '1' : '0'; }).join('');
+  return merk === '000' ? x : ' tijd' + merk + ' ';
 }
 // Woorden van een deelzin met hun soort: dag (ook een groep), deel, bereik, modus (1 of 0), nee (v7.4.1: niet, geen), vul (en, of, op, alleen, ook, getallen) of woord
 function beschTokens(zin) {
@@ -5071,16 +5213,33 @@ function neeVooraf(tk, i) { for (var k = i + 1; k <= i + 3 && k < tk.length; k++
 function neeAchteraf(tk, i) { for (var k = i - 1; k >= i - 4 && k >= 0; k--) { if (tk[k].soort === 'dag') return true; if (tk[k].soort !== 'deel' && BESCH_TUSSEN.indexOf(tk[k].w) < 0) return false; } return false; }
 // Achteraf alleen als er na het merkwoord geen dag en geen gewoon woord meer komt ('vrijdag liever niet', niet 'ma en di liever niet te vroeg')
 function modusAchteraf(tk, i) { return tk.slice(i + 1).every(function (x) { return x.soort !== 'dag' && (x.soort !== 'woord' || BESCH_TUSSEN.indexOf(x.w) >= 0); }); }
-// Eén deelzin in r. staat: { vorige (de dagen van de laatste deelzin met dagen), genoemd (alle dagen tot nu toe), werkBezet }
+// v7.4.1 ronde 4: een ontkend dagdeel ('geen avonden', "niet 's avonds", 'niet in de ochtend', "behalve 's avonds", 'Ochtenden niet', "'s ochtends heb ik
+// college") is 0 voor de dagen van de deelzin (een dag zonder dagdeel = ochtend en middag: 'Maandag niet in de ochtend' = middag); zonder dag in de deelzin
+// voor de dagen van de vorige deelzin ('Ma t/m vr, geen avonden'), en zonder dag ervoor voor elke dag ('Ochtenden niet, middagen wel' = middagen)
+var BESCH_VUL_DEEL = ['s', 'in', 'de', 'het', 'op', 'the', 'on', 'tijdens', 'during'];
+function deelNa(tk, i) { for (var k = i + 1; k <= i + 3 && k < tk.length; k++) { if (tk[k].soort === 'deel') return k; if (BESCH_VUL_DEEL.indexOf(tk[k].w) < 0) return -1; } return -1; }
+function deelVoor(tk, i) {
+  for (var k = i - 1; k >= i - 4 && k >= 0; k--) { if (tk[k].soort === 'deel') return tk[k].ontkend ? -1 : k; if (BESCH_VUL_DEEL.indexOf(tk[k].w) < 0 && BESCH_TUSSEN.indexOf(tk[k].w) < 0) return -1; }
+  return -1;
+}
+// Eén deelzin in r. staat: { vorige (de dagen van de laatste deelzin met dagen), genoemd (alle dagen tot nu toe), werkBezet, uitgesteld (ontkende dagdelen zonder dag) }
 function beschZin(r, tk, staat) {
   tk = tk.map(function (t, i) { return t.strikt && !striktOk(tk, i) ? { soort: 'woord', w: t.w } : t; });
-  var modus = 2, groep = [], reeks = 0, delen = [], eerst = false, dagenZin = [], ook = false, vanaf = -1;  // eerst: dagdelen vóór de dagen ("'s ochtends op ma en di")
-  var zet = function () { groep.forEach(function (g) { zetDagdelen(r, g.dag, delen.length ? delen : null, g.modus); }); groep = []; reeks = 0; delen = []; eerst = false; };
+  var modus = 2, groep = [], reeks = 0, delen = [], niet = [], eerst = false, dagenZin = [], ook = false, vanaf = -1;  // eerst: dagdelen vóór de dagen ("'s ochtends op ma en di")
+  var nul = function (dagen) { dagen.forEach(function (d) { niet.forEach(function (e) { r[DAGEN_KORT[d]][e] = 0; }); }); };
+  var zet = function () { groep.forEach(function (g) { zetDagdelen(r, g.dag, delen.length ? delen : null, g.modus); }); nul(groep.map(function (g) { return g.dag; })); groep = []; reeks = 0; delen = []; niet = []; eerst = false; };
   var achteraf = function (m) { groep.slice(reeks).forEach(function (g) { g.modus = m; }); };  // v7.4.1: de laatste reeks dagen ('dagelijks maar woensdag niet': alleen wo)
   tk.forEach(function (t, i) {
-    if (t.soort === 'modus') { if (groep.length && modusAchteraf(tk, i)) achteraf(t.modus); else modus = t.modus; }
-    else if (t.soort === 'nee' || (t.soort === 'werk' && staat.werkBezet)) { if (neeToelichting(tk, i)) { /* uitzondering */ } else if (groep.length && neeAchteraf(tk, i)) achteraf(0); else if (neeVooraf(tk, i)) modus = 0; }
+    var dn = t.soort === 'nee' || (t.soort === 'modus' && t.modus === 0) ? deelNa(tk, i) : -1, dv;
+    if (dn >= 0) tk[dn].ontkend = true;  // v7.4.1 ronde 4: 'geen avonden', "behalve 's avonds"
+    else if (t.soort === 'modus') { if (groep.length && modusAchteraf(tk, i)) achteraf(t.modus); else modus = t.modus; }
+    else if (t.soort === 'nee' || (t.soort === 'werk' && staat.werkBezet)) {
+      if (neeToelichting(tk, i)) { /* uitzondering */ }
+      else if (t.soort === 'nee' && (dv = deelVoor(tk, i)) >= 0) { delen = delen.filter(function (e) { return tk[dv].delen.indexOf(e) < 0; }); niet = niet.concat(tk[dv].delen); tk[dv].ontkend = true; }  // 'Ochtenden niet'
+      else if (groep.length && neeAchteraf(tk, i)) achteraf(0); else if (neeVooraf(tk, i)) modus = 0;
+    }
     else if (t.soort === 'vul') ook = ook || t.w === 'ook' || t.w === 'also';
+    else if (t.soort === 'deel' && t.ontkend) niet = niet.concat(t.delen);
     else if (t.soort === 'deel') { eerst = eerst || !groep.length; delen = delen.concat(t.delen); }
     else if (t.soort === 'dag') {
       var dagen = t.rest ? [0, 1, 2, 3, 4].filter(function (d) { return staat.genoemd.indexOf(d) < 0 && dagenZin.indexOf(d) < 0; }) : t.dagen, v = tk[i - 1], verder = v && (v.soort === 'dag' || v.soort === 'bereik' || (v.soort === 'vul' && /^(en|of|and|or)$/.test(v.w)));
@@ -5097,7 +5256,9 @@ function beschZin(r, tk, staat) {
   else if (delen.length) {  // alleen dagdelen: bij de dagen van de deelzin ervoor ('alleen' zonder 'ook' beperkt ze), anders op de werkdagen
     var vorige = staat.vorige;
     (vorige.length ? vorige : [0, 1, 2, 3, 4]).forEach(function (d) { if (vorige.length && modus === 2 && !ook) r[DAGEN_KORT[d]] = [0, 0, 0]; zetDagdelen(r, d, delen, modus); });
+    nul(vorige.length ? vorige : [0, 1, 2, 3, 4]);
   }
+  else if (niet.length) { if (dagenZin.length || staat.vorige.length) nul(dagenZin.length ? dagenZin : staat.vorige); else staat.uitgesteld = staat.uitgesteld.concat(niet); }  // v7.4.1 ronde 4
   staat.genoemd = staat.genoemd.concat(dagenZin);
   if (dagenZin.length) staat.vorige = dagenZin;
 }
@@ -5108,8 +5269,12 @@ function dagenTotEnMet(van, tot) { var u = []; if (van === tot) return [tot]; fo
 // v7.4.1: zonder toestemming geen profiel (de rij krijgt 'overgeslagen: geen toestemming'); een tabblad zonder toestemmingsvraag wordt niet verwerkt en
 // niet gemarkeerd (dan komen de rijen vanzelf aan de beurt zodra de vraag er is), met een fout in het resultaat en hoogstens één melding per dag. Zo ook een
 // tabblad met contactgegevens waarvan Athena niet zeker weet of het een aanmeldformulier is ('twijfel'). Talenten wordt één keer per run gelezen.
+// v7.4.1 ronde 4: nooit stil zonder toestemming. Geven in één tabblad minstens twee rijen hetzelfde antwoord dat geen ja is en geeft niemand ja (een
+// optietekst die Athena niet begrijpt), dan wordt het tabblad niet verwerkt en niet gemarkeerd (toestemmingTwijfel: fout en melding); slaat een run rijen
+// over zonder toestemming, dan krijgt het talentteam hoogstens één melding per dag met het aantal en het antwoord dat het vaakst voorkwam.
 function aanmeldingenVerwerken() {
   var uit = { nieuw: 0, bestaand: 0, mails: [], overgeslagen: { geenToestemming: 0, geenContact: 0, bewaartermijn: 0 }, fouten: [] }, problemen = [], talenten = null;
+  uit.toestemmingAntwoorden = {};  // v7.4.1 ronde 4: per overgeslagen antwoord (zonder privégegevens) het aantal, voor de melding
   blad('Aanmeldingen');  // het tabblad voor handmatige aanmeldingen bestaat altijd
   aanmeldBladen().forEach(function (b) {
     var laatste = b.getLastRow(); if (laatste < 2) return;
@@ -5126,6 +5291,13 @@ function aanmeldingenVerwerken() {
       }
       return;
     }
+    var twijfel = toestemmingTwijfel(waarden, c);
+    if (twijfel) {  // v7.4.1 ronde 4: niet verwerken en niet markeren; na een verbeterd formulier of een betere herkenning komen de rijen vanzelf terug
+      problemen.push(naam + ': het antwoord op de toestemmingsvraag wordt niet herkend');
+      uit.fouten.push('Tabblad "' + naam + '" is niet verwerkt: ' + twijfel.n + ' aanmeldingen gaven hetzelfde antwoord op de toestemmingsvraag ("' + twijfel.antwoord +
+        '") en niemand gaf ja. Athena herkent dat antwoord niet als toestemming. Pas de optietekst aan (bijvoorbeeld "Ja, ik geef toestemming …"); de aanmeldingen wachten.');
+      return;
+    }
     if (!c.verwerkt.length) { c.verwerkt = [kop.length]; b.getRange(1, kop.length + 1).setValue('verwerkt'); kop.push('verwerkt'); }
     if (!c.talentId.length) { c.talentId = [kop.length]; b.getRange(1, kop.length + 1).setValue('talentId'); kop.push('talentId'); }
     if (!talenten) talenten = lees('Talenten');
@@ -5133,7 +5305,46 @@ function aanmeldingenVerwerken() {
     vergeet(naam);
   });
   if (problemen.length) meldAanmeldProbleem(problemen);
+  if (uit.overgeslagen.geenToestemming) meldZonderToestemming(uit.overgeslagen.geenToestemming, uit.toestemmingAntwoorden);
+  delete uit.toestemmingAntwoorden;
   return uit;
+}
+// v7.4.1 ronde 4: twijfel over de toestemmingsvraag van een tabblad: { n, antwoord } of null. Twijfel = niemand in het tabblad gaf ja en minstens twee nog niet
+// verwerkte rijen gaven hetzelfde ander antwoord (nee of onduidelijk). Een leeg antwoord, een leeg selectievakje en een antwoord dat met een ontkenning begint
+// ('Nee', 'Niet akkoord', 'No') tellen niet: dat is een duidelijke weigering, geen optietekst die Athena verkeerd leest.
+function toestemmingTwijfel(waarden, c) {
+  var tel = {}, beste = null, ja = false;
+  waarden.slice(1).forEach(function (r) {
+    if (ja || !r.some(celIngevuld)) return;
+    var o = rijToestemming(r, c.toestemming), x, sl;
+    if (o === 'ja') { ja = true; return; }
+    if (o === 'leeg' || aanmeldAlVerwerkt(r, c)) return;
+    x = toestemmingTekst(r, c.toestemming); sl = aanmeldWoorden(x);
+    if (!sl || x === 'niet aangevinkt' || /^(nee|neen|nein|non|no|nope|niet|geen|not|never|nooit)( |$)/.test(sl)) return;
+    tel[sl] = tel[sl] || { n: 0, antwoord: vrijeTekst(x) };
+    if (++tel[sl].n >= 2 && (!beste || tel[sl].n > beste.n)) beste = tel[sl];
+  });
+  return ja ? null : beste;
+}
+// Het antwoord dat de toestemming besliste: de eerste ingevulde beslissende kolom die geen ja is (zoals rijToestemming), anders de eerste ingevulde
+function toestemmingTekst(r, kolommen) {
+  var eerste = '';
+  for (var i = 0; i < kolommen.length; i++) {
+    var v = r[kolommen[i]], x = v === false ? 'niet aangevinkt' : celTekst(v);
+    if (!x || TOESTEMMING_NVT.test(x)) continue;
+    if (toestemmingOordeel(v) !== 'ja') return x;
+    eerste = eerste || x;
+  }
+  return eerste;
+}
+// v7.4.1 ronde 4: hoogstens één melding per dag aan het talentteam over rijen zonder toestemming, met het aantal en het antwoord dat het vaakst voorkwam
+function meldZonderToestemming(n, antwoorden) {
+  var vandaag = datumStr(new Date()), meest = '', max = 0;
+  if (P.getProperty('AANMELD_GEEN_TOESTEMMING') === vandaag) return;
+  Object.keys(antwoorden).forEach(function (k) { if (antwoorden[k].n > max) { max = antwoorden[k].n; meest = antwoorden[k].antwoord; } });
+  meld(teamNamen('talent'), (n === 1 ? '1 aanmelding is' : n + ' aanmeldingen zijn') + ' overgeslagen zonder toestemming' + (meest ? ' (meest gegeven antwoord: "' + meest + '")' : '') +
+    '. Was het toch een toestemming, pas dan de toestemmingsvraag aan en maak bij die rijen de kolom verwerkt leeg; dan verwerkt Athena ze opnieuw.', '');
+  P.setProperty('AANMELD_GEEN_TOESTEMMING', vandaag);
 }
 // v7.4.1: de antwoordtabbladen: Aanmeldingen, Formulierreacties en Form Responses, en ook een hernoemd antwoordtabblad ('Aanmeldformulier'): elk tabblad dat
 // geen tabel van Athena is en waarvan de eerste kop 'Tijdstempel' of 'Timestamp' is (zo begint Google Forms)
@@ -5168,9 +5379,11 @@ function aanmeldRij(b, i, r, c, uit, talenten) {
   // v7.4.1: oude antwoorden (bij de eerste koppeling) waarvan de bewaartermijn al voorbij is: geen profiel en geen welkomstmail
   if (bewarenTotVan(dag) < datumStr(new Date())) { uit.overgeslagen.bewaartermijn++; aanmeldMarkeer(b, i, r, c, 'overgeslagen: bewaartermijn verstreken'); return; }
   if ((toest = rijToestemming(r, c.toestemming)) !== 'ja') {
+    var antw = vrijeTekst(toestemmingTekst(r, c.toestemming)) || '(leeg)', sl = aanmeldWoorden(antw) || 'leeg';
     uit.overgeslagen.geenToestemming++;
+    if (uit.toestemmingAntwoorden) { uit.toestemmingAntwoorden[sl] = uit.toestemmingAntwoorden[sl] || { n: 0, antwoord: antw }; uit.toestemmingAntwoorden[sl].n++; }
     aanmeldMarkeer(b, i, r, c, 'overgeslagen: geen toestemming' + (toest === 'onduidelijk' ? ' (antwoord onduidelijk)' : ''));
-    if (bestaand) aanmeldIntrekking(bestaand);
+    if (bestaand && toest === 'nee') aanmeldIntrekking(bestaand);  // v7.4.1 ronde 4: alleen bij een duidelijk nee, niet bij leeg of onduidelijk
     return;
   }
   if (!k.email && !k.tel) { uit.overgeslagen.geenContact++; return; }  // niet gemarkeerd: wie het adres later in de Sheet aanvult, wordt alsnog verwerkt
@@ -5184,20 +5397,23 @@ function aanmeldBestaand(talenten, email, tel) {
   if (!email && !tel) return null;
   return talenten.filter(function (t) { return t.status !== 'uitgeschreven' && ((email && klein(t.email) === email) || (tel && telefoonIn(t.telefoon) === tel && (!email || !t.email))); })[0] || null;
 }
-// De velden van een profiel uit een rij, met wat Athena niet herkende (zonder privégegevens, zonderPrive) en de antwoorden op toestemmingsvragen voor een
+// De velden van een profiel uit een rij, met wat Athena niet herkende (zonder privégegevens, vrijeTekst) en de antwoorden op toestemmingsvragen voor een
 // ander doel die geen ja zijn
 function aanmeldProfiel(r, c, k, dag) {
   var tekst = function (veld) { return aanmeldEerste(r, c[veld], celTekst); }, naam = aanmeldNaam(tekst('voornaam'), tekst('tussenvoegsel'), tekst('achternaam'), tekst('naam'));
   var fun = aanmeldLijst(r, c.functies, functiesUitDeel, keuzelijst('talentFuncties')), sec = aanmeldLijst(r, c.sector, sectorenUitDeel, keuzelijst('sectoren'));
   var pcRuw = tekst('postcode'), pc = postcodeUitCel(pcRuw), woonplaats = schoneNaam(tekst('woonplaats')), niet = [], rasterNiet = [], ander = [];
   var beschikbaarheid = aanmeldBeschikbaarheid(r, c, rasterNiet), toest = aanmeldEerste(r, c.toestemming, function (v) { var x = celTekst(v); return TOESTEMMING_NVT.test(x) ? '' : x; });
-  if (!pc && pcRuw) niet.push('postcode ' + zonderPrive(pcRuw.slice(0, 20)));  // v7.4.1: alleen een geldige postcode in het profiel
+  if (!pc && pcRuw) niet.push('postcode ' + vrijeTekst(pcRuw.slice(0, 20)));  // v7.4.1: alleen een geldige postcode in het profiel
   if (!woonplaats && pc && !c.woonplaats.length) woonplaats = plaatsNaPostcode(pc.rest);  // v7.4.1: één vraag 'Postcode en woonplaats'
-  if (fun.niet.length) niet.push('functies ' + fun.niet.map(zonderPrive).join('; '));
-  if (sec.niet.length) niet.push('sector ' + sec.niet.map(zonderPrive).join('; '));
-  if (rasterNiet.length) niet.push('beschikbaarheid ' + rasterNiet.map(zonderPrive).join('; '));
-  c.toestemmingAnder.forEach(function (j) { var x = celTekst(r[j]); if (x && !TOESTEMMING_NVT.test(x) && toestemmingOordeel(r[j]) !== 'ja') ander.push(zonderPrive(c.kop[j].slice(0, 80)) + ': ' + zonderPrive(x.slice(0, 80))); });
-  return { dag: dag, niet: niet, ander: ander, toestemming: zonderPrive(toest.slice(0, 60)),
+  // v7.4.1 ronde 4: een ingevuld e-mailveld zonder geldig adres ('renée.bakker@…'): leeg, en 'Niet herkend: e-mail' (zonder het adres)
+  if (!k.email && c.email.some(function (j) { return celTekst(r[j]).indexOf('@') >= 0; })) niet.push('e-mail');
+  // v7.4.1 ronde 4 (AVG): elke vrije tekst door hetzelfde filter (vrijeTekst: hoogstens 60 tekens per onderdeel, nooit gezondheid, religie of strafrecht)
+  if (fun.niet.length) niet.push('functies ' + fun.niet.map(vrijeTekst).join('; '));
+  if (sec.niet.length) niet.push('sector ' + sec.niet.map(vrijeTekst).join('; '));
+  if (rasterNiet.length) niet.push('beschikbaarheid ' + rasterNiet.map(vrijeTekst).join('; '));
+  c.toestemmingAnder.forEach(function (j) { var x = celTekst(r[j]); if (x && !TOESTEMMING_NVT.test(x) && toestemmingOordeel(r[j]) !== 'ja') ander.push(vrijeTekst(aanmeldKopDelen(c.kop[j]).kern) + ': ' + vrijeTekst(x)); });
+  return { dag: dag, niet: niet, ander: ander, toestemming: vrijeTekst(toest),
     velden: { voornaam: naam.voornaam, achternaam: naam.achternaam, email: k.email, telefoon: k.tel, postcode: pc ? pc.postcode : '', woonplaats: woonplaats, functies: fun.codes, sectoren: sec.codes, beschikbaarheid: beschikbaarheid } };
 }
 // De tekst van de notitie: eventueel een eerste regel, dan 'Niet herkend: …' (niets gaat stil verloren: 'Andere: bijles') en 'Andere toestemming: …'
@@ -5228,10 +5444,20 @@ function aanmeldOpnieuw(t, p) {
   if (v.sectoren.length && lijst(v.sectoren) !== lijst(t.sectoren)) anders.push('sectoren ' + lijst(v.sectoren));
   if (rasterGevuld(v.beschikbaarheid) && JSON.stringify(v.beschikbaarheid) !== JSON.stringify(beschikbaarheidUit(t.beschikbaarheid)))
     anders.push('beschikbaarheid ' + DAGEN_KORT.filter(function (d) { return v.beschikbaarheid[d].indexOf(2) >= 0; }).join(', '));
+  // v7.4.1 ronde 4: de nieuwe toestemming telt (aanmeldOpnieuw komt alleen na een ja): toestemmingDatum, grondslag en bewarenTot vanaf de dag van deze aanmelding,
+  // anders anonimiseert bewaartermijnRun een profiel dat net opnieuw toestemming gaf. Nooit terug in de tijd (een oudere rij) en nooit korter.
+  var wijzig = {}, tot = bewarenTotVan(p.dag), eerst = [];
+  if (!t.toestemmingDatum || String(t.toestemmingDatum).slice(0, 10) <= p.dag) {
+    wijzig.toestemmingDatum = p.dag; wijzig.toestemmingGrondslag = 'toestemming';
+    if (!t.bewarenTot || String(t.bewarenTot).slice(0, 10) < tot) wijzig.bewarenTot = tot;
+    eerst.push('Toestemming vernieuwd op ' + p.dag + (wijzig.bewarenTot ? '; bewaren tot ' + tot : '') + '.');
+  }
+  if (anders.length) eerst.push('Nieuw in het formulier (profiel niet aangepast): ' + anders.join(' · '));
   schrijf('Activiteiten', { type: 'notitie', datum: nu(), door: 'Formulier', talentId: t.id, bron: 'formulier', aangemaakt: nu(), onderwerp: 'Opnieuw aangemeld via het formulier',
-    tekst: aanmeldNotitie(p, anders.length ? 'Nieuw in het formulier (profiel niet aangepast): ' + anders.join(' · ') : '') });
+    tekst: aanmeldNotitie(p, eerst.join('\n')) });
   meld(teamNamen('talent'), talentNaam(t) + ' heeft zich opnieuw aangemeld via het formulier.', 'talent:' + t.id);
-  if (t.status === 'slapend') { schrijf('Talenten', { id: t.id, status: 'actief', statusSinds: nu(), laatsteContact: datumStr(new Date()) }); t.status = 'actief'; }
+  if (t.status === 'slapend') { wijzig.status = 'actief'; wijzig.statusSinds = nu(); wijzig.laatsteContact = datumStr(new Date()); }
+  if (Object.keys(wijzig).length) { wijzig.id = t.id; schrijf('Talenten', wijzig); Object.keys(wijzig).forEach(function (x) { t[x] = wijzig[x]; }); }
 }
 // v7.4.1 (AVG): een bekend talent vult het formulier in zonder toestemming: mogelijk een intrekking. Een notitie bij het profiel en een melding aan het
 // talentteam; Athena verwijdert zelf niets (anonimiseren blijft een handeling van het management)

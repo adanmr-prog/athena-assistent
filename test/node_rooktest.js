@@ -241,7 +241,9 @@ function formulierCtx(echteTermijn) {
   if (!echteTermijn) F.zetInstelling('bewaartermijnMaanden', 1200);  // v7.4.1 herstel 2: de vaste datums (2-11-2026) in deze tests verlopen niet (een verlopen rij krijgt geen profiel)
   return F;
 }
-(function () {
+// v7.4.1 ronde 4 (M13): een blok dat gooit (bijvoorbeeld tegen een oudere Code.gs via CODE_GS) wordt één FOUT-regel; de blokken erna lopen gewoon door
+function aanmeldBlok(naam, fn) { try { fn(); } catch (e) { eis(false, 'v7.4.1 ' + naam + ': het blok gooit ' + String(e && e.message)); } }
+aanmeldBlok('aanmeldformulier', function () {
   var F = formulierCtx(), dag = vm.runInContext('(function (j, m, d, u, n) { return new Date(j, m, d, u, n); })', F);  // Date uit de context zelf (instanceof)
   var tab = function (naam, rijen) { var b = F._demoSS.insertSheet(naam); rijen.forEach(function (r) { b.appendRow(r); }); return b; };
   var tl = function (email) { return F.lees('Talenten').filter(function (t) { return t.email === email; })[0] || {}; };
@@ -280,7 +282,7 @@ function formulierCtx(echteTermijn) {
   eis(annaAlles.indexOf('2001-04-15') < 0 && annaAlles.indexOf('NL13TEST0123456789') < 0 && annaAlles.indexOf('0611112222') < 0, 'v7.4.1 AVG: geboortedatum, IBAN en een medische kolom worden nooit gelezen, ook niet in de notitie of een melding');
   eis(!tl('gijs.zondervraag@mail.example').id && Z.rijen[0].length === 4 && !Z.rijen[1][4] && zonderVraag() === 1, 'v7.4.1 tabblad zonder toestemmingsvraag: geen profiel, geen markering, wel een fout en één melding aan het talentteam');
   var tweede = F.aanmeldingenVerwerken();
-  eis(tweede.nieuw === 0 && tweede.bestaand === 0 && tweede.overgeslagen && tweede.overgeslagen.geenToestemming === 0 && tweede.overgeslagen.geenContact === 0 && tweede.fouten.length === 1 && /toestemmingsvraag/.test(tweede.fouten[0]) && zonderVraag() === 1,
+  eis(tweede.nieuw === 0 && tweede.bestaand === 0 && tweede.overgeslagen && (tweede.overgeslagen || {}).geenToestemming === 0 && (tweede.overgeslagen || {}).geenContact === 0 && (tweede.fouten || []).length === 1 && /toestemmingsvraag/.test((tweede.fouten || [])[0]) && zonderVraag() === 1,
     'v7.4.1 resultaat { nieuw, bestaand, mails, overgeslagen: { geenToestemming, geenContact }, fouten }; een tweede run dezelfde dag meldt niet opnieuw');
   F.P.setProperty('AANMELD_ZONDER_TOESTEMMING', plusDagen(-1)); F.aanmeldingenVerwerken();
   eis(zonderVraag() === 2, 'v7.4.1 de melding over de ontbrekende toestemmingsvraag komt hoogstens één keer per dag terug');
@@ -292,15 +294,15 @@ function formulierCtx(echteTermijn) {
   var vAnouk = vt('anouk.proefhoeve@mail.example'), vBram = vt('bram.oefenmaker@mail.example'), vEva = vt('eva.modelhof@mail.example'), vFemke = vt('femke.fictiehof@mail.example'), vGijs = vt('gijs.bedenkveld@mail.example');
   eis(csv.length === 9 && /^6 nieuw, 1 bestaand, 6 mails, 1 zonder toestemming$/.test(vr2) && !vt('dewi.schetsboek@mail.example').id, 'v7.4.1 voorbeeld aanmeldformulier.csv: 8 rijen → 6 profielen, 1 opnieuw aangemeld, 1 zonder toestemming (' + vr2 + ')');
   var geb = csv.slice(1).map(function (r) { return r[14]; }), vAlles = JSON.stringify(V.lees('Talenten')) + JSON.stringify(V.lees('Activiteiten')) + JSON.stringify(V.lees('Meldingen'));
-  eis(vrs(vAnouk, 'ma') === '220' && vrs(vAnouk, 'wo') === '022' && vrs(vAnouk, 'do') === '200' && vAnouk.toestemmingDatum === '2026-11-02' && vAnouk.postcode === '1234 AB' && vAnouk.achternaam === 'van der Proefhoeve' &&
+  eis(vrs(vAnouk, 'ma') === '220' && vrs(vAnouk, 'wo') === '022' && vrs(vAnouk, 'do') === '200' && vAnouk.toestemmingDatum === '2026-11-03' && vAnouk.postcode === '1234 AB' && vAnouk.achternaam === 'van der Proefhoeve' &&
     V.telefoonIn(vBram.telefoon) === '0610000102' && vrs(vBram, 'di') === '220' && vrs(vBram, 'vr') === '110' && V.lijstUit(vBram.sectoren).join() === 'po' && V.lijstUit(vBram.functies).join() === 'huiswerkbegeleider' &&
     V.lijstUit(vEva.sectoren).join() === 'so' && vrs(vEva, 'vr') === '220' && vrs(vEva, 'zo') === '000' && V.lijstUit(vFemke.sectoren).sort().join() === 'mbo,vo' && vFemke.achternaam === 'de Fictiehof' &&
     V.lijstUit(vGijs.sectoren).sort().join() === 'po,vo' && vrs(vGijs, 'wo') === '020' && V.lees('Activiteiten').some(function (a) { return a.talentId === vGijs.id && /leesbegeleiding/.test(a.tekst); }) &&
     geb.length === 8 && geb.concat(geb.map(V.exportDag)).every(function (g) { return g && vAlles.indexOf(g) < 0; }),
-    'v7.4.1 voorbeeld: raster, bereik, liever niet, sector, telefoon als getal, tussenvoegsel, tekstdatum en "Niet herkend" kloppen per rij; de geboortedatums (ook als jjjj-mm-dd) staan nergens');
-})();
+    'v7.4.1 voorbeeld: raster, bereik, liever niet, sector, telefoon als getal, tussenvoegsel, tekstdatum en "Niet herkend" kloppen per rij (ronde 4: Anouk meldt zich op 3-11 opnieuw aan, haar toestemming telt vanaf die dag); de geboortedatums (ook als jjjj-mm-dd) staan nergens');
+});
 /* ---- v7.4.1 herstel ronde 1 (review en tegenspeler): elk geval een eigen tabblad in één run; alle namen, adressen en nummers verzonnen ---- */
-(function () {
+aanmeldBlok('herstel ronde 1', function () {
   var F = formulierCtx(), J = 'Ja', d = '2-11-2026 08:00', tabs = {}, n = 10;
   var tab = function (kop, rijen) { var b = F._demoSS.insertSheet('Formulierreacties ' + (n++)); b.appendRow(kop); rijen.forEach(function (r) { b.appendRow(r); }); return b; };
   var tl = function (email) { return F.lees('Talenten').filter(function (t) { return t.email === email; })[0] || {}; };
@@ -353,11 +355,11 @@ function formulierCtx(echteTermijn) {
     'v7.4.1 herstel: toestemming is "nee" alleen aan het begin van de cel ("Ik geef toestemming (bij geen toestemming …)", "I agree. We don\'t share …" en "Geen bezwaar" zijn ja; "Nee, liever niet" is nee)');
   eis(!!tl('sara.nvt@mail.example').id && !!tl('ugo.nvt@mail.example').id, 'v7.4.1 herstel: "n.v.t." of "N/A" bij een toestemmingsvraag voor ouders blokkeert de aanmelding niet');
   eis(!!tl('wout.vast@mail.example').id, 'v7.4.1 herstel: een akkoord-vraag over een oproepcontract is geen privacytoestemming (naast de echte privacyvraag)');
-  eis(!!tl('abel.handwerk@mail.example').id && hand.rijen[2][10] === '' && uit.overgeslagen.geenToestemming === 1 && tabs.vinkje.rijen[2][kolom(tabs.vinkje, 'Verwerkt')] === false,
+  eis(!!tl('abel.handwerk@mail.example').id && hand.rijen[2][10] === '' && (uit.overgeslagen || {}).geenToestemming === 1 && tabs.vinkje.rijen[2][kolom(tabs.vinkje, 'Verwerkt')] === false,
     'v7.4.1 herstel: een rij met alleen een leeg selectievakje (false) is leeg: niet gemarkeerd en niet geteld als "zonder toestemming"');
   eis(!!tl('yara.vinkje@mail.example').id && tabs.vinkje.rijen[1][kolom(tabs.vinkje, 'Verwerkt')] === true, 'v7.4.1 herstel: een kolom "Verwerkt" met lege selectievakjes (false) blokkeert niets; Athena zet er een vinkje in');
   eis(lijst(tl('sem.sbo@mail.example').sectoren) === 'so' && lijst(tl('pim.sbo@mail.example').sectoren) === 'so', 'v7.4.1 herstel: "Speciaal basisonderwijs" en "SBO" zijn so (zoals sectorVanSchool), niet ook po');
-  eis(!tl('j.directeur@school.example').id && !tl('p.leerkracht@school.example').id && kolom(tabs.avond, 'verwerkt') < 0 && kolom(tabs.evaluatie, 'verwerkt') < 0 && !uit.fouten.some(function (f) { return f.indexOf(tabs.avond.getName()) >= 0 || f.indexOf(tabs.evaluatie.getName()) >= 0; }) && uit.fouten.length === 0 &&
+  eis(!tl('j.directeur@school.example').id && !tl('p.leerkracht@school.example').id && kolom(tabs.avond, 'verwerkt') < 0 && kolom(tabs.evaluatie, 'verwerkt') < 0 && !(uit.fouten || []).some(function (f) { return f.indexOf(tabs.avond.getName()) >= 0 || f.indexOf(tabs.evaluatie.getName()) >= 0; }) && (uit.fouten || []).length === 0 &&
     tl('otto.simpel@mail.example').voornaam === 'Otto', 'v7.4.1 herstel: een aanmelding voor een informatieavond of een evaluatie in dezelfde Sheet is geen aanmeldformulier (geen profiel, geen markering, geen fout); een eenvoudig formulier met naam, e-mail, opmerkingen en toestemming wel');
   var sven = tl('sven.pabolaan@mail.example'), iris = tl('iris.stagewerk@mail.example');
   eis(sven.voornaam === 'Sven' && sven.achternaam === 'Pabolaan' && F.telefoonIn(sven.telefoon) === '0610000303' && !!iris.id && !iris.telefoon &&
@@ -390,10 +392,10 @@ function formulierCtx(echteTermijn) {
     'v7.4.1 herstel: ontkenningen in vrije tekst ("maar woensdag niet", "geen woensdag", "woensdag kan ik niet") zijn 0, "vrijdag liever niet" is 1; "weet ik het nog niet" laat maandag staan');
   var t0 = Date.now(); F.emailUitCel(new Array(50001).join('a')); F.beschikbaarheidUitTekst(new Array(10001).join('zo do ')); var ms = Date.now() - t0;
   eis(ms < 300, 'v7.4.1 herstel: een cel van 50.000 tekens zonder e-mailadres en 60.000 tekens dagtekst kosten samen geen seconden (' + ms + ' ms)');
-})();
+});
 /* ---- v7.4.1 herstel ronde 2 (review en tegenspeler): toestemming als witte lijst, omgekeerde en huidige vragen, bezette dagen, rasters met bereik en
    tijdvak, namen, toelichtingen, kleine en hernoemde formulieren, ontkenningen en privégegevens in antwoorden; alle namen, adressen en nummers verzonnen ---- */
-(function () {
+aanmeldBlok('herstel ronde 2', function () {
   var F = formulierCtx(), J = 'Ik geef toestemming om mijn gegevens op te slaan in het talentbestand', d = '2-11-2026 08:00', n = 30, nr = 400, T = {};
   var tel = function () { return '0610000' + String(nr++); };
   var tab = function (kop, rijen, naam) { var b = F._demoSS.insertSheet(naam || 'Formulierreacties ' + (n++)); b.appendRow(kop); rijen.forEach(function (r) { b.appendRow(r); }); return b; };
@@ -442,7 +444,7 @@ function formulierCtx(echteTermijn) {
   T.twijfel = tab(['Tijdstempel', 'E-mailadres', 'Naam', 'Wat is je vraag?'], [[d, 'quinten.vraag@mail.example', 'Quinten Vraag', 'Hoe werkt het?']]);
   var hand = F.blad('Aanmeldingen');
   ['-', '?', 'onbekend', 'volgt'].forEach(function (x, i) { hand.appendRow(['2-11-2026', 'H' + i, 'Handmatig', tel(), 'h' + i + '.handmatig@mail.example', '', '', '', '', x, '', '']); });
-  var uit = F.aanmeldingenVerwerken(), fout = function (b) { return uit.fouten.filter(function (x) { return x.indexOf('"' + b.getName() + '"') >= 0; }).join(); };
+  var uit = F.aanmeldingenVerwerken(), fout = function (b) { return (uit.fouten || []).filter(function (x) { return x.indexOf('"' + b.getName() + '"') >= 0; }).join(); };
   eis(!!tl('ada.akkoord@mail.example').id && weiger.every(function (a, i) { return !tl('w' + i + '.weiger@mail.example').id && /^overgeslagen: geen toestemming/.test(T.toest.rijen[i + 2][kolom(T.toest, 'verwerkt')]); }) &&
     /onduidelijk/.test(T.toest.rijen[weiger.length + 1][kolom(T.toest, 'verwerkt')]),
     'v7.4.1 herstel 2 (review 1, U01): toestemming is een witte lijst: "Ik ga hiermee niet akkoord", "Ik heb bezwaar", "Liever niet", "Weigeren", "Declined", "❌", "Weet ik nog niet", "Mee oneens" en "… geen toestemming" zijn nee, "… gelezen" is onduidelijk');
@@ -489,11 +491,11 @@ function formulierCtx(echteTermijn) {
   var veraAlles = JSON.stringify(vera) + notitie(vera) + JSON.stringify(F.lees('Meldingen').filter(function (m) { return m.link === 'talent:' + vera.id; }));
   eis(lijst(tim.sectoren) === 'vo' && F.lijstUit(tim.functies).indexOf('surveillant') < 0 && /behalve surveillance/.test(notitie(tim)) && lijst(uma.functies) === 'examentrainer',
     'v7.4.1 herstel 2 (U29): een ontkenning in het antwoord ("Alles behalve surveillance", "Geen mbo, wel vo", "Liever geen huiswerkbegeleiding") geeft geen code; de tekst blijft als "Niet herkend"');
-  eis(lijst(vera.functies) === 'huiswerkbegeleider' && veraAlles.indexOf('ziekte') < 0 && /weggelaten: privégegevens/.test(notitie(vera)), 'v7.4.1 herstel 2 (U30, AVG): een niet herkend antwoord met gezondheidsinformatie komt niet in het profiel of de notitie');
+  eis(lijst(vera.functies) === 'huiswerkbegeleider' && veraAlles.indexOf('ziekte') < 0 && /eigen antwoord, niet overgenomen/.test(notitie(vera)), 'v7.4.1 herstel 2 (U30, AVG): een niet herkend antwoord met gezondheidsinformatie komt niet in het profiel of de notitie (ronde 4: "(eigen antwoord, niet overgenomen)")');
   eis(!!tl('wout.nee@mail.example').id && !tl('xena.ja@mail.example').id, 'v7.4.1 herstel 2 (U31): een eigen kolom "Verwerkt" met "Nee" is nog niet verwerkt, met "Ja" wel');
-})();
+});
 /* ---- v7.4.1 herstel ronde 2: bestaande talenten (intrekking, opnieuw aangemeld), een gewiste kolom 'verwerkt', een verlopen rij en één leesbeurt per run ---- */
-(function () {
+aanmeldBlok('herstel ronde 2 (bestaande talenten)', function () {
   var F = formulierCtx(true), J = 'Ik geef toestemming om mijn gegevens op te slaan in het talentbestand', vandaag = vm.runInContext('(function (d) { return d.getDate() + "-" + (d.getMonth() + 1) + "-" + d.getFullYear(); })', F);
   var nu = vandaag(F.plusDagen(-1)) + ' 08:00', oud = vandaag(F.plusDagen(-800)) + ' 10:00';  // gisteren, en ruim twee jaar geleden (de bewaartermijn is 24 maanden)
   var hans = F.schrijf('Talenten', { voornaam: 'Hans', achternaam: 'Intrek', email: 'hans.intrek@mail.example', telefoon: '0610000480', status: 'actief' });
@@ -524,7 +526,148 @@ function formulierCtx(echteTermijn) {
   var V = formulierCtx(true), vb = V._demoSS.insertSheet('Formulierreacties 1'); vb.appendRow(['Tijdstempel', 'E-mailadres', 'Voornaam', 'Achternaam', 'Privacyverklaring']); vb.appendRow([oud, 'gert.oud@mail.example', 'Gert', 'Oud', J]);
   V._demoVerzonden.length = 0;
   eis(/^0 nieuw, 0 bestaand, 0 mails, 1 met verstreken bewaartermijn$/.test(V.aanmeldingenRun()) && V._demoVerzonden.length === 0, 'v7.4.1 herstel 2: aanmeldingenRun noemt de verlopen rij (", 1 met verstreken bewaartermijn") en mailt niet');
-})();
+});
+/* ---- v7.4.1 herstel ronde 4 (tegenspeler r3 en review): toestemming in de hoofdzin en nooit stil, andere formulieren, contactkolommen als witte lijst, één
+   filter voor vrije tekst (AVG), ontkende dagdelen, tijden, dagen en dagdelen uit twee kolommen, nieuwe toestemming van een bekend talent; alles verzonnen ---- */
+aanmeldBlok('herstel ronde 4', function () {
+  var F = formulierCtx(), J = 'Ik geef toestemming om mijn gegevens op te slaan in het talentbestand', d = '2-11-2026 08:00', n = 60, nr = 600, T = {};
+  var tel = function () { return '0610000' + String(nr++); };
+  var tab = function (kop, rijen, naam) { var b = F._demoSS.insertSheet(naam || 'Formulierreacties ' + (n++)); b.appendRow(kop); rijen.forEach(function (r) { b.appendRow(r); }); return b; };
+  var tl = function (email) { return F.lees('Talenten').filter(function (t) { return t.email === email; })[0] || {}; };
+  var rs = function (t, dg) { return t.id ? F.beschikbaarheidUit(t.beschikbaarheid)[dg].join('') : '?'; }, lijst = function (s) { return F.lijstUit(s).slice().sort().join(); };
+  var week = function (t) { return ['ma', 'di', 'wo', 'do', 'vr'].map(function (x) { return rs(t, x); }).join(' '); };
+  var probeer = function (fn) { try { return fn(); } catch (e) { return undefined; } }, kolom = function (b, naam) { return b.rijen[0].indexOf(naam); };
+  var tekst = function (t) { return probeer(function () { var r = F.beschikbaarheidUitTekst(t); return ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'].map(function (x) { return r[x].join(''); }).join(' '); }); };
+  var notitie = function (t) { return F.lees('Activiteiten').filter(function (a) { return t.id && a.talentId === t.id; }).map(function (a) { return a.onderwerp + ' ' + a.tekst; }).join(' | '); };
+  var K = function (kop, veld) { return probeer(function () { return F.aanmeldKolommen(['Tijdstempel'].concat(kop))[veld].join(); }); };
+  var OK5 = ['Tijdstempel', 'E-mailadres', 'Voornaam', 'Achternaam', 'Telefoonnummer'];
+  var rij = function (voor, achter) { return [d, voor.toLowerCase() + '.' + achter.toLowerCase() + '@mail.example', voor, achter, tel()]; };
+  var bekend = F.schrijf('Talenten', { voornaam: 'Lot', achternaam: 'Gelezen', email: 'lot.gelezen@mail.example', telefoon: '0610000699', status: 'actief' });
+  var bijzin = ['Ik geef toestemming voor het bewaren van mijn gegevens en weet dat ik die altijd kan intrekken', 'Ik ga akkoord met de privacyverklaring, mijn gegevens worden niet gedeeld met derden',
+    'Ik geef toestemming om mijn gegevens te bewaren tot ik me afmeld', 'Ja, ik geef toestemming; je gegevens worden nooit verkocht'];
+  T.bijzin = tab(OK5.concat(['Privacyverklaring']), bijzin.map(function (x, i) { return rij('Bz' + i, 'Bijzin').concat([x]); }).concat([rij('Bz', 'Nietakkoord').concat(['Ik ga niet akkoord']),
+    rij('Bz', 'Disagree').concat(['I do not agree']), rij('Lot', 'Gelezen').concat(['Ik heb de privacyverklaring gelezen'])]));
+  T.vaak = tab(OK5.concat(['Privacyverklaring']), [rij('Va', 'Ja').concat(['Ja'])].concat([0, 1, 2].map(function (i) { return rij('Va' + i, 'Nee').concat(['Nee, liever niet']); })));
+  T.twijfel = tab(OK5.concat(['Privacyverklaring']), [rij('Tw', 'Een').concat(['Ik heb de privacyverklaring gelezen en begrepen']), rij('Tw', 'Twee').concat(['Ik heb de privacyverklaring gelezen en begrepen'])]);
+  var hand = F.blad('Aanmeldingen');
+  ['gegeven', 'mondeling gegeven', 'getekend', 'aangevinkt', 'verkregen', 'wel'].forEach(function (x, i) { hand.appendRow(['2-11-2026', 'Hand' + i, 'Gegeven', tel(), 'hand' + i + '.gegeven@mail.example', '', '', '', '', x, '', '']); });
+  T.offerte = tab(['Tijdstempel', 'Naam', 'Naam van je school', 'Functie', 'E-mailadres', 'Telefoonnummer', 'Waar kunnen we je mee helpen?', 'Ik ga akkoord met de privacyverklaring'],
+    [[d, 'Karin Offerte', 'Esdoorn College', 'Teamleider onderbouw', 'k.offerte@esdoorn.example', '0301230601', 'Wij zoeken twee surveillanten', 'Ja']]);
+  T.contact = tab(['Tijdstempel', 'Naam', 'E-mailadres', 'Telefoonnummer', 'Namens welke school of organisatie neem je contact op?', 'Je vraag of bericht', 'Privacy'],
+    [[d, 'Joost Contact', 'j.contact@lindeschool.example', '0201230602', 'Lindeschool', 'Graag een offerte', 'Akkoord']]);
+  T.scholier = tab(OK5.concat(['Postcode', 'Naam van je school', 'Privacyverklaring']), [rij('Lars', 'Scholier').concat(['2511 AA', 'Lyceum Denkbeeld', J])]);
+  T.derden = tab(['Tijdstempel', 'Voornaam', 'Achternaam', 'Telefoonnummer', 'E-mailadres (optioneel)', 'Naam van je stagedocent', 'E-mailadres van je stagedocent', 'Telefoonnummer van je teamleider', 'Privacyverklaring'],
+    [[d, 'Sam', 'Stagiair', '0610000690', '', 'Petra Docent', 'p.docent@pabo.example', '0301230603', J], [d, 'Sem', 'Stagiair', '', '', 'Petra Docent', 'p.docent@pabo.example', '0301230603', J]]);
+  T.referee = tab(['Timestamp', 'Name', 'Email', 'Phone number', 'Referee name', 'Referee email', 'Phone number of your manager', 'I agree to the privacy policy'],
+    [[d, 'Noah Referee', '', '0610000691', 'Petra Ref', 'p.ref@mail.example', '0301230604', 'I agree']], 'Form Responses 9');
+  T.delen = tab(OK5.concat(['Privacy', 'Toestemming om je e-mailadres te delen met scholen', 'Toestemming om je telefoonnummer te delen met scholen']), [rij('Deel', 'Niet').concat(['Ja', 'Nee', 'Nee'])]);
+  T.avg = tab(OK5.concat(['Welke werkzaamheden wil je doen?', 'In welk type onderwijs wil je werken?', 'Privacyverklaring']),
+    [rij('Avg', 'Een').concat(['Huiswerkbegeleider, Andere: alleen ochtenden vanwege mijn burn-out', 'vo, Andere: graag een school met een gebedsruimte', J]),
+      rij('Avg', 'Straf').concat(['Examentrainer, Andere: ik heb een strafblad maar wel een VOG', 'vo', J]),
+      rij('Avg', 'Lang').concat(['Surveillant, Andere: ik wil graag helpen met allerlei dingen op school zoals de bibliotheek en de kantine opruimen', 'vo', J])]);
+  T.raster = tab(OK5.concat(['Beschikbaarheid [Maandag]', 'Beschikbaarheid [Dinsdag]', 'Beschikbaarheid [Woensdag]', 'Privacyverklaring']), [rij('Rast', 'Ontkend').concat(['Ochtend niet', '8.30 - 12.00', '8.30 - 12.00, 12.30 - 16.00', J])]);
+  T.bellen = tab(OK5.concat(['Toestemming om je te bellen', 'Ik heb de privacyverklaring gelezen en ga akkoord met het opslaan van mijn gegevens']), [rij('Bel', 'Niet').concat(['Nee, liever per mail', 'Ja'])]);
+  T.inval = tab(OK5.concat(['Wanneer ben je beschikbaar? (ook voor invallen bij ziekte)', 'Beschikbaarheid bij ziekte of verlof van docenten [Woensdag]', 'Welke werkzaamheden wil je doen? (bijv. bijles filosofie)', 'Privacyverklaring']),
+    [rij('Inval', 'Ziek').concat(['Maandag en dinsdag', '', 'Huiswerkbegeleider, Examentrainer', J]), rij('Inval', 'Raster').concat(['', 'Ochtend, Middag', '', J])]);
+  T.tweekolom = tab(OK5.concat(['Op welke dagen ben je beschikbaar?', 'Welke dagdelen?', 'Privacyverklaring']), [rij('Dag', 'Deel').concat(['Maandag, Woensdag', 'Middag, Avond', J]), rij('Dag', 'Alleen').concat(['Dinsdag, Donderdag', '', J])]);
+  T.vrij = tab(OK5.concat(['Wanneer ben je beschikbaar?', 'Privacyverklaring']), [rij('Vrij', 'Tekst').concat(['Flexibel, bel me even', J])]);
+  T.janee = tab(OK5.concat(['Welke werkzaamheden wil je doen?', 'Privacyverklaring']), [rij('Ja', 'Nee').concat(['Huiswerkbegeleiding ja, surveillance nee', J]), rij('Nee', 'Ja').concat(['Surveillance: nee. Huiswerkbegeleiding: ja', J])]);
+  T.wat = tab(OK5.concat(['Wat wil je doen?', 'Voorkeursdagen', 'Privacyverklaring']), [rij('Wat', 'Wil').concat(['Huiswerkbegeleiding en surveillance', 'Dinsdag en donderdag', J])]);
+  T.type = tab(['Timestamp', 'Email Address', 'First name', 'Last name', 'Phone number', 'Which type of school would you like to work at?', 'I agree to the privacy policy'], [[d, 'tess.type@mail.example', 'Tess', 'Type', tel(), 'Secondary school, Special needs', 'I agree']], 'Form Responses 8');
+  T.accent = tab(OK5.concat(['Privacyverklaring']), [[d, 'renée.accent@mail.example', 'Renée', 'Accent', tel(), J]]);
+  T.haakje = tab(['Tijdstempel', 'E-mailadres', 'Naam (voornaam)', 'Naam (achternaam)', 'Telefoonnummer', 'Privacyverklaring'], [[d, 'tess.haakje@mail.example', 'Tess', 'Haakje', tel(), J]]);
+  T.adres = tab(OK5.concat(['Je woonadres (straat + huisnummer)', 'Postcode', 'Privacyverklaring']), [rij('Woon', 'Adres').concat(['Oudegracht 12', '3511 AB', J])]);
+  var m0 = F.lees('Meldingen').length, uit = F.aanmeldingenVerwerken(), fouten = uit.fouten || [], fout = function (b) { return fouten.filter(function (x) { return x.indexOf('"' + b.getName() + '"') >= 0; }).join(); };
+  var meldingen = F.lees('Meldingen').slice(m0), alles = JSON.stringify(F.lees('Talenten')) + JSON.stringify(F.lees('Activiteiten')) + JSON.stringify(F.lees('Meldingen'));
+  // H1
+  eis(bijzin.every(function (x, i) { return !!tl('bz' + i + '.bijzin@mail.example').id; }) && !tl('bz.nietakkoord@mail.example').id && !tl('bz.disagree@mail.example').id &&
+    ['Nee', 'No', 'Niet akkoord', 'Ik geef geen toestemming', "I don't", 'Nee, verwijder mijn gegevens'].every(function (x) { return probeer(function () { return F.toestemmingOordeel(x); }) === 'nee'; }),
+    'v7.4.1 ronde 4 (H1, V01): een ontkenning in een bijzin na het ja-deel telt niet ("… en weet dat ik die altijd kan intrekken", "…, mijn gegevens worden niet gedeeld", "… tot ik me afmeld"); "Ik ga niet akkoord", "I do not agree", "Nee", "Niet akkoord" blijven nee');
+  eis([0, 1, 2, 3, 4, 5].every(function (i) { return !!tl('hand' + i + '.gegeven@mail.example').id; }), 'v7.4.1 ronde 4 (H1, V21): toestemming "gegeven", "mondeling gegeven", "getekend", "aangevinkt", "verkregen" en "wel" is ja');
+  var zonder = meldingen.filter(function (m) { return m.voor === 'Iris Mulder' && /overgeslagen zonder toestemming/.test(m.tekst); }), nOver = (uit.overgeslagen || {}).geenToestemming;
+  eis(zonder.length === 1 && zonder[0].tekst.indexOf(nOver + ' aanmeldingen zijn overgeslagen') === 0 && /meest gegeven antwoord: "Nee, liever niet"/.test(zonder[0].tekst) && /verwerkt leeg/.test(zonder[0].tekst),
+    'v7.4.1 ronde 4 (H1a): rijen zonder toestemming gaan niet stil: één melding aan het talentteam met het aantal (' + nOver + ') en het antwoord dat het vaakst voorkwam');
+  F.aanmeldingenVerwerken();
+  eis(F.lees('Meldingen').filter(function (m) { return m.voor === 'Iris Mulder' && /overgeslagen zonder toestemming/.test(m.tekst); }).length === 1, 'v7.4.1 ronde 4 (H1a): die melding komt hoogstens één keer per dag');
+  eis(!tl('tw.een@mail.example').id && kolom(T.twijfel, 'verwerkt') < 0 && /gelezen en begrepen/.test(fout(T.twijfel)) && /niemand gaf ja/.test(fout(T.twijfel)) &&
+    meldingen.some(function (m) { return m.voor === 'Iris Mulder' && /toestemmingsvraag wordt niet herkend/.test(m.tekst); }) && kolom(T.vaak, 'verwerkt') > 0 && !!tl('va.ja@mail.example').id,
+    'v7.4.1 ronde 4 (H1b, V02): twee rijen met hetzelfde antwoord dat geen ja is en niemand ja: het tabblad is twijfel (fout, melding, rijen niet gemarkeerd, dus later alsnog verwerkt)');
+  // H2
+  eis(!tl('k.offerte@esdoorn.example').id && !tl('j.contact@lindeschool.example').id && kolom(T.offerte, 'verwerkt') < 0 && kolom(T.contact, 'verwerkt') < 0 && !fout(T.offerte) && !fout(T.contact) && !!tl('lars.scholier@mail.example').id,
+    'v7.4.1 ronde 4 (H2, V08/V09): een offerte- of contactformulier van een school (naam van je school, namens welke organisatie, zonder vraag naar werk, sector of dagen) maakt geen talenten; een scholier die zijn school noemt naast zijn postcode wel');
+  // H3
+  var sam = tl('sam.stagiair@mail.example');
+  eis(!!F.lees('Talenten').filter(function (t) { return t.voornaam === 'Sam' && t.achternaam === 'Stagiair'; })[0] && !F.lees('Talenten').some(function (t) { return t.voornaam === 'Sem' && t.achternaam === 'Stagiair'; }) &&
+    ['p.docent@pabo.example', '0301230603', 'p.ref@mail.example', '0301230604', 'Petra'].every(function (x) { return alles.indexOf(x) < 0; }) && F.lees('Talenten').some(function (t) { return t.voornaam === 'Noah' && !t.email; }) &&
+    K(['E-mailadres van je stagedocent'], 'email') === '' && K(['Referee email'], 'email') === '' && K(['Phone number of your manager'], 'telefoon') === '' && K(['Toestemming om je e-mailadres te delen met scholen'], 'email') === '' &&
+    K(['Wat is je e-mailadres?', 'Op welk nummer kunnen we je bereiken?', 'Je eigen e-mailadres (dus niet dat van je ouders)'], 'email').split(',').sort().join() === '1,3' && !sam.id,
+    'v7.4.1 ronde 4 (H3, V10/V11): e-mail, telefoon en naam van een stagedocent, teamleider, referee of manager worden nooit die van het talent (witte lijst); zonder eigen contact geen profiel');
+  eis(/Andere toestemming: Toestemming om je e-mailadres te delen met scholen: Nee · Toestemming om je telefoonnummer te delen met scholen: Nee/.test(notitie(tl('deel.niet@mail.example'))),
+    'v7.4.1 ronde 4 (H3, V15): een kop met "toestemming" is nooit een contactkolom; de weigering "delen met scholen: Nee" staat als "Andere toestemming" in de notitie');
+  // H4
+  var avg = notitie(tl('avg.een@mail.example')) + notitie(tl('avg.straf@mail.example')), lang = notitie(tl('avg.lang@mail.example'));
+  eis(lijst(tl('avg.een@mail.example').functies) === 'huiswerkbegeleider' && ['burn', 'gebedsruimte', 'strafblad'].every(function (x) { return alles.toLowerCase().indexOf(x) < 0; }) &&
+    /eigen antwoord, niet overgenomen/.test(avg) && /ik wil graag helpen met allerlei dingen/.test(lang) && lang.indexOf('kantine') < 0,
+    'v7.4.1 ronde 4 (H4, V12, AVG): gezondheid, religie of strafrecht in "Andere: …" komt nooit als tekst in het profiel ("(eigen antwoord, niet overgenomen)"); elk onderdeel hoogstens 60 tekens');
+  // H5 en M4
+  eis(tekst('Ma t/m vr, geen avonden') === '220 220 220 220 220 000 000' && tekst('Doordeweeks, maar geen avonden') === '220 220 220 220 220 000 000' && tekst("Overdag, niet 's avonds") === '220 220 220 220 220 000 000' &&
+    tekst('Maandag en dinsdag, maar niet in de ochtend') === '020 020 000 000 000 000 000' && tekst("Maandagmiddag en dinsdagmiddag, niet 's ochtends") === '020 020 000 000 000 000 000' &&
+    tekst('Ochtenden niet, middagen wel') === '020 020 020 020 020 000 000' && tekst("Alle dagen behalve 's avonds") === '220 220 220 220 220 220 220' && rs(tl('rast.ontkend@mail.example'), 'ma') === '020',
+    'v7.4.1 ronde 4 (H5, V03): een ontkend dagdeel ("geen avonden", "niet \'s avonds", "niet in de ochtend", "Ochtenden niet", "behalve \'s avonds", rastercel "Ochtend niet") is 0 en draait niets om');
+  eis(tekst('Maandag en woensdag vanaf 13.00 uur') === '020 000 020 000 000 000 000' && tekst('Dinsdag 8.30-12.00') === '000 200 000 000 000 000 000' && tekst('Donderdag tot 12 uur') === '000 000 000 200 000 000 000' &&
+    tekst('Ma t/m vr 10-12 uur per week') === '220 220 220 220 220 000 000' && rs(tl('rast.ontkend@mail.example'), 'di') === '200' && rs(tl('rast.ontkend@mail.example'), 'wo') === '220',
+    'v7.4.1 ronde 4 (M4, V04/V05): tijden: "vanaf 13.00 uur" = middag, "8.30-12.00" en "tot 12 uur" = ochtend, rastercellen "8.30 - 12.00" en "12.30 - 16.00" = ochtend en middag; "10-12 uur per week" is geen tijd');
+  // H6 staat hieronder (eigen context, echte bewaartermijn)
+  // M1
+  var bel = tl('bel.niet@mail.example');
+  eis(!!bel.id && /Andere toestemming: Toestemming om je te bellen: Nee, liever per mail/.test(notitie(bel)),
+    'v7.4.1 ronde 4 (M1, V14): een toestemmingsvraag zonder woord over het talentbestand ("Toestemming om je te bellen") is een ander doel zodra een andere vraag er wel een heeft, ook als hij hoger scoort');
+  // M2
+  var inval = tl('inval.ziek@mail.example');
+  eis(week(inval) === '220 220 000 000 000' && rs(tl('inval.raster@mail.example'), 'wo') === '220' && lijst(inval.functies) === 'examentrainer,huiswerkbegeleider' &&
+    probeer(function () { return F.priveWoord('ziekteverlof') && F.priveWoord('sofi nummer') && F.priveWoord('ben je ziek geweest') && !F.priveWoord('bijles filosofie') && !F.priveWoord('invallen bij ziekte van een docent'); }) === true,
+    'v7.4.1 ronde 4 (M2, V22-V24): "invallen bij ziekte", "ziekte of verlof van docenten" en "filosofie" maken een kolom niet privé; "ziekteverlof", "Sofi-nummer" en "ben je ziek geweest" wel');
+  // M3
+  var dd = tl('dag.deel@mail.example'), da = tl('dag.alleen@mail.example');
+  eis(week(dd) === '022 000 022 000 000' && week(da) === '000 220 000 220 000', 'v7.4.1 ronde 4 (M3, V06): de dagen uit "Op welke dagen …?" en de dagdelen uit "Welke dagdelen?" samen (ma en wo middag en avond)');
+  // M5
+  var vrij = tl('vrij.tekst@mail.example');
+  eis(!!vrij.id && week(vrij) === '000 000 000 000 000' && /Niet herkend: beschikbaarheid Flexibel, bel me even/.test(notitie(vrij)), 'v7.4.1 ronde 4 (M5, V07): beschikbaarheidstekst waar geen raster uit komt staat als "Niet herkend" in de notitie; Athena verzint geen dagen');
+  // M6
+  eis(lijst(tl('ja.nee@mail.example').functies) === 'huiswerkbegeleider' && lijst(tl('nee.ja@mail.example').functies) === 'huiswerkbegeleider', 'v7.4.1 ronde 4 (M6, V18): "surveillance nee" en "Surveillance: nee. Huiswerkbegeleiding: ja" geven alleen huiswerkbegeleider');
+  // M7
+  var wat = tl('wat.wil@mail.example');
+  eis(lijst(wat.functies) === 'huiswerkbegeleider,surveillant' && week(wat) === '000 220 000 220 000' && lijst(tl('tess.type@mail.example').sectoren) === 'so,vo' &&
+    K(['E-mailadres', 'Which type of school would you like to work at?'], 'sector') === '2' && K(['E-mailadres', 'Voorkeursdagen'], 'beschikbaarheid') === '2',
+    'v7.4.1 ronde 4 (M7, V19/V20): "Which type of school …" (stopwoord in de term), "Wat wil je doen?" en "Voorkeursdagen" (achterdeel) worden herkend');
+  // M8
+  var ren = F.lees('Talenten').filter(function (t) { return t.voornaam === 'Renée'; })[0] || {};
+  eis(!!ren.id && !ren.email && /Niet herkend: e-mail/.test(notitie(ren)) && probeer(function () { return F.emailUitCel('zoë.devries@mail.example') === '' && F.emailUitCel('Mail: jan.bakker@mail.example') === 'jan.bakker@mail.example'; }) === true,
+    'v7.4.1 ronde 4 (M8, V16): van "renée.accent@…" maakt Athena geen ander adres ("e.accent@…"): leeg en "Niet herkend: e-mail"');
+  // M9 en M10
+  var hk = tl('tess.haakje@mail.example'), wa = tl('woon.adres@mail.example');
+  eis(hk.voornaam === 'Tess' && hk.achternaam === 'Haakje', 'v7.4.1 ronde 4 (M9, V13): "Naam (voornaam)" en "Naam (achternaam)": de toelichting beslist');
+  eis(wa.postcode === '3511 AB' && wa.woonplaats === '' && K(['E-mailadres', 'Je woonadres (straat + huisnummer)'], 'woonplaats') === '', 'v7.4.1 ronde 4 (M10, V17): "Je woonadres (straat + huisnummer)" is geen woonplaats');
+  // M11
+  eis(!F.lees('Activiteiten').some(function (a) { return a.talentId === bekend.id && /zonder toestemming/.test(a.onderwerp); }) && !meldingen.some(function (m) { return m.link === 'talent:' + bekend.id && /trekt die mogelijk in/.test(m.tekst); }),
+    'v7.4.1 ronde 4 (M11): een bekend talent met een onduidelijk antwoord ("… gelezen") krijgt geen melding "trekt mogelijk in" (alleen bij nee)');
+  // M12
+  var readme = fs.readFileSync(path.join(R, 'backend/README.md'), 'utf8').split('\n').filter(function (r) { return /apiTalentRunNu/.test(r) && /^\|/.test(r); })[0] || '';
+  eis(/met verstreken bewaartermijn/.test(readme), 'v7.4.1 ronde 4 (M12): backend/README.md noemt bij apiTalentRunNu ook ", n met verstreken bewaartermijn"');
+});
+// v7.4.1 ronde 4 (H6): een bekend talent (e-mail in andere hoofdletters) waarvan de bewaartermijn gisteren afliep, meldt zich vandaag opnieuw aan met toestemming
+aanmeldBlok('herstel ronde 4 (nieuwe toestemming)', function () {
+  var F = formulierCtx(true), vandaag = vm.runInContext('datumStr(new Date())', F), gisteren = vm.runInContext('datumStr(plusDagen(-1))', F);
+  var tekstDag = vm.runInContext('(function (d) { return d.getDate() + "-" + (d.getMonth() + 1) + "-" + d.getFullYear() + " 08:00"; })', F)(F.plusDagen(0));
+  var mira = F.schrijf('Talenten', { voornaam: 'Mira', achternaam: 'Herhaal', email: 'Mira.Herhaal@Mail.Example', telefoon: '0610000698', status: 'slapend', toestemmingDatum: '2024-11-02', toestemmingGrondslag: 'toestemming', bewarenTot: gisteren });
+  var b = F._demoSS.insertSheet('Formulierreacties 1');
+  b.appendRow(['Tijdstempel', 'E-mailadres', 'Voornaam', 'Achternaam', 'Telefoonnummer', 'Privacyverklaring']); b.appendRow([tekstDag, 'MIRA.HERHAAL@MAIL.EXAMPLE', 'Mira', 'Herhaal', '06 10000698', 'Ik geef toestemming om mijn gegevens op te slaan in het talentbestand']);
+  var uit = F.aanmeldingenVerwerken(), t = F.lees('Talenten').filter(function (x) { return x.id === mira.id; })[0] || {};
+  var anon = F.bewaartermijnRun(), na = F.lees('Talenten').filter(function (x) { return x.id === mira.id; })[0] || {};
+  eis(uit.bestaand === 1 && F.lees('Talenten').filter(function (x) { return /herhaal/i.test(x.email); }).length === 1 && t.toestemmingDatum === vandaag && String(t.bewarenTot) > vandaag && anon === 0 && na.status !== 'uitgeschreven' && !!na.email &&
+    F.lees('Activiteiten').some(function (a) { return a.talentId === mira.id && /Toestemming vernieuwd op/.test(a.tekst); }),
+    'v7.4.1 ronde 4 (H6): wie zich opnieuw aanmeldt met toestemming krijgt een nieuwe toestemmingsdatum en bewaartermijn (met een regel in de notitie); bewaartermijnRun anonimiseert het profiel die nacht niet');
+});
 var geo = ctx.geocodeerRun();
 eis(geo >= 1 && Number(ctx.lees('Talenten').filter(function (t) { return t.id === lieke.id; })[0].lat) > 50, 'geocodeerRun vult de ligging van nieuwe profielen (PDOK)');
 
