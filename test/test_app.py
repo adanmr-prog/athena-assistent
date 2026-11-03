@@ -115,6 +115,163 @@ def scenario_nieuw_naast_venster(pg):
     assert aanroepen == [('tk2', 'Kennismakingsmail Montessori Demo (venster)'), (None, 'Half getypte taak naast het venster')], 'venster en pagina slaan elk hun eigen taak op: ' + repr(aanroepen)
     assert pg.locator('#crmNieuw #cf-tekst').count() == 0, 'het paginaformulier sluit na het opslaan'
 
+def scenario_bezetting_per_project(b):
+    # v7.5: Bezetting → Per project, in een eigen context (eigen localStorage, zodat de rest van de test bij Per vacature blijft): één regel per project
+    # (een knop in een h3 met aria-expanded, aria-controls en een korte naam via aria-labelledby); tikken klapt de vacatures eronder uit op de plek zelf
+    # (dezelfde knop blijft bestaan) met de link naar de projectpagina; de statuspil en "Vacature bewerken" werken in een uitgeklapt project, het project
+    # blijft open na het opslaan (bezettingLokaal) en de volgorde verschuift niet; daarna werkt een andere projectweergave (S.trajecten is dan gewist);
+    # Tab bereikt de regel, Enter klapt in en Spatie weer uit met de focus op dezelfde knop; Alles uitklappen/inklappen; een zoekterm klapt de passende
+    # projecten vanzelf uit en de statusregel zegt hoeveel; na herladen staat de keuze nog (aa_bweergave); een vacature die na het eigen opslaan buiten
+    # het filter valt, blijft staan tot de volgende filterkeuze. Werkt op de seed én op de stand aan het eind van deze test.
+    c = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True); pg = c.new_page()
+    pg.on('pageerror', lambda e: meldingen.append(('pageerror per project', str(e))))
+    pg.goto(BASIS + '/'); pg.wait_for_selector('#apiInput'); pg.fill('#apiInput', BASIS + '/api'); pg.fill('#codeInput', 'test123'); pg.click('#codeOpslaan'); pg.wait_for_selector('#kpis .tegel')
+    def naar_bezetting():
+        pg.click('nav button[data-view="trajecten"]'); pg.wait_for_selector('#projectWeergaven [data-pweergave="bezetting"]'); pg.click('[data-pweergave="bezetting"]'); pg.wait_for_selector('[data-bweergave="project"]')
+        if pg.locator('#projectAms [data-pam=""]:not(.aan)').count(): pg.click('#projectAms [data-pam=""]'); pg.wait_for_timeout(200)  # iedereen: ook het project van Joris (t6)
+    naar_bezetting()
+    assert pg.locator('[data-bweergave="vacature"].aan').count() == 1 and pg.locator('.bp-rij').count() == 0, 'zonder keuze begint de bezetting bij Per vacature'
+    assert pg.locator('[role="group"][aria-label="Weergave"] [data-bweergave]').count() == 3 and pg.get_attribute('[data-bweergave="vacature"]', 'aria-pressed') == 'true' and pg.get_attribute('[data-bopen="1"]', 'aria-pressed') == 'true', 'weergaven en filters in eigen groepen met aria-pressed'
+    # v7.5 (iOS-review r3, B): in Per vacature heeft elke kaart van een project een eigen projectlink. Terug van de link op de tweede kaart geeft diezelfde
+    # link de focus (in beeld) en de lijst springt niet; ook na project → talent → Terug → Terug (niet de talentlink). De seed heeft geen project met
+    # twee vacatures: een kopie van v1 (t4) staat achteraan, na v2 (t6); daarna weer weg. Zonder de fix kreeg de link op de eerste kaart de focus en
+    # sprong de lijst daarheen.
+    L = '#trajectLijst a[data-crm-open="project:t4"]'
+    LPOS = "(function (s) { var m = document.querySelector('main'), mt = m.getBoundingClientRect().top, l = document.querySelectorAll(s), a = document.activeElement, r = a.getBoundingClientRect(); return { st: Math.round(m.scrollTop), eerste: Math.round(l[0].getBoundingClientRect().top - mt), tweede: Math.round(l[1].getBoundingClientRect().top - mt), focusNr: Array.prototype.indexOf.call(l, a), focusW: a.getAttribute('data-crm-open'), binnen: r.top >= mt && r.bottom <= m.getBoundingClientRect().bottom }; })('%s')" % L
+    pg.evaluate("S.bezetting.vacatures.push(Object.assign({}, zoekVacature('v1'), { id: 'v1_kopie' })); renderBezetting(); document.getElementById('view-trajecten').style.paddingBottom = '900px'")
+    assert pg.locator(L).count() == 2, 'twee kaarten met de link naar t4'
+    pg.evaluate("(function (s) { var m = document.querySelector('main'), a = document.querySelectorAll(s)[1]; m.scrollTop += a.getBoundingClientRect().top - m.getBoundingClientRect().top - 120; })('%s')" % L); pg.wait_for_timeout(100)
+    v = pg.evaluate(LPOS); assert v['eerste'] < 0 <= v['tweede'] < 600, 'vooraf: de tweede link in beeld, de eerste erboven: ' + repr(v)
+    for keten in (False, True):
+        pg.locator(L).nth(1).click(); pg.wait_for_selector('#crmDetailScherm .d-naam h2')
+        if keten:  # project → talent (Eva de Wit, tab Bezetting) → Terug naar het project
+            pg.click('#crmDetailScherm [data-dtab="bezetting"]'); pg.click('#crmDetailScherm a[data-crm-open="talent:tl1"]'); pg.wait_for_function("CRM.detail && CRM.detail.soort === 'talent'")
+            pg.click('#crmDetailScherm [data-crm-terug]'); pg.wait_for_function("CRM.detail && CRM.detail.soort === 'project'"); pg.wait_for_selector('#crmDetailScherm .d-naam h2')
+        with pg.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiTrajecten' in (r.request.post_data or '')):
+            pg.click('#crmDetailScherm [data-crm-terug]')
+        pg.wait_for_selector(L); pg.wait_for_timeout(400); n = pg.evaluate(LPOS)
+        assert n['focusNr'] == 1 and n['binnen'] and abs(n['st'] - v['st']) <= 1, ('na project → talent → Terug → Terug' if keten else 'na Terug') + ': de focus op de link van de tweede kaart, in beeld, en de lijst springt niet: %r -> %r' % (v, n)
+    pg.evaluate("S.bezetting.vacatures = S.bezetting.vacatures.filter(function (v) { return v.id !== 'v1_kopie'; }); document.getElementById('view-trajecten').style.paddingBottom = ''; document.querySelector('main').scrollTop = 0; renderBezetting()")
+    pg.click('[data-bweergave="project"]'); pg.wait_for_selector('.bp-rij[data-bproject="t4"]')
+    assert pg.locator('[data-bweergave="project"].aan').count() == 1 and pg.get_attribute('[data-bweergave="project"]', 'aria-pressed') == 'true' and pg.locator('.vac-kaart').count() == 0, 'Per project: alles ingeklapt, geen vacaturekaarten'
+    n = pg.evaluate("new Set(S.bezetting.vacatures.filter(function (v) { return v.status === 'open' || v.status === 'concept'; }).map(function (v) { return v.project.id; })).size")  # seed: t4 en t6; aan het eind ook het project uit het winformulier
+    assert n >= 2 and pg.locator('.bp-rij').count() == n and pg.inner_text('.bp-teller') == '%d projecten' % n and pg.locator('.bp-rij[data-bproject="t6"]').count() == 1, 'een regel per project met de teller: ' + pg.inner_text('.bp-balk')
+    assert pg.locator('#trajectLijst .tegels').count() == 0 and 'plekken open' in pg.inner_text('.bp-balk'), 'telefoon: de tegels als één regel in de balk'
+    t4 = '.bp-rij[data-bproject="t4"]'
+    assert pg.get_attribute(t4, 'aria-expanded') == 'false' and pg.get_attribute(t4, 'aria-controls') == 'bp-t4' and pg.locator('#bp-t4').is_hidden(), 'ingeklapt, aria-controls wijst naar het paneel'
+    assert pg.locator('h3.bp-kop > ' + t4).count() == 1 and pg.get_by_role('heading', level=3, name='ISK Voorbeeld').count() == 1, 'elk project is een kop (h3) met de knop erin'
+    naam = pg.evaluate("(function (k) { return k.getAttribute('aria-labelledby').split(' ').map(function (i) { return document.getElementById(i).textContent; }).join(' '); })(document.querySelector('%s'))" % t4)
+    assert 'ISK Voorbeeld' in naam and 'plekken open' in naam and 'AM' not in naam, 'korte toegankelijke naam (school, project, open plekken): ' + naam
+    tekst = pg.inner_text(t4)
+    assert 'ISK Voorbeeld' in tekst and ' open' in tekst and 'gevuld' in tekst and 'in proces' in tekst and 'NT2-ondersteuner' in tekst, 'open plekken, gevuld, open functies en kandidaten als tekst in de regel: ' + tekst
+    assert pg.locator(t4).bounding_box()['height'] >= 44, 'tikdoel van de projectregel ≥ 44 px'
+    pg.evaluate("window.__bp = document.querySelector('%s')" % t4)
+    pg.click(t4); pg.wait_for_selector('#bp-t4 .vac-kaart:has-text("NT2-ondersteuner")')
+    assert pg.get_attribute(t4, 'aria-expanded') == 'true' and pg.locator('#bp-t4 a[data-crm-open="project:t4"]').count() == 1, 'uitgeklapt, met de link naar de projectpagina'
+    assert pg.evaluate("window.__bp === document.querySelector('%s') && window.__bp.isConnected" % t4), 'op de plek zelf uitgeklapt: dezelfde knop (VoiceOver houdt zijn cursor)'
+    assert pg.locator('#bp-t4 .vac-kaart a[data-crm-open^="project:"]').count() == 0 and pg.locator('#bp-t6 .vac-kaart').count() == 0, 'de kaarten zonder eigen projectregel; t6 blijft dicht'
+    pg.screenshot(path=OUT + '/07i_bezetting_per_project.png', full_page=True)
+    volgorde = pg.evaluate("S.bVolgorde.join()")
+    with pg.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiKandidaatOpslaan' in (r.request.post_data or '')):
+        pg.select_option('#bp-t4 [data-kstatus="c1"]', 'geselecteerd')
+    pg.wait_for_timeout(300)
+    assert pg.get_attribute(t4, 'aria-expanded') == 'true' and pg.input_value('#bp-t4 [data-kstatus="c1"]') == 'geselecteerd', 'de statuspil slaat op en het project blijft open na bezettingLokaal'
+    assert pg.evaluate("S.bVolgorde.join()") == volgorde and pg.evaluate("S.trajecten") is None, 'na het opslaan verschuift er niets (en S.trajecten is gewist)'
+    pg.click('#bp-t4 .vac-kaart:has-text("NT2-ondersteuner") [data-vacature]'); pg.wait_for_selector('#venster.aan #vf-titel')
+    assert pg.input_value('#venster #vf-titel') == 'NT2-ondersteuner', 'Vacature bewerken opent de vacature uit het uitgeklapte project'
+    pg.click('#venster [data-cf-annuleer]'); pg.wait_for_selector('#venster.aan', state='detached')
+    # review: zonder S.trajecten werkt een andere projectweergave toch (laadTrajecten), en terug naar Bezetting staat t4 nog open
+    pg.click('#projectWeergaven [data-pweergave="lijst"]'); pg.wait_for_selector('#projectWeergaven [data-pweergave="lijst"].aan'); pg.wait_for_selector('#trajectLijst .rij[data-crm-open]')
+    pg.click('#projectWeergaven [data-pweergave="bezetting"]'); pg.wait_for_selector(t4 + '[aria-expanded="true"]')
+    pg.click('[data-bopen="0"]'); pg.wait_for_selector('[data-bopen="0"].aan'); assert pg.get_attribute(t4, 'aria-expanded') == 'true' and pg.get_attribute('[data-bopen="0"]', 'aria-pressed') == 'true', 'een ander filter laat het project open'
+    pg.click('[data-bopen="1"]'); pg.wait_for_selector('[data-bopen="1"].aan')
+    pg.click('[data-balles="uit"]'); pg.wait_for_selector('[data-balles="in"]:has-text("Alles inklappen")')
+    assert pg.locator('.bp-rij[aria-expanded="true"]').count() == n and pg.locator('#bp-t6 .vac-kaart:has-text("Examentrainer wiskunde")').count() == 1, 'Alles uitklappen'
+    assert pg.evaluate("document.activeElement === document.querySelector('[data-balles]') || document.activeElement === document.body"), 'de Alles-knop blijft bestaan (op de plek zelf bijgewerkt)'
+    # toetsenbord: Tab vanaf de Alles-knop bereikt de eerste regel; Enter klapt in, Spatie weer uit, en de focus blijft op dezelfde knop
+    pg.focus('[data-balles]'); pg.keyboard.press('Tab')
+    eerste = pg.evaluate("document.activeElement.getAttribute('data-bproject')"); assert eerste, 'Tab gaat van de Alles-knop naar de eerste projectregel'
+    k = '.bp-rij[data-bproject="%s"]' % eerste
+    pg.keyboard.press('Enter'); pg.wait_for_selector(k + '[aria-expanded="false"]'); assert pg.locator('#bp-' + eerste).is_hidden(), 'Enter klapt in'
+    assert pg.evaluate("document.activeElement.getAttribute('data-bproject')") == eerste and pg.locator('[data-balles="uit"]').count() == 1, 'na Enter staat de focus weer op dezelfde knop; de Alles-knop zegt weer uitklappen'
+    pg.keyboard.press('Space'); pg.wait_for_selector(k + '[aria-expanded="true"]')
+    assert pg.evaluate("document.activeElement.getAttribute('data-bproject')") == eerste, 'Spatie klapt weer uit, met de focus op dezelfde knop'
+    pg.click('[data-balles="in"]'); pg.wait_for_selector('[data-balles="uit"]'); assert pg.locator('.bp-rij[aria-expanded="true"]').count() == 0 and pg.locator('.vac-kaart').count() == 0, 'Alles inklappen'
+    # v7.5 (iOS-review r2, punt 1): een open project inklappen terwijl zijn kop bovenaan plakt (halverwege het paneel): daarna staat de regel bovenaan
+    # in beeld in plaats van erboven. Een lange lijst eronder is nagebootst met ruimte onder de lijst (anders klemt main de scrollpositie toch al).
+    POS = "(function (s) { var m = document.querySelector('main'), k = document.querySelector(s), mt = m.getBoundingClientRect().top; return { st: Math.round(m.scrollTop), rij: Math.round(k.getBoundingClientRect().top - mt), kop: Math.round(k.closest('.bp-kop').getBoundingClientRect().top - mt), wrap: Math.round(k.closest('.bp-project').getBoundingClientRect().top - mt) }; })('%s')"
+    pg.evaluate("document.getElementById('view-trajecten').style.paddingBottom = '1500px'")
+    pg.click(t4); pg.wait_for_selector(t4 + '[aria-expanded="true"]')
+    pg.evaluate("(function () { var m = document.querySelector('main'), p = document.getElementById('bp-t4'); m.scrollTop += p.getBoundingClientRect().top - m.getBoundingClientRect().top + p.offsetHeight / 2; })()"); pg.wait_for_timeout(100)
+    v = pg.evaluate(POS % t4)
+    assert abs(v['kop']) <= 1 and v['wrap'] < -40, 'vooraf plakt de kop van t4 bovenaan en ligt het begin van het project erboven: ' + repr(v)
+    pg.click(t4); pg.wait_for_selector(t4 + '[aria-expanded="false"]'); pg.wait_for_timeout(100)
+    n = pg.evaluate(POS % t4)
+    assert -1 <= n['rij'] <= 1 and n['st'] < v['st'], 'na inklappen staat de regel bovenaan in beeld: %r -> %r' % (v, n)
+    pg.evaluate("document.getElementById('view-trajecten').style.paddingBottom = ''; document.querySelector('main').scrollTop = 0")
+    pg.fill('#trajectZoek', 'Eva de Wit'); pg.wait_for_selector(t4 + '[aria-expanded="true"]'); pg.wait_for_timeout(250)  # kandidaat c1, alleen op t4 (Noor Bakker staat aan het eind ook op t4)
+    assert pg.locator('.bp-rij').count() == 1 and pg.locator('#bp-t4 .vac-kaart .rij:has-text("Eva de Wit")').count() == 1, 'een zoekterm (ook een kandidaatnaam) klapt het passende project vanzelf uit'
+    assert pg.text_content('#bpStatus') == '1 project, uitgeklapt' and pg.get_attribute('#bpStatus', 'role') == 'status' and pg.locator('#trajectLijst #bpStatus').count() == 0, 'de statusregel buiten de lijst zegt hoeveel projecten er overblijven'
+    pg.fill('#trajectZoek', ''); pg.wait_for_selector('.bp-rij[data-bproject="t4"]'); pg.wait_for_timeout(250)
+    assert pg.locator('.bp-rij[aria-expanded="true"]').count() == 0 and pg.text_content('#bpStatus') == '', 'zonder zoekterm weer ingeklapt'
+    assert pg.evaluate("localStorage.getItem('aa_bweergave')") == 'project', 'de keuze staat in localStorage'
+    # v7.5 (iOS-review r2, punt 3): Open de projectpagina → Terug zet de scrollpositie terug, houdt de volgorde vast (ook als het project intussen op
+    # de projectpagina is ingevuld; nagebootst met het antwoord van de backend, de mock verandert niet) en geeft de link de focus terug, in beeld.
+    # Zonder de fix stond main na Terug op 0, was t4 weggefilterd en stond de focus buiten beeld. Het herladen hieronder zet alles weer terug.
+    FOCUS = "(function (s) { var a = document.activeElement, m = document.querySelector('main').getBoundingClientRect(), r = a.getBoundingClientRect(); return { link: a.matches(s), binnen: r.top >= m.top && r.bottom <= m.bottom, top: Math.round(r.top - m.top) }; })('%s')"
+    pg.evaluate("document.getElementById('view-trajecten').style.paddingBottom = '600px'")
+    pg.click(t4); pg.wait_for_selector('#bp-t4 a.bp-link')
+    pg.evaluate("(function () { var m = document.querySelector('main'), k = document.querySelector('%s'); m.scrollTop += k.getBoundingClientRect().top - m.getBoundingClientRect().top - 60; })()" % t4); pg.wait_for_timeout(100)
+    v = pg.evaluate(POS % t4); volgorde3 = pg.evaluate("S.bVolgorde.join()")
+    assert v['st'] > 0, 'vooraf is de lijst gescrold: ' + repr(v)
+    pg.click('#bp-t4 a.bp-link'); pg.wait_for_selector('#crmDetailScherm .d-naam h2')
+    pg.evaluate("bezettingLokaal({ trajectId: 't4', vacatures: [Object.assign({}, zoekVacature('v1'), { status: 'ingevuld', gevuld: zoekVacature('v1').aantal, inProces: 0 })] })")
+    with pg.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiTrajecten' in (r.request.post_data or '')):
+        pg.click('#crmDetailScherm [data-crm-terug]')
+    pg.wait_for_selector(t4); pg.wait_for_timeout(400)
+    n = pg.evaluate(POS % t4); f = pg.evaluate(FOCUS % '#bp-t4 a.bp-link')
+    assert pg.evaluate("S.bVolgorde.join()") == volgorde3 and abs(n['st'] - v['st']) <= 1 and abs(n['rij'] - v['rij']) <= 1, 'na Terug dezelfde volgorde en scrollpositie: %r -> %r' % (v, n)
+    assert pg.get_attribute(t4, 'aria-expanded') == 'true' and 'vacature ingevuld' in pg.inner_text(t4), 't4 staat er nog, open en met de melding (de volgorde is vastgehouden)'
+    assert f['link'] and f['binnen'], 'de focus staat weer op de link naar de projectpagina, in beeld: ' + repr(f)
+    # v7.5 (iOS-review r3, A): scrol je na Terug zelf terwijl apiTrajecten nog laadt (nagebootst: 800 ms vertraging in run; Apps Script doet er 1-3 s
+    # over), dan zet het antwoord de lijst niet meer terug naar de oude plek. Het gebaar zijn echte touch-events via CDP (veeg omhoog, met momentum).
+    # Zonder eigen gebaar zet het antwoord hem wel terug (de stap hierboven). Zonder de fix sprong main na het antwoord terug naar st1.
+    pg.evaluate("document.getElementById('view-trajecten').style.paddingBottom = '1500px'")
+    pg.evaluate("window.__runOrig = run; run = function (fn) { var a = arguments; return fn !== 'apiTrajecten' ? window.__runOrig.apply(null, a) : new Promise(function (r) { setTimeout(r, 800); }).then(function () { window.__trajKlaar = true; return window.__runOrig.apply(null, a); }); }; window.__trajKlaar = false")
+    cdp = c.new_cdp_session(pg); MAIN = "document.querySelector('main')"
+    pg.click('#bp-t4 a.bp-link'); pg.wait_for_selector('#crmDetailScherm .d-naam h2')
+    with pg.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiTrajecten' in (r.request.post_data or ''), timeout=5000):
+        pg.click('#crmDetailScherm [data-crm-terug]'); st1 = pg.evaluate(MAIN + '.scrollTop')
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': 195, 'y': 600}]})
+        for i in range(1, 11): cdp.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': 195, 'y': 600 - 40 * i}]}); pg.wait_for_timeout(16)
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []}); pg.wait_for_timeout(100)
+        st_eigen = pg.evaluate(MAIN + '.scrollTop'); vroeg = pg.evaluate("!window.__trajKlaar")  # het antwoord is er nog niet
+    pg.wait_for_timeout(500); st2 = pg.evaluate(MAIN + '.scrollTop')
+    assert vroeg and st_eigen - st1 > 100 and st2 >= st_eigen - 2, 'zelf gescrold tijdens het laden: het antwoord laat de eigen positie staan (na Terug %d, eigen %d, na het antwoord %d)' % (st1, st_eigen, st2)
+    assert pg.evaluate("!S.bScroll && !S.bScrollLos"), 'geen terugzet en geen luisteraars meer'
+    pg.evaluate("(function () { run = window.__runOrig; })()"); cdp.detach()  # (een uitdrukking die een functie oplevert, roept Playwright aan)
+    pg.reload(); pg.wait_for_selector('#kpis .tegel'); naar_bezetting(); pg.wait_for_selector('.bp-rij[data-bproject="t4"]')
+    assert pg.locator('[data-bweergave="project"].aan').count() == 1, 'na herladen staat Per project nog aan'
+    pg.set_viewport_size({'width': 1280, 'height': 800}); pg.wait_for_selector('body.desk'); pg.click('.zb-item[data-desk="bezetting"]'); pg.wait_for_selector('.bp-rij[data-bproject="t4"]'); pg.wait_for_timeout(200)
+    xs = pg.eval_on_selector_all('.bp-rij .bp-hoofd', 'l => l.map(e => Math.round(e.getBoundingClientRect().right))')
+    assert len(set(xs)) == 1 and pg.eval_on_selector('.bp-raster', 'e => getComputedStyle(e).display') == 'grid' and pg.locator('#trajectLijst .tegels').count() == 1, 'desktop: de kolommen staan recht onder elkaar (en de tegels staan er): ' + repr(xs)
+    pg.click(t4); pg.wait_for_selector('#bp-t4 .vac-grid .vac-kaart'); pg.screenshot(path=OUT + '/26e_desk_bezetting_per_project.png')
+    # v7.5 (iOS-review r2, punt 3) ook op desktop: Terug van de projectpagina laat t4 open op zijn plek, met de focus op de link (in beeld)
+    volgorde3 = pg.evaluate("S.bVolgorde.join()")
+    pg.click('#bp-t4 a.bp-link'); pg.wait_for_selector('#crmDetailScherm .d-naam h2')
+    with pg.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiTrajecten' in (r.request.post_data or '')):
+        pg.click('#crmDetailScherm [data-crm-terug]')
+    pg.wait_for_selector(t4 + '[aria-expanded="true"]'); pg.wait_for_timeout(400); f = pg.evaluate(FOCUS % '#bp-t4 a.bp-link')
+    assert f['link'] and f['binnen'] and pg.evaluate("S.bVolgorde.join()") == volgorde3 and pg.locator('.zb-item.aan[data-desk="bezetting"]').count() == 1, 'desktop: na Terug staat t4 open met de focus op de link: ' + repr(f)
+    # review: een vacature die na het eigen opslaan vol is (ingevuld) valt buiten "Open en concept", maar blijft tot de volgende filterkeuze staan
+    # (nagebootst met het antwoord van de backend, zodat de mock zelf niet verandert; daarna weer opnieuw geladen)
+    pg.evaluate("bezettingLokaal({ trajectId: 't4', vacatures: [Object.assign({}, zoekVacature('v1'), { status: 'ingevuld', gevuld: zoekVacature('v1').aantal, inProces: 0 })] })"); pg.wait_for_timeout(200)
+    assert pg.evaluate("S.bVolgorde.join()") == volgorde and pg.locator(t4 + '[aria-expanded="true"]').count() == 1 and 'vacature ingevuld' in pg.inner_text(t4) and pg.locator('#bp-t4 .hint:has-text("buiten deze selectie")').count() == 1, 'ingevuld: blijft op zijn plek staan met een melding'
+    pg.click('[data-bopen="1"]'); pg.wait_for_timeout(200)
+    assert pg.locator(t4).count() == 0, 'bij de volgende filterkeuze valt het ingevulde project weg'
+    pg.evaluate("S.bezetting = null; laadBezetting()"); pg.wait_for_selector(t4)
+    c.close()
+
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=exe, headless=True)
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
@@ -561,6 +718,7 @@ with sync_playwright() as p:
     pp.click('[data-popslaan]'); pp.wait_for_selector('#toast.aan:has-text("Opgeslagen")')
     pp.goto('http://127.0.0.1:8765/?t=verkeerdtoken12345678&api=http%3A%2F%2F127.0.0.1%3A8765%2Fapi'); pp.wait_for_selector('#portaalKop:has-text("werkt niet meer")')
     ctx4.close()
+    scenario_bezetting_per_project(b)  # v7.5: eigen context, zodat de keuze Per project (localStorage) de stappen hierboven niet raakt
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

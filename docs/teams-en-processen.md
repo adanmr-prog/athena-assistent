@@ -87,6 +87,8 @@ Wat het dashboard bij elke stap doet:
 | Evaluatie | afspraak in het project (AM + consultant) | taak voor de AM elke periode |
 | Verlenging | weergave **Verlenging 26/27** | 3 maanden voor het einde een kans "Verlenging" voor de consultant |
 
+Het bord **Bezetting** (zijbalk, op de telefoon Projecten → Bezetting) toont de vacatures met dezelfde filters (open en concept of alle, Mijn projecten, accountmanager, zoeken ook op kandidaatnaam) in drie weergaven: **Per vacature** (kaarten), **Per status** (kandidaten in kolommen, v6.8) en sinds v7.5 **Per project**: één regel per project (school · project, AM en talentscout, startdatum, aantal vacatures met concepten apart, de open functies, de open plekken als hoofdgetal met "x/y gevuld" eronder, kandidaten in proces of in rood "nog geen kandidaten"), gesorteerd op open plekken, dan de vroegste start; tikken klapt de vacaturekaarten van dat project eronder uit, met alle knoppen en een link naar de projectpagina. Na het opslaan van een kandidaat of vacature verschuift er niets: de volgorde blijft staan en een vacature die net is ingevuld blijft met een melding zichtbaar tot je een filter, zoekterm of weergave kiest. De gekozen weergave blijft per apparaat bewaard.
+
 ## 4. Projectenbord voor accountmanagers (zoals monday)
 
 Hetzelfde beeld als nu in monday, maar dan gekoppeld aan scholen, kansen en facturatie.

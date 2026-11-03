@@ -515,6 +515,67 @@
   .bez-vol { color: var(--groen); }
   body.desk .vac-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; align-items: start; }
   body.desk .vac-grid .vac-kaart { margin: 0; }
+  /* v7.5: Bezetting per project. Elke regel is een knop (tikdoel ≥ 44 px) in een h3 (springen per kop met de schermlezer), met een raster erin:
+     telefoon in drie regels, desktop in uitgelijnde kolommen. Review: de open plekken zijn het hoofdgetal (als tekst, ook zonder kleur leesbaar),
+     "x/y gevuld" klein eronder en het balkje alleen als er iets gevuld is; segmenten breken niet midden in een begrip (.bp-seg); het paneel springt
+     in tot de naam en een open regel blijft op de telefoon bovenaan staan, zodat je ook halverwege een lang project weer kunt inklappen. */
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }  /* v7.5: alleen voor schermlezers */
+  .bp-chips { margin-top: 8px; }
+  .bp-chips + .bp-chips { margin-top: 6px; }
+  .bp-balk { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 2px; }
+  .bp-tekst { min-width: 0; overflow: hidden; font-size: var(--fs-klein); line-height: 1.4; color: var(--gedempt); }
+  .bp-teller { font-weight: 600; }
+  .bp-project { border-bottom: 1px solid var(--lijn); }
+  .bp-kop { margin: 0; font: inherit; }
+  .bp-rij { position: relative; display: block; width: 100%; min-height: 44px; padding: 10px 0; margin: 0; background: none; border: 0; border-radius: 10px; text-align: left; font: inherit; color: var(--inkt); cursor: pointer; }
+  .bp-rij:focus-visible { outline: 2px solid var(--paars); outline-offset: 2px; }
+  body:not(.desk) .bp-rij:active { background: var(--paars-l); }  /* de tik is zichtbaar (de tap-highlight staat uit) */
+  .bp-raster { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "pijl naam hoofd" "pijl naam sub" ". team team" ". info info"; column-gap: 10px; row-gap: 2px; align-items: center; }
+  .bp-pijl { grid-area: pijl; color: var(--paars); transition: transform .15s ease; }
+  .bp-rij[aria-expanded="true"] .bp-pijl { transform: rotate(90deg); }
+  .bp-naam { grid-area: naam; min-width: 0; font-size: var(--fs-kop); line-height: 1.3; overflow-wrap: anywhere; }
+  .bp-school { font-weight: 800; }
+  .bp-traject { font-weight: 400; color: var(--inkt2); }
+  .bp-team, .bp-info { min-width: 0; overflow: hidden; font-size: var(--fs-klein); line-height: 1.4; }
+  .bp-team { grid-area: team; color: var(--gedempt); }
+  .bp-info { grid-area: info; color: var(--inkt2); }
+  /* Elk segment begint met een puntje; .bp-lijn schuift 14 px naar links en de cel knipt dat af, zodat het puntje vóór het eerste segment van elke regel
+     wegvalt (geen puntje aan het begin van een regel). De schermlezer zegt het puntje als komma (oudere Safari: alleen het puntje). */
+  .bp-lijn { display: flex; flex-wrap: wrap; align-items: center; margin-left: -14px; }
+  .bp-seg { white-space: nowrap; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .bp-seg::before { content: '·'; content: '·' / ', '; display: inline-block; width: 14px; text-align: center; color: var(--gedempt); }
+  .bp-zonder, .bp-geen { color: var(--rood); }
+  .bp-weg { color: var(--gedempt); } .bp-weg.vol { color: var(--groen); }
+  .bp-start { display: none; }
+  .bp-hoofd { grid-area: hoofd; justify-self: end; font-size: var(--fs-zacht); color: var(--inkt); white-space: nowrap; }
+  .bp-hoofd b { font-size: var(--fs-kop); }
+  .bp-hoofd.vol { font-weight: 800; color: var(--groen); }
+  .bp-hoofd.leeg { color: var(--gedempt); }
+  .bp-sub { grid-area: sub; justify-self: end; display: flex; align-items: center; gap: 6px; font-size: var(--fs-klein); color: var(--gedempt); white-space: nowrap; }
+  .bp-meter { display: block; width: 40px; height: 6px; border-radius: 3px; background: var(--lijn); overflow: hidden; }
+  .bp-meter span { display: block; height: 100%; border-radius: 3px; background: var(--paars); }
+  .bp-paneel { padding: 0 0 12px 28px; }
+  .bp-paneel[hidden] { display: none; }
+  .bp-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 600; cursor: pointer; text-decoration: none; }
+  body:not(.desk) .bp-project.open > .bp-kop { position: sticky; top: 0; z-index: 2; background: var(--bg); box-shadow: 0 1px 0 var(--lijn); }
+  body:not(.desk) .bp-balk .knop-mini { min-height: 44px; }  /* v7.5 (iOS-review r2): Alles uitklappen is navigatie: 44 px op de telefoon */
+  body.desk .bp-rij { min-height: 52px; padding: 8px 10px; }
+  @media (hover: hover) { body.desk .bp-rij:hover { background: var(--paars-l); } }
+  @media (hover: none) { body.desk .bp-rij:active { background: var(--paars-l); } }  /* v7.5 (iOS-review r2): ook op een iPad (desktopbreedte zonder hover) is de tik zichtbaar */
+  body.desk .bp-raster { grid-template-columns: 18px minmax(0, 2.6fr) minmax(0, 1.4fr) 100px minmax(0, 1.7fr) minmax(0, 1.2fr) 110px;
+    grid-template-areas: "pijl naam team start vac proces hoofd" "pijl naam team start func proces sub"; column-gap: 14px; }
+  body.desk .bp-naam { font-size: var(--fs-tekst); }
+  body.desk .bp-info, body.desk .bp-info .bp-lijn { display: contents; }
+  body.desk .bp-lijn { margin-left: 0; }
+  body.desk .bp-team .bp-lijn { flex-direction: column; align-items: flex-start; }
+  body.desk .bp-seg::before { content: none; }
+  body.desk .bp-start-tel { display: none; }
+  body.desk .bp-start { display: block; grid-area: start; color: var(--gedempt); }
+  body.desk .bp-vac { grid-area: vac; } body.desk .bp-func, body.desk .bp-weg { grid-area: func; } body.desk .bp-func { color: var(--gedempt); } body.desk .bp-proces { grid-area: proces; }
+  body.desk .bp-weg ~ .bp-func { display: none; }  /* desktop: één regel onder de vacatures; de melding gaat even voor de functies */
+  body.desk .bp-meter { width: 56px; }
+  body.desk .bp-paneel { padding: 2px 10px 14px 42px; }
+  body.desk .bp-link { min-height: 28px; margin-bottom: 8px; }
   .tf-vraag { padding: 7px 0; border-top: 1px solid var(--lijn); }
   .tf-vraag:first-child { border-top: none; }
   .tf-vraag span { display: block; font-size: var(--fs-klein); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--gedempt); }
@@ -675,7 +736,7 @@
   body:not(.desk) #projectHeroTekst { display: none; }  /* v6.6: op de telefoon eerst de projecten; de kop zegt al wat dit scherm is */
   .p-acties { margin: 0 0 12px; }
   [data-sleep]:focus:not(:focus-visible) { outline: none; } [data-sleep]:focus-visible { outline: 2px solid var(--paars); outline-offset: 2px; }  /* v6.8 */
-  .chip-scheiding { display: inline-block; width: 1px; align-self: stretch; background: var(--lijn); margin: 0 4px; }
+  .chip:focus:not(:focus-visible) { outline: none; } .chip:focus-visible { outline: 2px solid var(--paars); outline-offset: 2px; }  /* v7.5: een chip die na een tik programmatisch focus krijgt (Bezetting), toont geen ring; toetsenbordfocus wel */
   /* v6.7: slepen op de borden */
   .kaartje.sleepbaar { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   body.desk .kaartje.sleepbaar { cursor: grab; }
@@ -965,8 +1026,9 @@
     <div class="subtabs" id="projectAms"></div>
     <div class="invoer"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="trajectZoek" placeholder="Zoek school, project, contactpersoon" autocomplete="off"></div>
     <div class="filters" id="projectFilters"><select id="fSchooljaar" aria-label="Schooljaar"><option value="">Alle schooljaren</option></select><select id="fTraject" aria-label="Project"><option value="">Alle projecten</option></select><select id="fStatus" aria-label="Status"><option value="">Alle statussen</option></select></div>
-    <div class="kop"><span id="trajectKop">Projecten</span> <small id="trajectTelling"></small></div>
+    <h2 class="kop"><span id="trajectKop">Projecten</span> <small id="trajectTelling"></small></h2>  <!-- v7.5 (review): een echte kop; de projecten in Bezetting → Per project zijn h3 -->
     <div id="trajectLijst"><div class="spinner">Laden</div></div>
+    <div id="bpStatus" class="vh" role="status" aria-live="polite"></div>  <!-- v7.5: zegt na het zoeken in Bezetting → Per project hoeveel projecten er overblijven -->
     </div>
   </div>
 
@@ -1031,7 +1093,7 @@
 
 <script>
   /* v1.0: Athena Assistent — vijf modules op één Apps Script-backend (zie backend/README.md). Conventies: ES5, run(), esc(), md(), alles door esc() vóór innerHTML. */
-  var S = { data: null, kennis: null, huis: null, trajecten: null, pWeergave: 'am', pAm: null, pOpen: {}, details: {}, open: {}, docFilter: '', docZoek: '', chat: leesChat(), bezig: false, filters: { zoek: '', schooljaar: '', traject: '', status: '' } };
+  var S = { data: null, kennis: null, huis: null, trajecten: null, pWeergave: 'am', pAm: null, pOpen: {}, details: {}, open: {}, docFilter: '', docZoek: '', chat: leesChat(), bezig: false, filters: { zoek: '', schooljaar: '', traject: '', status: '' }, bUit: {}, bZoekDicht: {} };  // v7.5: bUit/bZoekDicht = uitgeklapte projecten in Bezetting → Per project
   var TITELS = { vandaag: 'Vandaag', relaties: 'Relaties', brein: 'Assistent', review: 'Dagstart', huisstijl: 'Studio',  /* v3.9: nieuwe namen */ trajecten: 'Projecten', facturatie: 'Facturatie', financien: 'Financiën', home: 'Home', agenda: 'Agenda', doelen: 'Doelen', portaal: 'Beschikbaarheid' };  // v2.0: Relaties; v3.0: desktop-weergaven; v5.0: portaal
   var TYPE_LABEL = { contract: 'Contracten', werkwijze: 'Werkwijzen', schooldossier: 'Schooldossiers', voorstel: 'Voorstellen', prijslijst: 'Prijslijst', overig: 'Overig' };
   var TYPE_KORT = { contract: 'CTR', werkwijze: 'WW', schooldossier: 'DOS', voorstel: 'VST', prijslijst: 'PRS', overig: 'DOC' };
@@ -1758,7 +1820,18 @@
       lijst.map(function (t) { return projectBordRij(t, T); }).join('') + '</tbody></table></div></div>';
   }
   function renderTrajecten() {
-    var T = S.trajecten; if (!T) return;
+    var T = S.trajecten;
+    if (!T) {  // v7.5: na bezettingLokaal is S.trajecten gewist (anders deden filters, zoeken en de weergavechips daarna niets meer)
+      if (!el('view-trajecten').classList.contains('actief')) return;
+      el('projectAms').querySelectorAll('[data-pam]').forEach(function (c) { c.classList.toggle('aan', c.getAttribute('data-pam') === (S.pAm || '')); });
+      el('projectWeergaven').querySelectorAll('[data-pweergave]').forEach(function (c) { c.classList.toggle('aan', c.getAttribute('data-pweergave') === S.pWeergave); });  // v7.5 (iOS-review r2): ook de gekozen andere weergave licht meteen op
+      if (S.pWeergave === 'bezetting') renderBezetting();  // het bord heeft genoeg aan S.bezetting; renderBezetting laadt die zelf als hij ontbreekt
+      else {  // v7.5 (review): een andere weergave (Lijst, Per accountmanager, Talent) heeft de projecten nodig; laadTrajecten zet S.trajecten vóór renderTrajecten, dus geen lus
+        el('trajectTelling').textContent = ''; el('trajectLijst').innerHTML = '<div class="spinner">Laden</div>'; bezettingStatus('');
+        if (!S.trajectenLaden) laadTrajecten();  // v7.5 (iOS-review r2): één aanroep tegelijk, ook als je intussen zoekt of nog een chip kiest
+      }
+      return;
+    }
     var ws = projectWeergaven(), w = S.pWeergave, ams = projectAms(T);
     if (!S.pWeergaveGekozen && !isDesk() && T.ik && T.ik.team === 'talent' && magApp('vacatures')) w = S.pWeergave = 'bezetting';  // v4.1: talent begint bij de bezetting; v6.4: alleen op de telefoon (op desktop kies je in de zijbalk, en Projecten moet de projecten tonen)
     if (!ws.some(function (x) { return x[0] === w; })) w = S.pWeergave = 'am';
@@ -1772,6 +1845,7 @@
     el('projectHeroTekst').textContent = tl ? 'Eén profiel per flexkracht: functies, beschikbaarheid per dagdeel, VOG, relaties met scholen en beoordelingen. Plaatsing, contract en uren blijven in XPS.' : bz ? 'Open plekken per project en waar elke kandidaat staat: voorgesteld, gesprek, geselecteerd, academy, contract, VOG, klaar voor start.' : 'Lopende en afgelopen projecten, verlengingen en examentrainingen. Tik op een project voor de tijdlijn, taken en facturatie.';
     el('trajectKop').textContent = tl ? 'Talenten' : bz ? 'Vacatures' : 'Projecten';
     el('trajectZoek').placeholder = tl ? 'Zoek naam, plaats, functie of tag' : 'Zoek school, project, contactpersoon';
+    if (!bz) bezettingStatus('');  // v7.5
     if (tl) { renderTalenten(); return; }
     if (bz) { renderBezetting(); return; }
     vulSelect('fSchooljaar', T.filters.schooljaren, S.filters.schooljaar);
@@ -1807,14 +1881,64 @@
     el('trajectLijst').innerHTML = h || leeg;
   }
   /* --- v4.1: bezetting (vacatures en kandidaten) --- */
-  function laadBezetting() {
-    run('apiBezetting').then(function (B) { S.bezetting = B; if (S.pWeergave === 'bezetting' && el('view-trajecten').classList.contains('actief')) renderTrajecten(); })
-      .catch(function () { if (S.pWeergave === 'bezetting') el('trajectLijst').innerHTML = '<div class="leeg">Kon de bezetting niet laden.</div>'; });
+  function laadBezetting() {  // v7.5 (iOS-review r3, D): S.bezettingLaden telt de lopende aanroepen, zoals S.trajectenLaden
+    S.bezettingLaden = (S.bezettingLaden || 0) + 1;
+    var klaar = function () { S.bezettingLaden = Math.max(0, S.bezettingLaden - 1); };
+    run('apiBezetting').then(function (B) { klaar(); S.bezetting = B; if (S.pWeergave === 'bezetting' && el('view-trajecten').classList.contains('actief')) renderTrajecten(); })
+      .catch(function () { klaar(); S.bVast = false; bezettingScrollWis(); S.bFocus = null; if (S.pWeergave === 'bezetting') el('trajectLijst').innerHTML = '<div class="leeg">Kon de bezetting niet laden.</div>'; });  // v7.5: S.bVast; r2: S.bScroll, S.bFocus
+  }
+  // v7.5: drie weergaven; de keuze blijft per apparaat bewaard (aa_bweergave, via leesOpslag/zetOpslag met hun try/catch)
+  var BWEERGAVEN = [['vacature', 'Per vacature'], ['status', 'Per status'], ['project', 'Per project']];
+  function bezettingWeergave() {
+    var geldig = function (w) { return BWEERGAVEN.some(function (x) { return x[0] === w; }); };
+    if (!geldig(S.bWeergave)) { var w = leesOpslag('aa_bweergave'); S.bWeergave = geldig(w) ? w : 'vacature'; }
+    return S.bWeergave;
+  }
+  // v7.5: wat vóór het hertekenen de focus had (projectregel, chip, statuspil, link), krijgt hem daarna terug; zelfde herkenning als renderDetail
+  // (focusSleutel/zoekMetSleutel). Alleen "Alles uitklappen" wisselt van waarde (uit ↔ in), die zoeken we op het attribuut alleen.
+  // v7.5 (iOS-review r2): in iOS Safari krijgt een getikte knop geen focus (activeElement is body); dan telt de verse tik (LAATSTE_TIK), zoals in openVenster.
+  // r4: ook voor de chips (Weergave, Open/Alle, Mijn projecten), zodat VoiceOver na het hertekenen zijn plek houdt; een ring na een tik onderdrukt .chip:focus:not(:focus-visible).
+  // r3 (B): met k.nr, want dezelfde sleutel kan vaker voorkomen (de projectlink op elke vacaturekaart van een project)
+  function bezettingFocusVoor() {
+    var a = document.activeElement, t = LAATSTE_TIK.el, l = el('trajectLijst');
+    if (!echteFocus(a) && t && Date.now() - LAATSTE_TIK.t < 1000 && t.matches && t.matches('[data-bproject], [data-balles], [data-bweergave], [data-bopen], [data-bmijn]')) a = t;
+    if (!(a && a !== document.body && l.contains(a))) return null;
+    var k = focusSleutel(a); k.nr = sleutelNr(l, a, k); return k;
+  }
+  // v7.5 (iOS-review r2): de scrollpositie terugzetten na het hertekenen (bezettingFout, Terug van een project of talent). t.k = de sleutel (met nr) van
+  // wat het detail opende (data-crm-open): staat dat daarna toch buiten main (er veranderde iets erboven), dan komt het midden in beeld. Onder een
+  // geplakte kop (telefoon, open project) telt als binnen main; Shift+Tab kan daar ook focus geven (gemeten in r3, punt E: niet opgelost).
+  function bezettingScrollTerug(t) {
+    var m = document.querySelector('main'); m.scrollTop = t.top;
+    var d = t.k ? zoekMetSleutel(el('trajectLijst'), t.k) : null; if (!d) return;
+    var mr = m.getBoundingClientRect(), r = d.getBoundingClientRect();
+    if (r.top < mr.top || r.bottom > mr.bottom) m.scrollTop += r.top - mr.top - Math.max(0, (m.clientHeight - r.height) / 2);
+  }
+  // v7.5 (iOS-review r3, A): na Terug zet renderBezetting de scrollpositie nog een keer terug (S.bScroll), pas na het antwoord op apiTrajecten (bij Apps
+  // Script 1-3 s). Scrolt de gebruiker intussen zelf (aanraken, wieltje, toets of muisknop in main; op iOS ook midden in een momentumscroll), dan
+  // vervalt die tweede terugzet. De luisteraars gaan weer weg zodra S.bScroll gebruikt of gewist is (bezettingScrollWis).
+  var BSCROLL_GEBAREN = ['touchstart', 'wheel', 'keydown', 'mousedown'];
+  function bezettingScrollWacht() {
+    var m = document.querySelector('main'), t = S.bScroll;
+    var af = function () { if (S.bScroll === t) S.bScroll = null; los(); };
+    var los = function () { BSCROLL_GEBAREN.forEach(function (s) { m.removeEventListener(s, af, true); }); if (S.bScrollLos === los) S.bScrollLos = null; };
+    if (S.bScrollLos) S.bScrollLos();
+    BSCROLL_GEBAREN.forEach(function (s) { m.addEventListener(s, af, { capture: true, passive: true }); });
+    S.bScrollLos = los;
+  }
+  function bezettingScrollWis() { S.bScroll = null; if (S.bScrollLos) S.bScrollLos(); }
+  function bezettingFocusNa(k) {
+    if (!k) return;
+    var l = el('trajectLijst'), e = zoekMetSleutel(l, k);
+    if (!e && k.data.some(function (d) { return d[0] === 'data-balles'; })) e = l.querySelector('[data-balles]');
+    focusStil(e);
   }
   function renderBezetting() {
     var B = S.bezetting;
-    if (!B) { el('trajectTelling').textContent = ''; el('trajectLijst').innerHTML = '<div class="spinner">Laden</div>'; laadBezetting(); return; }
-    var q = S.filters.zoek.toLowerCase(), alleen = S.bOpen !== false, T = B.tellingen, ik = ikBen() || {}, mijn = !!S.bMijn && ik.team === 'talent';
+    if (!B) { el('trajectTelling').textContent = ''; el('trajectLijst').innerHTML = '<div class="spinner">Laden</div>'; bezettingStatus(''); if (!S.bezettingLaden) laadBezetting(); return; }  // r3 (D): één aanroep tegelijk, ook bij zoeken of een AM-chip
+    var vast = !!S.bVast; S.bVast = false;  // v7.5 (review): true = hertekenen na eigen opslaan (bezettingLokaal); dan schuift en verdwijnt er in Per project niets
+    var q = S.filters.zoek.toLowerCase(), alleen = S.bOpen !== false, T = B.tellingen, ik = ikBen() || {}, mijn = !!S.bMijn && ik.team === 'talent', bw = bezettingWeergave(), focus = bezettingFocusVoor() || S.bFocus;  // v7.5; r2: S.bFocus = de focus van vóór bezettingFout (intussen stond er een spinner)
+    S.bFocus = null;
     var lijst = B.vacatures.filter(function (v) {
       if (alleen && v.status !== 'open' && v.status !== 'concept') return false;  // v6.4: concepten horen bij wat er aankomt
       if (mijn && v.project.talentscout !== ik.naam) return false;  // v6.4: mijn projecten als talentscout
@@ -1822,12 +1946,158 @@
       return !q || [v.titel, v.project.school, v.project.traject, v.dagen, v.profiel].concat((v.kandidaten || []).map(function (k) { return k.naam; })).join(' ').toLowerCase().indexOf(q) >= 0;
     });
     el('trajectTelling').textContent = lijst.length + (lijst.length === 1 ? ' vacature' : ' vacatures');
-    el('trajectLijst').innerHTML = '<div class="tegels">' + tegel(T.openVacatures, 'Open vacatures' + (T.concept ? ' (+' + T.concept + ' concept)' : '')) + tegel(T.openPlekken, 'Plekken nog open', 'oranje') + tegel(T.inProces, 'Kandidaten in proces') + tegel(T.klaar, 'Klaar voor start') + '</div>' +  // v7.1: vier tegels; concepten bij de open vacatures
-      '<div class="chips"><button class="chip' + (alleen ? ' aan' : '') + '" data-bopen="1">Open en concept</button><button class="chip' + (alleen ? '' : ' aan') + '" data-bopen="0">Alle vacatures</button>' +
-      (ik.team === 'talent' ? '<button class="chip' + (mijn ? ' aan' : '') + '" data-bmijn="1">Mijn projecten</button>' : '') +  // v6.4
-      '<span class="chip-scheiding"></span><button class="chip' + (S.bWeergave !== 'status' ? ' aan' : '') + '" data-bweergave="vacature">Per vacature</button><button class="chip' + (S.bWeergave === 'status' ? ' aan' : '') + '" data-bweergave="status">Per status</button></div>' +  // v6.8
-      (S.bWeergave === 'status' ? kandidatenBord(lijst, B.keuzes) : lijst.length ? '<div class="vac-grid">' + lijst.map(function (v) { return vacatureKaart(v, !!v.kandidaten, v.magKandidaten, v.magWijzigen, B.keuzes, v.project); }).join('') + '</div>'
-        : '<div class="leeg">' + (B.vacatures.length ? 'Geen vacatures in deze selectie.' : 'Nog geen vacatures. Een accountmanager opent ze op de projectpagina (tab Bezetting).') + '</div>');
+    // v7.5 (review): weergaven en filters elk in een eigen rij (role=group, aria-pressed) en bóven de tegels, zodat ze bij het wisselen niet verspringen;
+    // op de telefoon staan de tegels in Per project als één regel in de balk, zodat de eerste projecten eerder in beeld komen
+    var druk = function (aan) { return ' aria-pressed="' + (aan ? 'true' : 'false') + '"'; };
+    var chips = '<div class="chips bp-chips" role="group" aria-label="Weergave">' + BWEERGAVEN.map(function (x) { return '<button class="chip' + (bw === x[0] ? ' aan' : '') + '" data-bweergave="' + x[0] + '"' + druk(bw === x[0]) + '>' + x[1] + '</button>'; }).join('') + '</div>' +  // v6.8; v7.5: Per project
+      '<div class="chips bp-chips" role="group" aria-label="Filter"><button class="chip' + (alleen ? ' aan' : '') + '" data-bopen="1"' + druk(alleen) + '>Open en concept</button><button class="chip' + (alleen ? '' : ' aan') + '" data-bopen="0"' + druk(!alleen) + '>Alle vacatures</button>' +
+      (ik.team === 'talent' ? '<button class="chip' + (mijn ? ' aan' : '') + '" data-bmijn="1"' + druk(mijn) + '>Mijn projecten</button>' : '') + '</div>';  // v6.4
+    var som = bw === 'project' && !isDesk();
+    var tegels = som ? '' : '<div class="tegels">' + tegel(T.openVacatures, 'Open vacatures' + (T.concept ? ' (+' + T.concept + ' concept)' : '')) + tegel(T.openPlekken, 'Plekken nog open', 'oranje') + tegel(T.inProces, 'Kandidaten in proces') + tegel(T.klaar, 'Klaar voor start') + '</div>';  // v7.1: vier tegels; concepten bij de open vacatures
+    var leeg = '<div class="leeg">' + (B.vacatures.length ? 'Geen vacatures in deze selectie.' : 'Nog geen vacatures. Een accountmanager opent ze op de projectpagina (tab Bezetting).') + '</div>';
+    S.bStatus = '';
+    el('trajectLijst').innerHTML = chips + tegels +
+      (bw === 'status' ? kandidatenBord(lijst, B.keuzes) : bw === 'project' ? bezettingPerProject(lijst, B, q, vast, leeg, som)
+        : !lijst.length ? leeg : '<div class="vac-grid">' + lijst.map(function (v) { return vacatureKaart(v, !!v.kandidaten, v.magKandidaten, v.magWijzigen, B.keuzes, v.project); }).join('') + '</div>');
+    bezettingStatus(S.bStatus);
+    if (S.bScroll && el('view-trajecten').classList.contains('actief')) { var terug = S.bScroll; bezettingScrollWis(); bezettingScrollTerug(terug); }  // v7.5 (iOS-review r2)
+    bezettingFocusNa(focus);  // v7.5
+  }
+  // v7.5 (review): een statusregel buiten de lijst (role=status) zegt na het zoeken hoeveel projecten er overblijven; alleen bij een andere tekst
+  // r3: opnieuw = een eigen handeling (Alles uitklappen/inklappen) met dezelfde tekst als er al staat: eerst leeg en de tekst een tik later, anders meldt
+  // VoiceOver de herhaling niet. Hertekenen (opslaan, focus terug) meldt een gelijke tekst juist niet opnieuw.
+  function bezettingStatus(t, opnieuw) {
+    var s = el('bpStatus'); if (!s) return;
+    clearTimeout(S.bStatusTimer);
+    if (s.textContent !== t) { s.textContent = t; return; }
+    if (opnieuw && t) { s.textContent = ''; S.bStatusTimer = setTimeout(function () { s.textContent = t; }, 200); }  // v7.5 (r4): 200 ms, zodat VoiceOver het als nieuwe melding ziet
+  }
+  /* --- v7.5: Bezetting per project — één regel per project (een echte knop in een h3) die de vacatures eronder uitklapt --- */
+  // Dezelfde filters als de andere weergaven (de lijst komt al gefilterd binnen). Sortering: open plekken aflopend, dan de vroegste start, dan de school.
+  // x/y gevuld telt zoals de projectpagina (bezettingVan): zonder gesloten vacatures, gevuld hoogstens het aantal per vacature. De open plekken
+  // voor de sortering tellen alleen open en conceptvacatures (zoals de tegel), zodat een oud project met ingevulde vacatures niet bovenaan komt.
+  // weg = vacatures die alleen nog staan omdat ze vóór het eigen opslaan zichtbaar waren (zie bezettingPerProject).
+  function bezettingProjecten(vacs, weg) {
+    var per = {}, uit = [];
+    weg = weg || {};
+    vacs.forEach(function (v) {
+      var p = v.project || {}, id = String(p.id || v.trajectId || ''), g = per[id];
+      if (!g) { g = per[id] = { id: id, project: p, vacs: [], concept: 0, nodig: 0, gevuld: 0, open: 0, inProces: 0, start: '', startAlle: '', functies: {}, weg: [] }; uit.push(g); }
+      g.vacs.push(v);
+      if (weg[v.id]) g.weg.push(String(v.status || ''));
+      var komt = v.status === 'open' || v.status === 'concept', s = String(v.start || '');  // komt = nog in te vullen
+      if (v.status === 'concept') g.concept++;
+      if (v.status !== 'gesloten') {
+        var n = Math.max(0, Number(v.aantal) || 0), gv = Math.min(Math.max(0, Number(v.gevuld) || 0), n);
+        g.nodig += n; g.gevuld += gv; g.inProces += Math.max(0, Number(v.inProces) || 0);
+        if (komt && n > gv) { g.open += n - gv; var f = String(v.titel || 'Vacature'); g.functies[f] = (g.functies[f] || 0) + n - gv; }  // v7.5 (review): welke functies nog open zijn
+      }
+      if (s && komt && (!g.start || s < g.start)) g.start = s;  // de vroegste start van wat nog ingevuld moet worden, anders van alle vacatures, anders van het project
+      if (s && (!g.startAlle || s < g.startAlle)) g.startAlle = s;
+    });
+    uit.forEach(function (g) { g.start = g.start || g.startAlle || String(g.project.start || ''); });
+    var tekst = function (a, b) { return String(a || '').localeCompare(String(b || ''), 'nl'); };
+    return uit.sort(function (a, b) {
+      return b.open - a.open || (a.start === b.start ? 0 : !a.start ? 1 : !b.start ? -1 : a.start < b.start ? -1 : 1) || tekst(a.project.school, b.project.school) || tekst(a.project.traject, b.project.traject);
+    });
+  }
+  var BP_ZOEK_MAX = 15;  // v7.5: bij een zoekterm klappen de passende projecten vanzelf uit, maar niet honderden tegelijk (iPhone)
+  var BP_ALLES_TEL = 40;  // v7.5 (review): Alles uitklappen op de telefoon hoogstens de eerste 40 projecten, om dezelfde reden
+  function bezettingIsOpenId(id) { return !!S.bUit[id] || (!!S.bZoekUit && !S.bZoekDicht[id]); }
+  function bezettingKlap(id, open) { if (open) { S.bUit[id] = true; delete S.bZoekDicht[id]; } else { delete S.bUit[id]; S.bZoekDicht[id] = true; } }
+  function bezettingAllesStand() {
+    var ids = S.bVolgorde || [], max = isDesk() ? ids.length : BP_ALLES_TEL, deel = ids.slice(0, max);
+    return { ids: deel, open: deel.length > 0 && deel.every(bezettingIsOpenId), afgekapt: ids.length > max };
+  }
+  // v7.5 (review): volgorde en inhoud blijven staan tussen gebruikersacties. Na het opslaan van een kandidaat of vacature (bezettingLokaal: vast)
+  // houdt elk project zijn plek, ook als zijn open plekken dalen, en blijft een vacature die nu buiten het filter valt (bijvoorbeeld ingevuld)
+  // met een melding staan; pas bij een filter, zoekterm, andere weergave of opnieuw openen wordt er opnieuw gesorteerd en gefilterd.
+  function bezettingPerProject(lijst, B, q, vast, leeg, som) {
+    if (q !== S.bZoekVorig) { S.bZoekVorig = q; S.bZoekDicht = {}; }  // een nieuwe zoekterm klapt de passende projecten weer vanzelf uit
+    var vacs = lijst, weg = {};
+    if (vast && S.bGetoond) {
+      var erin = {}; lijst.forEach(function (v) { erin[v.id] = true; });
+      vacs = B.vacatures.filter(function (v) { if (erin[v.id]) return true; if (S.bGetoond[v.id]) { weg[v.id] = true; return true; } return false; });
+    }
+    var groepen = bezettingProjecten(vacs, weg);
+    if (vast && S.bVolgorde) {  // dezelfde volgorde als vóór het opslaan; een project dat er nog niet stond komt erachter
+      var plek = {}; S.bVolgorde.forEach(function (id, i) { plek[id] = i; });
+      groepen = groepen.filter(function (g) { return plek[g.id] !== undefined; }).sort(function (a, b) { return plek[a.id] - plek[b.id]; })
+        .concat(groepen.filter(function (g) { return plek[g.id] === undefined; }));
+    }
+    S.bVolgorde = groepen.map(function (g) { return g.id; });  // ook voor Alles uitklappen/inklappen
+    S.bGetoond = {}; vacs.forEach(function (v) { S.bGetoond[v.id] = true; });
+    S.bGroepMap = {}; groepen.forEach(function (g) { S.bGroepMap[g.id] = g; });  // voor in- en uitklappen op de plek zelf
+    var zoekUit = S.bZoekUit = !!q && groepen.length <= BP_ZOEK_MAX;
+    var tel = groepen.length + (groepen.length === 1 ? ' project' : ' projecten');
+    S.bStatus = q ? tel + (zoekUit && groepen.length ? ', uitgeklapt' : '') : '';
+    if (!groepen.length) return leeg;
+    var T = B.tellingen, st = bezettingAllesStand();
+    var seg = function (h, kl) { return '<span class="bp-seg' + (kl ? ' ' + kl : '') + '">' + h + '</span>'; };
+    return '<div class="bp-balk"><span class="bp-tekst"><span class="bp-lijn">' + seg(tel, 'bp-teller') +
+      (som ? seg(esc(T.openPlekken) + ' plekken open') + seg(esc(T.inProces) + ' in proces') + seg(esc(T.klaar) + ' klaar voor start') : '') + '</span></span>' +  // telefoon: de tegels als één regel
+      '<button class="knop-mini" type="button" data-balles="' + (st.open ? 'in' : 'uit') + '">' + (st.open ? 'Alles inklappen' : 'Alles uitklappen') + '</button></div>' +
+      '<div class="hint" id="bpAllesHint"' + (st.open && st.afgekapt ? '' : ' hidden') + '>De eerste ' + BP_ALLES_TEL + ' projecten staan open. Zoek of filter om de rest te zien.</div>' +
+      (q && !zoekUit ? '<div class="hint">Meer dan ' + BP_ZOEK_MAX + ' projecten passen bij je zoekterm; die klappen niet vanzelf uit. Zoek preciezer of open er een.</div>' : '') +
+      '<div class="bp-lijst">' + begrensdeRijen(groepen, function (g) { return bezettingProjectRij(g, bezettingIsOpenId(g.id), B.keuzes); }) + '</div>';
+  }
+  function bezettingAllesBijwerken() {  // v7.5 (review): de Alles-knop en zijn hint bijwerken zonder te hertekenen
+    var st = bezettingAllesStand(), k = document.querySelector('#trajectLijst [data-balles]'), h = el('bpAllesHint');
+    if (k) { k.setAttribute('data-balles', st.open ? 'in' : 'uit'); k.textContent = st.open ? 'Alles inklappen' : 'Alles uitklappen'; }
+    if (h) h.hidden = !(st.open && st.afgekapt);
+  }
+  // v7.5 (review): in- en uitklappen op de plek zelf. Dezelfde knop blijft bestaan (VoiceOver houdt zijn cursor en leest de nieuwe aria-expanded;
+  // Safari geeft een getikte knop geen focus, dus herstellen via activeElement kan daar niet) en alleen dit ene paneel wordt gevuld of geleegd.
+  function bezettingPaneelZet(knop, open, alles) {
+    var p = el(knop.getAttribute('aria-controls')), g = (S.bGroepMap || {})[knop.getAttribute('data-bproject')], wrap = knop.closest('.bp-project');
+    if (!p || (open && !(g && S.bezetting))) { renderBezetting(); return; }  // hoort niet te gebeuren; dan alles opnieuw
+    // v7.5 (iOS-review r2): klap je een open project in terwijl zijn kop bovenaan plakt (het begin van het project ligt boven main), dan verdween de
+    // regel na het legen uit beeld. Vooraf meten waar het project begint en daarna main zo zetten dat de regel bovenaan staat. Niet bij Alles
+    // in/uitklappen (alles): die knop staat boven de lijst, en per paneel meten zou tot 40 keer een nieuwe layout kosten.
+    var m = document.querySelector('main'), boven = 0, doel = 0;
+    if (!open && !alles && wrap) { boven = wrap.getBoundingClientRect().top - m.getBoundingClientRect().top; doel = m.scrollTop + boven; }  // ook scrollTop lezen kost een layout: alleen hier
+    knop.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (wrap) wrap.classList.toggle('open', open);
+    if (open) { p.innerHTML = bezettingPaneel(g, S.bezetting.keuzes); p.hidden = false; } else { p.hidden = true; p.innerHTML = ''; }
+    if (boven < 0) m.scrollTop = doel;
+  }
+  function bezettingPaneelId(id) { return 'bp-' + String(id).replace(/[^A-Za-z0-9_-]/g, '_'); }
+  // Uitgeklapt: de bestaande vacaturekaarten (zonder projectregel, die staat al in de knop), zodat voorstellen, + Kandidaat, bewerken, bevestigen en de statuspil gewoon werken
+  function bezettingPaneel(g, K) {
+    var ingevuld = g.weg.length && g.weg.every(function (s) { return s === 'ingevuld'; });
+    return (g.weg.length ? '<div class="hint">' + (ingevuld ? 'Ingevuld' : 'Gewijzigd') + ' en daarmee buiten deze selectie. Blijft hier staan tot je een filter, zoekterm of weergave kiest.</div>' : '') +
+      '<a class="bp-link" data-crm-open="project:' + esc(g.id) + '" tabindex="0" role="link">Open de projectpagina</a><div class="vac-grid">' +
+      g.vacs.map(function (v) { return vacatureKaart(v, !!v.kandidaten, v.magKandidaten, v.magWijzigen, K, null); }).join('') + '</div>';
+  }
+  function bezettingFuncties(g) {  // v7.5 (review): de open functies kort, bijvoorbeeld "Surveillant 3, Rekenondersteuner 2 +1"
+    var l = Object.keys(g.functies).map(function (f) { return [f, g.functies[f]]; }).sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0], 'nl'); });
+    return l.slice(0, 2).map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + (l.length > 2 ? ' +' + (l.length - 2) : '');
+  }
+  var BP_PIJL = '<svg class="ic bp-pijl" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+  // v7.5 (review): de knop heet "school, project, x van y plekken open" (aria-labelledby; ook de tekst van de h3); team en info zijn de beschrijving.
+  // AM en TS staan zichtbaar afgekort en voor de schermlezer voluit; de puntjes ertussen leest hij als komma.
+  function bezettingProjectRij(g, open, K) {
+    var p = g.project, pid = bezettingPaneelId(g.id), n = g.vacs.length, vol = g.nodig > 0 && g.gevuld >= g.nodig, pct = g.nodig ? Math.round(100 * g.gevuld / g.nodig) : 0;
+    var seg = function (h, kl) { return '<span class="bp-seg' + (kl ? ' ' + kl : '') + '">' + h + '</span>'; };
+    var afk = function (kort, lang) { return '<span aria-hidden="true">' + kort + '</span><span class="vh">' + lang + '</span>'; };
+    var start = g.start ? 'start ' + esc(kortDatum(g.start)) : '';
+    var team = seg(p.am ? afk('AM', 'accountmanager') + ' ' + esc(p.am) : 'geen ' + afk('AM', 'accountmanager')) + seg(p.talentscout ? afk('TS', 'talentscout') + ' ' + esc(p.talentscout) : 'geen talentscout', p.talentscout ? '' : 'bp-zonder') + (start ? seg(start, 'bp-start-tel') : '');
+    var vac = n + (n === 1 ? ' vacature' : ' vacatures') + (g.concept && g.concept === n ? ' (concept)' : g.concept ? ', waarvan ' + g.concept + ' concept' : '');  // v7.5 (review): als zin, niet als los label
+    var wegAlle = g.weg.length && g.weg.every(function (s) { return s === g.weg[0]; }), wegTekst = !g.weg.length ? '' : (g.weg.length === 1 ? 'vacature ' : g.weg.length + ' vacatures ') + (wegAlle && g.weg[0] ? g.weg[0] : 'gewijzigd');
+    var functies = bezettingFuncties(g);
+    var info = (start ? seg(start, 'bp-start') : '') + seg(vac, 'bp-vac') + (wegTekst ? seg(esc(wegTekst), 'bp-weg' + (wegAlle && g.weg[0] === 'ingevuld' ? ' vol' : '')) : '') + (functies ? seg(esc(functies), 'bp-func') : '') +
+      (g.open > 0 && !g.inProces ? seg('nog geen kandidaten', 'bp-proces bp-geen') : seg(g.inProces + ' in proces', 'bp-proces'));  // v7.5 (review): geen kandidaten bij open plekken als tekst in rood
+    var hoofd = !g.nodig ? '<span class="bp-hoofd leeg">geen plekken</span>' : vol ? '<span class="bp-hoofd vol">vol</span>' : '<span class="bp-hoofd"><b>' + g.open + '</b> open</span>';
+    var sub = g.nodig ? '<span class="bp-sub">' + (g.gevuld > 0 && !vol ? '<span class="bp-meter" aria-hidden="true"><span style="width:' + pct + '%"></span></span>' : '') + g.gevuld + '/' + g.nodig + ' gevuld</span>' : '';
+    var label = !g.nodig ? 'geen plekken' : vol ? 'alle ' + g.nodig + ' plekken gevuld' : g.open + ' van ' + g.nodig + ' plekken open';
+    var knop = '<h3 class="bp-kop"><button class="bp-rij" type="button" data-bproject="' + esc(g.id) + '" aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="' + pid + '" aria-labelledby="' + pid + '-n ' + pid + '-o" aria-describedby="' + pid + '-t ' + pid + '-i">' +
+      '<span class="bp-raster">' + BP_PIJL +
+      '<span class="bp-naam" id="' + pid + '-n"><span class="bp-school">' + esc(p.school || '') + '</span><span class="vh">,</span> <span class="bp-traject"><span aria-hidden="true">· </span>' + esc(p.traject || '') + '</span></span>' +
+      '<span class="vh" id="' + pid + '-o">, ' + label + '</span>' + hoofd + sub +
+      '<span class="bp-team" id="' + pid + '-t"><span class="bp-lijn">' + team + '</span></span>' +
+      '<span class="bp-info" id="' + pid + '-i"><span class="bp-lijn">' + info + '</span></span></span></button></h3>';
+    var paneel = '<div class="bp-paneel" id="' + pid + '"' + (open ? '>' + bezettingPaneel(g, K) : ' hidden>') + '</div>';
+    return '<div class="bp-project' + (open ? ' open' : '') + '">' + knop + paneel + '</div>';
   }
   // v6.8: alle kandidaten van de getoonde vacatures in kolommen per status; slepen zet de status (zoals de statuspil)
   function kandidatenBord(vacs, K) {
@@ -1887,10 +2157,20 @@
       else { var tel = { openVacatures: 0, openPlekken: 0, inProces: 0, klaar: 0, concept: 0 };  // v6.4: concept
         S.bezetting.vacatures.forEach(function (v) { if (v.status === 'open') { tel.openVacatures++; tel.openPlekken += Math.max(0, v.aantal - v.gevuld); } if (v.status === 'concept') tel.concept++; if (v.status !== 'gesloten') { tel.inProces += v.inProces; tel.klaar += v.gevuld; } });
         S.bezetting.tellingen = tel; }
-      if (S.pWeergave === 'bezetting' && el('view-trajecten').classList.contains('actief')) renderBezetting();  // v5.0: S.trajecten is net gewist; het bord zelf heeft genoeg aan S.bezetting (renderTrajecten zou stil stoppen)
+      if (S.pWeergave === 'bezetting' && el('view-trajecten').classList.contains('actief')) { S.bVast = true; renderBezetting(); }  // v5.0: S.trajecten is net gewist; het bord zelf heeft genoeg aan S.bezetting (renderTrajecten zou stil stoppen); v7.5: vast = niets verschuift
     }
   }
-  function bezettingFout() { S.bezetting = null; if (CRM.detail && CRM.detail.soort === 'project' && el('view-relaties').classList.contains('actief')) herlaadDetail(); else if (el('view-trajecten').classList.contains('actief')) { if (S.trajecten) renderTrajecten(); else laadTrajecten(); } }  // v5.0: ook zonder geladen projectenlijst opnieuw laden
+  // v5.0: ook zonder geladen projectenlijst opnieuw laden; v7.5: S.bVast = volgorde vasthouden.
+  // v7.5 (iOS-review r2): tijdens het herladen staat er een spinner, main krimpt en de scrollpositie viel naar 0; die (S.bScroll) en de focus (S.bFocus)
+  // zet renderBezetting daarna terug. renderTrajecten in plaats van laadTrajecten: zonder S.trajecten laadt de tak voor Bezetting alleen apiBezetting.
+  function bezettingFout() {
+    S.bezetting = null;
+    if (CRM.detail && CRM.detail.soort === 'project' && el('view-relaties').classList.contains('actief')) { herlaadDetail(); return; }
+    if (!el('view-trajecten').classList.contains('actief')) return;
+    S.bVast = true;
+    if (S.pWeergave === 'bezetting') { S.bScroll = { top: document.querySelector('main').scrollTop }; S.bFocus = bezettingFocusVoor(); }
+    renderTrajecten();
+  }
   function vacatureVenster(vid, tid) {
     var v = vid && vid !== 'nieuw' ? zoekVacature(vid) : null, K = bezettingKeuzes(), w = v ? kopie(v) : { aantal: 1, titel: 'Onderwijsondersteuner' };
     var velden = [{ naam: 'titel', label: 'Functie', breed: true, plaats: 'Onderwijsondersteuner rekenen' }, { naam: 'aantal', label: 'Aantal plekken', type: 'number' }, { naam: 'urenPerWeek', label: 'Uren per week', type: 'number' },
@@ -2023,9 +2303,13 @@
       if (l.some(function (m) { return !m.gelezen; })) run('apiMeldingenGelezen').then(function () { zetMeldingen(0); if (CRM.basis) CRM.basis.meldingen = 0; }).catch(function () {});
     }).catch(function () { sluitVenster(); });
   }
-  function laadTrajecten() { run('apiTrajecten').then(function (T) { S.trajecten = T; renderTrajecten(); }).catch(function () { el('trajectLijst').innerHTML = '<div class="leeg">Kon de projecten niet laden.</div>'; }); }
+  function laadTrajecten() {  // v7.5 (iOS-review r2): S.trajectenLaden telt de lopende aanroepen (renderTrajecten start er zonder S.trajecten geen tweede bij)
+    S.trajectenLaden = (S.trajectenLaden || 0) + 1;
+    var klaar = function () { S.trajectenLaden = Math.max(0, S.trajectenLaden - 1); };
+    run('apiTrajecten').then(function (T) { klaar(); S.trajecten = T; renderTrajecten(); }).catch(function () { klaar(); bezettingScrollWis(); S.bFocus = null; el('trajectLijst').innerHTML = '<div class="leeg">Kon de projecten niet laden.</div>'; });  // r3 (C): ook S.bFocus
+  }
   var trajectZoekTimer = null;  // v7.4 (iOS-review): tekenen ±150 ms na de laatste toetsaanslag; de zoektekst zelf meteen (filters tekenen er direct mee)
-  el('trajectZoek').addEventListener('input', function () { S.filters.zoek = el('trajectZoek').value.trim(); clearTimeout(trajectZoekTimer); trajectZoekTimer = setTimeout(renderTrajecten, 150); });
+  el('trajectZoek').addEventListener('input', function () { S.filters.zoek = el('trajectZoek').value.trim(); S.bVast = false; clearTimeout(trajectZoekTimer); trajectZoekTimer = setTimeout(renderTrajecten, 150); });  // v7.5: S.bVast
   ['fSchooljaar', 'fTraject', 'fStatus'].forEach(function (id) {
     el(id).addEventListener('change', function () { S.filters[{ fSchooljaar: 'schooljaar', fTraject: 'traject', fStatus: 'status' }[id]] = el(id).value; renderTrajecten(); });
   });
@@ -2041,16 +2325,25 @@
     if ((fx = ev.target.closest('[data-finbevries]'))) { fx.disabled = true; run('apiFinancienBevriezen').then(function (r) { toast(r.al ? 'Deze maand was al vastgelegd.' : 'Prognose van ' + r.maand + ' vastgelegd.'); laadFinancien(); }).catch(function () { fx.disabled = false; }); return; }
     if ((fx = ev.target.closest('[data-exactcontrole]'))) { exactDraai(false, fx); return; }
     if ((fx = ev.target.closest('[data-exacttoepassen]'))) { exactDraai(true, fx); return; }
-    if ((x = ev.target.closest('[data-pweergave]'))) { S.pWeergave = x.getAttribute('data-pweergave'); S.pWeergaveGekozen = true; if (isDesk()) zetZijbalk(S.pWeergave === 'bezetting' ? 'bezetting' : S.pWeergave === 'talent' ? 'talent' : 'projecten'); renderTrajecten(); return; }  // v4.0; v5.0: talent
-    if ((x = ev.target.closest('[data-pam]'))) { S.pAm = x.getAttribute('data-pam'); renderTrajecten(); return; }
-    if ((x = ev.target.closest('[data-bopen]'))) { S.bOpen = x.getAttribute('data-bopen') === '1'; renderTrajecten(); return; }  // v4.1
+    if ((x = ev.target.closest('[data-pweergave]'))) { S.pWeergave = x.getAttribute('data-pweergave'); S.pWeergaveGekozen = true; bezettingScrollWis(); S.bFocus = null; if (isDesk()) zetZijbalk(S.pWeergave === 'bezetting' ? 'bezetting' : S.pWeergave === 'talent' ? 'talent' : 'projecten'); renderTrajecten(); return; }  // v4.0; v5.0: talent; v7.5 (iOS-review r3, C): een andere weergave neemt geen scrollpositie of focus van Bezetting mee
+    if ((x = ev.target.closest('[data-pam]'))) { S.pAm = x.getAttribute('data-pam'); S.bVast = false; renderTrajecten(); return; }  // v7.5: S.bVast
+    if ((x = ev.target.closest('[data-bopen]'))) { S.bOpen = x.getAttribute('data-bopen') === '1'; S.bVast = false; renderTrajecten(); return; }  // v4.1; v7.5: een filter sorteert opnieuw
     if ((x = ev.target.closest('[data-vacature]'))) { vacatureVenster(x.getAttribute('data-vacature'), x.getAttribute('data-tid')); return; }
     if ((x = ev.target.closest('[data-kandidaat]')) && !ev.target.closest('[data-crm-open]')) { kandidaatVenster(x.getAttribute('data-kandidaat'), x.getAttribute('data-vid')); return; }  // v5.0: de naam in de regel linkt naar het talentprofiel
     if ((x = ev.target.closest('[data-taskforce]'))) { taskforceVenster(); return; }
     if ((x = ev.target.closest('[data-tfplannen]'))) { taskforcePlannenVenster(); return; }  // v6.4
     if ((x = ev.target.closest('[data-tscout]'))) { if (x.getAttribute('data-tscout') === 'zelf') { x.disabled = true; run('apiTalentscoutToewijzen', CRM.detail.id, (ikBen() || {}).naam).then(function () { toast('Je bent talentscout van dit project.'); S.bezetting = null; herlaadDetail(); }).catch(function () { x.disabled = false; }); } else talentscoutVenster(); return; }  // v6.4
-    if ((x = ev.target.closest('[data-bmijn]'))) { S.bMijn = !S.bMijn; renderTrajecten(); return; }  // v6.4
-    if ((x = ev.target.closest('[data-bweergave]'))) { S.bWeergave = x.getAttribute('data-bweergave'); renderTrajecten(); return; }  // v6.8: per vacature of per status
+    if ((x = ev.target.closest('[data-bmijn]'))) { S.bMijn = !S.bMijn; S.bVast = false; renderTrajecten(); return; }  // v6.4
+    if ((x = ev.target.closest('[data-bweergave]'))) { S.bWeergave = x.getAttribute('data-bweergave'); S.bVast = false; zetOpslag('aa_bweergave', S.bWeergave); renderTrajecten(); return; }  // v6.8: per vacature of per status; v7.5: per project, en per apparaat onthouden
+    if ((x = ev.target.closest('[data-bproject]'))) { var bNu = x.getAttribute('aria-expanded') !== 'true'; bezettingKlap(x.getAttribute('data-bproject'), bNu); bezettingPaneelZet(x, bNu); bezettingAllesBijwerken(); return; }  // v7.5: project uit- of inklappen op de plek zelf (ook met Enter of Spatie: het is een knop)
+    if ((x = ev.target.closest('[data-balles]'))) {  // v7.5: Alles uitklappen/inklappen, ook op de plek zelf (de focus blijft op deze knop)
+      var bUit = x.getAttribute('data-balles') === 'uit', bSt = bezettingAllesStand(), bN = bSt.ids.length;
+      (bUit ? bSt.ids : S.bVolgorde || []).forEach(function (id) { bezettingKlap(id, bUit); });
+      document.querySelectorAll('#trajectLijst .bp-rij[data-bproject]').forEach(function (k) { var o = bezettingIsOpenId(k.getAttribute('data-bproject')); if ((k.getAttribute('aria-expanded') === 'true') !== o) bezettingPaneelZet(k, o, true); });
+      bezettingAllesBijwerken();
+      bezettingStatus(!bUit ? 'Alles ingeklapt' : (bSt.afgekapt ? 'De eerste ' : '') + bN + (bN === 1 ? ' project' : ' projecten') + ' uitgeklapt', true);  // v7.5 (iOS-review r2): VoiceOver meldt het nieuwe label van de knop niet; r3: ook een herhaling
+      return;
+    }
     if ((x = ev.target.closest('[data-vacbevestig]'))) {  // v6.4: de AM bevestigt de conceptvacature na de taskforce
       var vb = zoekVacature(x.getAttribute('data-vacbevestig')); if (!vb) return;
       if (!window.confirm('Vacature bevestigen? Het talentteam kan dan voordragen. Pas hem eerst aan via "Vacature bewerken" als de taskforce iets anders afsprak.')) return;
@@ -3061,6 +3354,7 @@
     var o = CRM.detailOpener; CRM.detailOpener = null; if (!o) return;
     function zoek() {
       if (zichtbaarEl(o.el)) return o.el;
+      var bk = o.k ? zoekMetSleutel(el('trajectLijst'), o.k) : null; if (bk) return bk;  // v7.5 (iOS-review r3, B): Bezetting geeft de sleutel met nr mee (sluitDetail)
       var l = document.querySelectorAll('[data-crm-open="' + String(o.w || '').replace(/["\\]/g, '') + '"]'), v = document.querySelector('.view.actief'), tag = o.el ? o.el.tagName : '', inScherm = null, eerste = null;
       for (var i = 0; i < l.length; i++) {
         var e = l[i]; if (!zichtbaarEl(e) || (e.closest && e.closest('#venster'))) continue;
@@ -3094,22 +3388,35 @@
     if (!k.id && !k.data.length) k.tekst = (e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
     return k;
   }
+  // v7.5 (iOS-review r3, B): k.nr = het hoeveelste zichtbare element met deze sleutel (sleutelNr); in Bezetting → Per vacature heeft elke kaart van
+  // een project dezelfde projectlink. Is er zoveel niet meer, dan het laatste dat past. Zonder nr (renderDetail) blijft het het eerste.
+  function pastSleutel(e, k) {
+    for (var j = 0; j < k.data.length; j++) { if (e.getAttribute(k.data[j][0]) !== k.data[j][1]) return false; }
+    if (k.tekst && (e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) !== k.tekst) return false;
+    return zichtbaarEl(e);
+  }
   function zoekMetSleutel(root, k) {
     if (k.id) { var byId = el(k.id); return byId && root.contains(byId) && zichtbaarEl(byId) ? byId : null; }
     if (!k.data.length && !k.tekst) return null;  // niets om het aan te herkennen
-    var l = root.querySelectorAll(k.tag);
-    for (var i = 0; i < l.length; i++) {
-      var e = l[i], past = true;
-      for (var j = 0; j < k.data.length; j++) { if (e.getAttribute(k.data[j][0]) !== k.data[j][1]) { past = false; break; } }
-      if (past && k.tekst && (e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) !== k.tekst) past = false;
-      if (past && zichtbaarEl(e)) return e;
-    }
-    return null;
+    var l = root.querySelectorAll(k.tag), nr = k.nr || 0, laatste = null;
+    for (var i = 0; i < l.length; i++) { if (!pastSleutel(l[i], k)) continue; if (nr-- <= 0) return l[i]; laatste = l[i]; }
+    return laatste;
   }
+  function sleutelNr(root, e, k) { var l = root.querySelectorAll(k.tag), n = 0; for (var i = 0; i < l.length && l[i] !== e; i++) { if (pastSleutel(l[i], k)) n++; } return n; }
   function sluitDetail() {
     var terug = CRM.detail && (CRM.detail.soort === 'project' || CRM.detail.soort === 'talent') ? CRM.terugNaar : ''; CRM.terugNaar = '';  // v3.8: terug naar Projecten of Facturatie; v5.0: of het talentbestand
     if (terug) { CRM.detail = null; formActie = null; el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block';
-      if (isDesk()) deskNaar(terug); else wisselView(terug === 'facturatie' ? 'facturatie' : 'trajecten'); focusDetailOpener(); return; }  // v7.3 (TB-9)
+      if (isDesk()) deskNaar(terug); else wisselView(terug === 'facturatie' ? 'facturatie' : 'trajecten');
+      // v7.5 (iOS-review r2): terug naar Bezetting houdt de volgorde vast (S.bVast) en zet de scrollpositie terug: meteen (de lijst van vóór het
+      // detail staat er nog) en na het hertekenen (S.bScroll in renderBezetting), zodat de regel en de link die de focus terugkrijgt in beeld staan
+      // r3 (A): die tweede terugzet vervalt als je intussen zelf scrolt (bezettingScrollWacht). r3 (B): de focus gaat naar precies het element dat het
+      // detail opende (S.bTerug.k met nr), ook als je onderweg nog een detail opende (project → talent → Terug → Terug: CRM.detailOpener is dan de talentlink)
+      if (terug === 'bezetting' && S.bTerug) {
+        S.bVast = true; S.bScroll = S.bTerug; document.querySelector('main').scrollTop = S.bTerug.top; bezettingScrollWacht();
+        CRM.detailOpener = { el: zoekMetSleutel(el('trajectLijst'), S.bTerug.k), w: S.bTerug.w, k: S.bTerug.k };
+      }
+      S.bTerug = null;
+      focusDetailOpener(); return; }  // v7.3 (TB-9)
     CRM.detail = null; formActie = null;
     el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block';
     if (CRM.basis) renderCrm(); else laadRelaties();
@@ -3493,6 +3800,14 @@
       if (soortO === 'talent' && !inRelaties) {  // v5.0: terug gaat naar het bezettingsbord (vanaf een kandidaatregel) of het talentbestand
         CRM.terugNaar = el('view-trajecten').classList.contains('actief') && S.pWeergave === 'bezetting' ? 'bezetting' : 'talent';
         if (CRM.terugNaar === 'talent') { S.pWeergave = 'talent'; S.pWeergaveGekozen = true; }
+      }
+      // v7.5 (iOS-review r2): vanuit Bezetting onthouden waar je stond (main gaat zo naar 0); Terug (sluitDetail) zet het terug. Binnen Relaties
+      // (van detail naar detail) blijft het staan, want Terug komt daar uiteindelijk ook weer bij Bezetting uit.
+      // r3 (B): k = de sleutel met nr, het hoeveelste element met deze link in de lijst (Per vacature: de projectlink op de tweede kaart van een project)
+      if (!inRelaties) {
+        var bLijst = el('trajectLijst'), bk = { tag: x.tagName, id: '', data: [['data-crm-open', w]], tekst: '', nr: 0 };
+        S.bTerug = (soortO === 'project' || soortO === 'talent') && CRM.terugNaar === 'bezetting' && el('view-trajecten').classList.contains('actief') ? { top: document.querySelector('main').scrollTop, w: w, k: bk } : null;
+        if (S.bTerug && bLijst.contains(x)) bk.nr = sleutelNr(bLijst, x, bk);
       }
       if (!inRelaties) {
         if (isDesk()) { if (soortO === 'project' || soortO === 'talent') { wisselView('relaties'); zetZijbalk(CRM.terugNaar || 'projecten'); } else deskNaar(soortO === 'kans' ? 'pipeline' : 'contacten'); } else { wisselView('relaties'); if ((soortO === 'project' || soortO === 'talent') && /^(projecten|bezetting|talent)$/.test(CRM.terugNaar || '')) telefoonTab('trajecten'); }
@@ -5233,11 +5548,12 @@
     document.body.classList.add('v-' + naam);
     el('paginaTitel').textContent = TITELS[naam] || 'Athena';
     document.querySelector('main').scrollTop = 0;
+    bezettingScrollWis(); S.bFocus = null;  // v7.5 (iOS-review r3, C): een ander scherm neemt geen scrollpositie of focus van Bezetting mee (sluitDetail zet ze hierna zelf)
     if (naam === 'vandaag') laadVandaag();
     if (naam === 'brein') laadBrein();
     if (naam === 'review') laadReview();
     if (naam === 'huisstijl') laadHuisstijl();
-    if (naam === 'trajecten') laadTrajecten();
+    if (naam === 'trajecten') { S.bVast = false; S.bScroll = null; laadTrajecten(); }  // v7.5: opnieuw openen sorteert Bezetting → Per project opnieuw (Terug van een project zet S.bVast en S.bScroll daarna zelf)
     if (naam === 'relaties') laadRelaties();  // v2.0
     if (naam === 'facturatie') laadFacturatie();  // v3.8
     if (naam === 'financien') laadFinancien();  // v6.5
