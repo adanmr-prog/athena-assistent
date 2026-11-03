@@ -1080,7 +1080,7 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
 (function () {
   ctx.GEBRUIKER = null;
   var c1 = ctx.controleer();
-  eis(c1.indexOf('backend 7.4.1') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.4.1 en geen afwijkende koppen in de demo-sheet');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch
+  eis(c1.indexOf('backend 7.5') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.5 en geen afwijkende koppen in de demo-sheet');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch; v7.5: release
   var b = ctx.blad('Scholen'), kop = ctx.TABELLEN.Scholen, was = b.getRange(1, 2, 1, 1).getValues()[0][0];
   b.getRange(1, 2, 1, 1).setValues([['schoolnaam']]);
   var c2 = ctx.controleer(), regel = c2.split('\n').filter(function (r) { return r.indexOf('- Scholen:') === 0; })[0] || '';
