@@ -83,6 +83,7 @@ function controleer() {
       ss.getSheets().forEach(function (b) { perNaam[b.getName()] = b; });
       regels.push('Sheet: ' + ss.getName());
       Object.keys(TABELLEN).forEach(function (naam) { var b = perNaam[naam]; regels.push('- ' + naam + ': ' + (b ? Math.max(0, b.getLastRow() - 1) + ' rijen' + kopControle(b, TABELLEN[naam]) : 'nog niet aangemaakt (gebeurt vanzelf)')); });
+      regels.push(antwoordTabbladenControle());  // v7.4.1 ronde 6
     } catch (e) { regels.push('Sheet ' + P.getProperty('SHEET_ID') + ' niet bereikbaar (verwijderd, in de prullenbak of niet gedeeld met dit account): ' + ((e && e.message) || e)); }
   }
   var aanwezig = triggerNamen(), mist = TRIGGERS.filter(function (n) { return aanwezig.indexOf(n) < 0; });
@@ -92,6 +93,18 @@ function controleer() {
   regels.push('Nieuwe Code.gs live zetten: implementeren als nieuwe versie, zie backend/README.md.');
   Logger.log(regels.join('\n'));
   return regels.join('\n');
+}
+
+// v7.4.1 ronde 6: elk antwoordtabblad van een formulier en hoe aanmeldingenVerwerken het behandelt, zodat een stil overgeslagen ander formulier te zien is
+function antwoordTabbladenControle() {
+  try {
+    var inst = instelling('aanmeldTabbladen'), tabs = aanmeldBladen().map(function (b) {
+      var laatste = b.getLastRow(), s = laatste < 2 ? null : aanmeldTabbladSoort(b.getName(), b.getRange(1, 1, laatste, Math.max(b.getLastColumn(), 1)).getValues(), inst);
+      return '"' + b.getName() + '" ' + (!s ? 'leeg' : s.keuze === 'negeren' ? 'genegeerd (instelling aanmeldTabbladen)' : s.soort === true ? (s.c.toestemming.length ? 'aanmeldformulier' : 'wacht: geen toestemmingsvraag')
+        : s.soort === 'twijfel' ? 'wacht: twijfel of het een aanmeldformulier is' : 'overgeslagen: geen aanmeldformulier');
+    });
+    return 'Antwoordtabbladen: ' + (tabs.join(' · ') || 'geen');
+  } catch (e) { return 'Antwoordtabbladen: niet te lezen (' + ((e && e.message) || e) + ')'; }
 }
 
 // v7.2.1: lees() leest op kolompositie, niet op kolomnaam. Een hernoemde of verschoven kop in de Sheet wordt dus stil onder het
@@ -4551,6 +4564,8 @@ function aanmeldingenRun() {
   if (r.overgeslagen.bewaartermijn) tekst += ', ' + r.overgeslagen.bewaartermijn + ' met verstreken bewaartermijn';
   if (r.overgeslagen.onduidelijk) tekst += ', ' + r.overgeslagen.onduidelijk + ' wachten op een duidelijke toestemming';  // v7.4.1 ronde 5
   if (r.overgeslagen.geenContact) tekst += ', ' + r.overgeslagen.geenContact + ' zonder geldig e-mailadres of telefoonnummer';
+  var ander = r.overgeslagenTabbladen || [];  // v7.4.1 ronde 6: stil overgeslagen tabbladen met naam, zodat de beheerder ze ziet
+  if (ander.length) tekst += ', ' + (ander.length === 1 ? '1 tabblad' : ander.length + ' tabbladen') + ' overgeslagen als ander formulier (' + ander.map(function (x) { return '"' + x + '"'; }).join(', ') + ')';
   return tekst + (r.fouten.length ? '; ' + r.fouten.join('; ') : '');
 }
 
@@ -4578,21 +4593,26 @@ var AANMELD_BIJZONDER_BEGIN = new RegExp('(^| )(burn ?out|overspann|zwanger|adhd
   'psychisch|psychose|medicijn|medicatie|diabet|epilep|kanker|astma|migraine|invalid|pregnan|disab|anxiety|religi|geloof|gelovig|moslim|islam|christen|christelijk|katholiek|' +
   'protestant|hindoe|boeddh|jood|joods|moskee|kerk|gebed|ramadan|halal|kosher|koosjer|muslim|christian|jewish|strafbla|veroordeel|justitie|politie|gevangen|detentie|' +
   'reclassering|criminal|convict|police|seksu|geaard|homo|lesbi|bisek|transgender|lhbt|lgbt|etnic|etnisch|afkomst|huidskleur|politiek|vakbond|vakbew)');
-var AANMELD_BIJZONDER_HEEL = /(^| )(add|ras|gay|hiv|aids|wia|wao|uwv|cvs|me cvs|pds|ocd|ptss|ptsd|in verwachting|vasten|sabbat|sjabbat|shabbat|eid)( |$)/;
+var AANMELD_BIJZONDER_HEEL = /(^| )(add|ras|gay|hiv|aids|wia|wao|uwv|cvs|me cvs|pds|ocd|ptss|ptsd|ivf|in (blijde |gezegende )?verwachting|vasten|sabbat|sjabbat|shabbat|eid)( |$)/;  // v7.4.1 ronde 6: ivf, 'in blijde verwachting'
 // v7.4.1 ronde 5: stammen van vijf letters of meer ook midden in een woord (Nederlandse samenstellingen: hoogzwanger, borstkanker, faalangst, winterdepressie,
 // vrijdaggebed, ziektewet), en meer woorden over gezondheid, uitkering en geloof (covid, hernia, reuma, klachten, pijn, operatie, herstel, Wajong, WIA, UWV,
 // arbeidsongeschikt, belastbaar, 'in verwachting', geboren, sabbat, vasten, suikerfeest)
 var AANMELD_BIJZONDER_DEEL = new RegExp('beperking|handicap|therap|rolstoel|hoofddoek|blind|zwanger|kanker|depress|angst|gebed|burnout|burn out|overspann|psychi|psychose|' +
   'medicijn|medicatie|diabet|epilep|migraine|astma|autis|dyslex|dyslect|chronisch|covid|corona|hernia|reuma|klacht|pijn|operatie|herstel|revalid|ziekenhuis|wajong|' +
-  'arbeidsongeschikt|belastbaar|uitkering|geboren|zwangerschap|bevalling|moederschap|suikerfeest|ramadan|islamit|katholiek|protestant|gelovig|religi|moskee|synagog|kerkdienst');
-function bijzonderWoord(w) { return AANMELD_BIJZONDER_BEGIN.test(w) || AANMELD_BIJZONDER_HEEL.test(w) || AANMELD_BIJZONDER_DEEL.test(w); }
+  'arbeidsongeschikt|belastbaar|uitkering|geboren|zwangerschap|bevall|moederschap|suikerfeest|ramadan|islamit|katholiek|protestant|gelovig|religi|moskee|synagog|kerkdienst|' +
+  'dyscalc|kraam');  // v7.4.1 ronde 6: bevall (bevallen, bevalling), dyscalculie, kraam (kraamtijd, kraamverlof)
+// v7.4.1 ronde 6: korte afkortingen alleen als heel woord: ivf in HEEL, en MS (multiple sclerose) en ME (zoals 'me cvs') alleen in hoofdletters in de tekst zelf
+// ('ms' en 'me' in kleine letters zijn ook gewone woorden); ruw = de tekst voordat aanmeldWoorden er kleine letters van maakt
+function bijzonderWoord(w, ruw) {
+  return AANMELD_BIJZONDER_BEGIN.test(w) || AANMELD_BIJZONDER_HEEL.test(w) || AANMELD_BIJZONDER_DEEL.test(w) || /(^|[^A-Za-z0-9])(MS|ME)([^A-Za-z0-9]|$)/.test(String(ruw || ''));
+}
 // v7.4.1 ronde 4 (AVG): één filter voor elke vrije tekst die Athena uit een antwoord bewaart ('Niet herkend', een ander toestemmingsantwoord, de toestemmingstekst):
 // per onderdeel hoogstens 60 tekens, en met een privéwoord (AANMELD_PRIVE) of een bijzonder persoonsgegeven nooit de tekst zelf
 var AANMELD_NIET_OVERGENOMEN = '(eigen antwoord, niet overgenomen)';
 function vrijeTekst(s) {
   var t = tekstIn(typeof s === 'string' ? s : String(s == null ? '' : s)).replace(/\s+/g, ' '), w = aanmeldWoorden(t);
   if (!w) return '';
-  if (priveAntwoord(w) || bijzonderWoord(w)) return AANMELD_NIET_OVERGENOMEN;  // v7.4.1 ronde 5: priveAntwoord (ook 'ziek' naast 'invallen')
+  if (priveAntwoord(w) || bijzonderWoord(w, t)) return AANMELD_NIET_OVERGENOMEN;  // v7.4.1 ronde 5: priveAntwoord (ook 'ziek' naast 'invallen'); ronde 6: MS of ME in hoofdletters
   return t.length > 60 ? t.slice(0, 59) + '…' : t;
 }
 var AANMELD_PERSOON = ['voornaam', 'tussenvoegsel', 'achternaam', 'naam', 'email', 'telefoon', 'contact', 'postcode', 'woonplaats'];
@@ -4617,21 +4637,25 @@ function anderPersoon(k) {
   return AANMELD_ROL.some(function (t) { return heeftNiet(k.toel, t); }) || AANMELD_ZELF_NIET.some(function (t) { return heeftTerm(k.kern, t); });
 }
 // v7.4.1 ronde 5: tekens van een ander formulier (offerte, contact, informatieavond, training, evaluatie van een school) per kolom: gewicht 2 = een woord dat
-// in een aanmeldformulier niet voorkomt (namens, offerte, training, collega's, tevreden, 'jullie school'); zo'n kolom is ook nooit werkzaamheden, sector of
-// beschikbaarheid ('Op welke dag wil je de training volgen?'). Gewicht 1 = de school of organisatie als onderwerp van de vraag ('School', 'Naam van je
-// school', 'Organisatie'; niet 'Via welke organisatie ken je ons?' of 'Bij welke onderwijsinstelling studeer je?'), een vraag of bericht aan het bedrijf ('Je
+// in een aanmeldformulier niet voorkomt (namens, offerte, training, tevreden, 'jullie school'); zo'n kolom is ook nooit werkzaamheden, sector of
+// beschikbaarheid ('Op welke dag wil je de training volgen?'). Gewicht 1 = collega of deelnemer (ronde 6, AANMELD_ANDER_ZWAK), de school of organisatie als
+// onderwerp van de vraag ('School', 'Naam van je school', 'Organisatie'; niet 'Via welke organisatie ken je ons?' of 'Bij welke onderwijsinstelling studeer je?'), een vraag of bericht aan het bedrijf ('Je
 // vraag', 'Waar kunnen we je mee helpen?'), een vraag die Athena niet kent in de u-vorm ('Waar heeft u interesse in?') en 'Op welke school werk je?' (een
 // leraar die werk zoekt kan dat ook vragen; samen met een training telt het formulier als ander). Zie aanmeldTabblad.
 var AANMELD_ANDER_STERK = ['namens', 'on behalf', 'offerte', 'quotation', 'informatieavond', 'informatiebijeenkomst', 'evaluatie', 'evaluation', 'tevreden', 'satisfied',
-  'satisfaction', 'training', 'workshop', 'deelnemer', 'participant', 'collega', 'colleague', 'hoeveel personen', 'vertegenwoordig je', 'vertegenwoordig jij',
+  'satisfaction', 'training', 'workshop', 'hoeveel personen', 'vertegenwoordig je', 'vertegenwoordig jij',
   'vertegenwoordigt u', 'vertegenwoordig u', 'vertegenwoordigt je', 'aantal leerlingen', 'jullie school',
   'binnen de school', 'binnen je school', 'binnen jullie school', 'op onze school'];
+// v7.4.1 ronde 6: collega en deelnemer wegen 1 (van 2 in ronde 5): een talent kan ook vragen 'Via welke collega ken je ons?' of 'Ben je deelnemer van ons
+// traineeship?'; naast een talentvraag blijft het een aanmelding, zonder is het twijfel (fout en melding), nooit meer stil
+var AANMELD_ANDER_ZWAK = ['collega', 'colleague', 'deelnemer', 'participant'];
 var AANMELD_SCHOOL_KAAL = ['school', 'scholen', 'schoolnaam', 'naam', 'organisatie', 'organisation', 'organization', 'bedrijf', 'bedrijfsnaam', 'company', 'instelling',
   'onderwijsinstelling', 'locatie', 'vestiging', 'of', 'en', 'or', 'and'];
 var AANMELD_CONTACTVRAAG = /^((je|jouw|uw|your) )?(vraag|vragen|bericht|question|message)( (of|en|or|and) (vraag|vragen|bericht|opmerking|opmerkingen|message|question))?$|(^| )(we|wij) (je |u )?(mee )?(helpen|help)( |$)|^(how|what) can we help/;
 function anderGewicht(k) {
   var kaal = k.kern.filter(function (w) { return AANMELD_STOP.indexOf(w) < 0; });
   if (AANMELD_ANDER_STERK.some(function (t) { return heeftTerm(k.kern, t); })) return 2;
+  if (AANMELD_ANDER_ZWAK.some(function (t) { return heeftTerm(k.kern, t); })) return 1;  // v7.4.1 ronde 6
   var school = kaal.some(function (w) { return w === 'school' || w === 'scholen'; });
   if (school && kaal.some(function (w) { return /^(werk|werkt|werkzaam)$/.test(w); }) && !AANMELD_WENS.some(function (t) { return heeftTerm(k.kern, t); })) return 1;
   if (kaal.length && kaal.every(function (w) { return AANMELD_SCHOOL_KAAL.indexOf(w) >= 0; }) && kaal.some(function (w) { return !/^(naam|of|en|or|and)$/.test(w); })) return 1;
@@ -4830,7 +4854,7 @@ function aanmeldKolommen(kop) {
     if (aanmeldPrive(k, s)) return;  // AVG: nooit lezen
     // v7.4.1 ronde 5: tekens van een ander formulier (c.ander, zie anderGewicht en aanmeldTabblad); een kolom met een woord als 'training' of 'offerte' is nooit
     // werkzaamheden, sector of beschikbaarheid
-    if (AANMELD_ANDER_STERK.some(function (t) { return heeftTerm(k.kern, t); })) { k.raster = null; s.functies = s.sector = s.beschikbaarheid = 0; }
+    if (AANMELD_ANDER_STERK.concat(AANMELD_ANDER_ZWAK).some(function (t) { return heeftTerm(k.kern, t); })) { k.raster = null; s.functies = s.sector = s.beschikbaarheid = 0; }
     veld = !!k.raster || velden.some(function (v) { return s[v] > 0; }); g = anderGewicht(k);
     c.ander += g; if (!g && anderUvorm(k, veld)) uvorm = 1;
     if (k.raster) { c.raster.push({ j: j, dagen: k.raster.dagen, deel: k.raster.deel }); return; }
@@ -4903,6 +4927,23 @@ function aanmeldTabKeuze(naam, inst) {
   var n = klein(String(naam).trim()), past = function (l) { return l instanceof Array && l.some(function (x) { return klein(String(x).trim()) === n; }); };
   if (!inst || typeof inst !== 'object') return '';
   return past(inst.negeren) ? 'negeren' : past(inst.aanmelden) ? 'aanmelden' : '';
+}
+// v7.4.1 ronde 6: noemt een beslissende toestemmingsvraag (de kop of een antwoord) het bewaren, opslaan of het talentbestand (TOESTEMMING_BEWAAR)?
+function aanmeldBewaarVraag(waarden, c) {
+  var bewaar = function (x) { return TOESTEMMING_BEWAAR.test(aanmeldWoorden(x)); };
+  return c.toestemming.some(function (j) { return bewaar(c.kop[j]) || waarden.slice(1).some(function (r) { return bewaar(celTekst(r[j])); }); });
+}
+// v7.4.1 ronde 6: hoe Athena een antwoordtabblad behandelt: { c, keuze, contact, soort: true | false | 'twijfel', bewaar }. De instelling aanmeldTabbladen gaat
+// voor ('negeren' → false); dan aanmeldTabblad. Een ander formulier (false) met een contactkolom en een toestemmingsvraag over het bewaren van gegevens is
+// 'twijfel' met bewaar = true: zo'n formulier kan ook een aanmelding zijn ('Ben je naar onze informatieavond geweest?', 'Heb je al eens een training bij ons
+// gevolgd?'), en een aanmelding gaat nooit stil verloren. Zonder bewaar-toestemming (een offerte, een training of een evaluatie van een school) blijft het stil.
+// Ook twijfel door een teken van een ander formulier ('Via welke collega ken je ons?') krijgt met zo'n toestemmingsvraag bewaar = true (de fout zegt dan waarom).
+function aanmeldTabbladSoort(naam, waarden, inst) {
+  var c = aanmeldKolommen(waarden[0].map(String)), keuze = aanmeldTabKeuze(naam, inst), contact = !!(c.email.length || c.telefoon.length || c.contact.length), soort, bewaar = false;
+  if (keuze === 'negeren') soort = false;
+  else if (keuze === 'aanmelden') soort = contact ? true : 'twijfel';
+  else if (((soort = aanmeldTabblad(c, naam)) === false || (soort === 'twijfel' && c.ander)) && contact && c.toestemming.length && aanmeldBewaarVraag(waarden, c)) { soort = 'twijfel'; bewaar = true; }
+  return { c: c, keuze: keuze, contact: contact, soort: soort, bewaar: bewaar };
 }
 
 /* Celwaarden */
@@ -4988,28 +5029,56 @@ function toestemmingOordeel(v) {
   }
   return 'onduidelijk';
 }
-// v7.4.1 ronde 5: na het ja-deel. Een los nee erachter ('Toestemming, nee', 'Ja, toch maar niet', 'Akkoord, of toch niet', 'Wel akkoord? Nee') = nee. Een deel dat
-// het bewaren beperkt of weigert ('Akkoord, maar niet met het bewaren van mijn gegevens', 'Ik ga akkoord als mijn gegevens niet worden bewaard', '… voor deze
-// vacature, niet voor het talentbestand', 'Prima, maar liever niet bewaren', 'Mag, maar niet langer dan een jaar') = onduidelijk: geen profiel, de rij wacht. Uitleg
-// blijft ja: intrekken, afmelden, 'niet gedeeld met derden', 'nooit verkocht', 'niet langer dan nodig', '… worden na twee jaar verwijderd' en 'niet langer dan
-// 2 jaar' als dat minstens de bewaartermijn is (bewaartermijnMaanden).
+// v7.4.1 ronde 5: na het ja-deel. Een los nee erachter ('Toestemming, nee', 'Ja, toch maar niet', 'Akkoord, of toch niet', 'Wel akkoord? Nee') = nee.
+// v7.4.1 ronde 6 (AVG): de regel omgedraaid. Elk deel met een ontkenning of beperking (TOESTEMMING_VOORBEHOUD: niet, niets, geen, nooit, not, don't, no, behalve,
+// except, mits, wis, weggooien, verwijder, delete, misschien) maakt het antwoord onduidelijk: geen profiel, de rij wacht met een fout en een melding ('Akkoord, maar
+// sla mijn gegevens niet op', 'I agree, but don't save my details', 'Akkoord, maar niet in het talentenbestand opnemen', 'Ja, maar na een maand weggooien' of 'gooi … weg',
+// 'Akkoord, maar wis mijn gegevens daarna'). Behalve een bekende uitleg (TOESTEMMING_UITLEG): een deel over delen, derden, verkopen, nieuwsbrief, marketing of
+// reclame, of over intrekken en afmelden, zonder woord over het bewaren ('… worden niet gedeeld met derden', '… nooit verkocht', 'maar niet met de nieuwsbrief';
+// 'niet opslaan of delen met derden' blijft onduidelijk), 'niet langer dan nodig' en een termijn van minstens de bewaartermijn (bewaartermijnMaanden: 'niet
+// langer dan 2 jaar', '… worden na twee jaar verwijderd'; zie toestemmingTermijnUit). 'Alleen', 'uitsluitend' en 'only' beperken altijd, ook in het ja-deel zelf
+// ('Akkoord, maar alleen voor deze sollicitatie', 'Ja, alleen voor de nieuwsbrief', 'Ik geef alleen toestemming voor deze sollicitatie'); 'alleen geen …' is een
+// ontkenning ('Ja, ik wil alleen geen nieuwsbrief' blijft ja).
 var TOESTEMMING_LOS_NEE = /^((nee|neen|no|nope|niet|not|geen|never|nooit|toch|maar|of|eigenlijk|liever|dan|wel|ik|doe|het)( |$))+$/;
-var TOESTEMMING_BEWAAR = /(^| )(bewaar|bewaren|bewaard|opslaan|opgeslagen|opslag|talentbestand|talentpool|bestand|database|verwijder|verwijderd|verwijderen|store|stored|storing|keep|kept|retain|retained|delete|deleted)( |$)|(^| )langer dan|deze vacature|this (vacancy|job)/;
-var TOESTEMMING_BEPERK = /(^| )(behalve|uitgezonderd|except|alleen|uitsluitend|only|mits)( |$)/;
+// v7.4.1 ronde 6: ook talentenbestand, talentenpool, save en vastleggen (het bewaren in andere woorden)
+var TOESTEMMING_BEWAAR = /(^| )(bewaar|bewaren|bewaard|opslaan|opgeslagen|opslag|talentbestand|talentpool|talentenbestand|talentenpool|bestand|database|verwijder|verwijderd|verwijderen|store|stored|storing|keep|kept|retain|retained|delete|deleted|save|saved|vastleggen|vastgelegd)( |$)|(^| )langer dan|deze vacature|this (vacancy|job)/;
+var TOESTEMMING_VOORBEHOUD = /(^| )(niet|niets|geen|nooit|never|not|nothing|no|nee|dont|doesnt|behalve|uitgezonderd|except|mits|wis|wissen|gewist|weggooien|weggooi|weggegooid|gooi|gooien|verwijder[a-z]*|delete[a-z]*|erase[a-z]*|misschien|maybe|twijfel)( |$)|n't( |$)/;
+var TOESTEMMING_ALLEEN = /(^| )(alleen|uitsluitend|only)( (?!(geen|niet|not|no|nooit|never)( |$))|$)/;
+var TOESTEMMING_UITLEG = /(^| )(derden|third|gedeeld|delen|share|shared|sharing|doorgegeven|doorgeven|verkocht|verkopen|sell|sold|selling|nieuwsbrief|newsletter|marketing|reclame|mailing|mailings|intrekken|ingetrokken|afmelden|afmeld|afgemeld|withdraw|withdrawn|unsubscribe)( |$)/;
 function toestemmingRest(ja, rest) {
   var alle = [ja].concat(rest);
   for (var i = 0; i < alle.length; i++) {
-    var t = alle[i], m, maanden;
+    var t = alle[i];
     if (!t) continue;
     if (i > 0 && TOESTEMMING_LOS_NEE.test(t) && TOESTEMMING_NEE.test(t)) return 'nee';
-    t = t.replace(/(^| )niet langer (bewaard |bewaren |opgeslagen )?dan (nodig|noodzakelijk|strikt noodzakelijk)( |$)/g, ' ').replace(/(^| )(worden|wordt|zijn|are|is|will be) ([a-z0-9']+ ){0,4}(verwijderd|deleted)( |$)/g, ' ');
-    if ((m = /(^| )niet langer (bewaard |bewaren |opgeslagen )?dan (\d+|een|twee|drie|vier|vijf) (jaar|jaren|maand|maanden)( |$)/.exec(t))) {
-      maanden = (/^\d+$/.test(m[3]) ? Number(m[3]) : ['een', 'twee', 'drie', 'vier', 'vijf'].indexOf(m[3]) + 1) * (/^jaar/.test(m[4]) ? 12 : 1);
-      if (maanden >= (Number(instelling('bewaartermijnMaanden')) || 24)) t = t.replace(m[0], ' ');
-    }
-    if (TOESTEMMING_BEWAAR.test(t) && (TOESTEMMING_NEE.test(t) || TOESTEMMING_BEPERK.test(t))) return 'onduidelijk';
+    t = toestemmingTermijnUit(t);
+    if (TOESTEMMING_ALLEEN.test(t)) return 'onduidelijk';
+    if (TOESTEMMING_VOORBEHOUD.test(t) && !(TOESTEMMING_UITLEG.test(t) && !TOESTEMMING_BEWAAR.test(t))) return 'onduidelijk';
   }
   return 'ja';
+}
+// v7.4.1 ronde 6: een deel zonder de bewaartermijnen die uitleg zijn: 'niet langer (bewaard) dan nodig', 'niet langer dan N jaar' en '(worden) na N jaar verwijderd'
+// met N minstens bewaartermijnMaanden, en '… worden (op verzoek) verwijderd' zonder termijn. Een kortere of andere termijn blijft staan ('niet langer dan een jaar'
+// bij 24 maanden, '… worden na afloop verwijderd'), en daarmee de ontkenning of het verwijderen: onduidelijk.
+var TOESTEMMING_GETAL = '(\\d+|een|twee|drie|vier|vijf|one|two|three|four|five)', TOESTEMMING_PERIODE = '(jaar|jaren|maand|maanden|year|years|month|months)';
+function toestemmingTermijnUit(t) {
+  var termijn = null;  // pas lezen als er een termijn staat
+  var lang = function (n, eenheid) { if (termijn === null) termijn = Number(instelling('bewaartermijnMaanden')) || 24; var g = /^\d+$/.test(n) ? Number(n) : (['een', 'twee', 'drie', 'vier', 'vijf'].indexOf(n) + 1 || ['one', 'two', 'three', 'four', 'five'].indexOf(n) + 1); return g * (/^(jaar|jaren|year|years)$/.test(eenheid) ? 12 : 1) >= termijn; };
+  t = t.replace(/(^| )(niet|not|no) (langer|longer) (bewaard |bewaren |opgeslagen |kept |stored )?(dan|than) (nodig|noodzakelijk|strikt noodzakelijk|necessary|needed|required|strictly necessary)( |$)/g, ' ');
+  t = t.replace(new RegExp("(^| )(niet|not|no) (langer|longer) (bewaard |bewaren |opgeslagen |kept |stored )?(dan|than) " + TOESTEMMING_GETAL + ' ' + TOESTEMMING_PERIODE + '( |$)', 'g'),
+    function (x, a, b, c, d, e, n, eenheid) { return lang(n, eenheid) ? ' ' : x; });
+  // passief ('… worden (op verzoek | na twee jaar) verwijderd', '… will be deleted (after two years)'): uitleg zonder termijn of met een termijn die lang genoeg is;
+  // zonder termijn niet als het een eis is ('… moeten worden verwijderd', '… wil ik verwijderd hebben', 'please')
+  var eis = /(^| )(moet|moeten|wil|willen|wens|graag|must|should|please|want)( |$)/.test(t);
+  t = t.replace(new RegExp("(^| )(worden|wordt|word|zijn|is|are|will be) (([a-z0-9']+ ){0,4})(verwijderd|deleted|gewist|erased)(( [a-z0-9']+){0,3})(?= |$)", 'g'), function (x, a, hulp, tussen, w, verb, na) {
+    var rond = ' ' + tussen + (na || '') + ' ', m = new RegExp(' (na|binnen|after|within) ' + TOESTEMMING_GETAL + ' ' + TOESTEMMING_PERIODE + ' ').exec(rond);
+    if (m) return lang(m[2], m[3]) ? ' ' : x;
+    return eis || / (na|daarna|afloop|direct|meteen|binnen|einde|after|afterwards|within|immediately) /.test(rond) ? x : ' ';
+  });
+  // zonder hulpwerkwoord na een voegwoord ('… bewaard en na twee jaar verwijderd')
+  t = t.replace(new RegExp('(^| )(na|binnen|after|within) ' + TOESTEMMING_GETAL + ' ' + TOESTEMMING_PERIODE + " (([a-z0-9']+ ){0,2})(verwijderd|deleted|gewist|erased)(?= |$)", 'g'),
+    function (x, a, voor, n, eenheid) { return lang(n, eenheid) ? ' ' : x; });
+  return t.replace(/\s+/g, ' ').trim();
 }
 function toestemmingGegeven(v) { return toestemmingOordeel(v) === 'ja'; }
 var TOESTEMMING_NVT = /^(n\.?\s?v\.?\s?t\.?|n\.?\s?a\.?|n\/a|niet van toepassing|not applicable)$/i;  // telt als niet ingevuld (een vraag voor ouders van jongeren)
@@ -5378,23 +5447,27 @@ function dagenTotEnMet(van, tot) { var u = []; if (van === tot) return [tot]; fo
 // per run maar één binnenkomt, en houdt één ja in hetzelfde tabblad niets tegen; de rest van het tabblad wordt gewoon verwerkt (dit vervangt toestemmingTwijfel
 // van ronde 4). Ook een rij zonder geldig e-mailadres of telefoonnummer (geenContact) staat in die melding en in de tekst van aanmeldingenRun.
 function aanmeldingenVerwerken() {
-  var uit = { nieuw: 0, bestaand: 0, mails: [], overgeslagen: { geenToestemming: 0, geenContact: 0, bewaartermijn: 0, onduidelijk: 0 }, fouten: [] }, problemen = [], rijProblemen = [], talenten = null;
+  var uit = { nieuw: 0, bestaand: 0, mails: [], overgeslagen: { geenToestemming: 0, geenContact: 0, bewaartermijn: 0, onduidelijk: 0 }, fouten: [], overgeslagenTabbladen: [] }, problemen = [], rijProblemen = [], talenten = null, tip = false;
   uit.toestemmingAntwoorden = {};  // v7.4.1 ronde 4: per overgeslagen antwoord (zonder privégegevens) het aantal, voor de melding
   blad('Aanmeldingen');  // het tabblad voor handmatige aanmeldingen bestaat altijd
   var inst = instelling('aanmeldTabbladen');  // v7.4.1 ronde 5: {"aanmelden": [tabblad], "negeren": [tabblad]}
   aanmeldBladen().forEach(function (b) {
     var laatste = b.getLastRow(); if (laatste < 2) return;
-    var naam = b.getName(), waarden = b.getRange(1, 1, laatste, Math.max(b.getLastColumn(), 1)).getValues(), kop = waarden[0].map(String), c = aanmeldKolommen(kop);
-    var keuze = aanmeldTabKeuze(naam, inst), contact = c.email.length || c.telefoon.length || c.contact.length, soort, n, voor;
-    if (keuze === 'negeren') return;
-    soort = keuze === 'aanmelden' ? (contact ? true : 'twijfel') : aanmeldTabblad(c, naam);
-    if (!soort) { if (contact) Logger.log('Aanmeldingen: tabblad ' + naam + ' is geen aanmeldformulier'); return; }  // bijv. een evaluatie door scholen in dezelfde Sheet
+    var naam = b.getName(), waarden = b.getRange(1, 1, laatste, Math.max(b.getLastColumn(), 1)).getValues(), kop = waarden[0].map(String);
+    var s = aanmeldTabbladSoort(naam, waarden, inst), c = s.c, contact = s.contact, soort = s.soort, n, voor;  // v7.4.1 ronde 6: aanmeldTabbladSoort
+    if (s.keuze === 'negeren') return;
+    // bijv. een evaluatie door scholen in dezelfde Sheet; v7.4.1 ronde 6: met naam in het resultaat (aanmeldingenRun en controleer tonen het)
+    if (!soort) { uit.overgeslagenTabbladen.push(naam); if (contact) Logger.log('Aanmeldingen: tabblad ' + naam + ' is geen aanmeldformulier'); return; }
     if (soort === 'twijfel' || !c.toestemming.length) {
       if ((n = aanmeldWachtend(waarden, c))) {
         var wacht = n + (n === 1 ? ' aanmelding wacht' : ' aanmeldingen wachten');
         var reden = !contact ? 'Athena herkent geen vraag naar e-mail of telefoon' : c.ander ? 'het vraagt ook naar een school of organisatie' : 'geen vraag naar werkzaamheden, beschikbaarheid, telefoon of toestemming';
-        problemen.push(naam + (soort === 'twijfel' ? ' lijkt geen aanmeldformulier' : ' heeft geen toestemmingsvraag'));
-        uit.fouten.push(soort === 'twijfel'
+        if (soort === 'twijfel') tip = true;
+        problemen.push(naam + (s.bewaar ? ' lijkt een ander formulier, maar vraagt toestemming om gegevens te bewaren' : soort === 'twijfel' ? ' lijkt geen aanmeldformulier' : ' heeft geen toestemmingsvraag'));
+        // v7.4.1 ronde 6: een ander formulier met een toestemmingsvraag over het bewaren van gegevens wacht (niet stil overslaan)
+        uit.fouten.push(s.bewaar
+          ? 'Tabblad "' + naam + '" is niet verwerkt: het lijkt een ander formulier (het vraagt ook naar bijvoorbeeld een school, training, informatieavond of collega), maar de toestemmingsvraag gaat over het bewaren van gegevens; ' + wacht + '. Zet de naam van het tabblad in de instelling aanmeldTabbladen onder "aanmelden" als het een aanmeldformulier is, of onder "negeren" als het een ander formulier is.'
+          : soort === 'twijfel'
           ? 'Tabblad "' + naam + '" is niet verwerkt: het lijkt geen aanmeldformulier (' + reden + '); ' + wacht + '. Is het er wel een, geef de e-mailvraag dan een duidelijke titel ("E-mailadres"), voeg een verplichte toestemmingsvraag toe of zet de naam van het tabblad in de instelling aanmeldTabbladen onder "aanmelden"; is het een ander formulier, zet hem dan onder "negeren".'
           : 'Tabblad "' + naam + '" heeft geen toestemmingsvraag: ' + wacht + '. Voeg aan het formulier een verplichte toestemmingsvraag toe; zonder toestemming maakt Athena geen profiel.');
       }
@@ -5415,7 +5488,7 @@ function aanmeldingenVerwerken() {
     }
     vergeet(naam);
   });
-  if (problemen.length || rijProblemen.length) meldAanmeldProbleem(problemen.concat(rijProblemen));  // eerst de tabbladen, dan de rijen
+  if (problemen.length || rijProblemen.length) meldAanmeldProbleem(problemen.concat(rijProblemen), tip);  // eerst de tabbladen, dan de rijen
   meldZonderToestemming(uit.overgeslagen.geenToestemming, uit.toestemmingAntwoorden);
   delete uit.toestemmingAntwoorden; delete uit.wachtAntwoorden;
   return uit;
@@ -5477,11 +5550,17 @@ function aanmeldWachtend(waarden, c) {
   var zonderKolom = !c.email.length && !c.telefoon.length && !c.contact.length;
   return waarden.slice(1).filter(function (r) { if (aanmeldAlVerwerkt(r, c) || !r.some(celIngevuld)) return false; var k = aanmeldContact(r, c); return zonderKolom || k.email || k.tel; }).length;
 }
-// v7.4.1: hoogstens één melding per dag aan het talentteam (scripteigenschap met de datum, zoals VOG_RUN_), voor alle tabbladen die wachten samen
-function meldAanmeldProbleem(problemen) {
-  var vandaag = datumStr(new Date());
+// v7.4.1: hoogstens één melding per dag aan het talentteam (scripteigenschap met de datum, zoals VOG_RUN_), voor alle tabbladen die wachten samen.
+// v7.4.1 ronde 6: tip = een tabblad wacht omdat Athena twijfelt of het een aanmeldformulier is; dan noemt de melding de instelling aanmeldTabbladen. Past de
+// lijst niet, dan alleen de eerste punten met '(en n meer)', zodat het begin (de tabbladnaam) en het slot (de tip) binnen de 300 tekens van een melding blijven.
+function meldAanmeldProbleem(problemen, tip) {
+  var vandaag = datumStr(new Date()), begin = 'Aanmeldingen wachten: ', lijst = problemen.join('; '), k;
+  var slot = tip ? '. Controleer het formulier, of zet het tabblad in de instelling aanmeldTabbladen onder "aanmelden" of "negeren"; daarna verwerkt Athena ze vanzelf.'
+    : '. Controleer het formulier; daarna verwerkt Athena ze vanzelf.';
   if (P.getProperty('AANMELD_ZONDER_TOESTEMMING') === vandaag) return;
-  meld(teamNamen('talent'), 'Aanmeldingen wachten: ' + problemen.join('; ') + '. Controleer het formulier; daarna verwerkt Athena ze vanzelf.', '');  // v7.4.1 ronde 5: kort (300 tekens)
+  for (k = problemen.length - 1; k > 0 && begin.length + lijst.length + slot.length > 300; k--) lijst = problemen.slice(0, k).join('; ') + ' (en ' + (problemen.length - k) + ' meer)';
+  if (begin.length + lijst.length + slot.length > 300) lijst = lijst.slice(0, 300 - begin.length - slot.length - 1) + '…';
+  meld(teamNamen('talent'), begin + lijst + slot, '');  // v7.4.1 ronde 5: kort (300 tekens)
   P.setProperty('AANMELD_ZONDER_TOESTEMMING', vandaag);
 }
 // v7.4.1: in een kolom 'verwerkt' met selectievakjes zet Athena een vinkje, anders de datum-tijd of 'overgeslagen: …'

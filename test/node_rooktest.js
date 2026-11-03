@@ -737,11 +737,12 @@ aanmeldBlok('herstel ronde 5', function () {
   eis(!!tim.id && /Andere toestemming: Toestemming om je gegevens te delen met scholen: Nee/.test(notitie(tim)), 'v7.4.1 ronde 5 (X20): een kale "Toestemming" beslist; "Toestemming om je gegevens te delen met scholen" is een ander doel (de weigering staat in de notitie)');
   eis(beperkt.every(function (x, i) { return !tl('w' + i + '.beperkt@mail.example').id && /^wacht: /.test(T.beperkt.rijen[i + 1][kolom(T.beperkt, 'verwerkt')]); }) && !!tl('wel.beperkt@mail.example').id &&
     ['Toestemming, nee', 'Ja, toch maar niet', 'Akkoord, of toch niet', 'Wel akkoord? Nee'].every(function (x) { return F.toestemmingOordeel(x) === 'nee'; }) && F.toestemmingOordeel('Mag, maar niet langer dan een jaar') === 'onduidelijk' &&
-    ['Ja, ik geef toestemming. Mijn gegevens worden na twee jaar verwijderd.', 'Ja, mijn gegevens worden niet langer bewaard dan nodig', 'Ik ga akkoord, maar niet met de nieuwsbrief'].every(function (x) { return F.toestemmingOordeel(x) === 'ja'; }),
+    ['Ja, mijn gegevens worden niet langer bewaard dan nodig', 'Ik ga akkoord, maar niet met de nieuwsbrief'].every(function (x) { return F.toestemmingOordeel(x) === 'ja'; }),  // ronde 6: '… na twee jaar verwijderd' hieronder met de echte bewaartermijn
     'v7.4.1 ronde 5 (X21, H1): een beperking of weigering van het bewaren na het ja-deel ("Akkoord, maar niet met het bewaren …", "… als mijn gegevens niet worden bewaard", "… niet voor het talentbestand") is onduidelijk; een los nee erachter ("Toestemming, nee") is nee; uitleg blijft ja');
   var G = formulierCtx(true);
-  eis(G.toestemmingOordeel('Ik ben ermee akkoord dat mijn gegevens niet langer dan 2 jaar bewaard worden') === 'ja' && G.toestemmingOordeel('Ik ben ermee akkoord dat mijn gegevens niet langer dan 1 jaar bewaard worden') === 'onduidelijk',
-    'v7.4.1 ronde 5 (X21): "niet langer dan 2 jaar" is ja zolang de bewaartermijn (24 maanden) daarbinnen valt; "niet langer dan 1 jaar" is onduidelijk');
+  eis(G.toestemmingOordeel('Ik ben ermee akkoord dat mijn gegevens niet langer dan 2 jaar bewaard worden') === 'ja' && G.toestemmingOordeel('Ik ben ermee akkoord dat mijn gegevens niet langer dan 1 jaar bewaard worden') === 'onduidelijk' &&
+    G.toestemmingOordeel('Ja, ik geef toestemming. Mijn gegevens worden na twee jaar verwijderd.') === 'ja' && G.toestemmingOordeel('Ja, ik geef toestemming. Mijn gegevens worden na een maand verwijderd.') === 'onduidelijk',
+    'v7.4.1 ronde 5 (X21): "niet langer dan 2 jaar" en (ronde 6) "… worden na twee jaar verwijderd" zijn ja zolang de bewaartermijn (24 maanden) daarbinnen valt; "niet langer dan 1 jaar" en "na een maand verwijderd" zijn onduidelijk');
   var zoe = tl('zoe.gezin@mail.example');
   eis(vn('Bram').filter(function (t) { return t.achternaam === 'Gezin'; }).length === 1 && !!zoe.id && F.lijstUit(zoe.functies).join() === 'huiswerkbegeleider' && meldingen.some(function (m) { return m.voor === 'Iris Mulder' && /Zoe Gezin heeft hetzelfde telefoonnummer als Bram Gezin: mogelijk dubbel/.test(m.tekst) && m.link === 'talent:' + zoe.id; }),
     'v7.4.1 ronde 5 (X06): op telefoon alleen ontdubbelen bij dezelfde voornaam; broer en zus met het vaste nummer thuis zijn twee profielen, met een melding "mogelijk dubbel"');
@@ -791,6 +792,68 @@ aanmeldBlok('herstel ronde 5', function () {
   var rm = fs.readFileSync(path.join(R, 'backend/README.md'), 'utf8'), rij = rm.split('\n').filter(function (r) { return /apiTalentRunNu/.test(r) && /^\|/.test(r); })[0] || '';
   eis(/wachten op een duidelijke toestemming/.test(rij) && /zonder geldig e-mailadres of telefoonnummer/.test(rij) && /aanmeldTabbladen/.test(rm) && /wacht: geen toestemming herkend/.test(rm),
     'v7.4.1 ronde 5: backend/README.md noemt de nieuwe delen van de runtekst, de wachtende rij en de instelling aanmeldTabbladen');
+});
+/* ---- v7.4.1 herstel ronde 6 (laatste ronde): een aanmelding gaat nooit stil verloren. P1: een ander formulier met een toestemmingsvraag over het bewaren wacht
+   (fout en hoogstens één melding per dag met de tip voor aanmeldTabbladen), een stil overgeslagen tabblad staat met naam in het resultaat, collega en
+   deelnemer wegen 1; P2: een ontkenning of beperking na het ja-deel is onduidelijk, behalve een bekende uitleg; P3: meer bijzondere persoonsgegevens. Alles verzonnen ---- */
+aanmeldBlok('herstel ronde 6', function () {
+  var F = formulierCtx(), d = '2-11-2026 08:00', n = 90, T = {}, J = 'Ik geef toestemming om mijn gegevens op te slaan in het talentbestand';
+  var tab = function (kop, rijen, naam) { var b = F._demoSS.insertSheet(naam || 'Formulierreacties ' + (n++)); b.appendRow(kop); rijen.forEach(function (r) { b.appendRow(r); }); return b; };
+  var tl = function (email) { return F.lees('Talenten').filter(function (t) { return t.email === email; })[0] || {}; };
+  var probeer = function (fn) { try { return fn(); } catch (e) { return undefined; } }, kolom = function (b, naam) { return b.rijen[0].indexOf(naam); };
+  var ander = function (kop) { return probeer(function () { return F.aanmeldKolommen(['Tijdstempel', 'E-mailadres'].concat(kop)).ander; }); };
+  var wachtMeld = function () { return F.lees('Meldingen').filter(function (m) { return m.voor === 'Iris Mulder' && /^Aanmeldingen wachten: /.test(m.tekst); }); };
+  // P1 (X11, X12): een minimaal aanmeldformulier met een woord van een ander formulier naast een toestemmingsvraag over het bewaren (in de kop of in het antwoord)
+  var vragen = ['Via welke collega ken je ons?', 'Ben je naar onze informatieavond geweest?', 'Hoe tevreden ben je over dit formulier?', 'Heb je al eens een training bij ons gevolgd?',
+    'Wil je onze gratis workshop volgen?', 'Ben je deelnemer van ons traineeship?', 'Wil je je aanmelden namens een uitzendbureau?'];
+  var p1 = vragen.map(function (q, i) {
+    return tab(['Tijdstempel', 'Naam', 'E-mailadres', 'Telefoonnummer', q, i % 2 ? 'Privacyverklaring' : 'Ik geef toestemming voor het bewaren van mijn gegevens'],
+      [[d, 'Mia Zes' + i, 'mia' + i + '.zes@mail.example', '06100009' + (10 + i), 'Iets', i % 2 ? J : 'Ja']]);
+  });
+  T.collega = tab(['Tijdstempel', 'Naam', 'E-mailadres', 'Telefoonnummer', 'Via welke collega ken je ons?', 'Welke werkzaamheden wil je doen?', 'Privacyverklaring'], [[d, 'Cora Collega', 'cora.collega@mail.example', '0610000920', 'Via Sam', 'Surveillant', J]]);
+  // X16-X19 zonder bewaar-toestemming blijven stil; dezelfde training met een antwoord over het opslaan van gegevens is twijfel
+  T.school = tab(['Tijdstempel', 'Naam', 'School', 'E-mailadres', 'Telefoonnummer', 'Je vraag', 'Ik ga akkoord met de privacyverklaring'], [[d, 'Karin Zes', 'Esdoorn College', 'k.zes@esdoorn.example', '0301230901', 'Graag een offerte', 'Ja']]);
+  T.training = tab(['Tijdstempel', 'E-mailadres', 'Naam', 'Op welke school werk je?', 'Op welke dag wil je de training volgen?', 'Ik ga akkoord met de privacyverklaring'], [[d, 'l.zes@esdoorn.example', 'Lies Zes', 'Esdoorn College', 'Dinsdag', 'Ja']]);
+  T.bewaar = tab(['Tijdstempel', 'E-mailadres', 'Naam', 'Op welke school werk je?', 'Op welke dag wil je de training volgen?', 'Ik ga akkoord met de privacyverklaring'], [[d, 'm.zes@esdoorn.example', 'Mo Zes', 'Esdoorn College', 'Dinsdag', 'Ik ga akkoord dat mijn gegevens worden opgeslagen']]);
+  // P2 (X21, AVG): een voorbehoud na het ja-deel
+  var voorbehoud = ['Akkoord, maar sla mijn gegevens niet op', "I agree, but don't save my details", 'Ik geef toestemming, maar niet voor de talentenpool', 'Akkoord, maar niet in het talentenbestand opnemen',
+    'Ja, maar mijn gegevens niet registreren', 'Akkoord, maar mijn gegevens niet vastleggen', 'Ik ga akkoord, maar wil niet dat jullie mijn gegevens houden', 'Akkoord, maar alleen voor deze sollicitatie',
+    'Ja, maar na een maand weggooien', 'Akkoord, maar wis mijn gegevens daarna', 'Ja, maar gooi mijn gegevens na de sollicitatie weg'];
+  T.voorbehoud = tab(['Tijdstempel', 'E-mailadres', 'Voornaam', 'Achternaam', 'Telefoonnummer', 'Privacyverklaring'],
+    voorbehoud.map(function (x, i) { return [d, 'v' + i + '.voorbehoud@mail.example', 'V' + i, 'Voorbehoud', '06100009' + (30 + i), x]; }).concat([[d, 'ja.voorbehoud@mail.example', 'Ja', 'Voorbehoud', '0610000950', 'Ja']]));
+  // P3 (X13, X14, AVG): meer gezondheid en zwangerschap in vrije tekst
+  T.avg = tab(['Tijdstempel', 'E-mailadres', 'Voornaam', 'Achternaam', 'Telefoonnummer', 'Welke werkzaamheden wil je doen?', 'Wanneer ben je beschikbaar?', 'Privacyverklaring'],
+    [[d, 'avg.zes@mail.example', 'Avg', 'Zes', '0610000960', 'Surveillant, Andere: na mijn kraamtijd rustig beginnen', 'Pas na de zomer, ik ben in blijde verwachting', J],
+      [d, 'avg.zeven@mail.example', 'Avg', 'Zeven', '0610000961', 'Huiswerkbegeleider, Andere: geen rekenen want ik heb dyscalculie', 'In overleg, ik heb MS', J]]);
+  var m0 = wachtMeld().length, uit = F.aanmeldingenVerwerken(), fouten = uit.fouten || [], fout = function (b) { return fouten.filter(function (x) { return x.indexOf('"' + b.getName() + '"') >= 0; }).join(); };
+  var nieuweMeld = wachtMeld().slice(m0), uit2 = F.aanmeldingenVerwerken(), alles = (JSON.stringify(F.lees('Talenten')) + JSON.stringify(F.lees('Activiteiten')) + JSON.stringify(F.lees('Meldingen'))).toLowerCase();
+  eis(p1.every(function (b, i) { return !tl('mia' + i + '.zes@mail.example').id && kolom(b, 'verwerkt') < 0 && /lijkt een ander formulier .*maar de toestemmingsvraag gaat over het bewaren van gegevens; 1 aanmelding wacht\. Zet de naam van het tabblad in de instelling aanmeldTabbladen onder "aanmelden" .* onder "negeren"/.test(fout(b)); }) &&
+    nieuweMeld.length === 1 && nieuweMeld[0].tekst.indexOf(p1[0].getName() + ' lijkt een ander formulier, maar vraagt toestemming om gegevens te bewaren') >= 0 && /aanmeldTabbladen onder "aanmelden" of "negeren"/.test(nieuweMeld[0].tekst) && nieuweMeld[0].tekst.length <= 300 &&
+    wachtMeld().length === m0 + 1 && p1.every(function (b) { return fout(b) && (uit2.fouten || []).join().indexOf('"' + b.getName() + '"') >= 0; }) &&
+    !tl('m.zes@esdoorn.example').id && /maar de toestemmingsvraag gaat over het bewaren van gegevens/.test(fout(T.bewaar)),
+    'v7.4.1 ronde 6 (P1a, X11, X12): een ander formulier ("collega", "informatieavond", "tevreden", "training", "workshop", "deelnemer", "namens") met contact en een toestemmingsvraag over het bewaren wacht: geen profiel, niet gemarkeerd, een fout in elke run en één melding per dag met de tabbladnaam en de tip voor aanmeldTabbladen');
+  var stil = uit.overgeslagenTabbladen || [], ar = probeer(function () { return F.aanmeldingenRun(); }) || '', cc = probeer(function () { return F.controleer(); }) || '';
+  eis(!tl('k.zes@esdoorn.example').id && !tl('l.zes@esdoorn.example').id && !fout(T.school) && !fout(T.training) && kolom(T.school, 'verwerkt') < 0 && stil.indexOf(T.school.getName()) >= 0 && stil.indexOf(T.training.getName()) >= 0 &&
+    stil.indexOf(p1[0].getName()) < 0 && ar.indexOf('2 tabbladen overgeslagen als ander formulier ("' + T.school.getName() + '", "' + T.training.getName() + '")') >= 0 &&
+    cc.indexOf('"' + T.school.getName() + '" overgeslagen: geen aanmeldformulier') >= 0 && cc.indexOf('"' + p1[0].getName() + '" wacht: twijfel of het een aanmeldformulier is') >= 0 && cc.indexOf('"Formulierreacties 97" aanmeldformulier') >= 0,
+    'v7.4.1 ronde 6 (P1b, X16-X19): een formulier zonder bewaar-toestemming blijft stil (geen profiel, geen fout), maar staat met naam in overgeslagenTabbladen, in aanmeldingenRun en in controleer()');
+  eis(ander(['Via welke collega ken je ons?']) === 1 && ander(['Ben je deelnemer van ons traineeship?']) === 1 && ander(['Heb je al eens een training bij ons gevolgd?']) === 2 && !!tl('cora.collega@mail.example').id &&
+    ander(['Via welke collega ken je ons?', 'Ben je deelnemer van ons traineeship?']) === 2,
+    'v7.4.1 ronde 6 (P1c): "collega" en "deelnemer" wegen 1 (training blijft 2); naast een talentvraag is het een aanmelding');
+  eis(voorbehoud.every(function (x, i) { return F.toestemmingOordeel(x) === 'onduidelijk' && !tl('v' + i + '.voorbehoud@mail.example').id && /^wacht: /.test(T.voorbehoud.rijen[i + 1][kolom(T.voorbehoud, 'verwerkt')]); }) &&
+    !!tl('ja.voorbehoud@mail.example').id && /11 aanmeldingen wachten, want Athena herkent het antwoord op de toestemmingsvraag niet/.test(fout(T.voorbehoud)) &&
+    ['Ik geef toestemming voor het bewaren van mijn gegevens en weet dat ik die altijd kan intrekken', 'Ik ga akkoord, mijn gegevens worden niet gedeeld met derden', 'Ik geef toestemming tot ik me afmeld',
+      'Ja, ik geef toestemming; je gegevens worden nooit verkocht', 'I agree. We never share your data with third parties', 'Ja, ik wil alleen geen nieuwsbrief', 'Ja, mits mijn gegevens niet worden gedeeld'].every(function (x) { return F.toestemmingOordeel(x) === 'ja'; }) &&
+    ['Nee', 'Niet akkoord', 'Ik geef geen toestemming'].every(function (x) { return F.toestemmingOordeel(x) === 'nee'; }) &&
+    ['Ja, alleen voor de nieuwsbrief', 'Ik geef alleen toestemming voor deze sollicitatie', "I agree, but don't save or share my details with third parties", 'Ja, mijn gegevens worden na afloop verwijderd'].every(function (x) { return F.toestemmingOordeel(x) === 'onduidelijk'; }),
+    'v7.4.1 ronde 6 (P2, X21, AVG): een ontkenning of beperking na het ja-deel ("… sla mijn gegevens niet op", "don\'t save", "alleen voor deze sollicitatie", "na een maand weggooien", "wis …") is onduidelijk: geen profiel, de rij wacht; uitleg (derden, delen, verkopen, nieuwsbrief, intrekken, afmelden) blijft ja, nee blijft nee');
+  eis(['bevallen', 'Ik ben net bevallen', 'in blijde verwachting', 'kraamtijd', 'na mijn kraam', 'IVF', 'ivf-traject', 'dyscalculie', 'MS', 'ik heb MS', 'Ik heb ME'].every(function (x) { return F.vrijeTekst(x) === '(eigen antwoord, niet overgenomen)'; }) &&
+    F.vrijeTekst('Mijn verwachting is maart') === 'Mijn verwachting is maart' && F.vrijeTekst('in de verwachting dat het lukt') === 'in de verwachting dat het lukt' && F.vrijeTekst('bijles') === 'bijles' && F.vrijeTekst('bel me even') === 'bel me even' &&
+    ['kraamtijd', 'blijde verwachting', 'dyscalculie', 'heb ms'].every(function (x) { return alles.indexOf(x) < 0; }) && /eigen antwoord, niet overgenomen/.test(JSON.stringify(F.lees('Activiteiten'))) && !!tl('avg.zeven@mail.example').id,
+    'v7.4.1 ronde 6 (P3, X13, X14, AVG): bevallen, "in blijde verwachting", kraamtijd, IVF, dyscalculie, MS en ME (heel woord, hoofdletters) komen nooit als tekst in het profiel; "verwachting" zonder "in" blijft');
+  var rm = fs.readFileSync(path.join(R, 'backend/README.md'), 'utf8'), rij = rm.split('\n').filter(function (r) { return /apiTalentRunNu/.test(r) && /^\|/.test(r); })[0] || '';
+  eis(/overgeslagen als ander formulier/.test(rij) && /overgeslagenTabbladen/.test(rm) && /toestemmingsvraag over het bewaren/.test(rm) && /Akkoord, maar sla mijn gegevens niet op/.test(rm),
+    'v7.4.1 ronde 6: backend/README.md noemt de stil overgeslagen tabbladen, het andere formulier met een bewaar-toestemming en het voorbehoud na het ja-deel');
 });
 var geo = ctx.geocodeerRun();
 eis(geo >= 1 && Number(ctx.lees('Talenten').filter(function (t) { return t.id === lieke.id; })[0].lat) > 50, 'geocodeerRun vult de ligging van nieuwe profielen (PDOK)');
