@@ -233,6 +233,7 @@ function vergeet(naam) {
   delete _LEES[naam]; delete _LEES[naam + '|licht'];
   if (naam === 'Trajecten') _TRAJECTNAMEN = null; if (naam === 'Gebruikers') _TEAMNAMEN = null; if (naam === 'Vacatures') _OPENVAC = null; if (naam === 'Acties') _TAAKINDEX = null;  // v4.6: ook de subtaken-index
   if (/^Talent|^Beoordelingen$|^Kandidaten$/.test(naam)) _TALENTINDEX = null;  // v5.0: de talentindex (VOG, beoordelingen, plaatsingen)
+  if (naam === 'Talenten') _TALENTNAMEN = null; if (naam === 'Instellingen') _INSTELLINGEN = null;  // v7.6: de namenmap en de instellingenmap
   if (naam === 'Kandidaten' || naam === 'Trajecten') _VIAPROJECT = null;  // v5.0: welke talenten een accountmanager via zijn projecten ziet
 }
 var KOP_GECONTROLEERD = {};
@@ -2160,10 +2161,15 @@ var KEUZELIJSTEN = {
   beoordelingsCriteria: { standaard: ['punctualiteit', 'didactiek', 'samenwerking', 'communicatie'], tab: 'Beoordelingen', kolom: 'criteria', sleutels: true },
   talentBronnen:    { standaard: ['website', 'xps-bestand', 'linkedin', 'eigen netwerk', 'sollicitatie', 'anders'], tab: 'Talenten', kolom: 'bron' }
 };
+// v7.6: de instellingen één keer per verzoek in een map. Tot v7.5 kopieerde elke aanroep de hele tab (lees() geeft kopieën), en vogStatus() riep
+// instelling() per rij aan: 90 % van alle lees()-aanroepen (apiTalenten 3.162×, apiTeamRapport 2.791×, apiBezetting 1.399× per verzoek). De eerste
+// rij per sleutel telt, zoals voorheen; JSON.parse blijft per aanroep, zodat een aanroeper die de lijst wijzigt de map niet raakt.
+var _INSTELLINGEN = null;
 function instelling(sleutel) {
-  var r = lees('Instellingen').filter(function (x) { return x.sleutel === sleutel; })[0];
-  if (!r || r.waarde === '') return null;
-  try { return JSON.parse(r.waarde); } catch (e) { return null; }
+  if (!_INSTELLINGEN) { _INSTELLINGEN = {}; lees('Instellingen').forEach(function (x) { if (!Object.prototype.hasOwnProperty.call(_INSTELLINGEN, x.sleutel)) _INSTELLINGEN[x.sleutel] = x.waarde; }); }
+  var w = uitMap(_INSTELLINGEN, sleutel);
+  if (w === undefined || w === '') return null;
+  try { return JSON.parse(w); } catch (e) { return null; }
 }
 function zetInstelling(sleutel, waarde) {  // altijd binnen metLock
   var b = blad('Instellingen'), hit = lees('Instellingen').filter(function (x) { return x.sleutel === sleutel; })[0], v = JSON.stringify(waarde);
@@ -3602,7 +3608,13 @@ var COMPLEET_VELDEN = [['voornaam', 'voornaam'], ['achternaam', 'achternaam'], [
 /* ----- Hulpfuncties ----- */
 
 function talentNaam(t) { return [t.voornaam, t.achternaam].filter(Boolean).join(' ') || t.email || '(naamloos)'; }
-function talentNaamVan(id) { var x = talentIndex().per[String(id)]; return x ? talentNaam(x.talent) : ''; }
+// v7.6: alleen de naam, uit alleen Talenten en pas bij de eerste activiteit met een talentId. Via talentIndex() las apiHome (en apiProject, apiSchool,
+// apiActiviteiten, apiActiviteitOpslaan) vijf tabbladen — 29 % van zijn rijen uit de Sheet — enkel voor een naam bij een paar activiteiten.
+var _TALENTNAMEN = null;
+function talentNaamVan(id) {
+  if (!_TALENTNAMEN) { _TALENTNAMEN = {}; lees('Talenten').forEach(function (t) { _TALENTNAMEN[String(t.id)] = talentNaam(t); }); }
+  return uitMap(_TALENTNAMEN, String(id)) || '';
+}
 // Per verzoek één keer: elk talent met zijn documenten, beoordelingen, relaties met scholen en kandidaatrijen (lees() onthoudt de rijen al)
 var _TALENTINDEX = null;
 function talentIndex() {

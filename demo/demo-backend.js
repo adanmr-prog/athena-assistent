@@ -652,11 +652,11 @@ function demoRun(fn, argsJson, code) {
   DEMO_HUIDIG = code || 'demo-sophie';
   _demoProps.CODES = _demoCodes(); _demoProps.SECRET = 'demo-sophie';  // een code die in Beheer vernieuwd is, werkt in de demo gewoon door
   // Apps Script begint elk verzoek met een schone globale scope; hier blijven de globals staan, dus de geheugens per verzoek legen
-  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null;  // v5.0: talentindex en talenten-via-project
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null;  // v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)  // v5.0: talentindex en talenten-via-project
   return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), secret: DEMO_HUIDIG }) } });
 }
 // v5.0: het portaal (?t=<token>&api=…) in de demo: dezelfde doPost, met het token in plaats van een koppelcode
 function demoPortaal(fn, argsJson, token) {
-  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null;
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null;  // v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)
   return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), portaal: token }) } });
 }
