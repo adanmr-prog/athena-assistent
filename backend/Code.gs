@@ -2166,11 +2166,13 @@ var KEUZELIJSTEN = {
 };
 // v7.6: de instellingen één keer per verzoek in een map. Tot v7.5 kopieerde elke aanroep de hele tab (lees() geeft kopieën), en vogStatus() riep
 // instelling() per rij aan: 90 % van alle lees()-aanroepen (apiTalenten 3.162×, apiTeamRapport 2.791×, apiBezetting 1.399× per verzoek). De eerste
-// rij per sleutel telt, zoals voorheen; JSON.parse blijft per aanroep, zodat een aanroeper die de lijst wijzigt de map niet raakt.
+// rij per sleutel telt, zoals voorheen; JSON.parse blijft per aanroep, zodat een aanroeper die de lijst wijzigt de map niet raakt. De map hangt aan
+// de gelezen rijen zelf (_LEES.Instellingen): vergeet(), maar ook elke reset van _LEES (demo, tests) maakt hem vanzelf ongeldig.
 var _INSTELLINGEN = null;
 function instelling(sleutel) {
-  if (!_INSTELLINGEN) { _INSTELLINGEN = {}; lees('Instellingen').forEach(function (x) { if (!Object.prototype.hasOwnProperty.call(_INSTELLINGEN, x.sleutel)) _INSTELLINGEN[x.sleutel] = x.waarde; }); }
-  var w = uitMap(_INSTELLINGEN, sleutel);
+  var bron = _LEES.Instellingen || (lees('Instellingen'), _LEES.Instellingen);
+  if (!_INSTELLINGEN || _INSTELLINGEN.bron !== bron) { _INSTELLINGEN = { bron: bron, map: {} }; bron.forEach(function (x) { if (!Object.prototype.hasOwnProperty.call(_INSTELLINGEN.map, x.sleutel)) _INSTELLINGEN.map[x.sleutel] = x.waarde; }); }
+  var w = uitMap(_INSTELLINGEN.map, sleutel);
   if (w === undefined || w === '') return null;
   try { return JSON.parse(w); } catch (e) { return null; }
 }
@@ -3615,10 +3617,12 @@ var COMPLEET_VELDEN = [['voornaam', 'voornaam'], ['achternaam', 'achternaam'], [
 function talentNaam(t) { return [t.voornaam, t.achternaam].filter(Boolean).join(' ') || t.email || '(naamloos)'; }
 // v7.6: alleen de naam, uit alleen Talenten en pas bij de eerste activiteit met een talentId. Via talentIndex() las apiHome (en apiProject, apiSchool,
 // apiActiviteiten, apiActiviteitOpslaan) vijf tabbladen — 29 % van zijn rijen uit de Sheet — enkel voor een naam bij een paar activiteiten.
+// De map hangt aan de gelezen rijen zelf (_LEES.Talenten): vergeet(), maar ook elke reset van _LEES (demo, tests) maakt hem vanzelf ongeldig.
 var _TALENTNAMEN = null;
 function talentNaamVan(id) {
-  if (!_TALENTNAMEN) { _TALENTNAMEN = {}; lees('Talenten').forEach(function (t) { _TALENTNAMEN[String(t.id)] = talentNaam(t); }); }
-  return uitMap(_TALENTNAMEN, String(id)) || '';
+  var bron = _LEES.Talenten || (lees('Talenten'), _LEES.Talenten);
+  if (!_TALENTNAMEN || _TALENTNAMEN.bron !== bron) { _TALENTNAMEN = { bron: bron, map: {} }; bron.forEach(function (t) { _TALENTNAMEN.map[String(t.id)] = talentNaam(t); }); }
+  return uitMap(_TALENTNAMEN.map, String(id)) || '';
 }
 // Per verzoek één keer: elk talent met zijn documenten, beoordelingen, relaties met scholen en kandidaatrijen (lees() onthoudt de rijen al)
 var _TALENTINDEX = null;
