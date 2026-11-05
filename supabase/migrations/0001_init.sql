@@ -485,6 +485,26 @@ create table if not exists "aanmeldingen" (
   "talent_id" text,
   rij bigserial
 );
+create table if not exists "metingen" (
+  "id" text primary key,
+  "dag" text,
+  "gebruiker" text,
+  "fn" text,
+  "aantal" numeric,
+  "fouten" numeric,
+  "b250" numeric,
+  "b500" numeric,
+  "b1000" numeric,
+  "b2000" numeric,
+  "b5000" numeric,
+  "b_meer" numeric,
+  "som_ms" numeric,
+  "max_ms" numeric,
+  "laatste_fout" text,
+  "app_versie" text,
+  "aangemaakt" text,
+  rij bigserial
+);
 -- scripteigenschappen (PropertiesService) en de korte cache (CacheService)
 create table if not exists eigenschappen (sleutel text primary key, waarde text);
 create table if not exists cache (sleutel text primary key, waarde text, verloopt timestamptz);
@@ -529,5 +549,6 @@ alter table "talent_uren" enable row level security;
 alter table "talent_uren_archief" enable row level security;
 alter table "prognoses" enable row level security;
 alter table "aanmeldingen" enable row level security;
+alter table "metingen" enable row level security;
 alter table "eigenschappen" enable row level security;
 alter table "cache" enable row level security;

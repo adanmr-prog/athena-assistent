@@ -5,7 +5,7 @@
  * Contract met de app: POST {fn, args, secret} → {ok:true, result} of {ok:false, fout}. Fout 'secret' = koppelcode klopt niet.
  */
 
-var VERSIE = '7.5';  // v7.5: Bezetting → Per project (alleen app; backend gelijk aan 7.4.1); v7.4.1: robuuste herkenning van het aanmeldformulier (kolommen, raster, toestemming, sector, functies, beschikbaarheid); v7.4: XPS-dienstenexport en Exact-afstemming werken met de echte exports; houd gelijk aan de release (zie /release); controleer() print dit als eerste regel
+var VERSIE = '7.6';  // v7.6: metingen (tabblad Metingen, apiMetingenOpslaan, apiMetingen, opruimen na 90 dagen); v7.5: Bezetting → Per project (alleen app; backend gelijk aan 7.4.1); v7.4.1: robuuste herkenning van het aanmeldformulier (kolommen, raster, toestemming, sector, functies, beschikbaarheid); v7.4: XPS-dienstenexport en Exact-afstemming werken met de echte exports; houd gelijk aan de release (zie /release); controleer() print dit als eerste regel
 var P = PropertiesService.getScriptProperties();
 
 // v2.0: nieuwe kolommen komen altijd ACHTERAAN (blad() vult de kop aan), zodat bestaande Sheets gewoon blijven werken.
@@ -59,7 +59,9 @@ var TABELLEN = {
   TalentUren:   ['id', 'talentId', 'xpsId', 'xpsProject', 'trajectId', 'week', 'uren', 'diensten', 'noShows', 'lateAfmeldingen', 'geimporteerd'],
   TalentUren_archief: ['id', 'talentId', 'xpsId', 'xpsProject', 'trajectId', 'week', 'uren', 'diensten', 'noShows', 'lateAfmeldingen', 'geimporteerd'],
   Prognoses:    ['id', 'gemaakt', 'trajectId', 'maand', 'prognose', 'kas'],  // v6.5: de prognose per project en maand zoals die op de eerste van maand 'gemaakt' was (bedragen in centen)
-  Aanmeldingen: ['tijdstempel', 'voornaam', 'achternaam', 'telefoon', 'email', 'postcode', 'functies', 'sector', 'beschikbaarheid', 'toestemming', 'verwerkt', 'talentId']  // het Google Form schrijft in een eigen tabblad (Formulierreacties); dit tabblad is voor handmatige of geïmporteerde aanmeldingen
+  Aanmeldingen: ['tijdstempel', 'voornaam', 'achternaam', 'telefoon', 'email', 'postcode', 'functies', 'sector', 'beschikbaarheid', 'toestemming', 'verwerkt', 'talentId'],  // het Google Form schrijft in een eigen tabblad (Formulierreacties); dit tabblad is voor handmatige of geïmporteerde aanmeldingen
+  // v7.6: metingen uit de app, gebundeld per dag, gebruiker en api (alleen api-naam, tellingen en één ingekorte foutmelding; nooit argumenten); ouder dan 90 dagen wordt opgeruimd (archiveer)
+  Metingen: ['id', 'dag', 'gebruiker', 'fn', 'aantal', 'fouten', 'b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer', 'somMs', 'maxMs', 'laatsteFout', 'appVersie', 'aangemaakt']
 };
 var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1, statusSinds: 1, gesprek: 1, gelezen: 1, ingevuld: 1, herinnerd: 1,  // v4.6: herinnerd
   beschikbaarheidBevestigd: 1, laatstePeiling: 1, gecontroleerdOp: 1, portaalTokenTot: 1, geimporteerd: 1, tijdstempel: 1, verwerkt: 1 };  // v5.0
@@ -1822,14 +1824,15 @@ function archiveer() {
   var grens = datumStr(plusDagen(-365)), alle = lees('Activiteiten');  // v7.2: kalenderdagen (geen uurdrift rond de zomertijd)
   var isOud = function (a) { var d = String(a.datum).slice(0, 10); return !!d && d < grens; };
   var oud = alle.filter(isOud), houden = alle.filter(function (a) { return !isOud(a); });
-  if (!oud.length) return { gearchiveerd: 0, over: houden.length };
+  if (!oud.length) return { gearchiveerd: 0, over: houden.length, uren: archiveerUren(), metingen: opruimMetingen() };  // v7.6: uren en metingen ook zonder oude activiteit
   schrijfVeel('Activiteiten_archief', oud);
   var b = blad('Activiteiten'), kop = TABELLEN.Activiteiten, laatste = b.getLastRow();
   if (laatste > 1) b.getRange(2, 1, laatste - 1, kop.length).clearContent();
   if (houden.length) b.getRange(2, 1, houden.length, kop.length).setValues(houden.map(function (r) { return kop.map(function (k) { return celUit(r[k]); }); }));
   vergeet('Activiteiten');
   var uren = archiveerUren();  // v5.0
-  return { gearchiveerd: oud.length, over: houden.length, uren: uren };
+  var metingen = opruimMetingen();  // v7.6
+  return { gearchiveerd: oud.length, over: houden.length, uren: uren, metingen: metingen };
 }
 // v5.0: weekuren ouder dan 26 weken naar TalentUren_archief (zelfde aanpak: eerst het archief schrijven, dan het tabblad in één keer herschrijven)
 var UREN_ARCHIEF_WEKEN = 26;  // v7.4: één archiefvenster voor het archiveren en voor de urenimport (oudere diensten worden niet meer ingelezen)
@@ -2443,7 +2446,9 @@ var RECHTEN = {
   talenten:      { consultancy: ['geen', 'geen'], accountmanagement: ['eigen', 'geen'], talent: ['alles', 'alles'] },
   beoordelingen: { consultancy: ['geen', 'geen'], accountmanagement: ['eigen', 'eigen'], talent: ['alles', 'alles'] },
   // v6.5: Financiën leest alleen (bewerken blijft in Facturatie): de AM zijn projecten, de consultant de projecten waar hij adviseur is, talent niets
-  financien:     { consultancy: ['eigen', 'geen'], accountmanagement: ['eigen', 'geen'], talent: ['geen', 'geen'] }
+  financien:     { consultancy: ['eigen', 'geen'], accountmanagement: ['eigen', 'geen'], talent: ['geen', 'geen'] },
+  // v7.6: het overzicht van de metingen (apiMetingen) is voor het management; het aanleveren (apiMetingenOpslaan) mag elke ingelogde gebruiker, alleen eigen rijen
+  metingen:      { consultancy: ['geen', 'geen'], accountmanagement: ['geen', 'geen'], talent: ['geen', 'geen'] }
 };
 function niveau(onderdeel, actie) {
   if (isBeheerder()) return 'alles';
@@ -6012,6 +6017,111 @@ function apiExactImport(tekst, opties) {
       tekst: 'Periode ' + van + ' t/m ' + tot + '. Alleen in Exact: ' + uit.alleenExact.length + '. Alleen in Athena: ' + uit.alleenAthena.length + '. Bedrag wijkt af: ' + uit.afwijkend.length + '. Betaald: ' + uit.betaald.length + '. Deels betaald: ' + uit.deelsBetaald.length + '. Creditnota\'s: ' + uit.creditnotas.length + '.' });
   });
   return uit;
+}
+
+/* ===================== 15. Metingen (v7.6): duur en uitkomst van elke backend-aanroep en elke JS-fout uit de app, per dag gebundeld ===================== */
+
+// De app meet elke run()-aanroep (api-naam, duur, ok/fout) en elke onafgevangen JS-fout, bundelt dat per (dag, api) en stuurt het hoogstens een
+// paar keer per dag naar het tabblad Metingen. Privacy: alleen de api-naam, de dag, de gebruikers-id, tellingen (per duur-emmer) en één ingekorte
+// foutmelding zonder e-mailadressen; nooit argumenten of gegevens. Rijen ouder dan METINGEN_BEWAAR_DAGEN ruimt archiveer() (1e van de maand) op.
+var METINGEN_EMMERS = ['b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer'];  // bovengrens in ms: 250, 500, 1000, 2000, 5000, daarboven
+var METINGEN_GRENZEN = [0, 250, 500, 1000, 2000, 5000];  // ondergrens per emmer
+var METINGEN_GETALLEN = ['aantal', 'fouten', 'somMs', 'maxMs'].concat(METINGEN_EMMERS);
+var METINGEN_MAX_RIJEN = 200, METINGEN_MAX_DAGEN = 30, METINGEN_BEWAAR_DAGEN = 90, METINGEN_FOUT_MAX = 120, METINGEN_VERSIE_MAX = 20;
+
+function metingenFout(i, wat) { throw new Error('Metingen: rij ' + (i + 1) + ' ' + wat); }
+function geheelGetal(v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 0; }
+// Een geldige api-naam: een functie 'api…' in dit bestand (zoals doPost die opzoekt), nooit een portaalfunctie; of 'js' voor JS-fouten uit de app
+function metingenFnGeldig(fn) { return fn === 'js' || (/^api[A-Z]\w*$/.test(fn) && typeof globalThis[fn] === 'function' && PORTAAL_FUNCTIES.indexOf(fn) < 0); }
+function metingenDagGeldig(dag) {
+  if (typeof dag !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dag)) return false;
+  var d = parseDatum(dag); if (!d || datumStr(d) !== dag) return false;  // 2026-02-30 bestaat niet
+  return dag <= datumStr(new Date()) && dag >= datumStr(plusDagen(-METINGEN_MAX_DAGEN));  // niet in de toekomst, niet ouder dan 30 kalenderdagen
+}
+// Eén gecontroleerde rij uit de invoer; gebruiker komt nooit uit de invoer
+function metingRijIn(r, i) {
+  if (!r || typeof r !== 'object' || r instanceof Array) metingenFout(i, 'is geen object.');
+  var fn = typeof r.fn === 'string' ? r.fn : '';
+  if (!metingenFnGeldig(fn)) metingenFout(i, 'noemt geen bekende api (' + (fn ? fn.slice(0, 40) : 'leeg') + ').');
+  if (!metingenDagGeldig(r.dag)) metingenFout(i, 'heeft geen geldige dag (yyyy-MM-dd, niet in de toekomst, hoogstens ' + METINGEN_MAX_DAGEN + ' dagen oud).');
+  var uit = { dag: r.dag, fn: fn };
+  METINGEN_GETALLEN.forEach(function (k) { if (!geheelGetal(r[k])) metingenFout(i, 'heeft geen geheel getal ≥ 0 in ' + k + '.'); uit[k] = r[k]; });
+  if (uit.aantal < 1) metingenFout(i, 'telt geen aanroepen (aantal 0).');
+  if (uit.fouten > uit.aantal) metingenFout(i, 'telt meer fouten dan aanroepen.');
+  var som = 0; METINGEN_EMMERS.forEach(function (k) { som += uit[k]; });
+  if (som !== uit.aantal) metingenFout(i, 'heeft emmers die niet optellen tot het aantal.');
+  uit.laatsteFout = tekstIn(r.laatsteFout); if (uit.laatsteFout.length > METINGEN_FOUT_MAX) metingenFout(i, 'heeft een foutmelding langer dan ' + METINGEN_FOUT_MAX + ' tekens.');
+  uit.appVersie = tekstIn(r.appVersie); if (uit.appVersie.length > METINGEN_VERSIE_MAX) metingenFout(i, 'heeft een appVersie langer dan ' + METINGEN_VERSIE_MAX + ' tekens.');
+  return uit;
+}
+// Elke ingelogde gebruiker levert zijn eigen bundel aan; upsert op (gebruiker, dag, fn): bij een bestaande rij tellen de getallen op, maxMs wordt het maximum
+function apiMetingenOpslaan(lijst) {
+  if (!(lijst instanceof Array)) throw new Error('Metingen: verwacht een lijst met rijen.');
+  if (lijst.length > METINGEN_MAX_RIJEN) throw new Error('Metingen: hoogstens ' + METINGEN_MAX_RIJEN + ' rijen per keer.');
+  var wie = GEBRUIKER ? String(GEBRUIKER.id) : 'beheer', rijen = lijst.map(metingRijIn);
+  if (!rijen.length) return { ontvangen: 0 };
+  return metLock(function () {
+    var bestaand = {}, per = {}, uit = [];
+    lees('Metingen').forEach(function (m) { if (String(m.gebruiker) === wie) bestaand[m.dag + '|' + m.fn] = m; });
+    rijen.forEach(function (r) {
+      var k = r.dag + '|' + r.fn, s = per[k];
+      if (!s) {
+        var oud = bestaand[k];
+        s = per[k] = oud ? { id: oud.id, aangemaakt: oud.aangemaakt } : { id: nieuwId(), aangemaakt: nu() };
+        s.dag = r.dag; s.fn = r.fn; s.gebruiker = wie; s.laatsteFout = oud ? String(oud.laatsteFout || '') : ''; s.appVersie = oud ? String(oud.appVersie || '') : '';
+        METINGEN_GETALLEN.forEach(function (g) { s[g] = oud ? (Number(oud[g]) || 0) : 0; });
+        uit.push(s);
+      }
+      METINGEN_GETALLEN.forEach(function (g) { if (g === 'maxMs') s.maxMs = Math.max(s.maxMs, r.maxMs); else s[g] += r[g]; });
+      if (r.laatsteFout) s.laatsteFout = r.laatsteFout;
+      if (r.appVersie) s.appVersie = r.appVersie;
+    });
+    schrijfVeel('Metingen', uit);
+    return { ontvangen: rijen.length };
+  });
+}
+// p50 en p95 geschat uit de emmers: lineair binnen de emmer waarin het gezochte rangnummer valt; de laatste emmer loopt tot maxMs
+function metingenPercentiel(s, p) {
+  var doel = p * s.aantal, voor = 0;
+  for (var i = 0; i < METINGEN_EMMERS.length; i++) {
+    var n = s[METINGEN_EMMERS[i]], lo = METINGEN_GRENZEN[i], hi = i + 1 < METINGEN_GRENZEN.length ? METINGEN_GRENZEN[i + 1] : Math.max(s.maxMs, lo);
+    if (n > 0 && voor + n >= doel) return Math.round(lo + (hi - lo) * Math.max(0, doel - voor) / n);
+    voor += n;
+  }
+  return s.maxMs;
+}
+// Management: per api over alle gebruikers de laatste `dagen` dagen (standaard 14, hoogstens 90), gesorteerd op p95 aflopend, plus de JS-fouten
+function apiMetingen(dagen) {
+  eis('metingen', 'zien');
+  var n = Math.min(90, Math.max(1, Math.round(Number(dagen)) || 14)), van = datumStr(plusDagen(-n)), tot = datumStr(new Date());
+  var per = {}, js = { aantal: 0, laatste: '', laatsteDag: '' }, gebruikers = {}, rijen = 0;
+  lees('Metingen').forEach(function (m) {
+    var dag = String(m.dag || ''); if (dag < van || dag > tot) return;
+    rijen++; gebruikers[String(m.gebruiker)] = true;
+    if (m.fn === 'js') { js.aantal += Number(m.fouten) || 0; if (m.laatsteFout && dag >= js.laatsteDag) { js.laatsteDag = dag; js.laatste = String(m.laatsteFout); } return; }
+    var s = per[m.fn];
+    if (!s) { s = per[m.fn] = { fn: String(m.fn), aantal: 0, fouten: 0, somMs: 0, maxMs: 0, laatsteFout: '', laatsteDag: '' }; METINGEN_EMMERS.forEach(function (k) { s[k] = 0; }); }
+    METINGEN_GETALLEN.forEach(function (g) { var v = Number(m[g]) || 0; if (g === 'maxMs') s.maxMs = Math.max(s.maxMs, v); else s[g] += v; });
+    if (m.laatsteFout && dag >= s.laatsteDag) { s.laatsteDag = dag; s.laatsteFout = String(m.laatsteFout); }
+  });
+  var apis = Object.keys(per).map(function (fn) {
+    var s = per[fn];
+    return { fn: fn, aantal: s.aantal, fouten: s.fouten, foutPct: s.aantal ? Math.round(1000 * s.fouten / s.aantal) / 10 : 0, p50: metingenPercentiel(s, 0.5), p95: metingenPercentiel(s, 0.95),
+      gemMs: s.aantal ? Math.round(s.somMs / s.aantal) : 0, maxMs: s.maxMs, laatsteFout: s.laatsteFout };
+  }).sort(function (a, b) { return b.p95 - a.p95 || b.aantal - a.aantal || a.fn.localeCompare(b.fn); });
+  return { dagen: n, van: van, tot: tot, schatting: true, uitleg: 'p50 en p95 zijn een schatting uit zes duur-emmers (lineair binnen de emmer; de laatste emmer loopt tot de langste aanroep).',
+    apis: apis, jsFouten: { aantal: js.aantal, laatste: js.laatste }, rijen: rijen, gebruikers: Object.keys(gebruikers).length };
+}
+// Metingen ouder dan 90 dagen weg (zelfde aanpak als archiveer: het tabblad in één keer herschrijven; er is geen archief, de cijfers zijn dan niets meer waard)
+function opruimMetingen() {
+  var grens = datumStr(plusDagen(-METINGEN_BEWAAR_DAGEN)), alle = lees('Metingen');
+  var oud = alle.filter(function (m) { return String(m.dag) < grens; });
+  if (!oud.length) return 0;
+  var houden = alle.filter(function (m) { return !(String(m.dag) < grens); }), b = blad('Metingen'), kop = TABELLEN.Metingen, laatste = b.getLastRow();
+  if (laatste > 1) b.getRange(2, 1, laatste - 1, kop.length).clearContent();
+  if (houden.length) b.getRange(2, 1, houden.length, kop.length).setValues(houden.map(function (r) { return kop.map(function (k) { return celUit(r[k]); }); }));
+  vergeet('Metingen');
+  return oud.length;
 }
 
 /* ===================== Claude API (raw HTTP via UrlFetchApp; Apps Script heeft geen SDK) ===================== */

@@ -171,16 +171,17 @@ FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'b
             {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
 KEUZES = {'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
 # v4.0: twee gebruikers. test123 = Menno (management), am123 = Joris (accountmanager): ziet geen pipeline, alleen zijn eigen projecten en facturatie
-ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen', 'financien')}  # v5.0: talenten, beoordelingen
+ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen', 'financien', 'metingen')}  # v5.0: talenten, beoordelingen; v7.6: metingen
 IKKEN = {'test123': {'naam': 'Menno', 'team': 'management', 'rol': 'management', 'beheer': True, 'gekoppeld': True, 'rechten': dict(ALLES, beheer=True, teamlead=False, doelen=True)},
          'am123': {'naam': 'Joris', 'team': 'accountmanagement', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'alles'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
                    'projecten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'facturatie': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'vacatures': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'kandidaten': {'zien': 'eigen', 'wijzigen': 'eigen'},
-                   'talenten': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beoordelingen': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'financien': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},  # v6.5: financien
+                   'talenten': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beoordelingen': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'financien': {'zien': 'eigen', 'wijzigen': 'geen'}, 'metingen': {'zien': 'geen', 'wijzigen': 'geen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},  # v6.5: financien; v7.6: metingen
          # v4.1: talentscout Lotte (code talent123): bezetting, geen pipeline of facturatie; v5.0: het hele talentbestand
          'talent123': {'naam': 'Lotte', 'team': 'talent', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'geen'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
-                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'financien': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'},
+                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'financien': {'zien': 'geen', 'wijzigen': 'geen'}, 'metingen': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'},
                    'talenten': {'zien': 'alles', 'wijzigen': 'alles'}, 'beoordelingen': {'zien': 'alles', 'wijzigen': 'alles'}, 'beheer': False, 'teamlead': False, 'doelen': False}}}
 HUIDIG = ['test123']
+METINGEN = {}  # v7.6: (code, dag, fn) → gebundelde rij uit apiMetingenOpslaan
 def ik(): return dict(IKKEN[HUIDIG[0]])
 def beheer(): return ik()['beheer']
 def eigen_project(t):
@@ -845,6 +846,45 @@ def handle(fn, args):
                 'herinneringTrigger': True, 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True), 'email': 'menno@voorbeeld.nl',  # v4.6
                 'talentTrigger': True, 'urenTrigger': True, 'xpsExportMap': True, 'laatsteUrenImport': d(-1) + ' 06:05'}  # v5.0
     if fn == 'apiImporteer': return {'ingevoegd': len(args[1]), 'bijgewerkt': 0}
+    # v7.6: metingen uit de app (per dag en api gebundeld); de mock controleert de vorm zoals Code.gs en telt per gebruiker op
+    if fn == 'apiMetingenOpslaan':
+        lijst = args[0] if args else None
+        if not isinstance(lijst, list): raise ValueError('Metingen: verwacht een lijst met rijen.')
+        if len(lijst) > 200: raise ValueError('Metingen: hoogstens 200 rijen per keer.')
+        for i, r in enumerate(lijst):
+            if not isinstance(r, dict): raise ValueError('Metingen: rij %d is geen object.' % (i + 1))
+            if r.get('fn') != 'js' and not str(r.get('fn', '')).startswith('api'): raise ValueError('Metingen: rij %d noemt geen bekende api (%s).' % (i + 1, r.get('fn')))
+            if not isinstance(r.get('dag'), str) or not (d(-30) <= r['dag'] <= d(0)): raise ValueError('Metingen: rij %d heeft geen geldige dag (yyyy-MM-dd, niet in de toekomst, hoogstens 30 dagen oud).' % (i + 1))
+            for k in ('aantal', 'fouten', 'b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer', 'somMs', 'maxMs'):
+                if not isinstance(r.get(k), int) or isinstance(r.get(k), bool) or r[k] < 0: raise ValueError('Metingen: rij %d heeft geen geheel getal ≥ 0 in %s.' % (i + 1, k))
+            if r['fouten'] > r['aantal']: raise ValueError('Metingen: rij %d telt meer fouten dan aanroepen.' % (i + 1))
+            if sum(r[k] for k in ('b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer')) != r['aantal']: raise ValueError('Metingen: rij %d heeft emmers die niet optellen tot het aantal.' % (i + 1))
+            if len(str(r.get('laatsteFout') or '')) > 120: raise ValueError('Metingen: rij %d heeft een foutmelding langer dan 120 tekens.' % (i + 1))
+            sleutel = (HUIDIG[0], r['dag'], r['fn']); oud = METINGEN.get(sleutel)
+            if oud:
+                for k in ('aantal', 'fouten', 'b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer', 'somMs'): oud[k] += r[k]
+                oud['maxMs'] = max(oud['maxMs'], r['maxMs']); oud['laatsteFout'] = r.get('laatsteFout') or oud['laatsteFout']
+            else: METINGEN[sleutel] = dict(r, gebruiker=HUIDIG[0])
+        return {'ontvangen': len(lijst)}
+    if fn == 'apiMetingen':
+        if not beheer(): geen_toegang()
+        apis = [{'fn': 'apiCrm', 'aantal': 120, 'fouten': 3, 'foutPct': 2.5, 'p50': 410, 'p95': 1900, 'gemMs': 520, 'maxMs': 4200, 'laatsteFout': 'de server reageert niet — probeer het zo nog eens'},
+                {'fn': 'apiHome', 'aantal': 300, 'fouten': 0, 'foutPct': 0, 'p50': 180, 'p95': 640, 'gemMs': 230, 'maxMs': 1100, 'laatsteFout': ''},
+                {'fn': 'apiTaken', 'aantal': 90, 'fouten': 0, 'foutPct': 0, 'p50': 150, 'p95': 420, 'gemMs': 190, 'maxMs': 800, 'laatsteFout': ''}]
+        per = {}  # wat de app zelf al heeft aangeleverd telt mee, zodat de tabel in de browsertest ook de echte aanroepen toont
+        for (wie, dag, f), r in METINGEN.items():
+            if f == 'js': continue
+            p = per.setdefault(f, {'fn': f, 'aantal': 0, 'fouten': 0, 'somMs': 0, 'maxMs': 0, 'laatsteFout': ''})
+            p['aantal'] += r['aantal']; p['fouten'] += r['fouten']; p['somMs'] += r['somMs']; p['maxMs'] = max(p['maxMs'], r['maxMs']); p['laatsteFout'] = r.get('laatsteFout') or p['laatsteFout']
+        vast = {a['fn'] for a in apis}
+        for f, p in per.items():
+            if f in vast: continue
+            gem = round(p['somMs'] / p['aantal']) if p['aantal'] else 0
+            apis.append({'fn': f, 'aantal': p['aantal'], 'fouten': p['fouten'], 'foutPct': round(1000 * p['fouten'] / p['aantal']) / 10 if p['aantal'] else 0, 'p50': gem, 'p95': p['maxMs'], 'gemMs': gem, 'maxMs': p['maxMs'], 'laatsteFout': p['laatsteFout']})
+        apis.sort(key=lambda a: (-a['p95'], -a['aantal'], a['fn']))
+        js = [r for (wie, dag, f), r in METINGEN.items() if f == 'js']
+        return {'dagen': 14, 'van': d(-14), 'tot': d(0), 'schatting': True, 'uitleg': 'p50 en p95 zijn een schatting uit zes duur-emmers (lineair binnen de emmer; de laatste emmer loopt tot de langste aanroep).',
+                'apis': apis, 'jsFouten': {'aantal': sum(r['fouten'] for r in js), 'laatste': (js[-1].get('laatsteFout') if js else '') or ''}, 'rijen': len(METINGEN) + 3, 'gebruikers': 2}
     # v7.2: Financiën — prognose vastleggen en de Exact-afstemming, met de vorm van financienBevriezen en apiExactImport in Code.gs (de app leest al/maand resp. van, tot, gekoppeld, toegepast en de vier lijsten)
     if fn == 'apiFinancienBevriezen':
         if not beheer(): geen_toegang()

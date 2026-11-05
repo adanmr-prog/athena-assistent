@@ -531,6 +531,13 @@ with sync_playwright() as p:
     page.click('#instellingenKnop'); page.wait_for_selector('#statusInfo .k-rij'); page.wait_for_timeout(200)
     page.click('#statusInfo [data-herinneringen="0"]'); page.wait_for_selector('#statusInfo [data-herinneringen="1"]:has-text("Uit")')  # v4.6: herinneringsmail uitzetten
     page.click('#statusInfo [data-herinneringen="1"]'); page.wait_for_selector('#statusInfo [data-herinneringen="0"]:has-text("Aan")')
+    # v7.6: Beheer → Metingen (alleen management): tabel per api met aantal, p50, p95 en fout %, de traagste bovenaan; JS-fouten; Vernieuwen haalt opnieuw op
+    page.wait_for_selector('#metingenInhoud table.metingen tbody tr'); assert page.locator('#metingenInhoud tbody tr').first.inner_text().startswith('apiCrm'), 'traagste api (p95) bovenaan'
+    assert '1900 ms' in page.inner_text('#metingenInhoud tbody tr:first-child') and 'JS-fouten' in page.inner_text('#metingenInhoud'), 'p95 en de JS-foutregel in de metingen'
+    n_metingen = len(api_vanaf(0, 'apiMetingen')); page.click('#statusInfo [data-metingen="vernieuwen"]'); page.wait_for_selector('#metingenInhoud table.metingen tbody tr'); page.wait_for_timeout(100)
+    assert len(api_vanaf(0, 'apiMetingen')) == n_metingen + 1, 'Vernieuwen haalt apiMetingen opnieuw op'
+    # de app heeft intussen haar eigen metingen aangeleverd (stil, na de eerste geslaagde aanroep): gebundeld per dag en api, zonder argumenten
+    bundels = api_vanaf(0, 'apiMetingenOpslaan'); assert bundels and all(isinstance(b['args'][0], list) and all(set(r) >= {'dag', 'fn', 'aantal', 'b250', 'somMs', 'maxMs'} and r['aantal'] >= 1 for r in b['args'][0]) for b in bundels), 'apiMetingenOpslaan: gebundelde rijen per dag en api'
     page.screenshot(path=OUT + '/09_instellingen.png', full_page=True)
     page.click('#koppelSluit')
     # v3.0: desktopweergave (zijbalk, Capsule-opbouw)
@@ -663,6 +670,7 @@ with sync_playwright() as p:
     am.wait_for_selector('.d-naam h2'); assert am.locator('.d-naam [data-composer="bewerk"]').count() == 0 and am.locator('[data-kansfase]').count() == 0, 'kans van eigen project alleen lezen'
     am.screenshot(path=OUT + '/41_am_kans_lezen.png')
     am.click('.zb-item[data-desk="financien"]'); am.wait_for_selector('table.fin [data-finopen]'); assert not am.locator('[data-finexact]').is_visible(), 'am: geen Exact-import'
+    am.click('#zbInstellingen'); am.wait_for_selector('#statusInfo .k-rij'); am.wait_for_timeout(300); assert am.locator('#statusInfo [data-metingen]').count() == 0, 'am: geen metingen in Beheer (v7.6; op desktop via de zijbalk)'; am.click('#koppelSluit')
     # v5.0: de accountmanager beoordeelt zijn geplaatste kandidaat en ziet een beperkt profiel (geen documenten, geen adres)
     am.click('.zb-item[data-desk="projecten"]'); am.wait_for_selector('.ftabel [data-crm-open="project:t6"]'); am.click('.ftabel a[data-crm-open="project:t6"]'); am.wait_for_selector('.d-naam h2:has-text("Examentraining")')
     am.click('[data-dtab="bezetting"]'); am.wait_for_selector('#dTab .rij:has-text("Noor Bakker") [data-beoordeel]'); assert am.locator('#dTab .rij:has-text("Noor Bakker") .vog.oranje').count() == 1, 'VOG-badge op de kandidaatregel'

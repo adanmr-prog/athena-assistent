@@ -1392,27 +1392,110 @@
     var timer = ac ? setTimeout(function () { ac.abort(); }, ms) : null;
     return maak(ac ? ac.signal : undefined).then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
   }
-  function run(fn) {
-    var args = Array.prototype.slice.call(arguments, 1), ms = RUN_LANG.hasOwnProperty(fn) ? RUN_TIMEOUT_LANG_MS : RUN_TIMEOUT_MS;  // v7.2
+  // v7.6: run() is een dunne schil om runKern(fn, args, opties): de 140 aanroepers blijven gelijk. opties.stil (alleen voor het verzenden van de
+  // metingen zelf) = geen toast, geen meting van zichzelf, de koppeling niet aanraken bij 'secret'.
+  function run(fn) { return runKern(fn, Array.prototype.slice.call(arguments, 1), null); }
+  function runKern(fn, args, opties) {
+    opties = opties || {};
+    var ms = RUN_LANG.hasOwnProperty(fn) ? RUN_TIMEOUT_LANG_MS : RUN_TIMEOUT_MS, t0 = tijdNu();  // v7.2; v7.6: t0 voor de meting
     var verzoek = DEMO ? laadDemo().then(function (D) { return D.run(fn, args); })  // v4.3
       : SERVER ? tokenVers().then(function (t) { return metTimeout(function (signal) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }), signal: signal }).then(leesAntwoord); }, ms); })  // v6.0: eigen server, sessietoken in plaats van koppelcode
       : metTimeout(function (signal) { return fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }), signal: signal }).then(leesAntwoord); }, ms);   // geen headers: geen CORS-preflight op Apps Script
     return verzoek
       .then(function (d) {
-        if (d && d.ok) return d.result;
-        if (d && d.fout === 'secret' && DEMO) { toast('Deze demorol kan niet meer inloggen. Kies Opnieuw in de demobalk.'); throw new Error('secret'); }  // v4.3: de demo raakt de echte koppelcode nooit aan
-        if (d && d.fout === 'secret' && SERVER) { wisToken(); checkKoppeling(); toast('Je sessie is verlopen of je staat niet in Gebruikers — log opnieuw in.'); throw new Error('secret'); }  // v6.0
-        if (d && d.fout === 'secret') { try { localStorage.removeItem('aa_secret'); } catch (e) {} checkKoppeling(); toast('Koppelcode klopt niet — koppel opnieuw.'); throw new Error('secret'); }
+        if (d && d.ok) { meet(fn, t0, true, '', opties); return d.result; }
+        if (d && d.fout === 'secret' && !opties.stil) {  // v7.6: een stille aanroep laat de koppeling met rust
+          if (DEMO) toast('Deze demorol kan niet meer inloggen. Kies Opnieuw in de demobalk.');  // v4.3: de demo raakt de echte koppelcode nooit aan
+          else if (SERVER) { wisToken(); checkKoppeling(); toast('Je sessie is verlopen of je staat niet in Gebruikers — log opnieuw in.'); }  // v6.0
+          else { try { localStorage.removeItem('aa_secret'); } catch (e) {} checkKoppeling(); toast('Koppelcode klopt niet — koppel opnieuw.'); }
+        }
+        if (d && d.fout === 'secret') throw new Error('secret');
         throw new Error((d && d.fout) || 'serverfout');
       })
       .catch(function (err) {
         var m = (err && err.message) || 'probeer opnieuw';
         if (err && err.name === 'AbortError') m = 'de server reageert niet — probeer het zo nog eens';  // v7.2: de time-out van metTimeout (een hangende fetch geeft op iOS geen TypeError)
         else if (err && err.name === 'TypeError') m = navigator.onLine === false ? 'je bent offline' : 'geen verbinding met de server — probeer het zo nog eens';  // v7.2: fetch-fouten zijn Engels en per browser anders ("Failed to fetch", "Load failed")
-        if (!err || err.message !== 'secret') toast('Niet gelukt — ' + m);
+        meet(fn, t0, false, foutCode(err), opties);  // v7.6
+        if (!opties.stil && (!err || err.message !== 'secret')) toast('Niet gelukt — ' + m);
         throw err;
       });
   }
+
+  /* ===== 0b. Metingen (v7.6) =====
+     Elke backend-aanroep (api-naam, duur in ms, ok/fout met een korte code) en elke onafgevangen JS-fout komt als ruwe meting in de ringbuffer
+     aa_metingen (hoogstens METING.max; de oudste vallen weg). Vóór het verzenden wordt gebundeld per (dag, api): tellingen per duur-emmer, somMs,
+     maxMs en één ingekorte foutmelding zonder e-mailadressen. Nooit argumenten of gegevens. Verzenden (stil, nooit een toast, nooit een lus) zodra er
+     iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
+     starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
+  var APP_VERSIE = '7.6';  // v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
+  var METING = { max: 400, drempel: 50, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
+  function tijdNu() { return (window.performance && typeof performance.now === 'function') ? performance.now() : Date.now(); }
+  function kortFout(s) { return String(s == null ? '' : s).replace(/[^\s@<>"'()]+@[^\s@<>"'()]+/g, '…').replace(/\s+/g, ' ').trim().slice(0, 120); }  // e-mailadressen eruit, hoogstens 120 tekens
+  function foutCode(err) {
+    if (err && err.message === 'secret') return 'secret';
+    if (err && err.name === 'AbortError') return 'abort';
+    if (err && err.name === 'TypeError') return navigator.onLine === false ? 'offline' : 'netwerk';
+    return kortFout((err && err.message) || 'onbekend') || 'onbekend';
+  }
+  function metingenLees() { try { var l = JSON.parse(leesOpslag('aa_metingen') || '[]'); return l instanceof Array ? l : []; } catch (e) { return []; } }
+  function metingVast(m) {
+    if (PORTAAL) return;
+    try {
+      var l = metingenLees(); m.dag = ymd(new Date()); l.push(m);
+      if (l.length > METING.max) l = l.slice(l.length - METING.max);
+      zetOpslag('aa_metingen', JSON.stringify(l));
+    } catch (e) {}
+  }
+  function meet(fn, t0, ok, fout, opties) {
+    if (opties && opties.stil) return;
+    metingVast({ fn: fn, ms: Math.max(0, Math.round(tijdNu() - t0)), ok: !!ok, fout: ok ? '' : fout });
+    if (ok && !METING.eersteOk) { METING.eersteOk = true; setTimeout(metingenVerzend, 1500); }  // na de eerste geslaagde schermlading, buiten het kritieke pad
+  }
+  function metingenBundel(l) {
+    var per = {}, uit = [];
+    l.forEach(function (m) {
+      var k = m.dag + '|' + m.fn, r = per[k], ms = Math.max(0, Math.round(Number(m.ms) || 0));
+      if (!r) { r = per[k] = { dag: m.dag, fn: m.fn, aantal: 0, fouten: 0, b250: 0, b500: 0, b1000: 0, b2000: 0, b5000: 0, bMeer: 0, somMs: 0, maxMs: 0, laatsteFout: '', appVersie: APP_VERSIE }; uit.push(r); }
+      r.aantal++; if (!m.ok) { r.fouten++; if (m.fout) r.laatsteFout = kortFout(m.fout); }
+      r[ms <= 250 ? 'b250' : ms <= 500 ? 'b500' : ms <= 1000 ? 'b1000' : ms <= 2000 ? 'b2000' : ms <= 5000 ? 'b5000' : 'bMeer']++;
+      r.somMs += ms; if (ms > r.maxMs) r.maxMs = ms;
+    });
+    return uit;
+  }
+  function metingenTijd(l) {
+    if (!l.length) return false;
+    var laatst = Number(leesOpslag('aa_metingen_verzonden')) || 0;
+    return l.length >= METING.drempel || Date.now() - laatst > METING.dag24;
+  }
+  function metingenVerzend() {
+    if (PORTAAL || METING.bezig || !ingelogd()) return;
+    if (METING.poging && Date.now() - METING.poging < METING.wachtNaFout) return;  // na een mislukte verzending even wachten (geen lus)
+    var l = metingenLees(); if (!metingenTijd(l)) return;
+    var grens = ymd(new Date(Date.now() - 30 * METING.dag24)), n = l.length, bundel = metingenBundel(l.filter(function (m) { return m && typeof m.fn === 'string' && m.dag >= grens; }));  // de backend weigert dagen ouder dan 30 dagen
+    if (!bundel.length) { zetOpslag('aa_metingen', '[]'); return; }
+    METING.bezig = true; METING.poging = Date.now();
+    runKern('apiMetingenOpslaan', [bundel], { stil: true }).then(function () {
+      zetOpslag('aa_metingen', JSON.stringify(metingenLees().slice(n)));  // alleen wat verzonden is wissen; wat er intussen bij kwam blijft staan
+      zetOpslag('aa_metingen_verzonden', String(Date.now())); METING.poging = 0;
+    }).then(function () { METING.bezig = false; }, function () { METING.bezig = false; });  // bij een fout blijft alles staan (de buffer is begrensd)
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') metingenVerzend(); });
+  // JS-fouten: window.onerror en unhandledrejection; dezelfde fout die via beide binnenkomt telt één keer
+  function jsFout(bericht, plek) {
+    var tekst = kortFout(String(bericht || 'Onbekende fout') + (plek ? ' @ ' + plek : ''));
+    if (tekst === METING.laatsteJs && Date.now() - METING.laatsteJsOp < 2000) return;
+    METING.laatsteJs = tekst; METING.laatsteJsOp = Date.now();
+    metingVast({ fn: 'js', ms: 0, ok: false, fout: tekst });
+  }
+  function plekUitStack(err) { var m = /([^\s()]+):(\d+):(\d+)/.exec(String((err && err.stack) || '')); return m ? m[1].replace(/^.*\//, '') + ':' + m[2] + ':' + m[3] : ''; }
+  window.onerror = function (bericht, bestand, regel, kolom, err) {
+    try { jsFout((err && err.message) || bericht, bestand ? String(bestand).replace(/^.*\//, '') + ':' + (regel || 0) + ':' + (kolom || 0) : plekUitStack(err)); } catch (e) {}
+    return false;  // de browser logt de fout zoals altijd
+  };
+  window.addEventListener('unhandledrejection', function (ev) {
+    try { var r = ev && ev.reason; jsFout(r && r.message ? r.message : String(r == null ? 'Onbekende fout' : r), plekUitStack(r)); } catch (e) {}
+  });
 
   /* ===== 1. Vandaag ===== */
   function tegel(cijfer, label, extra) { return '<div class="tegel' + (extra ? ' ' + extra : '') + '"><div class="t-cijfer">' + esc(cijfer) + '</div><div class="t-label">' + esc(label) + '</div></div>'; }
@@ -4364,6 +4447,7 @@
       sluitVenster(); taakLokaal(tw, null); delete REG.taak[tw];
       run('apiVerwijder', 'taak', tw, { metSubtaken: metSub }).then(function () { toast('Taak verwijderd.'); if (tt && tt.subtaken && tt.subtaken.aantal) herlaadHuidig(); }).catch(herlaadHuidig); return;
     }
+    if ((x = t.closest('[data-metingen]'))) { if (x.getAttribute('data-metingen') === 'alles') METING.alles = true; laadMetingen(); return; }  // v7.6: Beheer → Metingen vernieuwen of alles tonen
     if ((x = t.closest('[data-herinneringen]'))) { x.disabled = true; run('apiHerinneringenZetten', x.getAttribute('data-herinneringen') === '1').then(function () { toast('Opgeslagen.'); toonStatus(); }).catch(toonStatus); return; }  // v4.6
     if ((x = t.closest('[data-taakheropen]'))) { var th = x.getAttribute('data-taakheropen'); x.disabled = true; run('apiTaakHeropen', th).then(function (r) { sluitVenster(); taakLokaal(th, r); toast('Taak staat weer open.'); }).catch(function () { x.disabled = false; }); return; }
     if ((x = t.closest('[data-herhaalstop]'))) {  // v4.5
@@ -5598,7 +5682,25 @@
         ('herinneringen' in st ? rij('Herinnering bij taak met tijd', (st.herinneringTrigger === false ? nee + ' — draai setup() voor de trigger · ' : '') + '<button class="knop klein' + (st.herinneringen ? '' : ' licht') + '" data-herinneringen="' + (st.herinneringen ? '0' : '1') + '">' + (st.herinneringen ? 'Aan' : 'Uit') + '</button>' + (st.email ? ' · naar ' + esc(st.email) : ' · <span class="nee">geen e-mailadres</span>')) : '') +
         // v5.0: talentnetwerk (dagelijkse run en de weekexport uit XPS)
         ('talentTrigger' in st ? rij('Talentnetwerk (dagelijks 06:30)', st.talentTrigger ? ja : nee + ' — draai setup() voor de trigger') + rij('XPS-uren (maandag)', st.urenTrigger ? ja + (st.laatsteUrenImport ? ' · laatst ' + esc(st.laatsteUrenImport) : ' · nog niet geïmporteerd') + (st.xpsExportMap ? '' : ' · <span class="nee">map XPS-export nog niet gemaakt</span>') : nee) : '');
+      if (magApp('metingen')) { s.innerHTML += metingenBlokHtml(); laadMetingen(); }  // v7.6: alleen management (RECHTEN.metingen)
     }).catch(function () { s.innerHTML = '<div class="leeg">Geen verbinding met de backend.</div>'; });
+  }
+  // v7.6: Beheer → Metingen (laatste 14 dagen): per api aantal, p50, p95 (schatting uit de emmers) en fout %, de tien traagste bovenaan;
+  // de JS-fouten met de laatste melding; Vernieuwen haalt opnieuw op, Alles tonen laat de rest zien. Alles door esc().
+  function metingenBlokHtml() { return '<div id="metingenBlok" data-recht="metingen"><div class="k-rij"><span>Metingen (laatste 14 dagen)</span><span><button class="knop klein licht" data-metingen="vernieuwen">Vernieuwen</button></span></div><div id="metingenInhoud"></div></div>'; }
+  function laadMetingen() {
+    var b = el('metingenInhoud'); if (!b) return; b.innerHTML = '<div class="spinner">Metingen ophalen</div>';
+    run('apiMetingen', 14).then(function (r) { var b2 = el('metingenInhoud'); if (b2) b2.innerHTML = metingenHtml(r); }).catch(function () { var b2 = el('metingenInhoud'); if (b2) b2.innerHTML = '<div class="leeg">Kon de metingen niet ophalen.</div>'; });
+  }
+  function metingenHtml(r) {
+    var apis = (r && r.apis instanceof Array) ? r.apis : [], js = (r && r.jsFouten) || { aantal: 0, laatste: '' }, lijst = METING.alles ? apis : apis.slice(0, 10);
+    if (!apis.length && !js.aantal) return '<div class="leeg">Nog geen metingen. De app stuurt ze vanzelf, hoogstens een paar keer per dag.</div>';
+    var h = '<div class="tabel-wrap"><table class="tabel metingen"><thead><tr><th>Api</th><th>Aantal</th><th>p50</th><th>p95</th><th>Fout %</th></tr></thead><tbody>' +
+      lijst.map(function (a) { return '<tr' + (a.laatsteFout ? ' title="laatste fout: ' + esc(a.laatsteFout) + '"' : '') + '><td>' + esc(a.fn) + '</td><td>' + esc(a.aantal) + '</td><td>' + esc(a.p50) + ' ms</td><td>' + esc(a.p95) + ' ms</td><td>' + esc(a.foutPct) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    if (apis.length > lijst.length) h += '<div class="k-rij"><span>De tien traagste; nog ' + esc(apis.length - lijst.length) + ' andere</span><span><button class="knop klein licht" data-metingen="alles">Alles tonen</button></span></div>';
+    h += '<div class="k-rij"><span>JS-fouten</span><span>' + esc(js.aantal) + (js.laatste ? ' · laatste: ' + esc(js.laatste) : '') + '</span></div>';
+    h += '<div class="zacht">' + esc(r.uitleg || '') + (r.gebruikers ? ' ' + esc(r.gebruikers) + (r.gebruikers === 1 ? ' gebruiker, ' : ' gebruikers, ') + esc(r.van) + ' t/m ' + esc(r.tot) + '.' : '') + '</div>';
+    return h;
   }
   el('instellingenKnop').addEventListener('click', function () {
     el('apiInput').value = apiUrl(); el('codeInput').value = secret();

@@ -139,6 +139,7 @@ ONBEPAALD.push({ sleutel: 'financienWijzigen', uitleg: 'financien wijzigen: geen
 ONBEPAALD.push({ sleutel: 'beoordelingenZien', uitleg: 'beoordelingen zien: geen eigen api; zichtbaar via apiTalent (valt onder talenten zien).', in_test: 'niet apart getest' });
 ONBEPAALD.push({ sleutel: 'relatiesZien', uitleg: 'apiSchool en apiPersoon roepen geen eis(relaties, zien) aan; dat klopt alleen omdat elk team daar alles heeft (het portaalprofiel komt niet voorbij doPost).', in_test: 'getest met de huidige tabel' });
 ONBEPAALD.push({ sleutel: 'talentOpslaanMetRij', uitleg: 'v7.3 (R4): apiTalentOpslaan controleert eis(talenten, wijzigen, oud || null) mét de rij; een rijniveau eigen of team geldt dus ook hier (de rooktest bewijst dat met een tijdelijk niveau eigen voor de AM).', in_test: 'verwachting met rij (tl1)' });
+ONBEPAALD.push({ sleutel: 'metingen', uitleg: 'v7.6: RECHTEN.metingen (medewerker/teamlead geen) geldt voor het overzicht apiMetingen (management); het aanleveren via apiMetingenOpslaan mag elke ingelogde gebruiker en schrijft alleen rijen met zijn eigen gebruikers-id (gebruiker uit de invoer telt niet).', in_test: 'management-only aanvallen plus eigen-rij-controle' });
 ONBEPAALD.push({ sleutel: 'kansBeperkt', uitleg: 'v7.3 (R1): de kans achter een zichtbaar project komt beperkt terug (naam, school, fase; waarde 0, notities leeg, geen taken of tijdlijn) voor wie het project alleen via niveau opstart ziet (talent); de eigenaar van het project (AM, niveau eigen/team) en het management krijgen de kans volledig. Ook in apiProject, apiCrm (openWaarde) en de zoektool van de assistent.', in_test: 'sectie 5' });
 
 var PROEVEN = [
@@ -250,6 +251,17 @@ MENSEN.filter(function (m) { return m.team !== 'management'; }).forEach(function
   aanval(m.kort + ' leest de gebruikerslijst met codes (apiGebruikers)', m.code, 'apiGebruikers', [], false, MGMT);
   aanval(m.kort + ' bevriest de prognose (apiFinancienBevriezen)', m.code, 'apiFinancienBevriezen', [], false, MGMT);
   aanval(m.kort + ' importeert Exact (apiExactImport)', m.code, 'apiExactImport', ['Factuurnummer;Datum\n1;2026-01-01'], false, MGMT);
+});
+// v7.6: metingen — het overzicht is management; aanleveren mag iedereen, maar alleen onder de eigen gebruikers-id
+var METING_RIJ = { dag: vandaag(), fn: 'apiHome', aantal: 3, fouten: 1, b250: 2, b500: 1, b1000: 0, b2000: 0, b5000: 0, bMeer: 0, somMs: 600, maxMs: 400, laatsteFout: 'netwerk', appVersie: '7.6', gebruiker: 'beheer' };
+MENSEN.filter(function (m) { return m.team !== 'management'; }).forEach(function (m) { aanval(m.kort + ' leest het metingenoverzicht (apiMetingen)', m.code, 'apiMetingen', [14], false, TOEGANG); });
+aanval('management leest wel het metingenoverzicht (apiMetingen)', code('thomas'), 'apiMetingen', [14], true, null, function (r) { return r && r.apis instanceof Array && r.jsFouten && r.schatting === true; });
+MENSEN.forEach(function (m) {
+  aanval(m.kort + ' levert eigen metingen aan (apiMetingenOpslaan)', m.code, 'apiMetingenOpslaan', [[METING_RIJ]], true, null, function (r) {
+    var rijen = lees('Metingen'), eigen = rijen.filter(function (x) { return x.fn === 'apiHome'; });
+    return r && r.ontvangen === 1 && eigen.length === 1 && String(eigen[0].gebruiker) === String(m.id) && !rijen.some(function (x) { return x.fn === 'apiHome' && String(x.gebruiker) !== String(m.id); });
+  });
+  herstel();
 });
 aanval('management exporteert wel (apiExportAlles)', code('thomas'), 'apiExportAlles', ['Gebruikers'], true, null, function (r) { return r && r.rijen instanceof Array && r.rijen.length > 0; });
 // uitgeschakelde gebruiker: zijn code werkt niet meer
