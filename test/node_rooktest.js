@@ -1080,7 +1080,7 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
 (function () {
   ctx.GEBRUIKER = null;
   var c1 = ctx.controleer();
-  eis(c1.indexOf('backend 7.6') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.6 en geen afwijkende koppen in de demo-sheet');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch; v7.5: release; v7.6: metingen
+  eis(c1.indexOf('backend 7.7') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.7 en geen afwijkende koppen in de demo-sheet');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch; v7.5: release; v7.6: metingen; v7.7: alle gegevens inladen
   var b = ctx.blad('Scholen'), kop = ctx.TABELLEN.Scholen, was = b.getRange(1, 2, 1, 1).getValues()[0][0];
   b.getRange(1, 2, 1, 1).setValues([['schoolnaam']]);
   var c2 = ctx.controleer(), regel = c2.split('\n').filter(function (r) { return r.indexOf('- Scholen:') === 0; })[0] || '';
@@ -1482,6 +1482,126 @@ function tel(tab, fn) { return ctx.lees(tab).filter(fn).length; }
   eis(ar.metingen === 1 && !ctx.vind('Metingen', 'm-oud-rooktest') && !!ctx.vind('Metingen', 'm-net-rooktest') && metingen().length === n - 1 && roep(SOPHIE, 'apiArchiveer').metingen === 0, 'archiveer: een meting ouder dan 90 kalenderdagen gaat weg, de rest blijft; een tweede run ruimt niets op');
   eis(!faalt(SOPHIE, 'apiMetingenOpslaan', []) && roep(SOPHIE, 'apiMetingenOpslaan', []).ontvangen === 0, 'apiMetingenOpslaan: een lege lijst is geen fout (ontvangen 0)');
 })();
+
+/* ---- v7.7: talentimport — talenten uit de XPS-accountexport (koppelen, aanvullen, nieuw, overgeslagen, privékolommen, urenexport in de map, idempotent, rechten) ---- */
+(function () { try {
+  var V = '2026-10-30', TAL = ctx.lees('Talenten'), lijst = function (x) { return vm.runInContext('(function (x) { return JSON.parse(x); })', ctx)(JSON.stringify(x)); };
+  var fout = function (f) { try { f(); return ''; } catch (e) { return String(e.message); } }, FUN = ctx.keuzelijst('talentFuncties');
+  // 1. het verzonnen voorbeeldbestand, zuiver (zonder te schrijven): kolommen, nieuw, ongewijzigd, overgeslagen per reden, functies, privékolommen
+  var vb = ctx.Utilities.parseCsv(fs.readFileSync(path.join(R, 'test/voorbeelden/xps_accounts.csv'), 'utf8'), ';'), u = ctx.talentUitRijen(vb, TAL, { vandaag: V, functies: FUN }), O = u.overgeslagen;
+  eis(u.soort === 'account' && u.kolommen.xpsId === 'Accountnummer' && u.kolommen.naam === 'Naam' && u.kolommen.email === 'E-mail' && u.kolommen.telefoon === 'Telefoon' && u.kolommen.postcode === 'Postcode' && u.kolommen.woonplaats === 'Woonplaats' && u.kolommen.functie === 'Functie' && u.kolommen.status === 'Status' && u.kolommen.startdatum === 'In dienst sinds', 'accountexport: kolommen herkend (naam, contact, functie, status van het account, in dienst sinds)');
+  eis(u.regels === 8 && u.nieuw.length === 3 && u.bijgewerkt.length === 0 && u.ongewijzigd === 2 && O.geenNaam === 1 && O.geenContact === 1 && O.dubbelInBestand === 1 && O.uitgeschreven === 0, 'accountexport: nieuw, ongewijzigd (Eva en Tim bestaan al, alle velden gevuld) en overgeslagen per reden (geen naam, geen contact, dubbel in bestand) tellen op');
+  var pien = u.nieuw.filter(function (t) { return t.xpsId === 'X9101'; })[0], joris = u.nieuw.filter(function (t) { return t.xpsId === 'X9102'; })[0], noor = u.nieuw.filter(function (t) { return t.xpsId === 'X9103'; })[0];
+  eis(pien && pien.voornaam === 'Pien' && pien.achternaam === 'van der Berg' && pien.email === 'pien.vd.berg@mail.example' && pien.telefoon === '0619000001' && pien.postcode === '1234 AB' && pien.woonplaats === 'Voorbeeldstad' && pien.functies.join() === 'onderwijsondersteuner,surveillant' && pien.status === 'actief' && pien.bron === 'xps-bestand' && pien.toestemmingDatum === V && pien.toestemmingGrondslag === 'overeenkomst' && pien.bewarenTot > V && pien.velden.inDienstSinds === '2026-09-01' && !!pien.aangemaakt && !!pien.statusSinds, 'nieuw profiel: naam gesplitst (tussenvoegsels bij de achternaam), contact genormaliseerd, functies uit de keuzelijst, actief, bron xps-bestand, toestemming vandaag met grondslag overeenkomst, in dienst sinds als vrij veld');
+  eis(joris && joris.status === 'slapend' && joris.telefoon === '0619000002' && joris.functies.join() === 'examentrainer', 'status "Uit dienst" wordt slapend; een telefoonnummer zonder streepje wordt genormaliseerd');
+  eis(noor && noor.functies.length === 0 && u.nietHerkendeFuncties.length === 1 && u.nietHerkendeFuncties[0].functie === 'conciërge' && u.nietHerkendeFuncties[0].aantal === 1, 'dubbel in het bestand: de laatste rij telt (Noor met "Conciërge"); een onbekende functie gooit niet maar staat in nietHerkendeFuncties en wordt niet gezet');
+  var gen = u.genegeerdeKolommen.map(function (g) { return g.kolom; }), json = JSON.stringify(u);
+  eis(gen.indexOf('Geboortedatum') >= 0 && gen.indexOf('IBAN') >= 0 && gen.indexOf('Salaris (uur)') >= 0 && u.genegeerdeKolommen.filter(function (g) { return g.kolom === 'IBAN' || g.kolom === 'Geboortedatum'; }).every(function (g) { return /persoonsgegevens/.test(g.hint); }) && /loongegevens/.test(u.genegeerdeKolommen.filter(function (g) { return g.kolom === 'Salaris (uur)'; })[0].hint) && json.indexOf('NL00BANK') < 0 && json.indexOf('2000-01-01') < 0 && json.indexOf('17,50') < 0 && json.indexOf('17.5') < 0, 'privé- en loonkolommen (geboortedatum, IBAN, salaris) worden genegeerd met een hint en hun waarden staan nergens in het resultaat');
+  eis(ctx.XPS_PRIVE.test('geslacht') && ctx.XPS_PRIVE.test('nationaliteit') && ctx.XPS_PRIVE.test('ziekmeldingen') && ctx.XPS_PRIVE.test('religie') && ctx.XPS_PRIVE.test('gezondheid'), 'XPS_PRIVE kent ook geslacht, nationaliteit, gezondheid, ziek en religie');
+  // 2. koppelen aan een bestaand talent: accountnummer, e-mail, telefoon, unieke naam; alleen lege velden vullen; dubbele naam niet; uitgeschreven niet
+  var talenten = TAL.map(function (t) { var k = {}; Object.keys(t).forEach(function (x) { k[x] = t[x]; }); return k; }).concat([
+    { id: 'tlx1', voornaam: 'Eva', achternaam: 'de Wit', status: 'actief' }, { id: 'tlx2', voornaam: 'Leeg', achternaam: 'Profiel', status: 'gescreend', functies: [] },
+    { id: 'tlx3', voornaam: 'Weg', achternaam: 'Geweest', status: 'uitgeschreven', email: 'weg.geweest@mail.example' }]);
+  var KOP = ['Accountnummer', 'Voornaam', 'Achternaam', 'E-mail', 'Mobiel', 'Postcode', 'Woonplaats', 'Functies', 'Accountstatus'];
+  var k = ctx.talentUitRijen(lijst([KOP,
+    ['X5002', 'Iemand', 'Anders', 'anders@mail.example', '', '', '', '', 'Actief'],                                  // accountnummer wint van naam en e-mail: Ali (tl2), alles al gevuld
+    ['', 'Tim', 'V.', 'Tim.Verhoeven@mail.example', '', '', '', '', 'Actief'],                                      // e-mail (hoofdletters maken niet uit): tl4
+    ['', 'Nina', 'J.', '', '06-31031676', '', '', '', 'Actief'],                                                     // telefoon: tl5 (06-3 + 1031676)
+    ['X7001', 'Leeg', 'Profiel', 'leeg.profiel@mail.example', 612345670, '1234 AB', 'Voorbeeldstad', 'Surveillant, Onbekend', 'Actief'],  // unieke naam: lege velden vullen (telefoon als getal zonder voorloopnul)
+    ['X7002', 'Eva', 'de Wit', 'eva2@mail.example', '', '', '', '', 'Actief'],                                       // naam hoort bij twee talenten (tl1 en tlx1): nieuw profiel, niet gekoppeld
+    ['X7003', 'Weg', 'Geweest', 'weg.geweest@mail.example', '', '', '', '', 'Actief'],                               // uitgeschreven: niet overschrijven, wel geteld
+    ['X7004', 'Nieuw', 'Mens', '', '', '', 'Voorbeeldstad', '', 'Inactief']]), talenten, { vandaag: V, functies: FUN });
+  var w = function (id) { return k.bijgewerkt.filter(function (x) { return x.id === id; })[0]; };
+  eis(k.ongewijzigd === 3 && !w('tl2') && !w('tl4') && !w('tl5'), 'koppelen op accountnummer, e-mail en telefoon: een volledig profiel blijft ongewijzigd (Ali, Tim, Nina)');
+  var lp = w('tlx2');
+  eis(lp && lp.xpsId === 'X7001' && lp.email === 'leeg.profiel@mail.example' && lp.telefoon === '0612345670' && lp.postcode === '1234 AB' && lp.woonplaats === 'Voorbeeldstad' && lp.functies.join() === 'surveillant' && !('status' in lp) && !('notitie' in lp) && !('tags' in lp) && !('beschikbaarheid' in lp), 'koppelen op een unieke naam: alleen lege velden gevuld (accountnummer, e-mail, telefoon, postcode, woonplaats, functies); status, notitie, tags en beschikbaarheid blijven van het talentteam');
+  eis(k.nietHerkendeFuncties.length === 1 && k.nietHerkendeFuncties[0].functie === 'onbekend', 'een onbekende functie bij een bestaand profiel telt ook in nietHerkendeFuncties');
+  eis(k.nieuw.length === 2 && k.nieuw.some(function (t) { return t.xpsId === 'X7002' && t.voornaam === 'Eva'; }) && !w('tl1') && !w('tlx1') && k.nieuw.some(function (t) { return t.xpsId === 'X7004' && t.status === 'slapend' && t.email === '' && t.telefoon === ''; }), 'een naam die bij twee talenten hoort wordt niet gekoppeld (nieuw profiel); een onbekende accountstatus geeft slapend');
+  eis(k.overgeslagen.uitgeschreven === 1 && !w('tlx3') && !k.nieuw.some(function (t) { return t.xpsId === 'X7003'; }), 'een uitgeschreven talent wordt niet overschreven en niet opnieuw aangemaakt, wel geteld');
+  eis(k.nieuw.every(function (t) { return !/\s/.test(t.xpsId); }) && k.bijgewerkt.every(function (x) { return !x.xpsId || !/\s/.test(x.xpsId); }), 'nooit een naam in xpsId');
+  // 3. zonder accountstatuskolom is elk nieuw profiel actief; zonder naamkolom of contactkolom een duidelijke fout; een urenexport wordt herkend
+  var z = ctx.talentUitRijen(lijst([['Naam', 'E-mail'], ['Piet Nieuw', 'piet.nieuw@mail.example']]), talenten, { vandaag: V, functies: FUN });
+  eis(z.nieuw.length === 1 && z.nieuw[0].status === 'actief' && z.nieuw[0].achternaam === 'Nieuw', 'zonder statuskolom is een nieuw profiel actief');
+  eis(/geen naamkolom/.test(fout(function () { ctx.talentUitRijen(lijst([['Accountnummer', 'E-mail'], ['X1', 'a@b.example']]), talenten, { vandaag: V }); })) && /geen kolom met e-mail, telefoon of postcode/.test(fout(function () { ctx.talentUitRijen(lijst([['Naam', 'Opmerking'], ['Piet Nieuw', 'x']]), talenten, { vandaag: V }); })), 'geen naamkolom of geen contactkolom: een Nederlandse fout in plaats van een stille nul');
+  var ur = ctx.talentUitRijen(ctx.Utilities.parseCsv(fs.readFileSync(path.join(R, 'test/voorbeelden/xps_diensten.csv'), 'utf8'), ';'), talenten, { vandaag: V, functies: FUN });
+  eis(ur.soort === 'uren' && ur.nieuw.length === 0 && ur.regels === 0, 'de dienstenexport (datum, gewerkte tijd) wordt als urenexport herkend en niet als accounts gelezen');
+  eis(ctx.talentUitRijen(lijst([['Naam', 'E-mail', 'Uren per week'], ['Piet Nieuw', 'piet.nieuw@mail.example', '16']]), talenten, { vandaag: V, functies: FUN }).soort === 'account', 'een kolom "Uren per week" in een accountexport maakt er geen urenexport van');
+  // 4. talentImport uit de Drive-map: schrijft nieuw en bijgewerkt, slaat een urenexport over, tweede run idempotent, rechten
+  var map = ctx.xpsExportMap(), it = map.getFiles(); while (it.hasNext()) it.next().setTrashed(true);
+  ctx.P.setProperty('LAATSTE_TALENTIMPORT', ''); ctx.P.setProperty('LAATSTE_URENIMPORT', '');
+  var acc = map.createFile(ctx.Utilities.newBlob(fs.readFileSync(path.join(R, 'test/voorbeelden/xps_accounts.csv'), 'utf8'), 'text/csv', 'xps-accounts-v77.csv'));
+  var urenB = map.createFile(ctx.Utilities.newBlob(fs.readFileSync(path.join(R, 'test/voorbeelden/xps_diensten.csv'), 'utf8'), 'text/csv', 'xps-diensten-v77.csv'));
+  var nVoor = ctx.lees('Talenten').length, aVoor = ctx.lees('Activiteiten').length;
+  eis(/toegang/.test(faalt(FEMKE, 'apiTalentImport')) && /toegang/.test(faalt(LARS, 'apiTalentImport')) && ctx.lees('Talenten').length === nVoor, 'apiTalentImport: een accountmanager en een consultant worden geweigerd (niets geschreven)');
+  var imp = roep(IRIS, 'apiTalentImport'), na = ctx.lees('Talenten');
+  eis(imp.bestanden === 1 && imp.regels === 8 && imp.nieuw === 3 && imp.bijgewerkt === 0 && imp.ongewijzigd === 2 && imp.overgeslagen.geenNaam === 1 && imp.overgeslagen.geenContact === 1 && imp.overgeslagen.dubbelInBestand === 1 && imp.urenBestanden.join() === 'xps-diensten-v77.csv' && imp.fouten.length === 0 && imp.nietGelezen.length === 0 && imp.nietHerkendeFuncties.length === 1 && imp.sinds === '', 'apiTalentImport (talentteam): het accountbestand gelezen, de urenexport in de map overgeslagen onder urenBestanden, tellingen zoals de zuivere functie');
+  var pienR = na.filter(function (t) { return t.xpsId === 'X9101'; })[0];
+  eis(na.length === nVoor + 3 && pienR && pienR.status === 'actief' && pienR.bron === 'xps-bestand' && pienR.door === 'Iris Mulder' && ctx.lijstUit(pienR.functies).join() === 'onderwijsondersteuner,surveillant' && ctx.lees('Activiteiten').length === aVoor + 3 && ctx.lees('Activiteiten').filter(function (a) { return a.talentId === pienR.id && a.bron === 'xps'; }).length === 1, 'talentImport: drie profielen geschreven met een tijdlijnregel; door = wie importeerde');
+  eis(!!ctx.P.getProperty('LAATSTE_TALENTIMPORT'), 'na een geslaagde run schuift LAATSTE_TALENTIMPORT op');
+  var imp2 = roep(SOPHIE, 'apiTalentImport');
+  eis(imp2.bestanden === 0 && imp2.nieuw === 0 && imp2.urenBestanden.length === 0 && ctx.lees('Talenten').length === nVoor + 3 && !!imp2.sinds, 'tweede run (management mag ook): niets nieuws, hetzelfde bestand wordt niet opnieuw gelezen');
+  ctx.P.setProperty('LAATSTE_TALENTIMPORT', '');
+  var imp3 = roep(IRIS, 'apiTalentImport');
+  eis(imp3.bestanden === 1 && imp3.nieuw === 0 && imp3.bijgewerkt === 0 && imp3.ongewijzigd === 5 && ctx.lees('Talenten').length === nVoor + 3, 'hetzelfde bestand nog eens lezen is idempotent: alle vijf profielen ongewijzigd, niets dubbel');
+  // 5. een bestand zonder naamkolom naast een goed bestand: in fouten en LAATSTE_TALENTIMPORT schuift niet op; alleen zo'n bestand = de fout zelf
+  var slecht = map.createFile(ctx.Utilities.newBlob('Accountnummer;E-mail\nX1;a@b.example', 'text/csv', 'xps-zonder-naam.csv'));
+  ctx.P.setProperty('LAATSTE_TALENTIMPORT', '');
+  var deels = roep(IRIS, 'apiTalentImport');
+  eis(deels.bestanden === 1 && deels.fouten.length === 1 && deels.fouten[0].bestand === 'xps-zonder-naam.csv' && /geen naamkolom/.test(deels.fouten[0].melding) && !ctx.P.getProperty('LAATSTE_TALENTIMPORT'), 'een bestand zonder naamkolom staat in fouten; de rest wordt gelezen en LAATSTE_TALENTIMPORT schuift niet op');
+  acc.setTrashed(true); urenB.setTrashed(true);
+  eis(/^xps-zonder-naam\.csv: Dit bestand heeft geen naamkolom/.test(faalt(IRIS, 'apiTalentImport')), 'alleen zo\'n bestand in de map geeft de fout zelf');
+  slecht.setTrashed(true); ctx.P.setProperty('LAATSTE_TALENTIMPORT', '');
+  eis(roep(IRIS, 'apiTalentImport').bestanden === 0, 'een lege map: nul bestanden, geen fout');
+  // 6. kandidaten zonder talentId met hetzelfde e-mailadres krijgen het nieuwe profiel
+  ctx.schrijf('Kandidaten', { id: 'c77-koppel', vacatureId: 'v3', trajectId: 't4', naam: 'Kees Koppel', email: 'kees.koppel@mail.example', status: 'voorgesteld' });
+  var kk = map.createFile(ctx.Utilities.newBlob('Naam;E-mail\nKees Koppel;kees.koppel@mail.example', 'text/csv', 'xps-accounts-koppel.csv'));
+  ctx.P.setProperty('LAATSTE_TALENTIMPORT', '');  // de eigenschap heeft minuutprecisie: een bestand uit dezelfde minuut zou anders overgeslagen worden (zoals bij de uren)
+  roep(IRIS, 'apiTalentImport'); var kees = ctx.lees('Talenten').filter(function (t) { return t.email === 'kees.koppel@mail.example'; })[0];
+  eis(kees && ctx.vind('Kandidaten', 'c77-koppel').talentId === kees.id, 'een nieuw profiel koppelt kandidaatrijen met hetzelfde e-mailadres (koppelKandidaten)');
+  kk.setTrashed(true);
+} catch (e) { eis(false, 'v7.7 talentimport: onverwachte fout ' + e.message); } })();
+
+/* ---- v7.7: termijnen uit Exact — een factuur zonder termijn krijgt een termijn onder het ene lopende project van de school (vrij veld debiteurnummer of naam), met reden als dat niet kan ---- */
+(function () { try {
+  var dd = function (s) { return s.split('-').reverse().join('-'); }, vandaag = plusDagen(0), P = plusDagen(-1), T = ctx.perId(ctx.lees('Trajecten')), t3 = T.t3, t2 = T.t2, t9 = T.t9;
+  var inT3 = ctx.plusDagenVan(ctx.datumIn(t3.start), 10), inT2 = ctx.datumIn(t2.start) < plusDagen(-20) ? plusDagen(-20) : ctx.plusDagenVan(ctx.datumIn(t2.start), 1), inBeide = ctx.plusDagenVan(ctx.datumIn(t9.start), 3);
+  ctx.schrijf('Scholen', { id: 's3', velden: { debiteurnummer: '10003' } });  // v7.7: vrij veld op de school
+  var KOPF = 'Datum;Factuurnummer;Betreft;Debiteur;Debiteurnummer;Totaal;Open';
+  var r = function (dag, nr, betreft, deb, debnr, tot, open) { return [dd(dag), nr, betreft, deb, debnr, tot, open].join(';'); };
+  var csv = KOPF + '\n' + [r(inT2, '77700001', 'Huiswerkbegeleiding periode 1', 'Kompas College', '10002', '1234,00', '0,00'),   // één school, één lopend project (t2; t9 start later) → aangemaakt, betaald (Open 0)
+    r(inT3, '77700002', '', 'Scholengroep Duinrand B.V.', '10003', '500,00', '500,00'),                                        // school via het vrije veld debiteurnummer (de naam wijkt af); project t3 (periode) → aangemaakt, verzonden
+    r(inBeide, '77700003', 'Iets', 'Kompas College', '10002', '300,00', '300,00'),                                             // t2 en t9 lopen allebei → meer projecten
+    r(inT2, '77700004', 'Iets', 'Lyceum Valkenoord', '10006', '300,00', '300,00'),                                             // t5 en t10 (zonder datums, zelfde schooljaar) → meer projecten
+    r(inT2, '77700005', 'Iets', 'Waterpoort College', '10007', '300,00', '300,00'),                                            // geen project
+    r(inT2, '77700006', 'Iets', 'Onbekende School', '10099', '300,00', '300,00'),                                              // geen school
+    r(inT2, '77700007', 'Credit', 'Kompas College', '10002', '-50,00', '0,00')].join('\n');                                    // creditnota zonder origineel
+  var proef = roep(SOPHIE, 'apiExactImport', csv, { peildatum: P }), ae = function (c, n) { return c.alleenExact.filter(function (x) { return x.nummer === n; })[0]; };
+  eis(proef.aangemaakt.length === 0 && proef.alleenExact.length === 7 && ae(proef, '77700001').reden === '' && ae(proef, '77700001').school === 'Kompas College' && ae(proef, '77700001').project === 'Huiswerkbegeleiding' && ae(proef, '77700002').reden === '' && ae(proef, '77700002').school === 'Scholengroep Duinrand' && ae(proef, '77700002').project === 'Examentraining', 'controleren: de reden is altijd uitgerekend; een factuur met één school en één lopend project krijgt school en project (ook via het vrije veld debiteurnummer bij een afwijkende naam)');
+  eis(ae(proef, '77700003').reden === 'meer projecten' && ae(proef, '77700004').reden === 'meer projecten' && ae(proef, '77700005').reden === 'geen project' && ae(proef, '77700006').reden === 'geen school' && ae(proef, '77700007').reden === 'creditnota', 'controleren: meer projecten, geen project, geen school en creditnota als reden');
+  var nF = ctx.lees('Facturen').length;
+  var zonder = roep(SOPHIE, 'apiExactImport', csv, { peildatum: P, toepassen: true });
+  eis(zonder.aangemaakt.length === 0 && ctx.lees('Facturen').length === nF && zonder.alleenExact.length === 7, 'toepassen zonder aanmaken: alleen redenen, geen termijnen');
+  var alleen = roep(SOPHIE, 'apiExactImport', csv, { peildatum: P, aanmaken: true });
+  eis(alleen.aangemaakt.length === 0 && ctx.lees('Facturen').length === nF, 'aanmaken zonder toepassen doet niets (alleen samen met toepassen)');
+  eis(/management/i.test(faalt(IRIS, 'apiExactImport', csv, { peildatum: P, toepassen: true, aanmaken: true })) && ctx.lees('Facturen').length === nF, 'aanmaken: alleen management');
+  var toe = roep(SOPHIE, 'apiExactImport', csv, { peildatum: P, toepassen: true, aanmaken: true }), F = ctx.lees('Facturen'), f1 = F.filter(function (f) { return f.factuurnummer === '77700001'; })[0], f2 = F.filter(function (f) { return f.factuurnummer === '77700002'; })[0];
+  eis(toe.aangemaakt.length === 2 && toe.aangemaakt[0].nummer === '77700001' && toe.aangemaakt[0].school === 'Kompas College' && toe.aangemaakt[0].project === 'Huiswerkbegeleiding' && toe.aangemaakt[0].bedrag === 123400 && toe.aangemaakt[0].datum === inT2 && toe.alleenExact.length === 5 && !ae(toe, '77700001') && ae(toe, '77700003').reden === 'meer projecten', 'toepassen met aanmaken: twee termijnen aangemaakt (school, project, bedrag in centen, datum); de rest blijft onder Alleen in Exact met reden');
+  eis(f1 && f1.trajectId === 't2' && f1.omschrijving === 'Huiswerkbegeleiding periode 1' && Number(f1.bedrag) === 1234 && ctx.datumIn(f1.datum) === inT2 && ctx.datumIn(f1.verzonden) === inT2 && f1.status === 'betaald' && ctx.datumIn(f1.betaald) === P && /Exact-afstemming van /.test(f1.bijzonderheden) && f1.door === 'Sophie de Graaf' && !!f1.aangemaakt, 'de termijn: project t2, omschrijving uit Betreft, bedrag in euro\'s, datum en verzonden = factuurdatum, betaald op de peildatum (Open 0), bijzonderheden, door, aangemaakt');
+  eis(f2 && f2.trajectId === 't3' && f2.omschrijving === 'Factuur 77700002' && f2.status === 'verzonden' && !f2.betaald && Number(f2.bedrag) === 500, 'zonder Betreft heet de termijn "Factuur <nummer>"; Open = bedrag → verzonden, niet betaald');
+  eis(ctx.lees('Activiteiten').filter(function (a) { return a.trajectId === 't2' && a.bron === 'exact' && /77700001/.test(a.onderwerp); }).length === 1 && ctx.lees('Facturen').length === nF + 2, 'per project een tijdlijnregel met de aangemaakte nummers');
+  var nog = roep(SOPHIE, 'apiExactImport', csv, { peildatum: vandaag, toepassen: true, aanmaken: true });
+  eis(nog.aangemaakt.length === 0 && nog.gekoppeld === 2 && ctx.lees('Facturen').length === nF + 2 && ctx.lees('Facturen').filter(function (f) { return f.factuurnummer === '77700001'; }).length === 1, 'tweede run: de nummers staan nu op een termijn (gezien), niets dubbel');
+  // invarianten van Financiën blijven kloppen, ook met termijnen boven het contract (nog te factureren wordt dan negatief = meerwerk, met het bestaande signaal)
+  ctx.GEBRUIKER = null; ctx._LEES = {};
+  var D = ctx.financienData(), fout = [], t2F = ctx.financienProject(ctx.vind('Trajecten', 't2'), D.fac.t2, D.uren.t2 || [], 30);
+  ctx.lees('Trajecten').forEach(function (t) {
+    var Fp = ctx.financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], ctx.termijnDagenVan(t, D)), som = Fp.ongepland;
+    Object.keys(Fp.per.prognose).forEach(function (m) { som += Fp.per.prognose[m]; });
+    if (som !== Fp.contract || Fp.gefactureerd + Fp.nogTeFactureren !== Fp.contract || Fp.openstaand !== Fp.gefactureerd - Fp.ontvangen) fout.push(t.id);
+  });
+  eis(!fout.length && t2F.nogTeFactureren < 0 && t2F.signalen.some(function (s) { return /hoger dan het contract/.test(s); }), 'invarianten: som prognose = contract en gefactureerd + nog te factureren = contract blijven gelden; t2 zit boven zijn contract (nog te factureren negatief) met het signaal "hoger dan het contract"' + (fout.length ? ': ' + fout.join(', ') : ''));
+  ctx.verwijderRijen('Facturen', function (f) { return /^7770000/.test(String(f.factuurnummer)); }); ctx.schrijf('Scholen', { id: 's3', velden: '' });
+} catch (e) { eis(false, 'v7.7 termijnen uit Exact: onverwachte fout ' + e.message); } })();
 
 /* ---- bestaande schermen blijven werken ---- */
 ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });

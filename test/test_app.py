@@ -504,6 +504,10 @@ with sync_playwright() as p:
     inp.nth(0).fill('Scholen'); inp.nth(1).fill('contract'); inp.nth(2).fill('90'); inp.nth(3).fill('5'); page.screenshot(path=OUT + '/17b_beheer_mijlpalen.png', full_page=True); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Mijlpalen opgeslagen")')
     page.click('[data-beheer="tags"]'); page.wait_for_selector('#crmBeheer [data-hernoem]')
     page.click('[data-beheer="talentrun"]'); page.wait_for_selector('#toast.aan:has-text("Talentrun klaar")')  # v5.0
+    # v7.7: Talenten importeren uit XPS (management via de Beheer-kaart: de uitkomst in een venster)
+    page.click('[data-beheer="talentimport"]'); page.wait_for_selector('#venster.aan #talentImportKaart'); tekst = page.inner_text('#vensterInhoud')
+    assert '2 nieuw' in tekst and '1 aangevuld' in tekst and 'conciërge' in tekst and 'xps-diensten-week.csv' in tekst and 'IBAN' in tekst and 'twee keer in het bestand' in tekst, 'talentimport: tellingen, niet herkende functie, overgeslagen urenexport, genegeerde kolom en reden: ' + tekst[:300]
+    page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden')
     page.click('[data-beheer="doelen"]'); page.wait_for_selector('#venster.aan [data-doelbewerk]'); page.locator('[data-doelbewerk]').first.click(); page.wait_for_selector('#venster.aan #vf-doel'); page.fill('#vf-doel', '12'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan [data-doelbewerk]')
     page.select_option('#vf-eigenaar', 'team:talent'); page.select_option('#vf-metric', 'timeToFill'); page.fill('#vf-doel', '14'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan .rij:has-text("Team talent")')  # v4.2: teamdoel
     page.screenshot(path=OUT + '/18_doelen_beheer.png'); page.click('#venster [data-cf-annuleer]')
@@ -617,7 +621,12 @@ with sync_playwright() as p:
     page.set_input_files('#vf-exactbestand', {'name': 'exact.csv', 'mimeType': 'text/csv', 'buffer': b'Factuurnummer;Factuurdatum;Debiteur;Bedrag;Betaaldatum\nF2026-001;01-10-2026;Lyceum Demo;1.950,00;15-10-2026\n'})
     page.wait_for_selector('#venster [data-exactcontrole]:not([disabled])'); page.click('#venster [data-exactcontrole]'); page.wait_for_selector('#exactUit .kaart')
     assert 'gekoppeld' in page.inner_text('#exactUit') and 'F9999' in page.inner_text('#exactUit'), 'financien: uitkomst van de Exact-controle'
+    # v7.7: na Controleren staat per factuur zonder termijn wat er zou gebeuren; het vinkje "aanmaken" gaat mee met Toepassen en levert het blok Aangemaakt
+    uit = page.inner_text('#exactUit'); assert 'termijn mogelijk onder Lyceum Demo' in uit and 'geen school met deze debiteur' in uit and 'Aangemaakt onder een project' not in uit, 'exact: reden per factuur na controleren: ' + uit[:300]
+    assert not page.locator('#vf-exactaanmaken').is_disabled(), 'exact: het vinkje aanmaken is na controleren te kiezen'; page.check('#vf-exactaanmaken')
     page.click('#venster [data-exacttoepassen]'); page.wait_for_selector('#exactUit .kaart:has-text("1 bijgewerkt.")')  # de confirm wordt door de dialoog-handler hierboven geaccepteerd
+    uit = page.inner_text('#exactUit'); assert 'Aangemaakt onder een project' in uit and 'F9999' in uit and 'F9998' in uit and page.locator('#vf-exactaanmaken').is_disabled(), 'exact: na toepassen met aanmaken het blok Aangemaakt en F9998 met reden: ' + uit[:300]
+    assert [a for a in api_vanaf(0, 'apiExactImport') if a['args'][1].get('aanmaken')][-1]['args'][1]['toepassen'] is True, 'exact: aanmaken gaat alleen mee met toepassen'
     page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden'); page.wait_for_selector('table.fin [data-finopen]')
     page.click('[data-finkas="1"]'); page.wait_for_selector('[data-finkas="1"].aan')
     page.screenshot(path=OUT + '/29b_desk_financien.png')
@@ -707,6 +716,11 @@ with sync_playwright() as p:
     tl.click('[data-rasteropslaan]'); tl.wait_for_selector('#toast.aan:has-text("Beschikbaarheid opgeslagen")'); tl.wait_for_selector('[data-rcel="ma:0"].b1')
     tl.screenshot(path=OUT + '/47_talent_profiel.png')
     tl.click('[data-dtab="documenten"]'); tl.click('[data-talentdoc="nieuw"]'); tl.wait_for_selector('#venster.aan #vf-soort'); tl.fill('#vf-afgifte', '2026-09-01'); tl.check('#vf-gecontroleerd'); tl.click('#venster [data-cf-opslaan]'); tl.wait_for_selector('#dTab .rij:has-text("vog")'); tl.wait_for_selector('.cijfers .vog.groen')
+    # v7.7: het talentteam importeert de accountexport zelf: Instellingen → Talenten importeren uit XPS → de uitkomst inline (het venster ligt daar achter de overlay)
+    tl.click('#zbInstellingen'); tl.wait_for_selector('#statusInfo [data-beheer="talentimport"]'); assert tl.locator('#statusInfo [data-beheer="urenimport"]').count() == 1, 'talent: ook de urenimport in Instellingen'
+    tl.click('#statusInfo [data-beheer="talentimport"]'); tl.wait_for_selector('#xpsImportUit #talentImportKaart'); tekst = tl.inner_text('#xpsImportUit')
+    assert '2 nieuw' in tekst and '3 ongewijzigd' in tekst and 'conciërge' in tekst and tl.locator('#xpsImportUit [data-cf-annuleer]').count() == 0, 'talent: talentimport inline met de tellingen, zonder Sluiten-knop: ' + tekst[:200]
+    tl.click('#koppelSluit'); tl.wait_for_selector('#koppel.aan', state='hidden')
     tl.click('.zb-item[data-desk="bezetting"]'); tl.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]'); tl.click('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]')
     tl.wait_for_selector('#venster.aan .match-rij'); assert tl.locator('#venster .match-rij').count() >= 2 and tl.locator('#venster .match-rij:has-text("Eva de Wit") [data-mkies]').is_disabled(), 'matchlijst; de al voorgedragene is niet aan te vinken'
     tl.click('#venster .match-rij:has-text("Noor Bakker") [data-mtoggle]'); assert tl.locator('#venster .match-rij.open .m-uitleg .b-rij').count() == 7, 'uitleg per onderdeel van de score'

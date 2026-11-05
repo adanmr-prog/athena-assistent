@@ -373,6 +373,12 @@ def handle_talent(fn, args):
     if fn == 'apiTalentAnonimiseer':
         t = per_id(TALENTEN)[args[0]]; t.update({'voornaam': 'Verwijderd', 'achternaam': 'profiel', 'naam': 'Verwijderd profiel', 'email': '', 'telefoon': '', 'postcode': '', 'notitie': '', 'status': 'uitgeschreven'}); return talent_uit(t, False)
     if fn == 'apiTalentRunNu': return {'vog': 'niet vandaag (1 mei en 1 juni)', 'peiling': 0, 'slapend': 0, 'bewaartermijn': 0, 'geocoderen': 0, 'aanmeldingen': '0 nieuw, 0 bestaand, 0 mails'}
+    # v7.7: de vorm van talentImport in Code.gs (nieuw, aangevuld, ongewijzigd, overgeslagen per reden, niet herkende functies, overgeslagen urenexports, genegeerde kolommen); alleen wie het talentbestand beheert
+    if fn == 'apiTalentImport':
+        if ik()['rechten']['talenten']['wijzigen'] != 'alles': geen_toegang()
+        return {'bestanden': 1, 'regels': 8, 'nieuw': 2, 'bijgewerkt': 1, 'ongewijzigd': 3, 'overgeslagen': {'geenNaam': 1, 'geenContact': 0, 'dubbelInBestand': 1, 'uitgeschreven': 0},
+                'nietHerkendeFuncties': [{'functie': 'conciërge', 'aantal': 1}], 'genegeerdeKolommen': [{'kolom': 'IBAN', 'hint': 'persoonsgegevens die niet in Athena horen: nooit gelezen; laat deze kolom uit de export'}],
+                'urenBestanden': ['xps-diensten-week.csv'], 'nietGelezen': [], 'fouten': [], 'sinds': d(-14) + ' 09:10'}
     # v7.4: de vorm van urenImport in Code.gs (tellingen, overgeslagen per reden, onbekend en dubbel met aantal diensten, genegeerde kolommen, fouten per bestand)
     if fn == 'apiTalentUrenImport': return {'bestanden': 1, 'regels': 14, 'gelezen': 14, 'gekoppeld': 8, 'weekregels': 3, 'weken': 1, 'ongewijzigd': 0, 'kandidatenBijgewerkt': 0,
         'overgeslagen': {'status': 3, 'toekomst': 1, 'oud': 0, 'geenTalent': 1, 'dubbeleNaam': 1, 'geenUren': 0, 'geenDatum': 0},
@@ -901,7 +907,11 @@ def handle(fn, args):
                 'betaald': [{'nummer': 'F2026-001', 'waar': 'Lyceum Demo · termijn 1', 'datum': d(-2), 'bedrag': 195000, 'bron': 'betaaldatum'}],
                 'deelsBetaald': [{'nummer': 'F2026-002', 'waar': 'Lyceum Demo · termijn 2', 'bedrag': 108000, 'open': 50000}],
                 'creditnotas': [{'nummer': 'F2026-010', 'origineel': 'F2026-003', 'bedrag': -93600, 'datum': d(-1), 'waar': 'Lyceum Demo · termijn 3', 'inAthena': True}],
-                'meldingen': [], 'afwijkend': [], 'alleenAthena': [], 'alleenExact': [{'nummer': 'F9999', 'datum': d(-3), 'bedrag': 125000, 'creditnota': False}]}
+                'meldingen': [], 'afwijkend': [], 'alleenAthena': [],
+                # v7.7: de reden per factuur zonder termijn (altijd); met toepassen + aanmaken wordt F9999 een termijn onder t1 en blijft alleen F9998 over
+                'aangemaakt': [{'nummer': 'F9999', 'school': 'Lyceum Demo', 'project': 'Onderwijsondersteuning', 'bedrag': 125000, 'datum': d(-3)}] if o.get('toepassen') and o.get('aanmaken') else [],
+                'alleenExact': ([] if o.get('toepassen') and o.get('aanmaken') else [{'nummer': 'F9999', 'datum': d(-3), 'bedrag': 125000, 'creditnota': False, 'reden': '', 'school': 'Lyceum Demo', 'project': 'Onderwijsondersteuning'}]) +
+                    [{'nummer': 'F9998', 'datum': d(-4), 'bedrag': 30000, 'creditnota': False, 'reden': 'geen school'}]}
     return handle_crm(fn, args)
 
 # v6.2: met MOCK_CSP=1 gaat de Content-Security-Policy uit vercel.json mee met de app (zoals Vercel die stuurt), met de nep-Supabase

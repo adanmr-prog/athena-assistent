@@ -1388,7 +1388,7 @@
   // De time-out dekt het hele antwoord (ook het lezen van de body). Functies die Claude aanroepen, importeren of een bestand meesturen krijgen
   // meer tijd: Apps Script mag daar tot 6 minuten over doen en Vercel 300 s.
   var RUN_TIMEOUT_MS = 25000, RUN_TIMEOUT_LANG_MS = 120000;
-  var RUN_LANG = { apiBrein: 1, apiReviewNu: 1, apiMaakContent: 1, apiCapsuleMigratie: 1, apiTalentUrenImport: 1, apiExactImport: 1, apiTalentDocumentOpslaan: 1 };
+  var RUN_LANG = { apiBrein: 1, apiReviewNu: 1, apiMaakContent: 1, apiCapsuleMigratie: 1, apiTalentUrenImport: 1, apiTalentImport: 1, apiExactImport: 1, apiTalentDocumentOpslaan: 1 };  // v7.7: apiTalentImport
   function metTimeout(maak, ms) {
     var ac = (typeof AbortController === 'function') ? new AbortController() : null;
     var timer = ac ? setTimeout(function () { ac.abort(); }, ms) : null;
@@ -1430,7 +1430,7 @@
      maxMs en één ingekorte foutmelding zonder e-mailadressen. Nooit argumenten of gegevens. Verzenden (stil, nooit een toast, nooit een lus) zodra er
      iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
-  var APP_VERSIE = '7.6';  // v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
+  var APP_VERSIE = '7.7';  // v7.7: alle gegevens inladen; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
   var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
   function tijdNu() { return (window.performance && typeof performance.now === 'function') ? performance.now() : Date.now(); }
   function kortFout(s) { return String(s == null ? '' : s).replace(/[^\s@<>"'()]+@[^\s@<>"'()]+/g, '…').replace(/\s+/g, ' ').trim().slice(0, 120); }  // e-mailadressen eruit, hoogstens 120 tekens
@@ -3365,7 +3365,7 @@
     h += '<div class="kop">Activiteit ' + (R.eigenaar ? 'van ' + esc(R.eigenaar) : R.team === 'alle' ? 'van iedereen' : (kiezer ? 'van het team' : '')) + ' <small id="rapportActTelling"></small></div><div id="rapportActiviteit"><div class="spinner">Laden</div></div>';  // v3.3
     if (!beheer && rr.doelen) h += '<div class="kop">Team</div><div class="kaart"><div class="balk" style="margin-top:0"><button class="knop licht klein" data-beheer="doelen">Doelen van mijn team</button></div></div>';  // v4.0: teamlead
     if (beheer) h += '<div class="kop">Beheer</div><div class="kaart"><div class="balk" style="margin-top:0">' +
-      [['sync', 'Mail & agenda nu koppelen'], ['gebruikers', 'Gebruikers'], ['doelen', 'Doelen'], ['mijlpalen', 'Mijlpalen'], ['tracks', 'Tracks'], ['keuzelijsten', 'Keuzelijsten'], ['tags', 'Tags en velden'], ['talentrun', 'Talentrun nu'], ['urenimport', 'XPS-uren importeren'], ['inrichten', 'Oude gegevens overzetten'], ['capsule', 'Capsule-migratie']]
+      [['sync', 'Mail & agenda nu koppelen'], ['gebruikers', 'Gebruikers'], ['doelen', 'Doelen'], ['mijlpalen', 'Mijlpalen'], ['tracks', 'Tracks'], ['keuzelijsten', 'Keuzelijsten'], ['tags', 'Tags en velden'], ['talentrun', 'Talentrun nu'], ['urenimport', 'XPS-uren importeren'], ['talentimport', 'Talenten importeren uit XPS'], ['inrichten', 'Oude gegevens overzetten'], ['capsule', 'Capsule-migratie']]  // v7.7: talentimport
         .map(function (b) { return '<button class="knop licht klein" data-beheer="' + b[0] + '">' + b[1] + '</button>'; }).join('') +
       '</div><div class="balk">' + ['scholen', 'personen', 'kansen', 'activiteiten', 'taken', 'talenten', 'beoordelingen', 'talenturen'].map(function (t) { return '<button class="chip" data-export="' + t + '">CSV ' + t + '</button>'; }).join('') + '</div>' +  // v5.0: talenten, beoordelingen, talenturen
       '<div class="hint">Mails en afspraken met scholen worden elk uur automatisch aan de juiste school en persoon gekoppeld. Tot ieders eigen Gmail gekoppeld is, kunnen collega\'s mails doorsturen of bcc\'en naar het CRM-adres (label CRM).</div></div>' +
@@ -3977,7 +3977,10 @@
       else if (b === 'keuzelijsten') beheerKeuzelijsten();  // v3.7
       else if (b === 'tags') beheerTagsVelden();
       else if (b === 'talentrun') { x.disabled = true; run('apiTalentRunNu').then(function (r) { x.disabled = false; toast('Talentrun klaar: ' + Object.keys(r).map(function (k) { return k + ' ' + r[k]; }).join(', ')); }).catch(function () { x.disabled = false; }); }  // v5.0
-      else if (b === 'urenimport') { x.disabled = true; run('apiTalentUrenImport').then(function (r) { x.disabled = false; formActie = null; openVenster(urenImportHtml(r)); }).catch(function () { x.disabled = false; }); }  // v5.0; v7.4: de uitkomst in een venster (tellingen, overgeslagen per reden, onbekend, dubbel, genegeerde kolommen)
+      else if (b === 'urenimport' || b === 'talentimport') {  // v5.0; v7.4: de uitkomst in een venster (tellingen, overgeslagen per reden, onbekend, dubbel, genegeerde kolommen); v7.7: ook de talentimport, en in het statusscherm (#xpsImportUit) inline
+        var inStatus = x.closest('#statusInfo'), maakHtml = b === 'talentimport' ? talentImportHtml : urenImportHtml;
+        x.disabled = true; run(b === 'talentimport' ? 'apiTalentImport' : 'apiTalentUrenImport').then(function (r) { x.disabled = false; if (inStatus && el('xpsImportUit')) el('xpsImportUit').innerHTML = maakHtml(r, true); else { formActie = null; openVenster(maakHtml(r)); } }).catch(function () { x.disabled = false; });
+      }
       else if (b === 'inrichten') { if (window.confirm('Contactpersonen, eigenaren en notities uit de oude velden overzetten naar het CRM? Dit kan veilig vaker.')) run('apiCrmInrichten').then(function (r) { toast(r.personen + ' personen, ' + r.kansen + ' kansen en ' + r.notities + ' notities overgezet.'); crmVerouderd(); laadCrmBasis(); }); }
       else if (b === 'capsule') { if (window.confirm('Alle scholen, personen, kansen, projecten, taken en historie uit Capsule ophalen? Dit duurt een paar minuten; laat de app open.')) capsuleMigratie('mijlpalen', 1, {}); }
     }
@@ -4597,6 +4600,7 @@
       .catch(function () { if (!FIN.data) el('finInhoud').innerHTML = '<div class="leeg">Kon Financiën niet laden.</div>'; });
   }
   function finBedrag(c, nul) { c = Number(c) || 0; return c ? euro(c / 100) : (nul || ''); }
+  function finNogTe(c) { c = Number(c) || 0; return c < 0 ? '€ 0 (' + finBedrag(-c) + ' boven het contract)' : finBedrag(c, '€ 0'); }  // v7.7: de backend houdt contract − gefactureerd (invariant); onder nul is meerwerk
   function finSom(l) { return (l || []).reduce(function (a, b) { return a + (Number(b) || 0); }, 0); }
   function finMaandLabel(m) { var x = String(m).split('-'); return MAANDEN_KORT[Number(x[1]) - 1] + (x[1] === '01' || x[1] === '08' ? ' ’' + x[0].slice(2) : ''); }
   // Welke reeksen een regel toont: de prognose (factuurmoment of binnenkomst), gefactureerd, ontvangen; geleverd en "prognose toen" alleen als er iets in staat
@@ -4623,7 +4627,7 @@
     var ou = T.ouderdom || {};
     var h = '<div class="tegels">' + tegel(finBedrag(finSom(R[FIN.kas ? 'prognoseKas' : 'prognose']), '€ 0'), 'Prognose ' + F.schooljaar) + tegel(finBedrag(finSom(R.gefactureerd), '€ 0'), 'Gefactureerd ' + F.schooljaar) +
       tegel(finBedrag(finSom(R.ontvangen), '€ 0'), 'Ontvangen ' + F.schooljaar) + tegel(finBedrag(T.openstaand, '€ 0'), 'Openstaand nu', T.openstaand ? 'oranje' : '') + '</div>' +  // v7.1: vier tegels; de rest als rustige regel eronder
-      '<div class="fin-sub">Nog te factureren volgens contract <b>' + finBedrag(T.nogTeFactureren, '€ 0') + '</b> · gemiddelde betaaltijd <b>' + (T.gemBetaaltijd === null || T.gemBetaaltijd === undefined ? '—' : esc(T.gemBetaaltijd) + ' dagen') + '</b></div>';
+      '<div class="fin-sub">Nog te factureren volgens contract <b>' + finNogTe(T.nogTeFactureren) + '</b> · gemiddelde betaaltijd <b>' + (T.gemBetaaltijd === null || T.gemBetaaltijd === undefined ? '—' : esc(T.gemBetaaltijd) + ' dagen') + '</b></div>';
     if (T.openstaand) h += '<div class="chips fin-ouderdom"><span class="chip">0–30 dagen ' + finBedrag(ou['0-30'], '€ 0') + '</span><span class="chip">31–60 dagen ' + finBedrag(ou['31-60'], '€ 0') + '</span><span class="chip' + (ou['60+'] ? ' rood' : '') + '">ouder dan 60 dagen ' + finBedrag(ou['60+'], '€ 0') + '</span></div>';
     var hints = [];
     if (F.geschat) hints.push('Bij oudere termijnen ontbreekt de verzend- of betaaldatum; daar telt de termijndatum als schatting. Een Exact-afstemming of het bijwerken van de termijn maakt het exact.');
@@ -4634,7 +4638,7 @@
     var body = F.scholen.map(function (s) {
       var sleutel = s.schoolId || s.naam, open = !!FIN.open[sleutel];
       var naam = '<td class="fin-naam"><button class="fin-open" data-finopen="' + esc(sleutel) + '" aria-expanded="' + open + '">' + (open ? '▾' : '▸') + ' ' + esc(s.naam) + '</button><div class="r-meta">' + esc(s.projecten.length + (s.projecten.length === 1 ? ' project' : ' projecten')) +
-        (s.openstaand ? ' · open ' + finBedrag(s.openstaand) : '') + (s.nogTeFactureren ? ' · nog te factureren ' + finBedrag(s.nogTeFactureren) : '') + (s.gemBetaaltijd != null ? ' · betaalt in ' + esc(s.gemBetaaltijd) + ' d' : '') + '</div></td>';
+        (s.openstaand ? ' · open ' + finBedrag(s.openstaand) : '') + (s.nogTeFactureren > 0 ? ' · nog te factureren ' + finBedrag(s.nogTeFactureren) : s.nogTeFactureren < 0 ? ' · ' + finBedrag(-s.nogTeFactureren) + ' boven contract' : '') + (s.gemBetaaltijd != null ? ' · betaalt in ' + esc(s.gemBetaaltijd) + ' d' : '') + '</div></td>';  // v7.7: onder nul = meer gefactureerd dan het contract (meerwerk)
       var rij = finRijen(s.reeksen, F.maanden, nu, naam, 'school');
       if (open) rij += s.projecten.map(function (p) {
         var pk = '<td class="fin-naam fin-project">' + crmLink('project', p.id, p.traject) + '<div class="r-meta">' + esc([p.schooljaar, p.am ? 'AM ' + p.am : '', p.soortFacturatie, p.bron === 'termijnen' ? 'volgens termijnen' : p.bron === 'afspraak' ? 'volgens afspraak' : 'geen contractwaarde'].filter(Boolean).join(' · ')) +
@@ -4655,6 +4659,7 @@
       '<div class="veld breed"><label for="vf-exactbestand">Exportbestand (.csv)</label><input type="file" id="vf-exactbestand" accept=".csv,text/csv,text/plain"></div>' +
       '<div class="veld"><label for="vf-exactpeil">Peildatum van de export (optioneel)</label><input type="date" id="vf-exactpeil"></div>' +  // v7.4: de datum voor "betaald volgens openstaand bedrag"; leeg = vandaag
       '<div class="kop">Kolomnamen in de export</div><div class="hint">De facturatie-export (Datum, Factuurnummer, Totaal, Open) wordt vanzelf herkend. Een naam die je hier wijzigt, gaat voor.</div><div class="velden-2">' + veld('factuurnummer', 'Factuurnummer') + veld('datum', 'Factuurdatum') + veld('bedrag', 'Bedrag') + veld('betaald', 'Betaaldatum (optioneel)') + '</div>' +
+      '<div class="veld vinkje breed"><label><input type="checkbox" id="vf-exactaanmaken" disabled>Facturen zonder termijn aanmaken onder het passende project (alleen bij Toepassen)</label></div>' +  // v7.7: aanmaken gaat alleen samen met toepassen; Controleren laat per factuur zien wat er zou gebeuren
       '<div id="exactUit"></div><div class="balk"><button class="knop" data-exactcontrole="1" disabled>Controleren</button><button class="knop licht" data-exacttoepassen="1" disabled>Toepassen</button><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>');
   }
   function exactKolommenUitVenster() { var k = {}; document.querySelectorAll('#vensterInhoud [data-exactkol]').forEach(function (x) { if (x.value.trim() && x.value.trim() !== String(x.defaultValue || '').trim()) k[x.getAttribute('data-exactkol')] = x.value.trim(); }); return k; }  // v7.4: alleen wat de beheerder wijzigde gaat voor; de rest herkent de backend zelf
@@ -4670,25 +4675,34 @@
       lijst('Deels betaald', L('deelsBetaald'), function (x) { return esc(x.nummer + (x.waar ? ' · ' + x.waar : '')) + ' · ' + finBedrag(x.open, '€ 0') + ' open van ' + finBedrag(x.bedrag, '€ 0'); }) +
       lijst('Creditnota\'s', L('creditnotas'), function (x) { return esc(x.nummer + ' crediteert ' + x.origineel + (x.waar ? ' · ' + x.waar : '') + (x.inAthena ? ' · termijn gaat terug' : ' · origineel niet in Athena')) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
       lijst('Bedrag wijkt af', L('afwijkend'), function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · Athena ' + finBedrag(x.athena, '€ 0') + ', Exact ' + finBedrag(x.exact, '€ 0'); }) +
-      lijst('Alleen in Exact', L('alleenExact'), function (x) { return esc(x.nummer + ' · ' + kortDatum(x.datum) + (x.creditnota ? ' · creditnota zonder origineel' : '')) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
+      lijst('Aangemaakt onder een project', L('aangemaakt'), function (x) { return esc(x.nummer + ' · ' + kortDatum(x.datum) + ' · ' + (x.school || '') + ' · ' + (x.project || '')) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +  // v7.7
+      lijst('Alleen in Exact', L('alleenExact'), function (x) { return esc(x.nummer + ' · ' + kortDatum(x.datum) + (x.creditnota ? ' · creditnota zonder origineel' : '')) + ' · ' + finBedrag(x.bedrag, '€ 0') + exactRedenHtml(x); }) +
       lijst('Alleen in Athena (in dezelfde periode)', L('alleenAthena'), function (x) { return esc(x.nummer + ' · ' + x.waar) + ' · ' + finBedrag(x.bedrag, '€ 0'); }) +
       (!L('afwijkend').length && !L('alleenExact').length && !L('alleenAthena').length && !L('deelsBetaald').length && !L('creditnotas').length ? '<div class="hint">Geen verschillen.</div>' : '') + '</div>';
+  }
+  // v7.7: wat er met een factuur zonder termijn gebeurt: de reden waarom er geen termijn komt, of de school en het project waar hij onder zou komen
+  function exactRedenHtml(x) {
+    if (!('reden' in x)) return '';  // oudere backend
+    var R = { 'geen school': 'geen school met deze debiteur (zet het debiteurnummer in een vrij veld van de school)', 'meer scholen': 'meer scholen met deze debiteur', 'geen project': 'geen lopend project op de factuurdatum', 'meer projecten': 'meer lopende projecten op de factuurdatum', creditnota: 'creditnota: geen termijn', 'geen bedrag': 'geen bedrag', 'geen datum': 'geen factuurdatum' };
+    return x.reden ? ' · <span class="nee">' + esc(R[x.reden] || x.reden) + (x.school && x.reden !== 'geen school' ? ' (' + esc(x.school) + ')' : '') + '</span>' : ' · <span class="ok">termijn mogelijk onder ' + esc((x.school || '') + ' · ' + (x.project || '')) + '</span>';
   }
   function exactDraai(toepassen, knop) {
     if (!FIN.exactTekst) { toast('Kies eerst het exportbestand.'); return; }
     if (toepassen && !window.confirm('De termijnen bijwerken met de datums en statussen uit Exact?')) return;
     knop.disabled = true;
-    var peil = el('vf-exactpeil'), opties = { kolommen: exactKolommenUitVenster(), toepassen: toepassen };
+    var peil = el('vf-exactpeil'), aanm = el('vf-exactaanmaken'), opties = { kolommen: exactKolommenUitVenster(), toepassen: toepassen };
     if (peil && peil.value) opties.peildatum = peil.value;  // v7.4
+    if (toepassen && aanm && aanm.checked) opties.aanmaken = true;  // v7.7
     run('apiExactImport', FIN.exactTekst, opties).then(function (u) {
       if (!el('exactUit')) return;
       el('exactUit').innerHTML = exactUitHtml(u); knop.disabled = false;
       var t = el('vensterInhoud').querySelector('[data-exacttoepassen]'); if (t) t.disabled = toepassen;
-      if (toepassen) { toast(u.bijgewerkt.length + ' termijnen bijgewerkt uit Exact.'); FIN.data = null; FACT.data = null; laadFinancien(); }
+      var a = el('vf-exactaanmaken'); if (a) a.disabled = toepassen;  // v7.7: na controleren te kiezen, na toepassen niet meer
+      if (toepassen) { toast(u.bijgewerkt.length + ' termijnen bijgewerkt uit Exact' + (u.aangemaakt && u.aangemaakt.length ? ', ' + u.aangemaakt.length + ' aangemaakt' : '') + '.'); FIN.data = null; FACT.data = null; laadFinancien(); }
     }).catch(function () { knop.disabled = false; });
   }
   // v7.4: de uitkomst van "XPS-uren importeren": wat gelezen en gekoppeld is, wat is overgeslagen en waarom, wie onbekend of dubbel is en welke kolommen genegeerd zijn
-  function urenImportHtml(r) {
+  function urenImportHtml(r, inline) {  // v7.7: inline (statusscherm) zonder Sluiten-knop
     r = r || {};
     var n = function (x) { return Number(x) || 0; }, L = function (k) { return r[k] instanceof Array ? r[k] : []; }, O = r.overgeslagen && typeof r.overgeslagen === 'object' && !(r.overgeslagen instanceof Array) ? r.overgeslagen : {};
     var rij = function (t) { return '<div class="rij"><div class="r-body"><div class="r-meta">' + t + '</div></div></div>'; };
@@ -4707,7 +4721,29 @@
       blok('Naam hoort bij meer talenten', L('dubbel'), function (o) { return esc(o.naam) + ' · ' + esc(n(o.diensten)) + (n(o.diensten) === 1 ? ' dienst' : ' diensten') + ' · ' + esc(n(o.talenten)) + ' talenten'; }, r.dubbelAantal) +
       '<div class="hint">Vul bij het talent het XPS-accountnummer of het e-mailadres in; op naam koppelt Athena alleen als de naam bij precies één talent hoort.</div>';
     if (L('genegeerdeKolommen').length) h += '<div class="kop">Genegeerde kolommen</div>' + L('genegeerdeKolommen').map(function (g) { return rij(esc(g.kolom) + (g.hint ? ': ' + esc(g.hint) : '')); }).join('');
-    return h + '<div class="balk"><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>';
+    return h + (inline ? '' : '<div class="balk"><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>');
+  }
+  // v7.7: de uitkomst van "Talenten importeren uit XPS" (accountexport in de map XPS-export): nieuw, aangevuld en ongewijzigd, overgeslagen met reden,
+  // niet herkende functies (met de hint ze in de keuzelijst op te nemen), overgeslagen urenexports en genegeerde kolommen. Alles door esc().
+  function talentImportHtml(r, inline) {
+    r = r || {};
+    var n = function (x) { return Number(x) || 0; }, L = function (k) { return r[k] instanceof Array ? r[k] : []; }, O = r.overgeslagen && typeof r.overgeslagen === 'object' && !(r.overgeslagen instanceof Array) ? r.overgeslagen : {};
+    var rij = function (t) { return '<div class="rij"><div class="r-body"><div class="r-meta">' + t + '</div></div></div>'; };
+    var REDEN = [['geenNaam', 'geen naam'], ['geenContact', 'geen accountnummer, e-mail of telefoon'], ['dubbelInBestand', 'twee keer in het bestand (de laatste regel telt)'], ['uitgeschreven', 'uitgeschreven talent (niet overschreven)']];
+    var over = REDEN.filter(function (x) { return n(O[x[0]]); }), somOver = over.reduce(function (t, x) { return t + n(O[x[0]]); }, 0), b = n(r.bestanden);
+    var h = '<div class="kop" style="margin-top:14px">Talenten ingelezen uit XPS</div>';
+    if (!b && !L('fouten').length && !L('nietGelezen').length) h += '<div class="hint">Geen nieuwe accountexport in de map XPS-export' + (r.sinds ? ' sinds ' + esc(r.sinds) : '') + '.</div>';
+    h += '<div class="kaart" id="talentImportKaart"><div><b>' + esc(b) + '</b> ' + (b === 1 ? 'bestand' : 'bestanden') + ', <b>' + esc(n(r.regels)) + '</b> regels gelezen.</div>' +
+      '<div><b>' + esc(n(r.nieuw)) + '</b> nieuw, <b>' + esc(n(r.bijgewerkt)) + '</b> aangevuld, <b>' + esc(n(r.ongewijzigd)) + '</b> ongewijzigd.</div>' +
+      '<div class="hint">Een bestaand profiel wordt alleen aangevuld (lege velden); status, beschikbaarheid, notitie en tags blijven van het talentteam. Een nieuw profiel krijgt bron xps-bestand en grondslag overeenkomst.</div></div>';
+    if (L('fouten').length || L('nietGelezen').length) h += '<div class="kop">Niet ingelezen</div>' + L('fouten').map(function (f) { return rij('<b>' + esc(f.bestand) + '</b>: ' + esc(f.melding)); }).join('') + L('nietGelezen').map(function (f) { return rij(esc(f) + ': dit bestand kon niet worden gelezen (csv, Google Sheet of Excel met de Drive API).'); }).join('');
+    if (over.length) h += '<div class="kop">Overgeslagen (' + esc(somOver) + ')</div>' + over.map(function (x) { return rij(esc(x[1]) + ': <b>' + esc(n(O[x[0]])) + '</b>'); }).join('');
+    if (L('nietHerkendeFuncties').length) h += '<div class="kop">Niet herkende functies</div>' + L('nietHerkendeFuncties').map(function (f) { return rij(esc(f.functie) + ' · ' + esc(n(f.aantal)) + (n(f.aantal) === 1 ? ' keer' : ' keer')); }).join('') +
+      '<div class="hint">Deze functies zijn niet gezet. Neem ze op in Keuzelijsten → talentFuncties (of pas de export aan) en importeer opnieuw; bestaande profielen zonder functies worden dan aangevuld.</div>';
+    if (L('urenBestanden').length) h += '<div class="kop">Urenexports overgeslagen</div>' + L('urenBestanden').map(function (f) { return rij(esc(f) + ': dit is een urenexport (datum, week of uren); die leest "XPS-uren importeren".'); }).join('');
+    if (L('genegeerdeKolommen').length) h += '<div class="kop">Genegeerde kolommen</div>' + L('genegeerdeKolommen').map(function (g) { return rij(esc(g.kolom) + (g.hint ? ': ' + esc(g.hint) : '')); }).join('');
+    h += '<div class="hint">Afwijkende kolomnamen in de export zet je in de instelling xpsKolommen (Beheer → Keuzelijsten), bijvoorbeeld {"telefoon": ["mobiel nr"]}.</div>';
+    return h + (inline ? '' : '<div class="balk"><button class="knop licht" data-cf-annuleer="1">Sluiten</button></div>');
   }
   function termijnVenster(tid, fid) {
     var K = keuzesApp(), f = fid && fid !== 'nieuw' ? factuurLokaal(fid) : null, w = f ? kopie(f) : { status: (K.factuurStatussen || ['nog te doen'])[0] };
@@ -5694,6 +5730,7 @@
         ('herinneringen' in st ? rij('Herinnering bij taak met tijd', (st.herinneringTrigger === false ? nee + ' — draai setup() voor de trigger · ' : '') + '<button class="knop klein' + (st.herinneringen ? '' : ' licht') + '" data-herinneringen="' + (st.herinneringen ? '0' : '1') + '">' + (st.herinneringen ? 'Aan' : 'Uit') + '</button>' + (st.email ? ' · naar ' + esc(st.email) : ' · <span class="nee">geen e-mailadres</span>')) : '') +
         // v5.0: talentnetwerk (dagelijkse run en de weekexport uit XPS)
         ('talentTrigger' in st ? rij('Talentnetwerk (dagelijks 06:30)', st.talentTrigger ? ja : nee + ' — draai setup() voor de trigger') + rij('XPS-uren (maandag)', st.urenTrigger ? ja + (st.laatsteUrenImport ? ' · laatst ' + esc(st.laatsteUrenImport) : ' · nog niet geïmporteerd') + (st.xpsExportMap ? '' : ' · <span class="nee">map XPS-export nog niet gemaakt</span>') : nee) : '');
+      if (recht('talenten', 'wijzigen') === 'alles') s.innerHTML += '<div class="k-rij"><span>XPS-exports in de map XPS-export</span><span><button class="knop klein licht" data-beheer="urenimport">XPS-uren importeren</button> <button class="knop klein licht" data-beheer="talentimport">Talenten importeren uit XPS</button></span></div><div id="xpsImportUit"></div>';  // v7.7: het talentteam importeert zelf (het venster ligt hier achter de overlay, dus de uitkomst komt inline)
       if (magApp('metingen')) { s.innerHTML += metingenBlokHtml(); laadMetingen(); }  // v7.6: alleen management (RECHTEN.metingen)
     }).catch(function () { s.innerHTML = '<div class="leeg">Geen verbinding met de backend.</div>'; });
   }

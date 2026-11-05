@@ -1,5 +1,5 @@
 /* Athena Assistent — service worker: HTML cache-first met verversen op de achtergrond (v7.6, stale-while-revalidate), statische shell cache-first, API altijd via netwerk */
-var CACHE = 'athena-assistent-v7.6';  // bump bij elke release (zie /release)
+var CACHE = 'athena-assistent-v7.7';  // bump bij elke release (zie /release)
 // v7.3 (iOS-review R2): de app luistert op controllerchange en toont dan de vaste balk #updateBalk (Herladen / Later); deze worker neemt met
 // skipWaiting + clients.claim meteen over en herlaadt nooit zelf, zodat een open venster of composer niet verloren gaat.
 // v7.6: './index.html' staat niet meer apart in SHELL: dat was hetzelfde bestand (609 kB) twee keer downloaden bij elke installatie; install zet de
