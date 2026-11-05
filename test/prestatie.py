@@ -9,7 +9,8 @@
 # CPU-rem (alleen de ketens). Koud = verse browsercontext (geen cache, geen service worker); warm = dezelfde context na de installatie van de
 # service worker, herladen.
 # Deel 2 — render op praktijkschaal in de demo (?demo=1&schaal=groot&kaal=1&rol=sophie, dezelfde server), telefoon 4x CPU: tik tot getekend per
-# scherm (gevuld plus twee frames) tegen een regressiegrens van ongeveer anderhalf keer de nulmeting van v7.6.
+# scherm (gevuld plus twee frames) tegen een regressiegrens van ongeveer twee keer de nulmeting van v7.6 (CPU-gebonden met 4x rem: de spreiding op een
+# gedeelde machine is tot ±40 %, en storing van buiten telt alleen op).
 # Vijf runs per maat: de mediaan moet binnen het budget blijven; p95 (= max bij vijf) staat erbij. Verschillen onder 10 % zijn ruis; de machine
 # (nproc, loadavg) staat in de uitvoer, want andere processen vertragen vooral de CPU-gebonden maten (deel 2).
 # De ms-budgetten krijgen --marge (standaard 10 %) als meetruis van de gedeelde machine: pas daarboven is het een regressie.
@@ -32,8 +33,8 @@ DIEPTE_UITZ = {'Rapporten': 2}  # apiTeamRapport → apiActiviteiten gebruikt de
 RENDER_BUDGET = [  # (naam, klik-selector, voorwaarde dat het scherm gevuld is, budget ms) — telefoon, demo groot, sophie
     ('Relaties lijst', 'nav button[data-view="relaties"]', '#crmInhoud .rij[data-crm-open^="school:"]', 300),
     ('Taken', '#crmTabs [data-crmtab="taken"]', '#crmInhoud .rij .vink, #crmInhoud .leeg', 325),
-    ('Projecten per AM', 'nav button[data-view="trajecten"]', '#trajectLijst .p-groep .p-rij, #trajectLijst .p-groep h3, #trajectLijst .leeg', 350),
-    ('Bezetting per vacature', '[data-pweergave="bezetting"]', '#trajectLijst .vac-grid .vac-kaart, #trajectLijst .leeg', 425),
+    ('Projecten per AM', 'nav button[data-view="trajecten"]', '#trajectLijst .p-groep .p-rij, #trajectLijst .p-groep h3, #trajectLijst .leeg', 450),
+    ('Bezetting per vacature', '[data-pweergave="bezetting"]', '#trajectLijst .vac-grid .vac-kaart, #trajectLijst .leeg', 500),
     ('Financiën', '[data-naarfinancien]', '#finInhoud table.fin tbody, #finInhoud .leeg', 1050),
 ]
 STAPPEN_TELEFOON = [('Relaties', 'nav button[data-view="relaties"]'), ('Taken', '#crmTabs [data-crmtab="taken"]'), ('Rapporten', '#crmTabs [data-crmtab="rapport"]'),
