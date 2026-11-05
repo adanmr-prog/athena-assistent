@@ -2915,9 +2915,21 @@
     if (CRM.detail) { CRM.detail = null; el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block'; }
     if (!CRM.basis) { var bewaard = uitBewaard('aa_cache_crm'); if (bewaard && bewaard.scholen && bewaard.ik) { CRM.basis = bewaard; zetRechten(); } }  // v3.2: meteen de vorige lijst tonen
     renderCrm();
-    laadCrmBasis().then(function () { CRM.pipeline = null; CRM.taken = null; CRM.rapport = null; renderCrm(); })
+    // v7.6: de lijst van de open tab (taken, pipeline, rapport) ververst tegelijk met apiCrm in plaats van erná. Tot v7.5 wiste de then-tak
+    // CRM.taken/pipeline/rapport en tekende opnieuw: elke tab kostte zo twee rondreizen achter elkaar en haalde apiTaken of apiTeamRapport twee keer op
+    // (gemeten in de waterval). Scholen en personen komen uit apiCrm zelf en tekenen opnieuw zodra die binnen is.
+    verversTab();
+    laadCrmBasis().then(function () { if (CRM.tab === 'scholen' || CRM.tab === 'personen') renderCrm(); })
       .catch(function () { if (!CRM.basis) el('crmInhoud').innerHTML = '<div class="leeg">Kon de relaties niet laden — controleer de koppeling (tandwiel rechtsboven).</div>'; });
   }
+  // v7.6: een tab die al getekend staat ververst stil (de vorige lijst blijft staan tot de verse er is); zonder gegevens heeft renderCrm al laadTab gestart
+  function verversTab() {
+    if (!CRM.basis) return;
+    if (CRM.tab === 'pipeline') { if (CRM.pipeline) stilTab('apiPipeline', 'pipeline', renderPipeline); }
+    else if (CRM.tab === 'taken') { if (CRM.taken) stilTab('apiTaken', 'taken', renderTaken); }
+    else if (CRM.tab === 'rapport') { if (CRM.rapport) laadRapport(); }
+  }
+  function stilTab(fn, tab, render) { run(fn).then(function (r) { CRM[tab] = r; if (CRM.tab === tab) render(); }).catch(function () {}); }
   function renderCrm() {
     if (CRM.tab === 'pipeline' && !magApp('pipeline')) CRM.tab = 'scholen';  // v4.0
     el('crmTabs').innerHTML = CRM_TABS.filter(function (t) { return t[0] !== 'pipeline' || magApp('pipeline'); }).map(function (t) { return '<button class="chip' + (CRM.tab === t[0] ? ' aan' : '') + '" data-crmtab="' + t[0] + '">' + t[1] + '</button>'; }).join('');
@@ -5558,7 +5570,11 @@
     if (naam === 'brein') laadBrein();
     if (naam === 'review') laadReview();
     if (naam === 'huisstijl') laadHuisstijl();
-    if (naam === 'trajecten') { S.bVast = false; S.bScroll = null; laadTrajecten(); }  // v7.5: opnieuw openen sorteert Bezetting → Per project opnieuw (Terug van een project zet S.bVast en S.bScroll daarna zelf)
+    if (naam === 'trajecten') {
+      S.bVast = false; S.bScroll = null;  // v7.5: opnieuw openen sorteert Bezetting → Per project opnieuw (Terug van een project zet S.bVast en S.bScroll daarna zelf)
+      if (S.pWeergave === 'bezetting' && !S.bezettingLaden) laadBezetting();  // v7.6: het bord vertrekt tegelijk met apiTrajecten (was: pas in de then-tak erna, twee rondreizen achter elkaar) en is bij elk bezoek vers
+      laadTrajecten();
+    }
     if (naam === 'relaties') laadRelaties();  // v2.0
     if (naam === 'facturatie') laadFacturatie();  // v3.8
     if (naam === 'financien') laadFinancien();  // v6.5
