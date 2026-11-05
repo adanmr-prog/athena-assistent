@@ -1329,6 +1329,7 @@
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
     if (o.error || !o.access_token) { toast('Inloggen mislukt: ' + (o.error_description || o.error || 'geen token')); return false; }
     zetOpslag('aa_token', o.access_token); zetOpslag('aa_refresh', o.refresh_token || '');
+    wisCaches();  // v7.6 (iOS-review R2): een nieuwe login op dit toestel begint zonder de schermen van de vorige
     zetOpslag('aa_token_tot', String(o.expires_at ? Number(o.expires_at) * 1000 : Date.now() + (Number(o.expires_in) || 3600) * 1000));
     if (leesOpslag('aa_token') !== o.access_token) { toast('Opslag niet beschikbaar (privémodus?) — de app kan je login niet bewaren.'); return false; }  // v6.1: anders een stille inloglus
     return true;
@@ -1350,6 +1351,7 @@
   }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && SERVER && leesOpslag('aa_token')) tokenVers(); });  // v6.1: na het hervatten het token alvast verversen, vóór het eerste verzoek
   function wisToken() { ['aa_token', 'aa_refresh', 'aa_token_tot'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} }); }
+  function wisCaches() { ['aa_cache_home', 'aa_cache_vandaag', 'aa_cache_crm'].forEach(function (k) { zetOpslag(k, ''); }); }  // v7.6 (iOS-review R2): de bewaarde schermen van de vorige gebruiker (Vandaag bevat mail en agenda) nooit aan de volgende login tonen
   function uitloggen() {
     var t = leesOpslag('aa_token');
     if (SERVER && t) { try { fetch(SERVER.supabaseUrl + '/auth/v1/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t, apikey: SERVER.anonKey } }).catch(function () {}); } catch (e) {} }
@@ -1399,15 +1401,15 @@
     opties = opties || {};
     var ms = RUN_LANG.hasOwnProperty(fn) ? RUN_TIMEOUT_LANG_MS : RUN_TIMEOUT_MS, t0 = tijdNu();  // v7.2; v7.6: t0 voor de meting
     var verzoek = DEMO ? laadDemo().then(function (D) { return D.run(fn, args); })  // v4.3
-      : SERVER ? tokenVers().then(function (t) { return metTimeout(function (signal) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }), signal: signal }).then(leesAntwoord); }, ms); })  // v6.0: eigen server, sessietoken in plaats van koppelcode
-      : metTimeout(function (signal) { return fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }), signal: signal }).then(leesAntwoord); }, ms);   // geen headers: geen CORS-preflight op Apps Script
+      : SERVER ? tokenVers().then(function (t) { return metTimeout(function (signal) { return fetch('api', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, token: t }), signal: signal, keepalive: !!opties.stil }).then(leesAntwoord); }, ms); })  // v6.0: eigen server, sessietoken in plaats van koppelcode
+      : metTimeout(function (signal) { return fetch(apiUrl() + '?app=1', { method: 'POST', body: JSON.stringify({ fn: fn, args: args, secret: secret() }), signal: signal, keepalive: !!opties.stil }).then(leesAntwoord); }, ms);   // geen headers: geen CORS-preflight op Apps Script
     return verzoek
       .then(function (d) {
         if (d && d.ok) { meet(fn, t0, true, '', opties); return d.result; }
         if (d && d.fout === 'secret' && !opties.stil) {  // v7.6: een stille aanroep laat de koppeling met rust
           if (DEMO) toast('Deze demorol kan niet meer inloggen. Kies Opnieuw in de demobalk.');  // v4.3: de demo raakt de echte koppelcode nooit aan
-          else if (SERVER) { wisToken(); checkKoppeling(); toast('Je sessie is verlopen of je staat niet in Gebruikers — log opnieuw in.'); }  // v6.0
-          else { try { localStorage.removeItem('aa_secret'); } catch (e) {} checkKoppeling(); toast('Koppelcode klopt niet — koppel opnieuw.'); }
+          else if (SERVER) { wisToken(); wisCaches(); checkKoppeling(); toast('Je sessie is verlopen of je staat niet in Gebruikers — log opnieuw in.'); }  // v6.0; v7.6: ook de bewaarde schermen weg
+          else { try { localStorage.removeItem('aa_secret'); } catch (e) {} wisCaches(); checkKoppeling(); toast('Koppelcode klopt niet — koppel opnieuw.'); }  // v7.6: ook de bewaarde schermen weg
         }
         if (d && d.fout === 'secret') throw new Error('secret');
         throw new Error((d && d.fout) || 'serverfout');
@@ -1438,13 +1440,20 @@
     if (err && err.name === 'TypeError') return navigator.onLine === false ? 'offline' : 'netwerk';
     return kortFout((err && err.message) || 'onbekend') || 'onbekend';
   }
-  function metingenLees() { try { var l = JSON.parse(leesOpslag('aa_metingen') || '[]'); return l instanceof Array ? l : []; } catch (e) { return []; } }
+  // v7.6 (iOS-review R4): de ruwe metingen staan in het geheugen (METING.lijst) en gaan buiten de then van de aanroeper om naar de opslag (setTimeout 0),
+  // zodat run() er geen JSON-werk bij krijgt op het kritieke pad; bij de start wordt de lijst één keer uit aa_metingen gelezen.
+  function metingenLees() {
+    if (!METING.lijst) { try { var l = JSON.parse(leesOpslag('aa_metingen') || '[]'); METING.lijst = l instanceof Array ? l : []; } catch (e) { METING.lijst = []; } }
+    return METING.lijst;
+  }
+  function metingenSchrijf() { METING.schrijfTimer = null; try { zetOpslag('aa_metingen', JSON.stringify(METING.lijst || [])); } catch (e) {} }
+  function metingenZet(l) { METING.lijst = l; metingenSchrijf(); }
   function metingVast(m) {
     if (PORTAAL) return;
     try {
       var l = metingenLees(); m.dag = ymd(new Date()); l.push(m);
-      if (l.length > METING.max) l = l.slice(l.length - METING.max);
-      zetOpslag('aa_metingen', JSON.stringify(l));
+      if (l.length > METING.max) l.splice(0, l.length - METING.max);
+      if (!METING.schrijfTimer) METING.schrijfTimer = setTimeout(metingenSchrijf, 0);
     } catch (e) {}
   }
   function meet(fn, t0, ok, fout, opties) {
@@ -1471,12 +1480,13 @@
   function metingenVerzend() {
     if (PORTAAL || METING.bezig || !ingelogd()) return;
     if (METING.poging && Date.now() - METING.poging < METING.wachtNaFout) return;  // na een mislukte verzending even wachten (geen lus)
+    if (SERVER && (Number(leesOpslag('aa_token_tot')) || 0) - Date.now() < 60 * 1000) return;  // v7.6 (iOS-review R1): geen tokenvernieuwing vanuit een verzending bij het wegzwaaien (raakt het antwoord zoek, dan is het refresh-token verbruikt)
     var l = metingenLees(); if (!metingenTijd(l)) return;
     var grens = ymd(new Date(Date.now() - 30 * METING.dag24)), n = l.length, bundel = metingenBundel(l.filter(function (m) { return m && typeof m.fn === 'string' && m.dag >= grens; }));  // de backend weigert dagen ouder dan 30 dagen
-    if (!bundel.length) { zetOpslag('aa_metingen', '[]'); return; }
+    if (!bundel.length) { metingenZet([]); return; }
     METING.bezig = true; METING.poging = Date.now();
     runKern('apiMetingenOpslaan', [bundel], { stil: true }).then(function () {
-      zetOpslag('aa_metingen', JSON.stringify(metingenLees().slice(n)));  // alleen wat verzonden is wissen; wat er intussen bij kwam blijft staan
+      metingenZet(metingenLees().slice(n));  // alleen wat verzonden is wissen; wat er intussen bij kwam blijft staan
       zetOpslag('aa_metingen_verzonden', String(Date.now())); METING.poging = 0;
     }).then(function () { METING.bezig = false; }, function () { METING.bezig = false; });  // bij een fout blijft alles staan (de buffer is begrensd)
   }
@@ -5758,7 +5768,14 @@
     navigator.serviceWorker.register('sw.js').catch(function () {});
     var toonUpdateBalk = function () { var u = el('updateBalk'); if (u && versieNieuw) u.hidden = false; };
     if (hadController) navigator.serviceWorker.addEventListener('controllerchange', function () { versieNieuw = true; toonUpdateBalk(); });
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') toonUpdateBalk(); });
+    var swCheckOp = 0;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible') return;
+      toonUpdateBalk();
+      // v7.6 (iOS-review R3): een pagina die dagen leeft (desktop-tab, iOS hervat uit het geheugen) krijgt anders geen sw.js-check, en met cache-eerst
+      // hangt de balk "Nieuwe versie" daaraan; hoogstens één keer per tien minuten (een GET van 5 kB, 304 met ETag)
+      if (Date.now() - swCheckOp > 10 * 60 * 1000) { swCheckOp = Date.now(); try { navigator.serviceWorker.getRegistration().then(function (r) { if (r) return r.update(); }).catch(function () {}); } catch (e) {} }
+    });
     document.addEventListener('click', function (ev) {
       var k = ev.target.closest('[data-update]'); if (!k) return;
       if (k.getAttribute('data-update') === 'herladen') { location.reload(); return; }

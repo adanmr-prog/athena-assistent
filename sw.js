@@ -8,7 +8,9 @@ var SHELL = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png',
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {
-    return c.addAll(SHELL).then(function () { return c.match('./'); }).then(function (r) { return r ? c.put('./index.html', r.clone()) : null; });  // v7.6: één download, twee sleutels
+    // v7.6 (iOS-review B1): './' altijd vers van het netwerk: GitHub Pages stuurt max-age=600, dus via de HTTP-cache kon een nieuwe worker vlak na een
+    // release de oude index.html in zijn cache zetten en bleef die na Herladen staan. Eén download, twee sleutels.
+    return c.addAll([new Request('./', { cache: 'no-cache' })].concat(SHELL.slice(1))).then(function () { return c.match('./'); }).then(function (r) { return r ? c.put('./index.html', r) : null; });
   }).then(function () { return self.skipWaiting(); }));
 });
 
@@ -26,7 +28,7 @@ function isHtml(req, url) {
 // v4.3: HTML één keer per pad bewaren, niet per query (?demo=1&rol=…); opzoeken zonder query
 function htmlSleutel(req) { var u = new URL(req.url); return u.origin + u.pathname; }
 function uitCache(req) {
-  return caches.match(req, { ignoreSearch: true }).then(function (hit) { return hit || caches.match('./index.html'); });
+  return caches.match(req, { ignoreSearch: true, cacheName: CACHE }).then(function (hit) { return hit || caches.match('./index.html', { cacheName: CACHE }); });  // v7.6 (iOS-review O2): alleen de eigen cache
 }
 
 // Een response die via een redirect binnenkwam mag niet aan een navigatie worden geserveerd (Safari en Chrome weigeren die)
@@ -41,15 +43,17 @@ function zonderRedirect(resp) {
 // server). Nu komt de gecachte shell meteen; het netwerk ververst de cache voor de volgende keer. Een nieuwe release bumpt CACHE in dit bestand,
 // waarna install de nieuwe shell ophaalt en de app via controllerchange de balk #updateBalk toont (v7.3) — de gebruiker kiest zelf Herladen.
 function cacheEerst(e) {
-  var req = e.request, sleutel = htmlSleutel(req);
+  var req = e.request, sleutel = htmlSleutel(req), kopie = null;
   var vanNet = fetch(req.url, { cache: 'no-cache' }).then(function (resp) {
     if (!(resp && resp.ok)) return resp;  // serverfout: niet in de cache zetten
-    return zonderRedirect(resp).then(function (schoon) {
-      var kopie = schoon.clone();
-      return caches.open(CACHE).then(function (c) { return c.put(sleutel, kopie); }).then(function () { return schoon; }, function () { return schoon; });
-    });
+    return zonderRedirect(resp).then(function (schoon) { kopie = schoon.clone(); return schoon; });
   });
-  e.waitUntil(vanNet.then(null, function () {}));  // de verversing loopt door na het antwoord; iOS mag de worker anders stoppen vóór de put klaar is
+  // De verversing loopt buiten het antwoord om (de pagina wacht er niet op; iOS mag de worker anders stoppen vóór de put klaar is) en alleen als deze
+  // cache nog bestaat: een nieuwere worker heeft hem anders net verwijderd en caches.open zou een achtergebleven cache maken (iOS-review O2).
+  e.waitUntil(vanNet.then(function (resp) {
+    if (!(resp && resp.ok) || !kopie) return;
+    return caches.has(CACHE).then(function (ja) { if (ja) return caches.open(CACHE).then(function (c) { return c.put(sleutel, kopie); }); });
+  }).then(null, function () {}));
   return uitCache(req).then(function (hit) {
     if (hit) return hit;  // warme start: meteen de shell uit de cache
     return vanNet.then(function (resp) { return resp && resp.ok ? resp : uitCache(req).then(function (h2) { return h2 || resp; }); });  // eerste bezoek: netwerk

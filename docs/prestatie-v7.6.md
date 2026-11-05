@@ -55,7 +55,7 @@ Het koude budget van 2 s is met het 600 ms-model haalbaar maar krap (3 % marge);
 
 De app meet nu elke backend-aanroep (api-naam, duur, ok of een korte foutcode) en elke onafgevangen JS-fout (`window.onerror`, `unhandledrejection`), bundelt per dag en api in zes duur-emmers (≤ 250, 500, 1 000, 2 000, 5 000 ms, daarboven) en stuurt dat stil met `apiMetingenOpslaan` naar het tabblad `Metingen`: na de eerste geslaagde schermlading en als de app uit beeld gaat, hoogstens een paar keer per dag (> 24 uur sinds de vorige keer of ≥ 50 ruwe metingen; tien minuten wachten na een fout; ringbuffer `aa_metingen` van 400). Beheer (management, recht `metingen`) toont per api aantal, p50, p95 (schatting uit de emmers) en fout%, de tien traagste bovenaan, plus het aantal JS-fouten met de laatste melding; `apiMetingen(dagen)`. Opruimen na 90 dagen rijdt mee op `archiveer()`. Privacy: alleen api-naam, dag, gebruikers-id, tellingen en één ingekorte foutmelding zonder e-mailadressen; nooit argumenten of gegevens. Ook in de demo, de mock, de server (schema `metingen`), de rooktest (blok "v7.6: metingen"), `rechten_test`, `fuzz`, `vergelijk`, README en skill.
 
-Kosten: één `localStorage`-schrijfactie per aanroep (≤ 400 ruwe metingen, ±25 kB) en één extra stille aanroep per dag per gebruiker. ⚠️ Eigenaar Claude (v7.7): als de telemetrie zelf in de metingen als kostenpost opduikt (JSON per aanroep op een trage telefoon), de buffer in het geheugen houden en alleen bij `visibilitychange` wegschrijven.
+Kosten: de ruwe metingen staan in het geheugen (`METING.lijst`) en gaan buiten de then van de aanroeper om naar `aa_metingen` (setTimeout 0; iOS-review R4), plus één extra stille aanroep per dag per gebruiker. Het verzenden bij `visibilitychange` gaat met `keepalive` (iOS-review R1) en op de eigen server niet als het token binnen een minuut verloopt (geen tokenvernieuwing vanuit het wegzwaaien).
 
 ## 4. De drie posten: voor en na
 
@@ -75,7 +75,7 @@ Wijziging. `sw.js`: HTML stale-while-revalidate in plaats van network-first met 
 | Koud: gevuld | 1356 (1303–1398) | 1341 (1308–1442) | ruis (geen cache bij een eerste bezoek) |
 | HTML-bytes per koude start (pagina + installatie) | 495 kB (3× 165) | 330 kB (2× 165) | −33 % |
 
-Gedrag bij een release: de gebruiker krijgt na de volgende sw.js-update (CACHE-bump) de balk "Nieuwe versie beschikbaar" (v7.3) en kiest zelf Herladen; precies het geval waarvoor die balk bestaat. Tot v7.5 kreeg een navigatie vlak na een deploy de nieuwe HTML soms al zonder die balk; nu altijd via de balk. CACHE-bump per release blijft verplicht (hook `check-index.sh`).
+Gedrag bij een release: de gebruiker krijgt na de volgende sw.js-update (CACHE-bump) de balk "Nieuwe versie beschikbaar" (v7.3) en kiest zelf Herladen; precies het geval waarvoor die balk bestaat. Tot v7.5 kreeg een navigatie vlak na een deploy de nieuwe HTML soms al zonder die balk; nu altijd via de balk. CACHE-bump per release blijft verplicht (hook `check-index.sh`). Uit de iOS-review (§7): install haalt `./` met `cache: 'no-cache'` (GitHub Pages stuurt `max-age=600`, anders kon een nieuwe worker vlak na een release de oude index.html in zijn cache zetten), `uitCache` kijkt alleen in de eigen cache (`cacheName`), de achtergrondput loopt buiten het antwoord om en alleen als de cache nog bestaat, en een pagina die weer in beeld komt vraagt hoogstens eens per tien minuten een sw.js-check aan.
 
 Teruggedraaid binnen deze post: de registratie van de service worker uitstellen tot na `load` + 1 s (de installatie deelt op 4G de lijn met de eerste api-aanroep). A/B/A-meting van de koude start, zie §4.4.
 
@@ -136,7 +136,16 @@ Uitkomst op de werkkopie van v7.6 (5 runs, load 0,3–1,9): koud 1 933 ms, warm 
 
 ## 7. Verificatie
 
-[suites en iOS-review volgen hieronder]
+**iOS-review** (subagent `ios-pwa-reviewer`, twee rondes). Ronde 1: één blokkerende bevinding en vier risico's, alle verwerkt:
+- B1 (blokkerend): `c.addAll(SHELL)` haalde `./` via de HTTP-cache; GitHub Pages stuurt `cache-control: max-age=600` (geverifieerd met `curl -I` op de productie-url: ETag, gzip, 167 kB), dus een nieuwe worker kon binnen tien minuten na een release de oude index.html onder de nieuwe CACHE zetten en na Herladen stond die er nog, zonder balk. Fix: `new Request('./', { cache: 'no-cache' })` in install.
+- R1: verzenden bij `visibilitychange` zonder `keepalive` wordt op iOS vaak afgebroken; dan blijft de buffer staan en telt de bundel de volgende keer dubbel (aantallen, niet p50/p95). Fix: `keepalive` op stille aanroepen; op de eigen server geen verzending als het token binnen een minuut verloopt (geen refresh-token-rotatie vanuit het wegzwaaien).
+- R2: `aa_cache_vandaag` bevat mail en agenda en bleef staan bij een nieuwe login op hetzelfde toestel (verlopen sessie, Google-login); `aa_cache_home`/`aa_cache_crm` hadden dit al. Fix: `wisCaches()` in beide 'secret'-paden en in `tokenUitHash`.
+- R3: een pagina die dagen leeft kreeg geen sw.js-check, en met cache-eerst hangt de update-balk daaraan. Fix: `registration.update()` als de app weer in beeld komt, hoogstens eens per tien minuten.
+- R4: telemetrie op het kritieke pad van elke `run()` (JSON van de hele buffer per aanroep, 1–3 ms op een oudere iPhone). Fix: buffer in het geheugen, wegschrijven met setTimeout 0.
+- O2: de oude worker kon na een release met `caches.open` een achtergebleven cache maken. Fix: `caches.has(CACHE)` vóór de put en `cacheName` in `uitCache`.
+Ronde 2 (op de fixes): [uitkomst volgt].
+
+**Suites** op de laatste commit: [lijst volgt].
 
 ## 8. Open punten (elk met eigenaar en vraag)
 
@@ -145,8 +154,8 @@ Uitkomst op de werkkopie van v7.6 (5 runs, load 0,3–1,9): koud 1 933 ms, warm 
 3. ⚠️ **iPhone over 4G** — Menno: Web Inspector-trace plus HAR van een koude start van Home, Relaties, een schooldetail en Bezetting; toetst de 4G-nabootsing (CDP en server-pacing) en de V8-aannames (WebKit cachet anders).
 4. ⚠️ **Rijtellingen van de echte Sheet** — Menno: per tabblad; toetst of het groot-profiel (9 941 rijen, Activiteiten 3 277, Talenten 770) de praktijk dekt.
 5. ⚠️ **Gebruikersmeting** — Menno: twintig minuten meekijken bij twee gebruikers plus klachten; daarna de negen kerntaken van `test/ux_taken.py` bij drie gebruikers voor en na. Niet uitgevoerd in v7.6.
-6. ⚠️ **Headers van GitHub Pages en Vercel** (gzip of brotli, ETag, 304) — uit geheugen, niet online geverifieerd; Menno: `curl -I` op de productie-url bevestigt het in één keer.
-7. ⚠️ **Telemetrie op iOS bij het wegzwaaien** — fetch zonder keepalive bij `visibilitychange`; de metingen blijven staan en gaan bij de volgende start mee. Claude: na twee weken aan de aantallen zien of iOS-gebruikers aanleveren.
+6. **Headers van GitHub Pages** — geverifieerd op 5 november 2026 met `curl -I` op de productie-url: `cache-control: max-age=600`, ETag, gzip (167 180 bytes voor index.html); dit is precies waarom install `./` nu met `cache: 'no-cache'` ophaalt. ⚠️ Vercel (eigen domein, nog niet in gebruik) — Menno: zodra die live is dezelfde `curl -I` (de reviewer zag `no-cache` op /index.html en `must-revalidate` op /).
+7. ⚠️ **Telemetrie op iOS bij het wegzwaaien** — de verzending gaat nu met `keepalive`; raakt het antwoord toch zoek, dan gaat dezelfde bundel de volgende keer opnieuw mee en telt `apiMetingenOpslaan` hem op (aantallen te hoog, p50/p95 niet). Claude: na twee weken aan `aantal` per gebruiker zien of dat voorkomt; dan een bundel-id in de rij.
 8. ⚠️ **Bezetting → Alle vacatures** op praktijkschaal (§6) — Claude v7.7, vraag aan Menno over het gebruik.
 
 ## 9. Herhalen
