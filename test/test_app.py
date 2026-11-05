@@ -625,7 +625,10 @@ with sync_playwright() as p:
     assert 'gekoppeld' in page.inner_text('#exactUit') and 'F9999' in page.inner_text('#exactUit'), 'financien: uitkomst van de Exact-controle'
     # v7.7: na Controleren staat per factuur zonder termijn wat er zou gebeuren; het vinkje "aanmaken" gaat mee met Toepassen en levert het blok Aangemaakt
     uit = page.inner_text('#exactUit'); assert 'termijn mogelijk onder Lyceum Demo' in uit and 'geen school met deze debiteur' in uit and 'Aangemaakt onder een project' not in uit, 'exact: reden per factuur na controleren: ' + uit[:300]
-    assert not page.locator('#vf-exactaanmaken').is_disabled(), 'exact: het vinkje aanmaken is na controleren te kiezen'; page.check('#vf-exactaanmaken')
+    assert not page.locator('#vf-exactaanmaken').is_disabled(), 'exact: het vinkje aanmaken is na controleren te kiezen'
+    vk = page.evaluate("(function () { var i = document.getElementById('vf-exactaanmaken'), r = i.getBoundingClientRect(), l = i.closest('label').getBoundingClientRect(); return [r.width, r.height, l.height]; })()")
+    assert vk[0] >= 22 and vk[1] >= 22 and vk[2] >= 44, 'exact: het vinkje is 22 px en het label 44 px hoog (iOS-review v7.7): %s' % vk  # v7.7 (iOS-review)
+    page.check('#vf-exactaanmaken')
     page.click('#venster [data-exacttoepassen]'); page.wait_for_selector('#exactUit .kaart:has-text("1 bijgewerkt.")')  # de confirm wordt door de dialoog-handler hierboven geaccepteerd
     uit = page.inner_text('#exactUit'); assert 'Aangemaakt onder een project' in uit and 'F9999' in uit and 'F9998' in uit and page.locator('#vf-exactaanmaken').is_disabled(), 'exact: na toepassen met aanmaken het blok Aangemaakt en F9998 met reden: ' + uit[:300]
     assert [a for a in api_vanaf(0, 'apiExactImport') if a['args'][1].get('aanmaken')][-1]['args'][1]['toepassen'] is True, 'exact: aanmaken gaat alleen mee met toepassen'
@@ -722,7 +725,11 @@ with sync_playwright() as p:
     tl.click('#zbInstellingen'); tl.wait_for_selector('#statusInfo [data-beheer="talentimport"]'); assert tl.locator('#statusInfo [data-beheer="urenimport"]').count() == 1, 'talent: ook de urenimport in Instellingen'
     tl.click('#statusInfo [data-beheer="talentimport"]'); tl.wait_for_selector('#xpsImportUit #talentImportKaart'); tekst = tl.inner_text('#xpsImportUit')
     assert '2 nieuw' in tekst and '3 ongewijzigd' in tekst and 'conciërge' in tekst and tl.locator('#xpsImportUit [data-cf-annuleer]').count() == 0, 'talent: talentimport inline met de tellingen, zonder Sluiten-knop: ' + tekst[:200]
+    kn = tl.evaluate("(function () { var a = document.querySelector('#statusInfo [data-beheer=\"urenimport\"]').getBoundingClientRect(), b = document.querySelector('#statusInfo [data-beheer=\"talentimport\"]').getBoundingClientRect(); return [Math.abs(a.top - b.top) < 2 ? b.left - a.right : b.top - a.bottom, a.height, b.height]; })()")
+    assert kn[0] >= 8 and kn[1] >= 24 and kn[2] >= 24, 'talent: de twee importknoppen staan met minstens 8 px tussenruimte en zijn op desktop minstens 24 px hoog (iOS-review v7.7; op de telefoon 40 px via .knop.klein): %s' % kn  # v7.7 (iOS-review)
     tl.click('#statusInfo [data-beheer="urenimport"]'); tl.wait_for_function("() => /XPS-uren ingelezen/.test((document.querySelector('#xpsImportUit') || {}).innerText || '')"); assert 'Accountexports overgeslagen' in tl.inner_text('#xpsImportUit'), 'talent: de urenimport meldt een overgeslagen accountexport (R4)'  # v7.7
+    sh = tl.evaluate("Array.from(document.querySelectorAll('#xpsImportUit summary')).map(function (s) { return s.getBoundingClientRect().height; })")
+    assert sh and all(h >= 32 for h in sh), 'talent: de uitklapregels van de urenimport hebben hun padding (zonder ±20 px, met ±36 px op desktop en 44 px op de telefoon; iOS-review v7.7): %s' % sh  # v7.7 (iOS-review)
     tl.click('#koppelSluit'); tl.wait_for_selector('#koppel.aan', state='hidden'); assert tl.locator('#statusInfo [data-beheer]').count() == 0, 'talent: na Sluiten is #statusInfo leeg (R11)'  # v7.7
     tl.click('.zb-item[data-desk="bezetting"]'); tl.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]'); tl.click('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]')
     tl.wait_for_selector('#venster.aan .match-rij'); assert tl.locator('#venster .match-rij').count() >= 2 and tl.locator('#venster .match-rij:has-text("Eva de Wit") [data-mkies]').is_disabled(), 'matchlijst; de al voorgedragene is niet aan te vinken'
