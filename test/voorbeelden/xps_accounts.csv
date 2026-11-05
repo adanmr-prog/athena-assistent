@@ -1,0 +1,9 @@
+Accountnummer;Naam;E-mail;Telefoon;Postcode;Woonplaats;Functie;Status;In dienst sinds;Geboortedatum;IBAN;Salaris (uur)
+X5001;Eva de Wit;eva.de.wit@mail.example;06-31000000;3511 AB;Utrecht;Onderwijsondersteuner;Actief;01-09-2024;01-01-2000;NL00BANK0000000001;17,50
+X5004;Tim Verhoeven;;06-31023757;3811 GH;Amersfoort;Huiswerkbegeleider;Actief;15-10-2024;02-02-2001;NL00BANK0000000002;15,25
+X9101;Pien van der Berg;pien.vd.berg@mail.example;06-19000001;1234 AB;Voorbeeldstad;Onderwijsondersteuner, Surveillant;Actief;01-09-2026;03-03-2002;NL00BANK0000000003;16,00
+X9102;Joris Blauw;joris.blauw@mail.example;0619000002;1235 CD;Voorbeelddorp;Examentrainer;Uit dienst;01-02-2025;04-04-1999;NL00BANK0000000004;18,00
+X9103;Noor Groen;noor.groen@mail.example;06-19000003;1236 EF;Voorbeeldstad;Huiswerkbegeleider;Actief;01-10-2026;05-05-2003;NL00BANK0000000005;14,50
+X9103;Noor Groen;noor.groen@mail.example;06-19000003;1236 EF;Voorbeeldstad;Conciërge;Actief;01-10-2026;05-05-2003;NL00BANK0000000005;14,50
+;Zonder Contact;;;;Voorbeeldstad;Surveillant;Actief;;;;
+X9105;;iemand@mail.example;06-19000005;1237 GH;Voorbeeldstad;Surveillant;Actief;;;;

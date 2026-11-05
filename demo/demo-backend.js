@@ -86,8 +86,33 @@ var Utilities = {
   getUuid: function () { var s = ''; for (var i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16); return s.slice(0, 8) + '-' + s.slice(8, 12) + '-' + s.slice(12, 16) + '-' + s.slice(16, 20) + '-' + s.slice(20); },
   formatDate: function (d, tz, f) { return String(f).replace('yyyy', d.getFullYear()).replace('MM', _p2(d.getMonth() + 1)).replace('dd', _p2(d.getDate())).replace('HH', _p2(d.getHours())).replace('mm', _p2(d.getMinutes())); },
   sleep: function () {},
-  newBlob: _demoBlob, base64Decode: _demoB64Decode, base64Encode: _demoB64Encode, parseCsv: _demoParseCsv  // v5.0
+  newBlob: _demoBlob, base64Decode: _demoB64Decode, base64Encode: _demoB64Encode, parseCsv: _demoParseCsv,  // v5.0
+  computeDigest: function (alg, s) { return _demoSha256(String(s)); }, DigestAlgorithm: { SHA_256: 'sha256', MD5: 'md5' }, Charset: { UTF_8: 'utf8' }  // v7.7: sha-256 voor de onderdrukkingslijst (B2); alleen SHA_256
 };
+// v7.7: sha-256 in zuiver ES5 (synchroon, zoals Utilities.computeDigest; crypto.subtle is asynchroon): bytes als getekende getallen (-128..127), net als Apps Script
+var _demoShaK = [];
+function _demoSha256(tekst) {
+  if (!_demoShaK.length) { for (var p = 2, n = 0; n < 64; p++) { var pr = true; for (var d = 2; d * d <= p; d++) if (p % d === 0) { pr = false; break; } if (pr) { _demoShaK[n++] = (Math.pow(p, 1 / 3) % 1) * 4294967296 | 0; } } }
+  var b = [], i, j; tekst = unescape(encodeURIComponent(tekst));
+  for (i = 0; i < tekst.length; i++) b.push(tekst.charCodeAt(i) & 255);
+  var bitLen = b.length * 8; b.push(128); while (b.length % 64 !== 56) b.push(0);
+  for (i = 7; i >= 0; i--) b.push(i >= 4 ? 0 : (bitLen / Math.pow(2, i * 8)) & 255);
+  var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19], W = [], K = _demoShaK;
+  var rotr = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+  for (i = 0; i < b.length; i += 64) {
+    for (j = 0; j < 16; j++) W[j] = (b[i + j * 4] << 24) | (b[i + j * 4 + 1] << 16) | (b[i + j * 4 + 2] << 8) | b[i + j * 4 + 3];
+    for (j = 16; j < 64; j++) { var s0 = rotr(W[j - 15], 7) ^ rotr(W[j - 15], 18) ^ (W[j - 15] >>> 3), s1 = rotr(W[j - 2], 17) ^ rotr(W[j - 2], 19) ^ (W[j - 2] >>> 10); W[j] = (W[j - 16] + s0 + W[j - 7] + s1) | 0; }
+    var a = H[0], bb = H[1], c = H[2], dd = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for (j = 0; j < 64; j++) {
+      var S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25), ch = (e & f) ^ (~e & g), t1 = (h + S1 + ch + K[j] + W[j]) | 0, S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22), maj = (a & bb) ^ (a & c) ^ (bb & c), t2 = (S0 + maj) | 0;
+      h = g; g = f; f = e; e = (dd + t1) | 0; dd = c; c = bb; bb = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + bb) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + dd) | 0; H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  var uit = [];
+  for (i = 0; i < 8; i++) for (j = 3; j >= 0; j--) { var byte = (H[i] >>> (j * 8)) & 255; uit.push(byte > 127 ? byte - 256 : byte); }
+  return uit;
+}
 var Session = { getScriptTimeZone: function () { return 'Europe/Amsterdam'; },
   getEffectiveUser: function () { var m = DEMO_MENSEN.filter(function (x) { return x.code === DEMO_HUIDIG; })[0] || DEMO_MENSEN[0]; return { getEmail: function () { return m.email; } }; },
   getActiveUser: function () { return Session.getEffectiveUser(); } };
@@ -124,7 +149,7 @@ function _demoMap(id, naam) {
 _demoMap('demo-talent', 'Talent'); _demoMap('demo-xps', 'XPS-export');
 var DriveApp = { getFolderById: function (id) { var m = _demoDrive.mappen[id]; if (!m) _demoNiet(); return m; }, getFileById: function (id) { var f = _demoDrive.bestanden[id]; if (!f) _demoNiet(); return f; }, createFolder: _demoNiet };
 var DocumentApp = { openById: _demoNiet, create: _demoNiet, ParagraphHeading: {} };
-var Drive = { Files: { list: _demoNiet, get: _demoNiet, insert: _demoNiet, create: _demoNiet, export: _demoNiet, copy: _demoNiet } };
+var Drive = { Files: { list: _demoNiet, get: _demoNiet, insert: _demoNiet, create: _demoNiet, export: _demoNiet, copy: _demoNiet, remove: _demoNiet, 'delete': _demoNiet } };  // v7.7: remove/delete (verwijderDriveBestand, R13); de Excel-weg loopt in de demo niet
 
 /* ----- Gmail en Agenda met verzonnen berichten en afspraken ----- */
 function _demoDag(n, uur, min) { var d = new Date(); d.setDate(d.getDate() + n); d.setHours(uur || 9, min || 0, 0, 0); return d; }

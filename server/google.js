@@ -201,7 +201,9 @@ function maak(h) {
     copy: function (resource, id, params) { var qs = Object.keys(params || {}).map(function (k) { return k + '=' + q(params[k]); }).join('&'); return api('POST', DRIVE + 'files/' + q(id) + '/copy?fields=' + VELDEN + '&supportsAllDrives=true' + (qs ? '&' + qs : ''), resource); },
     create: function (resource) { return api('POST', DRIVE + 'files?fields=' + VELDEN, resource); },
     get: function (id) { return meta(id); },
-    list: function (params) { return { files: lijst((params && params.q) || "trashed = false") }; }
+    list: function (params) { return { files: lijst((params && params.q) || "trashed = false") }; },
+    remove: function (id) { api('DELETE', DRIVE + 'files/' + q(id) + '?supportsAllDrives=true'); },  // v7.7 (R13): de tijdelijke Sheet-kopie van een Excel definitief weg
+    'delete': function (id) { Drive.Files.remove(id); }
   } };
 
   /* ----- Docs: lezen (tekst) en de offerte (nieuw document of sjabloon met {{velden}}) ----- */

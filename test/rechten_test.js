@@ -252,6 +252,9 @@ MENSEN.filter(function (m) { return m.team !== 'management'; }).forEach(function
   aanval(m.kort + ' bevriest de prognose (apiFinancienBevriezen)', m.code, 'apiFinancienBevriezen', [], false, MGMT);
   aanval(m.kort + ' importeert Exact (apiExactImport)', m.code, 'apiExactImport', ['Factuurnummer;Datum\n1;2026-01-01'], false, MGMT);
 });
+// v7.7: de talentimport uit de XPS-accountexport (apiTalentImport) en de urenimport: niveau talenten wijzigen = alles (talentteam en management); de map bevat in de seed alleen een urenexport
+MENSEN.filter(function (m) { return m.team !== 'management' && m.team !== 'talent'; }).forEach(function (m) { aanval(m.kort + ' importeert talenten uit XPS (apiTalentImport)', m.code, 'apiTalentImport', [], false, TOEGANG); aanval(m.kort + ' importeert XPS-uren (apiTalentUrenImport)', m.code, 'apiTalentUrenImport', [], false, TOEGANG); });
+[['talent (Sem)', SEM], ['talent-teamlead (Iris)', IRIS], ['management (Sophie)', SOPHIE]].forEach(function (x) { aanval(x[0] + ' importeert wel talenten uit XPS (apiTalentImport)', x[1], 'apiTalentImport', [], true, null, function (r) { return r && typeof r.bestanden === 'number' && r.urenBestanden instanceof Array && r.nieuw === 0; }); });
 // v7.6: metingen — het overzicht is management; aanleveren mag iedereen, maar alleen onder de eigen gebruikers-id
 var METING_RIJ = { dag: vandaag(), fn: 'apiHome', aantal: 3, fouten: 1, b250: 2, b500: 1, b1000: 0, b2000: 0, b5000: 0, bMeer: 0, somMs: 600, maxMs: 400, laatsteFout: 'netwerk', appVersie: '7.6', gebruiker: 'beheer' };
 MENSEN.filter(function (m) { return m.team !== 'management'; }).forEach(function (m) { aanval(m.kort + ' leest het metingenoverzicht (apiMetingen)', m.code, 'apiMetingen', [14], false, TOEGANG); });

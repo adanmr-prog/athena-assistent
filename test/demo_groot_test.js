@@ -163,7 +163,10 @@ if (dienstBestand) {
   eis(!fout.length, 'invariant per project (' + G.lees('Trajecten').length + '): som prognose = contract, gefactureerd + nog te factureren = contract' + (fout.length ? ': ' + fout.slice(0, 4).join('; ') : ''));
   var Fi = JSON.parse(G.demoRun('apiFinancien', '[]', 'demo-sophie')).result;
   var somS = Fi.scholen.reduce(function (a, s) { return a + s.contract; }, 0);
-  eis(Fi.scholen.length >= 40 && somS === Fi.totalen.contract && Fi.totalen.gefactureerd + Fi.totalen.nogTeFactureren === Fi.totalen.contract, 'apiFinancien: ' + Fi.scholen.length + ' scholen, totalen sluiten');
+  // v7.7 (R10): per project geldt gefactureerd + nog te factureren = contract; in de school- en totaalsom telt 'nog te factureren' per project op 0 geklemd
+  // (meerwerk boven het contract verrekent niet met een ander project), dus op totaalniveau is de som ≥ het contract en gelijk aan de som van de scholen
+  var somN = Fi.scholen.reduce(function (a, s) { return a + s.nogTeFactureren; }, 0);
+  eis(Fi.scholen.length >= 40 && somS === Fi.totalen.contract && somN === Fi.totalen.nogTeFactureren && Fi.totalen.gefactureerd + Fi.totalen.nogTeFactureren >= Fi.totalen.contract, 'apiFinancien: ' + Fi.scholen.length + ' scholen, totalen sluiten');
   eis(Fi.totalen.ontvangen > 0 && Fi.totalen.openstaand > 0 && Fi.totalen.ouderdom['0-30'] > 0, 'ontvangen, openstaand en ouderdom gevuld');
   var geleverd = Fi.reeksen.geleverd.reduce(function (a, b) { return a + b; }, 0);
   if (!geleverd) { var Fv = JSON.parse(G.demoRun('apiFinancien', JSON.stringify([(Number(sj.slice(0, 4)) - 1) + '-' + sj.slice(0, 4)]), 'demo-sophie')).result; geleverd = Fv.reeksen.geleverd.reduce(function (a, b) { return a + b; }, 0); }
