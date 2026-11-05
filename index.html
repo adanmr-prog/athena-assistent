@@ -1972,7 +1972,7 @@
   function laadBezetting() {  // v7.5 (iOS-review r3, D): S.bezettingLaden telt de lopende aanroepen, zoals S.trajectenLaden
     S.bezettingLaden = (S.bezettingLaden || 0) + 1;
     var klaar = function () { S.bezettingLaden = Math.max(0, S.bezettingLaden - 1); };
-    run('apiBezetting').then(function (B) { klaar(); S.bezetting = B; if (S.pWeergave === 'bezetting' && el('view-trajecten').classList.contains('actief')) renderTrajecten(); })
+    run('apiBezetting').then(function (B) { klaar(); S.bezetting = B; if (S.pWeergave === 'bezetting' && el('view-trajecten').classList.contains('actief') && !S.trajectenLaden) renderTrajecten(); })  // v7.6: loopt apiTrajecten nog, dan tekent die then-tak straks alles in één keer (geen dubbele render)
       .catch(function () { klaar(); S.bVast = false; bezettingScrollWis(); S.bFocus = null; if (S.pWeergave === 'bezetting') el('trajectLijst').innerHTML = '<div class="leeg">Kon de bezetting niet laden.</div>'; });  // v7.5: S.bVast; r2: S.bScroll, S.bFocus
   }
   // v7.5: drie weergaven; de keuze blijft per apparaat bewaard (aa_bweergave, via leesOpslag/zetOpslag met hun try/catch)
@@ -5656,7 +5656,7 @@
     if (naam === 'huisstijl') laadHuisstijl();
     if (naam === 'trajecten') {
       S.bVast = false; S.bScroll = null;  // v7.5: opnieuw openen sorteert Bezetting → Per project opnieuw (Terug van een project zet S.bVast en S.bScroll daarna zelf)
-      if (S.pWeergave === 'bezetting' && !S.bezettingLaden) laadBezetting();  // v7.6: het bord vertrekt tegelijk met apiTrajecten (was: pas in de then-tak erna, twee rondreizen achter elkaar) en is bij elk bezoek vers
+      if (S.pWeergave === 'bezetting' && !S.bezetting && !S.bezettingLaden) laadBezetting();  // v7.6: bij het eerste bezoek vertrekt apiBezetting tegelijk met apiTrajecten (was: pas in de then-tak erna, twee rondreizen achter elkaar); een bord dat er al staat blijft staan, zoals Terug van een project verwacht (S.bVast, scroll, focus, lokale wijzigingen)
       laadTrajecten();
     }
     if (naam === 'relaties') laadRelaties();  // v2.0

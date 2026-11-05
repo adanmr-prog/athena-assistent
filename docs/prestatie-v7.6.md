@@ -81,7 +81,7 @@ Teruggedraaid binnen deze post: de registratie van de service worker uitstellen 
 
 ### Post 2: api-ketens in de app — commit 401911a
 
-Wijziging. `laadRelaties` ververst de getekende tab (taken, pipeline, rapport) stil en tegelijk met apiCrm (`verversTab`, `stilTab`: de vorige lijst blijft staan tot de verse er is; Rapporten via `laadRapport`) in plaats van de lijst na apiCrm te wissen en opnieuw te laden; scholen en personen tekenen opnieuw zodra apiCrm binnen is. `wisselView('trajecten')` start `laadBezetting` meteen naast `laadTrajecten` als de weergave Bezetting is; het bord is zo bij elk bezoek vers (tot v7.5 toonde een tweede bezoek het oude bord).
+Wijziging. `laadRelaties` ververst de getekende tab (taken, pipeline, rapport) stil en tegelijk met apiCrm (`verversTab`, `stilTab`: de vorige lijst blijft staan tot de verse er is; Rapporten via `laadRapport`) in plaats van de lijst na apiCrm te wissen en opnieuw te laden; scholen en personen tekenen opnieuw zodra apiCrm binnen is. `wisselView('trajecten')` start `laadBezetting` bij het eerste bezoek meteen naast `laadTrajecten` als de weergave Bezetting is (een bord dat er al staat blijft staan: Terug van een project rekent op S.bVast, de scrollpositie, de focus en lokale wijzigingen, zoals `test_app.py` bewaakt); de then-tak van apiBezetting tekent niet zolang apiTrajecten loopt, zodat er één render is.
 
 | Scherm (mock 150 ms RTT, management, 5 runs) | Span voor → na | Diepte | Aanroepen |
 |---|---|---|---|
