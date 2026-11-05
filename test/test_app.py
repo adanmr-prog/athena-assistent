@@ -505,8 +505,10 @@ with sync_playwright() as p:
     page.click('[data-beheer="tags"]'); page.wait_for_selector('#crmBeheer [data-hernoem]')
     page.click('[data-beheer="talentrun"]'); page.wait_for_selector('#toast.aan:has-text("Talentrun klaar")')  # v5.0
     # v7.7: Talenten importeren uit XPS (management via de Beheer-kaart: de uitkomst in een venster)
+    assert page.locator('#statusInfo [data-beheer="talentimport"]').count() == 0, 'talentimport: na het sluiten van Instellingen staan de importknoppen niet meer in de DOM (R11)'  # v7.7
     page.click('[data-beheer="talentimport"]'); page.wait_for_selector('#venster.aan #talentImportKaart'); tekst = page.inner_text('#vensterInhoud')
     assert '2 nieuw' in tekst and '1 aangevuld' in tekst and 'conciërge' in tekst and 'xps-diensten-week.csv' in tekst and 'IBAN' in tekst and 'twee keer in het bestand' in tekst, 'talentimport: tellingen, niet herkende functie, overgeslagen urenexport, genegeerde kolom en reden: ' + tekst[:300]
+    assert 'account niet actief in XPS' in tekst and 'tegenstrijdig accountnummer' in tekst and 'Gebruikte kolommen' in tekst and 'Mobiel' in tekst and 'Pien van der Berg' in tekst, 'talentimport: niet actief, conflict met lijst en gebruikte kolommen (B1, B3, B4): ' + tekst[:400]  # v7.7
     page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden')
     page.click('[data-beheer="doelen"]'); page.wait_for_selector('#venster.aan [data-doelbewerk]'); page.locator('[data-doelbewerk]').first.click(); page.wait_for_selector('#venster.aan #vf-doel'); page.fill('#vf-doel', '12'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan [data-doelbewerk]')
     page.select_option('#vf-eigenaar', 'team:talent'); page.select_option('#vf-metric', 'timeToFill'); page.fill('#vf-doel', '14'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster.aan .rij:has-text("Team talent")')  # v4.2: teamdoel
@@ -720,7 +722,8 @@ with sync_playwright() as p:
     tl.click('#zbInstellingen'); tl.wait_for_selector('#statusInfo [data-beheer="talentimport"]'); assert tl.locator('#statusInfo [data-beheer="urenimport"]').count() == 1, 'talent: ook de urenimport in Instellingen'
     tl.click('#statusInfo [data-beheer="talentimport"]'); tl.wait_for_selector('#xpsImportUit #talentImportKaart'); tekst = tl.inner_text('#xpsImportUit')
     assert '2 nieuw' in tekst and '3 ongewijzigd' in tekst and 'conciërge' in tekst and tl.locator('#xpsImportUit [data-cf-annuleer]').count() == 0, 'talent: talentimport inline met de tellingen, zonder Sluiten-knop: ' + tekst[:200]
-    tl.click('#koppelSluit'); tl.wait_for_selector('#koppel.aan', state='hidden')
+    tl.click('#statusInfo [data-beheer="urenimport"]'); tl.wait_for_function("() => /XPS-uren ingelezen/.test((document.querySelector('#xpsImportUit') || {}).innerText || '')"); assert 'Accountexports overgeslagen' in tl.inner_text('#xpsImportUit'), 'talent: de urenimport meldt een overgeslagen accountexport (R4)'  # v7.7
+    tl.click('#koppelSluit'); tl.wait_for_selector('#koppel.aan', state='hidden'); assert tl.locator('#statusInfo [data-beheer]').count() == 0, 'talent: na Sluiten is #statusInfo leeg (R11)'  # v7.7
     tl.click('.zb-item[data-desk="bezetting"]'); tl.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]'); tl.click('.vac-kaart:has-text("NT2-ondersteuner") [data-voorstellen]')
     tl.wait_for_selector('#venster.aan .match-rij'); assert tl.locator('#venster .match-rij').count() >= 2 and tl.locator('#venster .match-rij:has-text("Eva de Wit") [data-mkies]').is_disabled(), 'matchlijst; de al voorgedragene is niet aan te vinken'
     tl.click('#venster .match-rij:has-text("Noor Bakker") [data-mtoggle]'); assert tl.locator('#venster .match-rij.open .m-uitleg .b-rij').count() == 7, 'uitleg per onderdeel van de score'

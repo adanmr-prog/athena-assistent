@@ -2698,7 +2698,13 @@
     }, '<div class="hint">Favoriet telt mee in de matchscore; niet meer sluit deze school uit bij het voorstellen.</div>'));
   }
   function compleetBlok(t) { return '<div class="blok"><div class="blok-kop">Profiel compleet</div><div class="compleet"><div class="b-spoor"><div class="b-vul sterk" style="width:' + esc(t.compleetheid) + '%"></div></div><b>' + esc(t.compleetheid) + '%</b></div>' + ((t.ontbreekt || []).length ? '<div class="hint">Ontbreekt: ' + esc(t.ontbreekt.join(', ')) + '</div>' : '') + '</div>'; }
-  function avgBlok(t) { return '<div class="blok"><div class="blok-kop">AVG</div><div class="hint">Toestemming ' + esc(t.toestemmingDatum ? kortDatum(t.toestemmingDatum) : 'onbekend') + (t.toestemmingGrondslag ? ' (' + esc(t.toestemmingGrondslag) + ')' : '') + (t.bewarenTot ? ' · bewaren tot ' + esc(kortDatum(t.bewarenTot)) : '') + '</div><div class="balk"><button class="knop licht klein" data-talentexport="' + esc(t.id) + '">Inzage-export</button><button class="knop licht klein gevaar" data-talentanonimiseer="' + esc(t.id) + '">Anonimiseren</button></div></div>'; }
+  // v7.7 (R14): een profiel uit de XPS-accountexport heeft grondslag overeenkomst, geen toestemming; dan staat er "Grondslag overeenkomst, vastgelegd op <datum>"
+  function avgGrondslagTekst(t) {
+    var d = t.toestemmingDatum ? kortDatum(t.toestemmingDatum) : 'onbekend', g = t.toestemmingGrondslag || '';
+    if (g && g !== 'toestemming') return 'Grondslag ' + esc(g) + ', vastgelegd op ' + esc(d);
+    return 'Toestemming ' + esc(d) + (g ? ' (' + esc(g) + ')' : '');
+  }
+  function avgBlok(t) { return '<div class="blok"><div class="blok-kop">AVG</div><div class="hint">' + avgGrondslagTekst(t) + (t.bewarenTot ? ' · bewaren tot ' + esc(kortDatum(t.bewarenTot)) : '') + '</div><div class="balk"><button class="knop licht klein" data-talentexport="' + esc(t.id) + '">Inzage-export</button><button class="knop licht klein gevaar" data-talentanonimiseer="' + esc(t.id) + '">Anonimiseren</button></div></div>'; }
   /* --- voorstellen: de matchscore per talent met uitleg; het talentteam kiest wie het voordraagt --- */
   function matchVenster(vid) {
     formActie = null; openVenster('<div class="spinner" id="matchLaden">Talenten vergelijken</div>' + LADEN_ANNULEER);  // v7.3 (iOS-review O3)
@@ -4716,6 +4722,7 @@
       (r.archiefVanaf ? '<div class="hint">Alleen gewerkte diensten van week ' + esc(r.archiefVanaf) + ' tot en met vandaag tellen mee.</div>' : '') + '</div>';
     if (L('fouten').length || L('nietGelezen').length) h += '<div class="kop">Niet ingelezen</div>' + L('fouten').map(function (f) { return rij('<b>' + esc(f.bestand) + '</b>: ' + esc(f.melding)); }).join('') + L('nietGelezen').map(function (f) { return rij(esc(f) + ': dit bestand kon niet worden gelezen (csv, Google Sheet of Excel met de Drive API).'); }).join('');
     if (over.length) h += '<div class="kop">Overgeslagen (' + esc(somOver) + ')</div>' + over.map(function (x) { return rij(esc(x[1]) + ': <b>' + esc(n(O[x[0]])) + '</b>'); }).join('');
+    if (L('accountBestanden').length) h += '<div class="kop">Accountexports overgeslagen</div>' + L('accountBestanden').map(function (f) { return rij(esc(f) + ': dit is een accountexport (naam en contact, geen datum of uren); lees die met "Talenten importeren uit XPS".'); }).join('');  // v7.7 (R4)
     if (L('onbekend').length || L('dubbel').length) h += '<div class="kop">Nog niet te koppelen</div>' +
       blok('Onbekend in het talentbestand', L('onbekend'), function (o) { return esc([o.naam || '(geen naam)', o.xpsId ? 'account ' + o.xpsId : '', o.email || ''].filter(Boolean).join(' · ')) + ' · ' + esc(n(o.diensten)) + (n(o.diensten) === 1 ? ' dienst' : ' diensten'); }, r.onbekendAantal) +
       blok('Naam hoort bij meer talenten', L('dubbel'), function (o) { return esc(o.naam) + ' · ' + esc(n(o.diensten)) + (n(o.diensten) === 1 ? ' dienst' : ' diensten') + ' · ' + esc(n(o.talenten)) + ' talenten'; }, r.dubbelAantal) +
@@ -4729,7 +4736,10 @@
     r = r || {};
     var n = function (x) { return Number(x) || 0; }, L = function (k) { return r[k] instanceof Array ? r[k] : []; }, O = r.overgeslagen && typeof r.overgeslagen === 'object' && !(r.overgeslagen instanceof Array) ? r.overgeslagen : {};
     var rij = function (t) { return '<div class="rij"><div class="r-body"><div class="r-meta">' + t + '</div></div></div>'; };
-    var REDEN = [['geenNaam', 'geen naam'], ['geenContact', 'geen accountnummer, e-mail of telefoon'], ['dubbelInBestand', 'twee keer in het bestand (de laatste regel telt)'], ['uitgeschreven', 'uitgeschreven talent (niet overschreven)']];
+    var REDEN = [['geenNaam', 'geen naam'], ['geenContact', 'geen accountnummer, e-mail of telefoon'], ['dubbelInBestand', 'twee keer in het bestand (de laatste regel telt)'], ['uitgeschreven', 'uitgeschreven of geanonimiseerd talent (komt niet terug)'],
+      ['nietActief', 'account niet actief in XPS (geen nieuw profiel)'], ['conflict', 'tegenstrijdig accountnummer of e-mailadres (niet gewijzigd)']];  // v7.7 (B1, B3)
+    var KOLOM = { xpsId: 'accountnummer', naam: 'naam', voornaam: 'voornaam', achternaam: 'achternaam', email: 'e-mail', telefoon: 'telefoon', postcode: 'postcode', woonplaats: 'woonplaats', functie: 'functies', startdatum: 'in dienst sinds', status: 'accountstatus', accountStatus: 'accountstatus' };  // v7.7 (B4)
+    var K = r.kolommen && typeof r.kolommen === 'object' && !(r.kolommen instanceof Array) ? r.kolommen : {};
     var over = REDEN.filter(function (x) { return n(O[x[0]]); }), somOver = over.reduce(function (t, x) { return t + n(O[x[0]]); }, 0), b = n(r.bestanden);
     var h = '<div class="kop" style="margin-top:14px">Talenten ingelezen uit XPS</div>';
     if (!b && !L('fouten').length && !L('nietGelezen').length) h += '<div class="hint">Geen nieuwe accountexport in de map XPS-export' + (r.sinds ? ' sinds ' + esc(r.sinds) : '') + '.</div>';
@@ -4738,6 +4748,9 @@
       '<div class="hint">Een bestaand profiel wordt alleen aangevuld (lege velden); status, beschikbaarheid, notitie en tags blijven van het talentteam. Een nieuw profiel krijgt bron xps-bestand en grondslag overeenkomst.</div></div>';
     if (L('fouten').length || L('nietGelezen').length) h += '<div class="kop">Niet ingelezen</div>' + L('fouten').map(function (f) { return rij('<b>' + esc(f.bestand) + '</b>: ' + esc(f.melding)); }).join('') + L('nietGelezen').map(function (f) { return rij(esc(f) + ': dit bestand kon niet worden gelezen (csv, Google Sheet of Excel met de Drive API).'); }).join('');
     if (over.length) h += '<div class="kop">Overgeslagen (' + esc(somOver) + ')</div>' + over.map(function (x) { return rij(esc(x[1]) + ': <b>' + esc(n(O[x[0]])) + '</b>'); }).join('');
+    if (L('conflicten').length) h += '<div class="kop">Conflicten</div>' + L('conflicten').map(function (x) { return rij(esc([x.naam || '(geen naam)', x.xpsId ? 'account ' + x.xpsId : '', x.email || ''].filter(Boolean).join(' · ')) + ': ' + esc(x.reden || '')); }).join('') +
+      '<div class="hint">Controleer in XPS en in het profiel welk accountnummer en e-mailadres bij wie horen; Athena wijzigt zo\'n rij niet.</div>';  // v7.7 (B3)
+    if (Object.keys(K).length) h += '<div class="kop">Gebruikte kolommen</div>' + Object.keys(K).map(function (k) { return rij(esc(KOLOM[k] || k) + ': <b>' + esc(K[k]) + '</b>'); }).join('');  // v7.7 (B4): welke kop voor welk veld is gebruikt
     if (L('nietHerkendeFuncties').length) h += '<div class="kop">Niet herkende functies</div>' + L('nietHerkendeFuncties').map(function (f) { return rij(esc(f.functie) + ' · ' + esc(n(f.aantal)) + (n(f.aantal) === 1 ? ' keer' : ' keer')); }).join('') +
       '<div class="hint">Deze functies zijn niet gezet. Neem ze op in Keuzelijsten → talentFuncties (of pas de export aan) en importeer opnieuw; bestaande profielen zonder functies worden dan aangevuld.</div>';
     if (L('urenBestanden').length) h += '<div class="kop">Urenexports overgeslagen</div>' + L('urenBestanden').map(function (f) { return rij(esc(f) + ': dit is een urenexport (datum, week of uren); die leest "XPS-uren importeren".'); }).join('');
@@ -5730,7 +5743,7 @@
         ('herinneringen' in st ? rij('Herinnering bij taak met tijd', (st.herinneringTrigger === false ? nee + ' — draai setup() voor de trigger · ' : '') + '<button class="knop klein' + (st.herinneringen ? '' : ' licht') + '" data-herinneringen="' + (st.herinneringen ? '0' : '1') + '">' + (st.herinneringen ? 'Aan' : 'Uit') + '</button>' + (st.email ? ' · naar ' + esc(st.email) : ' · <span class="nee">geen e-mailadres</span>')) : '') +
         // v5.0: talentnetwerk (dagelijkse run en de weekexport uit XPS)
         ('talentTrigger' in st ? rij('Talentnetwerk (dagelijks 06:30)', st.talentTrigger ? ja : nee + ' — draai setup() voor de trigger') + rij('XPS-uren (maandag)', st.urenTrigger ? ja + (st.laatsteUrenImport ? ' · laatst ' + esc(st.laatsteUrenImport) : ' · nog niet geïmporteerd') + (st.xpsExportMap ? '' : ' · <span class="nee">map XPS-export nog niet gemaakt</span>') : nee) : '');
-      if (recht('talenten', 'wijzigen') === 'alles') s.innerHTML += '<div class="k-rij"><span>XPS-exports in de map XPS-export</span><span><button class="knop klein licht" data-beheer="urenimport">XPS-uren importeren</button> <button class="knop klein licht" data-beheer="talentimport">Talenten importeren uit XPS</button></span></div><div id="xpsImportUit"></div>';  // v7.7: het talentteam importeert zelf (het venster ligt hier achter de overlay, dus de uitkomst komt inline)
+      if (ikBen() && recht('talenten', 'wijzigen') === 'alles') s.innerHTML += '<div class="k-rij"><span>XPS-exports in de map XPS-export</span><span><button class="knop klein licht" data-beheer="urenimport">XPS-uren importeren</button> <button class="knop klein licht" data-beheer="talentimport">Talenten importeren uit XPS</button></span></div><div id="xpsImportUit"></div>';  // v7.7: het talentteam importeert zelf (het venster ligt hier achter de overlay, dus de uitkomst komt inline)
       if (magApp('metingen')) { s.innerHTML += metingenBlokHtml(); laadMetingen(); }  // v7.6: alleen management (RECHTEN.metingen)
     }).catch(function () { s.innerHTML = '<div class="leeg">Geen verbinding met de backend.</div>'; });
   }
@@ -5758,7 +5771,7 @@
     el('koppelSluit').style.display = ok ? 'inline-block' : 'none'; el('uitloggen').style.display = (SERVER && ok) ? 'inline-block' : 'none'; el('koppelOffline').style.display = 'none';
     if (ok) toonStatus(); else el('statusInfo').innerHTML = '';
   });
-  el('koppelSluit').addEventListener('click', function () { el('koppel').classList.remove('aan'); });
+  el('koppelSluit').addEventListener('click', function () { el('koppel').classList.remove('aan'); el('statusInfo').innerHTML = ''; });  // v7.7 (R11): verborgen importknoppen blijven niet in de DOM
   el('inloggenGoogle').addEventListener('click', inloggenGoogle);  // v6.0
   el('koppelOpnieuw').addEventListener('click', function () { startKoppeling(false, true); });  // v6.1
   el('uitloggen').addEventListener('click', function () { uitloggen(); toast('Uitgelogd.'); });

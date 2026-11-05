@@ -65,7 +65,7 @@ var TABELLEN = {
 };
 var DATUMTIJD_KOLOMMEN = { bijgewerkt: 1, aangemaakt: 1, afgerond: 1, gemaaktOp: 1, gewijzigd: 1, datum: 1, statusSinds: 1, gesprek: 1, gelezen: 1, ingevuld: 1, herinnerd: 1,  // v4.6: herinnerd
   beschikbaarheidBevestigd: 1, laatstePeiling: 1, gecontroleerdOp: 1, portaalTokenTot: 1, geimporteerd: 1, tijdstempel: 1, verwerkt: 1 };  // v5.0
-var TEKST_KOLOMMEN = { tijd: 1, telefoon: 1, postcode: 1, week: 1 };  // v4.5: als tekst opgemaakt ('@'), anders leest Sheets van '14:00' een tijdwaarde uit 1899; v5.0: nieuwe telefoon-, postcode- en weekkolommen houden hun voorloopnul
+var TEKST_KOLOMMEN = { tijd: 1, telefoon: 1, postcode: 1, week: 1, factuurnummer: 1 };  // v7.7: factuurnummer als tekst (voorloopnullen; een bestaande kolom zet de beheerder één keer op tekst, zie backend/README.md)  // v4.5: als tekst opgemaakt ('@'), anders leest Sheets van '14:00' een tijdwaarde uit 1899; v5.0: nieuwe telefoon-, postcode- en weekkolommen houden hun voorloopnul
 var DOC_TYPES = ['contract', 'werkwijze', 'schooldossier', 'voorstel', 'prijslijst', 'overig'];
 var KANS_FASES = ['lead', 'gesprek', 'voorstel', 'onderhandeling', 'gewonnen', 'verloren'];
 var TRAJECT_STATUSSEN = ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'];  // v4.0: zoals het monday-bord
@@ -3711,7 +3711,7 @@ function talentUit(t, beperkt, x) {
   u.postcode = t.postcode || ''; u.lat = Number(t.lat) || null; u.lon = Number(t.lon) || null; u.opleiding = t.opleiding || ''; u.bevoegdheid = t.bevoegdheid || ''; u.vervoer = t.vervoer || '';
   u.reisafstandKm = Number(t.reisafstandKm) || ''; u.maxUrenWeek = Number(t.maxUrenWeek) || ''; u.beschikbaarVanaf = t.beschikbaarVanaf || ''; u.beschikbaarTot = t.beschikbaarTot || '';
   u.beschikbaarheid = beschikbaarheidUit(t.beschikbaarheid); u.uitzonderingen = lijstUit(t.uitzonderingen); u.laatstePeiling = t.laatstePeiling || '';
-  u.contractvorm = t.contractvorm || ''; u.bron = t.bron || ''; u.xpsId = t.xpsId || ''; u.afasNummer = t.afasNummer || ''; u.tags = tagsUit(t.tags); u.velden = veldenUit(t.velden);
+  u.contractvorm = t.contractvorm || ''; u.bron = t.bron || ''; u.xpsId = t.xpsId || ''; u.afasNummer = t.afasNummer || ''; u.tags = tagsUit(t.tags); u.velden = veldenZonderVergeten(veldenUit(t.velden));  // v7.7 (B2): de onderdrukkingslijst blijft in de Sheet, niet in de app of de inzage-export
   u.toestemmingDatum = t.toestemmingDatum || ''; u.toestemmingGrondslag = t.toestemmingGrondslag || ''; u.bewarenTot = t.bewarenTot || ''; u.portaal = !!(t.portaalToken && String(t.portaalTokenTot || '') >= nu());
   u.notitie = t.notitie || ''; u.laatsteContact = t.laatsteContact || ''; u.door = t.door || ''; u.aangemaakt = t.aangemaakt || ''; u.bijgewerkt = t.bijgewerkt || ''; u.ontbreekt = compleet.ontbreekt;
   return u;
@@ -3847,7 +3847,7 @@ function apiTalentOpslaan(obj) {
   if (o.status !== undefined && TALENT_STATUSSEN.indexOf(o.status) < 0) throw new Error('Onbekende status.');
   if (o.bron !== undefined && o.bron !== '') { o.bron = klein(o.bron); if (keuzelijst('talentBronnen').indexOf(o.bron) < 0) throw new Error('Onbekende bron.'); }
   if (o.tags !== undefined) o.tags = tagsIn(o.tags);
-  if (o.velden !== undefined) o.velden = veldenUit(o.velden);
+  if (o.velden !== undefined) { o.velden = veldenUit(o.velden); delete o.velden.vergeten; if (oud) { var vg = veldenUit(oud.velden).vergeten; if (vg instanceof Array) o.velden.vergeten = vg; } }  // v7.7 (B2): de onderdrukkingslijst komt alleen uit het anonimiseren: nooit uit de invoer, en gaat nooit verloren
   // één profiel per persoon: zelfde e-mail of telefoon = dubbel (tenzij forceer)
   var email = o.email !== undefined ? o.email : (oud ? klein(oud.email) : ''), tel = o.telefoon !== undefined ? o.telefoon : (oud ? telefoonIn(oud.telefoon) : '');
   if (!obj.forceer && (email || tel)) {
@@ -4161,7 +4161,10 @@ var XPS_KOLOMMEN_STANDAARD = { xpsId: ['accountnummer', 'account nr', 'accountnr
   voornaam: ['voornaam', 'roepnaam', 'first name'], achternaam: ['achternaam', 'last name', 'surname'], telefoon: ['telefoon', 'telefoonnummer', 'mobiel', 'mobiel nummer', 'mobiele telefoon', 'phone', 'gsm'],
   postcode: ['postcode', 'zip'], woonplaats: ['woonplaats', 'plaats', 'stad'], functie: ['functies', 'functie', 'functiegroep', 'functienaam'],
   accountStatus: ['accountstatus', 'account status', 'status account', 'status medewerker', 'dienstverband status'], startdatum: ['startdatum', 'in dienst sinds', 'datum in dienst', 'indiensttreding', 'in dienst'] };
-var XPS_LOON = /salaris|loon|tarief/, XPS_PRIVE = /bsn|burgerservice|iban|geboorte|geslacht|nationaliteit|gezondheid|ziek|religie/;  // v7.4: zulke kolommen worden nooit gelezen of bewaard (AVG; loon hoort niet in het talentbestand); v7.7: ook geslacht, nationaliteit, gezondheid, ziek en religie
+var XPS_LOON = /salaris|loon|tarief/;  // v7.4: zulke kolommen worden nooit gelezen of bewaard (AVG; loon hoort niet in het talentbestand)
+// v7.7 (B4): privékolommen, ook van een ander dan de flexkracht (noodcontact, ouder/verzorger, partner, huisarts): nooit gelezen, ook niet via xpsKolommen
+var XPS_PRIVE = /bsn|burgerservice|iban|rekening|bank|paspoort|identiteit|legitimatie|sofi|geboorte|leeftijd|birth|geslacht|nationaliteit|gezondheid|ziek|religie|beperking|nood|emergency|contactpersoon|partner|ouder|verzorger|voogd|huisarts/;
+var XPS_FUNCTIE_NIET = /omschrijving|opmerking|notitie|beperking/;  // v7.7 (R1): zo'n kop is vrije tekst, nooit de functiekolom
 // v7.4: statussen per soort (deel van de tekst, zonder hoofdletters en accenten); instelbaar met Instellingen xpsStatussen = {"noShow": […], "laat": […], "negeren": […]}.
 // Een dienst telt alleen als gewerkt als de status op geen van deze lijkt; 'ziek' wordt altijd genegeerd, wat de instelling ook zegt (AVG: geen gezondheid per persoon).
 var XPS_STATUSSEN_STANDAARD = { noShow: ['no-show', 'no show', 'noshow', 'niet verschenen'], laat: ['laat', 'late afmelding'], negeren: ['afwezig', 'ziek', 'geannuleerd', 'reserve'] };
@@ -4196,14 +4199,14 @@ function xpsStatusSoort(status, S) {
 // Zo wordt 'Projectleider' geen project en 'Projectnummer' geen accountnummer. Loon- en privékolommen doen nooit mee.
 function xpsKolomIndexen(kop, M) {
   var k = kop.map(function (h) { return klein(zonderAccenten(h)); }), c = {}, bezet = {};
-  var vrij = function (j) { return !bezet[j] && k[j] && !XPS_LOON.test(k[j]) && !XPS_PRIVE.test(k[j]); };
+  var vrij = function (j, sl) { return !bezet[j] && k[j] && !XPS_LOON.test(k[j]) && !XPS_PRIVE.test(k[j]) && !(sl === 'functie' && XPS_FUNCTIE_NIET.test(k[j])); };  // v7.7 (R1): 'Functieomschrijving' is nooit de functiekolom
   Object.keys(M).forEach(function (sl) {
     c[sl] = -1;
-    for (var i = 0; i < M[sl].length && c[sl] < 0; i++) { var j = k.indexOf(klein(zonderAccenten(M[sl][i]))); if (j >= 0 && vrij(j)) { c[sl] = j; bezet[j] = sl; } }
+    for (var i = 0; i < M[sl].length && c[sl] < 0; i++) { var j = k.indexOf(klein(zonderAccenten(M[sl][i]))); if (j >= 0 && vrij(j, sl)) { c[sl] = j; bezet[j] = sl; } }
   });
   Object.keys(M).forEach(function (sl) {
     if (c[sl] >= 0) return;
-    for (var i = 0; i < M[sl].length && c[sl] < 0; i++) { var n = klein(zonderAccenten(M[sl][i])); if (!n) continue; for (var j = 0; j < k.length; j++) if (vrij(j) && k[j].indexOf(n) >= 0) { c[sl] = j; bezet[j] = sl; break; } }
+    for (var i = 0; i < M[sl].length && c[sl] < 0; i++) { var n = klein(zonderAccenten(M[sl][i])); if (!n) continue; for (var j = 0; j < k.length; j++) if (vrij(j, sl) && k[j].indexOf(n) >= 0) { c[sl] = j; bezet[j] = sl; break; } }
   });
   return c;
 }
@@ -4344,10 +4347,15 @@ function rijenVanBestand(f) {
     if (/spreadsheetml|ms-excel/.test(mime) || /\.xlsx?$/.test(naam)) {  // Excel: via de Drive API omzetten naar een Google Sheet (Services → Drive API), daarna weer weg
       if (typeof Drive === 'undefined') return null;
       var kopie = Drive.Files.create ? Drive.Files.copy({ name: 'tmp-athena-' + f.getName(), mimeType: MimeType.GOOGLE_SHEETS }, f.getId()) : Drive.Files.copy({ title: 'tmp-athena-' + f.getName(), mimeType: MimeType.GOOGLE_SHEETS }, f.getId());
-      try { return SpreadsheetApp.openById(kopie.id).getSheets()[0].getDataRange().getValues(); } finally { try { DriveApp.getFileById(kopie.id).setTrashed(true); } catch (e) {} }
+      try { return SpreadsheetApp.openById(kopie.id).getSheets()[0].getDataRange().getValues(); } finally { verwijderDriveBestand(kopie.id); }  // v7.7 (R13): de kopie definitief weg, niet naar de prullenbak
     }
   } catch (e) { Logger.log('Export ' + f.getName() + ' niet gelezen: ' + e); }
   return null;
+}
+// v7.7 (R13): een tijdelijk bestand (de Sheet-kopie van een Excel) definitief verwijderen via de Drive API (remove, anders delete); lukt dat niet, dan de prullenbak
+function verwijderDriveBestand(id) {
+  try { if (typeof Drive !== 'undefined' && Drive.Files.remove) Drive.Files.remove(id); else Drive.Files['delete'](id); return; } catch (e) { Logger.log('Tijdelijk bestand niet definitief verwijderd: ' + e); }
+  try { DriveApp.getFileById(id).setTrashed(true); } catch (e2) {}
 }
 // Een kandidaat die klaar voor start staat en in de uren van zijn project voorkomt, staat echt op de werkvloer: geplaatst (altijd binnen metLock)
 function plaatsingenUitUren(regels) {
@@ -4362,13 +4370,14 @@ function plaatsingenUitUren(regels) {
 function urenImport() {
   var map = xpsExportMap(), sinds = P.getProperty('LAATSTE_URENIMPORT') || '', talenten = lees('Talenten'), opties = { trajecten: lees('Trajecten'), statussen: xpsStatussen(), vandaag: datumStr(new Date()) };
   var stats = { bestanden: 0, regels: 0, gelezen: 0, gekoppeld: 0, weekregels: 0, weken: 0, ongewijzigd: 0, overgeslagen: urenOvergeslagenLeeg(), onbekend: [], onbekendAantal: 0, dubbel: [], dubbelAantal: 0,
-    genegeerdeKolommen: [], kandidatenBijgewerkt: 0, nietGelezen: [], fouten: [], archiefVanaf: urenArchiefGrens(opties.vandaag), archiefWeken: UREN_ARCHIEF_WEKEN, sinds: sinds }, perRegel = {};
+    genegeerdeKolommen: [], kandidatenBijgewerkt: 0, nietGelezen: [], accountBestanden: [], fouten: [], archiefVanaf: urenArchiefGrens(opties.vandaag), archiefWeken: UREN_ARCHIEF_WEKEN, sinds: sinds }, perRegel = {};  // v7.7 (R4): accountBestanden
   var samen = function (doel, lijst, sleutel) { lijst.forEach(function (o) { var k = sleutel(o), hit = doel.filter(function (x) { return sleutel(x) === k; })[0]; if (hit) hit.diensten += o.diensten; else doel.push(o); }); };
   var it = map.getFiles();
   while (it.hasNext()) {
     var f = it.next(); if (sinds && datumTijdStr(f.getLastUpdated()) <= sinds) continue;
     var rijen = rijenVanBestand(f);
     if (!rijen) { stats.nietGelezen.push(f.getName()); continue; }
+    if (isAccountExport(rijen)) { stats.accountBestanden.push(f.getName()); continue; }  // v7.7 (R4): de accountexport hoort bij talentImport; geen fout, de eigenschap schuift gewoon op
     var r;
     try { r = urenUitRijen(rijen, talenten, opties); } catch (e) { if (!e.xpsExport) throw e; stats.fouten.push({ bestand: f.getName(), melding: e.message }); continue; }
     stats.bestanden++; stats.regels += r.gelezen; stats.gelezen += r.gelezen; stats.gekoppeld += r.gekoppeld;
@@ -4403,28 +4412,61 @@ function talentUrenTrigger() { try { var s = urenImport(); if (s.fouten.length) 
 // beschikbaarheid, notitie, tags) blijft staan. De kolomnamen van de accountexport zijn niet vast: herkenning op naam (XPS_KOLOMMEN_STANDAARD),
 // met de instelling xpsKolommen als overschrijving, net als de uren. Loon- en privékolommen (XPS_LOON, XPS_PRIVE) worden nooit gelezen.
 // Zie backend/README.md, sectie "Talenten importeren uit XPS".
-var TALENT_IMPORT_FUNCTIES_MAX = 30, ACCOUNT_ACTIEF = /actief|active|in dienst|geplaatst|werkzaam/, ACCOUNT_NIET_ACTIEF = /inactie|niet actief|uit dienst|geblokkeerd|gearchiveerd|beeindigd|beëindigd|gestopt/;
+var TALENT_IMPORT_FUNCTIES_MAX = 30, TALENT_IMPORT_CONFLICT_MAX = 20, ACCOUNT_ACTIEF = /actief|active|in dienst|geplaatst|werkzaam/, ACCOUNT_NIET_ACTIEF = /inactie|niet actief|uit dienst|geblokkeerd|gearchiveerd|beeindigd|beëindigd|gestopt/;
+var XPS_PLAATSHOUDER = /^(-|–|—|\.|\?|n\.v\.t\.?|nvt)$/i;  // v7.7 (R7): zo'n cel telt als leeg
+// v7.7 (R6): een datumkolom telt alleen als urenkolom als de kop niet op een andere datum lijkt (datum uit dienst, einddatum, aanmaakdatum); een week- of urenkolom niet bij uren per week, contracturen, weekend beschikbaar
+var XPS_DATUM_NIET = /dienst|eind|aanmaak|mutatie|wijzig|start/, XPS_UREN_NIET = /per week|contract|max|weekend|beschikbaar|registratie/;
 // Lijkt de accountstatus op actief? Zonder statuskolom (null) wel; 'Inactief' en 'Uit dienst' niet, ook al staat er 'actief' of 'dienst' in
 function accountActief(s) { if (s === null) return true; s = klein(s); return !ACCOUNT_NIET_ACTIEF.test(s) && ACCOUNT_ACTIEF.test(s); }
-function talentOvergeslagenLeeg() { return { geenNaam: 0, geenContact: 0, dubbelInBestand: 0, uitgeschreven: 0 }; }
-function naamSplits(naam) { var d = String(naam == null ? '' : naam).trim().split(/\s+/).filter(Boolean); return { voornaam: d[0] || '', achternaam: d.slice(1).join(' ') }; }  // tussenvoegsels blijven bij de achternaam
+function talentOvergeslagenLeeg() { return { geenNaam: 0, geenContact: 0, dubbelInBestand: 0, uitgeschreven: 0, nietActief: 0, conflict: 0 }; }  // v7.7 (B1, B3): nietActief en conflict
+// v7.7 (R5): 'Voornaam tussenvoegsel Achternaam' of 'Achternaam, Voornaam tussenvoegsel' ('Berg, Pien van der' → Pien / van der Berg); tussenvoegsels blijven bij de achternaam
+function naamSplits(naam) {
+  var s = String(naam == null ? '' : naam).trim().replace(/^[\s,]+|[\s,]+$/g, ''), m = /^([^,]+),\s*(.+)$/.exec(s);  // v7.7 (verificatie): losse komma's aan de randen tellen niet
+  if (m) { var rest = m[2].replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean); return { voornaam: rest[0] || '', achternaam: rest.slice(1).concat([m[1].trim()]).join(' ') }; }
+  var d = s.split(/\s+/).filter(Boolean); return { voornaam: d[0] || '', achternaam: d.slice(1).join(' ') };
+}
+// v7.7 (R7): een cel met postcode en plaats ('1234 AB Utrecht') → postcode en woonplaats, via postcodeUitCel van het aanmeldformulier ({postcode, rest}); de woonplaats alleen als de woonplaatskolom leeg is
+function postcodePlaatsUitCel(v) {
+  var s = tekstIn(String(v == null ? '' : v)), m = postcodeUitCel(s);
+  return m ? { postcode: m.postcode, woonplaats: plaatsNaPostcode(m.rest) } : { postcode: postcodeIn(s), woonplaats: '' };  // v7.7 (verificatie): zoals het aanmeldformulier: leestekens en land eraf
+}
+// v7.7 (B2): sha-256 (hex) van een contactgegeven voor de onderdrukkingslijst velden.vergeten van een geanonimiseerd profiel: niet terug te rekenen, wel te vergelijken
+function onderdrukHash(s) {
+  s = String(s == null ? '' : s); if (!s) return '';
+  var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8), hex = '';
+  for (var i = 0; i < b.length; i++) { var x = b[i] < 0 ? b[i] + 256 : b[i]; hex += (x < 16 ? '0' : '') + x.toString(16); }
+  return hex;
+}
+function onderdrukHashes(email, xpsId, telefoon) { return [onderdrukHash(klein(email)), onderdrukHash(klein(xpsId)), onderdrukHash(telefoonIn(telefoon))].filter(Boolean); }
+function veldenZonderVergeten(v) { if (!v || typeof v !== 'object' || !('vergeten' in v)) return v; var u = {}; Object.keys(v).forEach(function (k) { if (k !== 'vergeten') u[k] = v[k]; }); return u; }  // v7.7 (B2): de hashes zijn geen persoonsgegeven voor de app of de inzage-export
 function accountNummerIn(v) { var s = String(v == null ? '' : v).trim(); return /\d/.test(s) && !/\s/.test(s) ? s : ''; }  // nooit een naam als accountnummer
 // Welke export is dit? 'uren' (een datum-, week- of urenkolom: de dienstenexport, die hoort bij urenImport) of 'account' (een naam plus e-mail,
 // telefoon of postcode); anders een fout met uitleg. "Uren per week" of "Contracturen" in een accountexport telt niet als urenkolom.
-function accountExportSoort(c, kop) {
-  var urenachtig = function (j) { return j >= 0 && !/per week|contract|max/.test(klein(zonderAccenten(kop[j]))); };
-  if (c.datum >= 0 || urenachtig(c.week) || urenachtig(c.uren)) return 'uren';
+// v7.7 (R6): met stil geeft hij '' in plaats van een fout (voor urenImport, R4).
+function accountExportSoort(c, kop, stil) {
+  var urenachtig = function (j, niet) { return j >= 0 && !niet.test(klein(zonderAccenten(kop[j]))); };
+  if (urenachtig(c.datum, XPS_DATUM_NIET) || urenachtig(c.week, XPS_UREN_NIET) || urenachtig(c.uren, XPS_UREN_NIET)) return 'uren';
   var naam = c.naam >= 0 || c.voornaam >= 0 || c.achternaam >= 0, contact = c.email >= 0 || c.telefoon >= 0 || c.postcode >= 0;
+  if (stil) return naam && contact ? 'account' : '';
   if (!naam) throw xpsFout('Dit bestand heeft geen naamkolom (naam, of voornaam en achternaam); stel xpsKolommen in (Instellingen) of controleer de export.');
   if (!contact) throw xpsFout('Dit bestand heeft geen kolom met e-mail, telefoon of postcode en is dus geen accountexport. Vraag XPS de export met e-mail en telefoon, of stel xpsKolommen in.');
   return 'account';
 }
-// Functies uit een cel tegen de keuzelijst talentFuncties, tolerant: een onbekend woord gooit niet maar wordt geteld (en niet gezet)
+function isAccountExport(rijen) {
+  if (!rijen || !rijen.length) return false;
+  var kop = rijen[0].map(function (h) { return String(h == null ? '' : h).trim(); }), c = xpsKolomIndexen(kop, xpsKolommen());
+  if (c.datum >= 0 || c.week >= 0 || c.uren >= 0) return false;  // v7.7 (verificatie): met een datum-, week- of urenkolom nooit stil als accountexport overslaan; urenUitRijen geeft dan zelf zijn Nederlandse fout
+  return accountExportSoort(c, kop, true) === 'account';
+}  // v7.7 (R4)
+// Functies uit een cel tegen de keuzelijst talentFuncties, tolerant: een onbekend woord gooit niet maar wordt geteld (en niet gezet).
+// v7.7 (R1): een onbekend woord gaat door vrijeTekst (hoogstens 60 tekens, nooit privé- of bijzondere persoonsgegevens); leeg of niet overgenomen telt niet
 function functiesTolerant(v, lijst, onbekend) {
   var codes = [];
   lijstIn(v).forEach(function (x) {
     var k = klein(x), z = klein(zonderAccenten(x)), hit = lijst.indexOf(k) >= 0 ? k : lijst.indexOf(z) >= 0 ? z : '';
-    if (hit) { if (codes.indexOf(hit) < 0) codes.push(hit); } else if (k) onbekend[k] = (onbekend[k] || 0) + 1;
+    if (!k || XPS_PLAATSHOUDER.test(k)) return;  // v7.7 (verificatie): een plaatshouder ('-', 'n.v.t.') is geen functie en telt niet als niet herkend
+    if (hit) { if (codes.indexOf(hit) < 0) codes.push(hit); }
+    else if (k) { var vt = vrijeTekst(x); if (vt && vt !== AANMELD_NIET_OVERGENOMEN) { var kk = klein(vt); onbekend[kk] = (onbekend[kk] || 0) + 1; } }
   });
   return codes;
 }
@@ -4434,26 +4476,32 @@ function nietHerkendLijst(onbekend) { return Object.keys(onbekend).map(function 
 function talentUitRijen(rijen, talenten, opties) {
   opties = opties && typeof opties === 'object' ? opties : {};
   var vandaag = /^\d{4}-\d{2}-\d{2}$/.test(String(opties.vandaag || '')) ? opties.vandaag : datumStr(new Date()), functies = opties.functies instanceof Array ? opties.functies : keuzelijst('talentFuncties');
-  var uit = { soort: 'account', regels: 0, nieuw: [], bijgewerkt: [], ongewijzigd: 0, overgeslagen: talentOvergeslagenLeeg(), nietHerkendeFuncties: [], genegeerdeKolommen: [], kolommen: {} };
+  var uit = { soort: 'account', regels: 0, nieuw: [], bijgewerkt: [], ongewijzigd: 0, overgeslagen: talentOvergeslagenLeeg(), conflicten: [], nietHerkendeFuncties: [], genegeerdeKolommen: [], kolommen: {} };
   if (!rijen || !rijen.length) return uit;
   var kop = rijen[0].map(function (h) { return String(h == null ? '' : h).trim(); }), c = xpsKolomIndexen(kop, xpsKolommen());
   uit.soort = accountExportSoort(c, kop);
   if (uit.soort !== 'account') return uit;
+  if (c.voornaam >= 0 && c.achternaam >= 0) c.naam = -1;  // v7.7 (B4): de naamkolom alleen als er geen voornaam- én achternaamkolom is
   var statusKol = c.accountStatus >= 0 ? 'accountStatus' : (c.status >= 0 ? 'status' : '');  // in een accountexport is een kolom 'Status' de status van het account
   var gebruikt = ['xpsId', 'naam', 'voornaam', 'achternaam', 'email', 'telefoon', 'postcode', 'woonplaats', 'functie', 'startdatum'].concat(statusKol ? [statusKol] : []);
   gebruikt.forEach(function (k) { if (c[k] >= 0) uit.kolommen[k] = kop[c[k]]; });
   kop.forEach(function (h, j) {
     if (!h || gebruikt.some(function (k) { return c[k] === j; })) return;
     var n = klein(zonderAccenten(h));
-    uit.genegeerdeKolommen.push({ kolom: h, hint: XPS_LOON.test(n) ? 'loongegevens: worden nooit gelezen of bewaard; laat deze kolom uit de export' : XPS_PRIVE.test(n) ? 'persoonsgegevens die niet in Athena horen: nooit gelezen; laat deze kolom uit de export' : /omschrijving|opmerking|notitie/.test(n) ? 'vrije tekst: niet gelezen' : '' });
+    uit.genegeerdeKolommen.push({ kolom: h, hint: XPS_LOON.test(n) ? 'loongegevens: worden nooit gelezen of bewaard; laat deze kolom uit de export' : XPS_PRIVE.test(n) ? 'persoonsgegevens die niet in Athena horen: nooit gelezen; laat deze kolom uit de export' : XPS_FUNCTIE_NIET.test(n) ? 'vrije tekst: niet gelezen' : '' });
   });
-  var perXps = {}, perEmail = {}, perTel = {}, perNaam = {}, onbekendF = {}, over = uit.overgeslagen;
+  var perXps = {}, perEmail = {}, perTel = {}, perNaam = {}, onbekendF = {}, over = uit.overgeslagen, onderdrukt = {}, onderdruktAantal = 0;
+  var onderdruk = function (h) { if (h && !onderdrukt['h' + h]) { onderdrukt['h' + h] = 1; onderdruktAantal++; } };
   var indexeer = function (t) {
     if (t.xpsId) perXps['x' + klein(t.xpsId)] = t; if (t.email) perEmail['e' + klein(t.email)] = t; var tel = telefoonIn(t.telefoon); if (tel) perTel['t' + tel] = t;
     var n = naamSleutel([t.voornaam, t.achternaam].filter(Boolean).join(' ')); if (n) (perNaam['n' + n] = perNaam['n' + n] || []).push(t);
+    // v7.7 (B2): de onderdrukkingslijst van een geanonimiseerd profiel en de contactgegevens van elk uitgeschreven profiel: zo'n rij komt nooit terug
+    var vg = veldenUit(t.velden).vergeten; if (vg instanceof Array) vg.forEach(onderdruk);
+    if (t.status === 'uitgeschreven') onderdrukHashes(t.email, t.xpsId, t.telefoon).forEach(onderdruk);
   };
   (talenten || []).forEach(indexeer);
-  var cel = function (r, k) { var v = c[k] >= 0 ? r[c[k]] : ''; return v == null ? '' : v; }, tekst = function (r, k) { return c[k] >= 0 ? tekstIn(String(cel(r, k))) : ''; };
+  var cel = function (r, k) { var v = c[k] >= 0 ? r[c[k]] : ''; return v == null ? '' : v; };
+  var tekst = function (r, k) { if (c[k] < 0) return ''; var v = tekstIn(String(cel(r, k))); return XPS_PLAATSHOUDER.test(v) ? '' : v; };  // v7.7 (R7): '-', '—', '.', '?', 'n.v.t.' tellen als leeg
   var kand = [], perSleutel = {};
   for (var i = 1; i < rijen.length; i++) {
     var r = rijen[i]; if (!r || !r.some(function (x) { return x !== '' && x != null; })) continue; uit.regels++;
@@ -4465,7 +4513,8 @@ function talentUitRijen(rijen, talenten, opties) {
     var xps = accountNummerIn(cel(r, 'xpsId')), email = klein(cel(r, 'email')); if (email.indexOf('@') < 0) email = '';
     var tel = c.telefoon >= 0 ? telefoonUitCel(cel(r, 'telefoon')) : '';
     if (!xps && !email && !tel) { over.geenContact++; continue; }
-    var k = { vn: vn, an: an, xps: xps, email: email, tel: tel, postcode: c.postcode >= 0 && tekst(r, 'postcode') ? postcodeIn(tekst(r, 'postcode')) : '', woonplaats: tekst(r, 'woonplaats'), functiesRuw: cel(r, 'functie'),
+    var pc = c.postcode >= 0 && tekst(r, 'postcode') ? postcodePlaatsUitCel(tekst(r, 'postcode')) : { postcode: '', woonplaats: '' };  // v7.7 (R7): '1234 AB Utrecht' in één cel
+    var k = { vn: vn, an: an, xps: xps, email: email, tel: tel, postcode: pc.postcode, woonplaats: tekst(r, 'woonplaats') || pc.woonplaats, functiesRuw: cel(r, 'functie'),
       status: statusKol ? klein(cel(r, statusKol)) : null, start: c.startdatum >= 0 ? exportDag(cel(r, 'startdatum')) : '', vervallen: false };
     // 3. hetzelfde accountnummer of e-mailadres twee keer in het bestand: de laatste telt
     var dubbel = false;
@@ -4475,8 +4524,17 @@ function talentUitRijen(rijen, talenten, opties) {
   }
   kand.forEach(function (k) {
     if (k.vervallen) return;
+    // v7.7 (B2): op de onderdrukkingslijst (geanonimiseerd of uitgeschreven): overslaan, nooit een nieuw profiel
+    if (onderdruktAantal && [k.email, k.xps ? klein(k.xps) : '', k.tel].some(function (v) { return v && onderdrukt['h' + onderdrukHash(v)]; })) { over.uitgeschreven++; return; }
     // 4. koppelen: accountnummer → e-mail → telefoon → een volledige naam die bij precies één talent hoort (en geen ander accountnummer heeft)
-    var t = (k.xps && perXps['x' + klein(k.xps)]) || (k.email && perEmail['e' + k.email]) || (k.tel && perTel['t' + k.tel]) || null;
+    var viaE = (k.email && perEmail['e' + k.email]) || null, viaT = (k.tel && perTel['t' + k.tel]) || null;
+    var t = (k.xps && perXps['x' + klein(k.xps)]) || viaE || viaT || null;
+    // v7.7 (B3): het accountnummer wijst naar talent A maar de e-mail of telefoon naar talent B, of A heeft al een ander accountnummer: niet toepassen
+    if ((viaE && viaE !== t) || (viaT && viaT !== t) || (t && k.xps && t.xpsId && klein(t.xpsId) !== klein(k.xps))) {
+      over.conflict++;
+      if (uit.conflicten.length < TALENT_IMPORT_CONFLICT_MAX) uit.conflicten.push({ naam: (k.vn + ' ' + k.an).trim(), xpsId: k.xps, email: k.email, reden: 'tegenstrijdig accountnummer of e-mailadres (niet gewijzigd)' });
+      return;
+    }
     if (!t) { var l = perNaam['n' + naamSleutel(k.vn + ' ' + k.an)]; if (l && l.length === 1 && !(k.xps && l[0].xpsId && klein(l[0].xpsId) !== klein(k.xps))) t = l[0]; }
     var codes = functiesTolerant(k.functiesRuw, functies, onbekendF);
     if (t) {
@@ -4488,8 +4546,9 @@ function talentUitRijen(rijen, talenten, opties) {
       if (Object.keys(w).length) { w.id = t.id; uit.bijgewerkt.push(w); Object.keys(w).forEach(function (x) { t[x] = w[x]; }); } else uit.ongewijzigd++;
       return;
     }
+    if (!accountActief(k.status)) { over.nietActief++; return; }  // v7.7 (B1): een inactief account (uit dienst, inactief, lege status) wordt nooit een nieuw profiel; het mag alleen een bestaand profiel aanvullen
     var n = { id: nieuwId(), voornaam: k.vn, achternaam: k.an, email: k.email, telefoon: k.tel, postcode: k.postcode, woonplaats: k.woonplaats, xpsId: k.xps, functies: codes, bron: 'xps-bestand',
-      status: accountActief(k.status) ? 'actief' : 'slapend', statusSinds: nu(), aangemaakt: nu(), door: ikNaam(),
+      status: 'actief', statusSinds: nu(), aangemaakt: nu(), door: ikNaam(),
       toestemmingDatum: vandaag, toestemmingGrondslag: 'overeenkomst', bewarenTot: bewarenTotVan(vandaag), velden: k.start ? { inDienstSinds: k.start } : '' };  // ⚠️ grondslag overeenkomst (het account in XPS); zie backend/README.md. De startdatum alleen bij een nieuw profiel, als vrij veld inDienstSinds
     uit.nieuw.push(n); indexeer(n);  // een volgende rij met dezelfde persoon vult dit profiel aan in plaats van een tweede te maken
   });
@@ -4500,7 +4559,7 @@ function talentUitRijen(rijen, talenten, opties) {
 // zonder naam- of contactkolom staat in fouten en LAATSTE_TALENTIMPORT schuift dan niet op; is geen enkel accountbestand te lezen, dan volgt de fout zelf.
 function talentImport() {
   var map = xpsExportMap(), sinds = P.getProperty('LAATSTE_TALENTIMPORT') || '', talenten = lees('Talenten').slice(), opties = { vandaag: datumStr(new Date()), functies: keuzelijst('talentFuncties') };
-  var stats = { bestanden: 0, regels: 0, nieuw: 0, bijgewerkt: 0, ongewijzigd: 0, overgeslagen: talentOvergeslagenLeeg(), nietHerkendeFuncties: [], genegeerdeKolommen: [], urenBestanden: [], nietGelezen: [], fouten: [], sinds: sinds };
+  var stats = { bestanden: 0, regels: 0, nieuw: 0, bijgewerkt: 0, ongewijzigd: 0, overgeslagen: talentOvergeslagenLeeg(), conflicten: [], nietHerkendeFuncties: [], genegeerdeKolommen: [], kolommen: {}, urenBestanden: [], nietGelezen: [], fouten: [], sinds: sinds };  // v7.7: conflicten (B3) en kolommen (B4)
   var nieuw = [], wijz = [], nietF = {};
   var it = map.getFiles();
   while (it.hasNext()) {
@@ -4516,12 +4575,18 @@ function talentImport() {
     r.bijgewerkt.forEach(function (w) { wijz.push(w); });
     r.nietHerkendeFuncties.forEach(function (x) { nietF[x.functie] = (nietF[x.functie] || 0) + x.aantal; });
     r.genegeerdeKolommen.forEach(function (g) { if (!stats.genegeerdeKolommen.some(function (x) { return x.kolom === g.kolom; })) stats.genegeerdeKolommen.push(g); });
+    r.conflicten.forEach(function (x) { if (stats.conflicten.length < TALENT_IMPORT_CONFLICT_MAX) stats.conflicten.push(x); });
+    Object.keys(r.kolommen).forEach(function (k) { if (!stats.kolommen[k]) stats.kolommen[k] = r.kolommen[k]; });
   }
   if (stats.fouten.length && !stats.bestanden) throw new Error(stats.fouten.map(function (x) { return x.bestand + ': ' + x.melding; }).join(' '));
   var nieuwPer = {}; nieuw.forEach(function (n) { nieuwPer[n.id] = n; });
   var echt = []; wijz.forEach(function (w) { var n = nieuwPer[w.id]; if (n) Object.keys(w).forEach(function (k) { if (k !== 'id') n[k] = w[k]; }); else echt.push(w); });  // aanvulling op een profiel uit dezelfde run: in dat profiel zelf
+  // v7.7 (R3): per aangevuld profiel één tijdlijnregel met alleen de veldnamen, geen waarden
+  var aanvulPer = {}, aanvulIds = [];
+  echt.forEach(function (w) { var a = aanvulPer[w.id]; if (!a) { a = aanvulPer[w.id] = {}; aanvulIds.push(w.id); } Object.keys(w).forEach(function (k) { if (k !== 'id') a[k] = 1; }); });
   if (nieuw.length || echt.length) metLock(function () {
     schrijfVeel('Talenten', nieuw.concat(echt));
+    if (aanvulIds.length) schrijfVeel('Activiteiten', aanvulIds.map(function (id) { return { type: 'notitie', datum: nu(), door: ikNaam(), talentId: id, bron: 'xps', aangemaakt: nu(), onderwerp: 'Aangevuld uit de XPS-accountexport: ' + Object.keys(aanvulPer[id]).join(', ') }; }));
     if (nieuw.length) schrijfVeel('Activiteiten', nieuw.map(function (n) { return { type: 'notitie', datum: nu(), door: ikNaam(), talentId: n.id, bron: 'xps', aangemaakt: nu(), onderwerp: 'Profiel aangemaakt uit de XPS-accountexport (xps-bestand)' }; }));
     nieuw.forEach(function (n) { koppelKandidaten(n); });  // kandidaten met hetzelfde e-mailadres of accountnummer krijgen het talentId
   });
@@ -4583,11 +4648,12 @@ function apiTalentAnonimiseer(id) {
 }
 // Persoonsgegevens weg, de gebeurtenissen (plaatsingen, uren, beoordelingen zonder naam) blijven voor de cijfers (altijd binnen metLock)
 function anonimiseerTalent(t, reden) {
+  var vergeten = uniek(lijstUit(veldenUit(t.velden).vergeten || []).concat(onderdrukHashes(t.email, t.xpsId, t.telefoon)));  // v7.7 (B2): niet-omkeerbare onderdrukkingslijst, zodat een volgende XPS-import dit profiel niet opnieuw aanmaakt
   var docs = lees('TalentDocumenten').filter(function (d) { return String(d.talentId) === String(t.id); });
   docs.forEach(function (d) { if (d.driveId) { try { DriveApp.getFileById(d.driveId).setTrashed(true); } catch (e) {} } });
   if (docs.length) verwijderRijen('TalentDocumenten', function (d) { return String(d.talentId) === String(t.id); });
   try { var map = talentSubmapAls(t.id); if (map) map.setTrashed(true); } catch (e2) {}
-  schrijf('Talenten', { id: t.id, voornaam: 'Verwijderd', achternaam: 'profiel', email: '', telefoon: '', postcode: '', woonplaats: '', lat: '', lon: '', opleiding: '', bevoegdheid: '', notitie: '', tags: '', velden: '', xpsId: '', afasNummer: '',
+  schrijf('Talenten', { id: t.id, voornaam: 'Verwijderd', achternaam: 'profiel', email: '', telefoon: '', postcode: '', woonplaats: '', lat: '', lon: '', opleiding: '', bevoegdheid: '', notitie: '', tags: '', velden: vergeten.length ? { vergeten: vergeten } : '', xpsId: '', afasNummer: '',
     portaalToken: '', portaalTokenTot: '', beschikbaarheid: '', uitzonderingen: '', status: 'uitgeschreven', statusSinds: nu(), bewarenTot: '' });
   var kands = lees('Kandidaten').filter(function (k) { return String(k.talentId) === String(t.id); });
   if (kands.length) schrijfVeel('Kandidaten', kands.map(function (k) { return { id: k.id, naam: 'Verwijderd profiel', email: '', telefoon: '', notitie: '' }; }));
@@ -6005,7 +6071,8 @@ function apiFinancien(schooljaar) {
       contract: F.contract, ongepland: F.ongepland, gefactureerd: F.gefactureerd, ontvangen: F.ontvangen, nogTeFactureren: F.nogTeFactureren, openstaand: F.openstaand, ouderdom: F.ouderdom, signalen: F.signalen, geschat: F.geschat,
       gemBetaaltijd: F.betaaltijden.length ? Math.round(F.betaaltijden.reduce(function (a, b) { return a + b; }, 0) / F.betaaltijden.length) : null });
     telBij(s.reeksen, r); telBij(totaal, r);
-    ['contract', 'gefactureerd', 'ontvangen', 'nogTeFactureren', 'openstaand'].forEach(function (k) { s[k] += F[k]; tot[k] += F[k]; });
+    ['contract', 'gefactureerd', 'ontvangen', 'openstaand'].forEach(function (k) { s[k] += F[k]; tot[k] += F[k]; });
+    var nogTe = Math.max(0, F.nogTeFactureren); s.nogTeFactureren += nogTe; tot.nogTeFactureren += nogTe;  // v7.7 (R10): per project blijft de ruwe waarde (negatief = meerwerk); in de school- en totaalsom telt meerwerk niet als 'nog te factureren'
     Object.keys(F.ouderdom).forEach(function (k) { s.ouderdom[k] += F.ouderdom[k]; tot.ouderdom[k] += F.ouderdom[k]; });
     s.betaaltijden = s.betaaltijden.concat(F.betaaltijden); betaaltijdenAlle = betaaltijdenAlle.concat(F.betaaltijden); s.geschat = s.geschat || F.geschat; geschatAlle = geschatAlle || F.geschat;
   });
@@ -6064,8 +6131,10 @@ function zelfdeDebiteur(a, b) {
   if (a.debiteurNummer && b.debiteurNummer && klein(a.debiteurNummer) === klein(b.debiteurNummer)) return true;
   return !!(a.debiteur && b.debiteur && naamSleutel(a.debiteur) === naamSleutel(b.debiteur));
 }
+function nrSleutel(n) { return String(n == null ? '' : n).trim().replace(/^0+(?=\d)/, '').toLowerCase(); }  // v7.7 (R9): één normalisatie van een factuurnummer ('000123' = 123 = '123')
 function apiExactImport(tekst, opties) {
   alleenBeheerder(); opties = opties && typeof opties === 'object' ? opties : {};
+  var nk = function (n) { return 'n' + nrSleutel(n); };  // v7.7 (R9): dezelfde sleutel aan beide kanten (exact-index, gezien, aanmaken)
   tekst = String(tekst || '').replace(/^﻿/, ''); if (!tekst.trim()) throw new Error('Het bestand is leeg.');
   if (tekst.length > 3 * 1024 * 1024) throw new Error('Het bestand is groter dan 3 MB; exporteer een kortere periode.');
   if (isOpenstaandePosten(tekst)) throw new Error('Dit is het Exact-rapport Openstaande posten: dat heeft één regel per relatie. Voor de afstemming is een export per factuur nodig met factuurnummer, factuurdatum, bedrag en betaaldatum, als csv met de kolomnamen op de eerste regel.');
@@ -6093,9 +6162,9 @@ function apiExactImport(tekst, opties) {
   rijen.slice(1).forEach(function (r) {
     var cel = function (x) { return idx[x] >= 0 ? String(r[idx[x]] == null ? '' : r[idx[x]]).trim() : ''; }, nr = cel('factuurnummer'); if (!nr) return;
     var x = { nummer: nr, datum: datumUitExport(cel('datum')), bedrag: bedragIn(cel('bedrag')), betaald: idx.betaald >= 0 ? datumUitExport(cel('betaald')) : '', open: cel('open') !== '' ? bedragIn(cel('open')) : null,
-      debiteur: cel('debiteur'), debiteurNummer: cel('debiteurNummer'), omschrijving: cel('omschrijving') }, e = exact['n' + nr];  // v7.7: omschrijving voor een aan te maken termijn
+      debiteur: cel('debiteur'), debiteurNummer: cel('debiteurNummer'), omschrijving: cel('omschrijving') }, e = exact[nk(nr)];  // v7.7: omschrijving voor een aan te maken termijn
     if (e) { e.bedrag = (e.bedrag || 0) + (x.bedrag || 0); if (x.betaald > e.betaald) e.betaald = x.betaald; if (x.open !== null) e.open = (e.open || 0) + x.open; }  // meerdere regels per factuur: optellen
-    else { exact['n' + nr] = x; nummers.push(x); }
+    else { exact[nk(nr)] = x; nummers.push(x); }
     if (x.datum) datums.push(x.datum);
   });
   // v7.4: creditnota's → het origineel bij dezelfde debiteur, zelfde bedrag, factuurdatum tot 60 dagen eerder (de meest recente); elk origineel één keer.
@@ -6105,9 +6174,9 @@ function apiExactImport(tekst, opties) {
   nummers.filter(function (c) { return c.bedrag !== null && c.bedrag < 0; }).sort(function (a, b) { return String(a.datum).localeCompare(String(b.datum)) || a.nummer.localeCompare(b.nummer); }).forEach(function (c) {
     if (!c.datum) return;
     var na = function (x) { var a = Number(x.nummer), b = Number(c.nummer); return isFinite(a) && isFinite(b) && a > b ? 1 : 0; }, open = function (x) { return x.open === 0 ? 0 : 1; };
-    var vanaf = plusDagenVan(c.datum, -EXACT_CREDIT_DAGEN), o = nummers.filter(function (x) { return x !== c && x.bedrag === -c.bedrag && !gecrediteerd['n' + x.nummer] && x.datum && x.datum <= c.datum && x.datum >= vanaf && zelfdeDebiteur(x, c); })
+    var vanaf = plusDagenVan(c.datum, -EXACT_CREDIT_DAGEN), o = nummers.filter(function (x) { return x !== c && x.bedrag === -c.bedrag && !gecrediteerd[nk(x.nummer)] && x.datum && x.datum <= c.datum && x.datum >= vanaf && zelfdeDebiteur(x, c); })
       .sort(function (a, b) { return (open(a) - open(b)) || (na(a) - na(b)) || b.datum.localeCompare(a.datum) || b.nummer.localeCompare(a.nummer); })[0];
-    if (o) { gecrediteerd['n' + o.nummer] = c; origineelVan['n' + c.nummer] = o; }
+    if (o) { gecrediteerd[nk(o.nummer)] = c; origineelVan[nk(c.nummer)] = o; }
   });
   datums.sort();
   var van = datums[0] || '', tot = datums[datums.length - 1] || '', tMap = perId(lees('Trajecten')), gezien = {}, waarVan = {}, eersteStatus = keuzelijst('factuurStatussen')[0], openAlsBetaald = idx.open >= 0 && idx.betaald < 0, volgensOpen = 0;
@@ -6116,10 +6185,10 @@ function apiExactImport(tekst, opties) {
   lees('Facturen').forEach(function (f) {
     var nr = String(f.factuurnummer || '').trim(), t = tMap[f.trajectId] || {}, waar = (t.school || '') + ' · ' + (t.traject || '') + ' · ' + (f.omschrijving || '');
     if (!nr) return;
-    var x = exact['n' + nr];
+    var x = exact[nk(nr)];
     if (!x) { var v = verzondenVan(f); if (v && (!van || (v.datum >= van && v.datum <= tot))) uit.alleenAthena.push({ nummer: nr, waar: waar, bedrag: centen(f.bedrag) }); return; }
-    gezien['n' + nr] = 1; waarVan['n' + nr] = waar; uit.gekoppeld++;
-    var c = gecrediteerd['n' + nr];
+    gezien[nk(nr)] = 1; waarVan[nk(nr)] = waar; uit.gekoppeld++;
+    var c = gecrediteerd[nk(nr)];
     if (c) {  // v7.4: gecrediteerd: terug naar de eerste status, zonder factuurnummer en datums; beide nummers komen op de tijdlijn van het project
       wijz.push({ id: f.id, status: eersteStatus, factuurnummer: '', verzonden: '', betaald: '' }); credits.push({ f: f, t: t, origineel: nr, credit: c });
       uit.bijgewerkt.push({ nummer: nr, waar: waar, wat: 'gecrediteerd met ' + c.nummer + ': terug naar ' + eersteStatus + ', zonder factuurnummer' });
@@ -6138,11 +6207,11 @@ function apiExactImport(tekst, opties) {
     if (veranderd.length) { wijz.push(nieuw); uit.bijgewerkt.push({ nummer: nr, waar: waar, wat: veranderd.join(', ') }); }
   });
   nummers.forEach(function (x) {
-    var o = origineelVan['n' + x.nummer];
-    if (o) { uit.creditnotas.push({ nummer: x.nummer, origineel: o.nummer, bedrag: x.bedrag, datum: x.datum, waar: waarVan['n' + o.nummer] || '', inAthena: !!gezien['n' + o.nummer] }); return; }
-    if (gecrediteerd['n' + x.nummer]) return;
-    if (x.open !== null && x.bedrag !== null && x.open > 0 && x.open < x.bedrag) uit.deelsBetaald.push({ nummer: x.nummer, waar: waarVan['n' + x.nummer] || '', bedrag: x.bedrag, open: x.open });  // v7.4: de status blijft verzonden
-    if (!gezien['n' + x.nummer]) uit.alleenExact.push({ nummer: x.nummer, datum: x.datum, bedrag: x.bedrag, creditnota: x.bedrag !== null && x.bedrag < 0 });
+    var o = origineelVan[nk(x.nummer)];
+    if (o) { uit.creditnotas.push({ nummer: x.nummer, origineel: o.nummer, bedrag: x.bedrag, datum: x.datum, waar: waarVan[nk(o.nummer)] || '', inAthena: !!gezien[nk(o.nummer)] }); return; }
+    if (gecrediteerd[nk(x.nummer)]) return;
+    if (x.open !== null && x.bedrag !== null && x.open > 0 && x.open < x.bedrag) uit.deelsBetaald.push({ nummer: x.nummer, waar: waarVan[nk(x.nummer)] || '', bedrag: x.bedrag, open: x.open });  // v7.4: de status blijft verzonden
+    if (!gezien[nk(x.nummer)]) uit.alleenExact.push({ nummer: x.nummer, datum: x.datum, bedrag: x.bedrag, creditnota: x.bedrag !== null && x.bedrag < 0 });
   });
   if (volgensOpen) meldingen.push(volgensOpen + (volgensOpen === 1 ? ' factuur' : ' facturen') + ' betaald volgens openstaand bedrag; datum = peildatum (' + peil + ').');
   if (openAlsBetaald) meldingen.push('Geen kolom met de betaaldatum: Open = 0 telt als betaald, behalve bij een factuur met een creditnota.');
@@ -6154,11 +6223,12 @@ function apiExactImport(tekst, opties) {
   var scholenL = lees('Scholen'), trajectenL = lees('Trajecten'), aanmaken = !!opties.aanmaken && !!opties.toepassen, nieuweTermijnen = [], perProject = {};
   uit.aangemaakt = [];
   uit.alleenExact.forEach(function (a) {
-    var x = exact['n' + a.nummer], d = exactDoelVan(x, scholenL, trajectenL);
+    var x = exact[nk(a.nummer)], d = exactDoelVan(x, scholenL, trajectenL);
     a.reden = d.reden; if (d.school) a.school = d.school; if (d.project) a.project = d.project;
     if (d.reden || !aanmaken) return;
     var betaaldOp = x.betaald || (openAlsBetaald && x.open === 0 ? peil : '');  // dezelfde regels als bij een bestaande koppeling
-    nieuweTermijnen.push({ trajectId: d.traject.id, omschrijving: tekstIn(x.omschrijving) || 'Factuur ' + a.nummer, bedrag: x.bedrag / 100, datum: x.datum, factuurnummer: a.nummer, verzonden: x.datum, status: betaaldOp ? 'betaald' : 'verzonden', betaald: betaaldOp,
+    // v7.7 (R2): omschrijving = Betreft, hoogstens 80 tekens (geen persoonsnamen; de boekhouder controleert de export), anders 'Factuur <nummer>'
+    nieuweTermijnen.push({ trajectId: d.traject.id, omschrijving: tekstIn(x.omschrijving).slice(0, 80) || 'Factuur ' + a.nummer, bedrag: x.bedrag / 100, datum: x.datum, factuurnummer: a.nummer, verzonden: x.datum, status: betaaldOp ? 'betaald' : 'verzonden', betaald: betaaldOp,
       bijzonderheden: 'Aangemaakt uit de Exact-afstemming van ' + peil, door: ikNaam(), aangemaakt: nu() });
     uit.aangemaakt.push({ nummer: a.nummer, school: d.school, project: d.project, bedrag: x.bedrag, datum: x.datum });
     (perProject[d.traject.id] = perProject[d.traject.id] || { t: d.traject, nummers: [] }).nummers.push(a.nummer);
@@ -6184,7 +6254,7 @@ function apiExactImport(tekst, opties) {
 }
 // v7.7: de school bij een Exact-factuur: een vrij veld op de school (Beheer → Tags en velden) waarvan de sleutel debiteur of exact bevat en de waarde
 // het debiteurnummer is; anders de debiteurnaam gelijk aan de schoolnaam (naamSleutel). Meer dan één treffer = 'meer scholen'.
-var EXACT_VELD_DEBITEUR = /debiteur|exact/i;
+var EXACT_VELD_DEBITEUR = /debiteur|exact/i, EXACT_PROJECT_STATUS = ['opstart', 'bezig', 'afgelopen'];  // v7.7 (R8): alleen zo'n project is kandidaat; gestopt en onduidelijk niet
 function exactSchoolVan(x, scholen) {
   var nr = klein(x.debiteurNummer), hits = [];
   if (nr) scholen.forEach(function (s) { var v = veldenUit(s.velden); if (Object.keys(v).some(function (k) { return EXACT_VELD_DEBITEUR.test(k) && klein(v[k]) === nr; })) hits.push(s); });
@@ -6206,7 +6276,7 @@ function exactDoelVan(x, scholen, trajecten) {
   var sch = exactSchoolVan(x, scholen);
   if (!sch.length) return { reden: 'geen school' };
   if (sch.length > 1) return { reden: 'meer scholen' };
-  var s = sch[0], ps = trajecten.filter(function (t) { return t.status !== 'gestopt' && (t.schoolId ? String(t.schoolId) === String(s.id) : naamSleutel(t.school) === naamSleutel(s.naam)) && trajectInPeriode(t, x.datum); });
+  var s = sch[0], ps = trajecten.filter(function (t) { return EXACT_PROJECT_STATUS.indexOf(t.status) >= 0 && (t.schoolId ? String(t.schoolId) === String(s.id) : naamSleutel(t.school) === naamSleutel(s.naam)) && trajectInPeriode(t, x.datum); });
   if (!ps.length) return { reden: 'geen project', school: s.naam };
   if (ps.length > 1) return { reden: 'meer projecten', school: s.naam };
   return { reden: '', school: s.naam, project: ps[0].traject || '', traject: ps[0] };

@@ -376,11 +376,13 @@ def handle_talent(fn, args):
     # v7.7: de vorm van talentImport in Code.gs (nieuw, aangevuld, ongewijzigd, overgeslagen per reden, niet herkende functies, overgeslagen urenexports, genegeerde kolommen); alleen wie het talentbestand beheert
     if fn == 'apiTalentImport':
         if ik()['rechten']['talenten']['wijzigen'] != 'alles': geen_toegang()
-        return {'bestanden': 1, 'regels': 8, 'nieuw': 2, 'bijgewerkt': 1, 'ongewijzigd': 3, 'overgeslagen': {'geenNaam': 1, 'geenContact': 0, 'dubbelInBestand': 1, 'uitgeschreven': 0},
+        return {'bestanden': 1, 'regels': 8, 'nieuw': 2, 'bijgewerkt': 1, 'ongewijzigd': 3, 'overgeslagen': {'geenNaam': 1, 'geenContact': 0, 'dubbelInBestand': 1, 'uitgeschreven': 0, 'nietActief': 1, 'conflict': 1},
+                'conflicten': [{'naam': 'Pien van der Berg', 'xpsId': 'X9101', 'email': 'tim.verhoeven@mail.example', 'reden': 'tegenstrijdig accountnummer of e-mailadres (niet gewijzigd)'}],  # v7.7 (B3)
+                'kolommen': {'xpsId': 'Accountnummer', 'naam': 'Naam', 'email': 'E-mail', 'telefoon': 'Mobiel'},  # v7.7 (B4): welke kop voor welk veld
                 'nietHerkendeFuncties': [{'functie': 'conciërge', 'aantal': 1}], 'genegeerdeKolommen': [{'kolom': 'IBAN', 'hint': 'persoonsgegevens die niet in Athena horen: nooit gelezen; laat deze kolom uit de export'}],
                 'urenBestanden': ['xps-diensten-week.csv'], 'nietGelezen': [], 'fouten': [], 'sinds': d(-14) + ' 09:10'}
     # v7.4: de vorm van urenImport in Code.gs (tellingen, overgeslagen per reden, onbekend en dubbel met aantal diensten, genegeerde kolommen, fouten per bestand)
-    if fn == 'apiTalentUrenImport': return {'bestanden': 1, 'regels': 14, 'gelezen': 14, 'gekoppeld': 8, 'weekregels': 3, 'weken': 1, 'ongewijzigd': 0, 'kandidatenBijgewerkt': 0,
+    if fn == 'apiTalentUrenImport': return {'bestanden': 1, 'regels': 14, 'gelezen': 14, 'gekoppeld': 8, 'weekregels': 3, 'weken': 1, 'ongewijzigd': 0, 'kandidatenBijgewerkt': 0, 'accountBestanden': ['xps-accounts-voorbeeld.csv'],  # v7.7 (R4): een accountexport in de map wordt overgeslagen
         'overgeslagen': {'status': 3, 'toekomst': 1, 'oud': 0, 'geenTalent': 1, 'dubbeleNaam': 1, 'geenUren': 0, 'geenDatum': 0},
         'onbekend': [{'xpsId': 'x9998', 'email': '', 'naam': 'Sanne Voorbeeld', 'diensten': 1}], 'onbekendAantal': 1, 'dubbel': [{'naam': 'Eva de Vries', 'diensten': 1, 'talenten': 2}], 'dubbelAantal': 1,
         'genegeerdeKolommen': [{'kolom': 'Salaris (totaal)', 'hint': 'loongegevens: worden nooit gelezen of bewaard; laat deze kolom uit de export'}, {'kolom': 'Projectleider', 'hint': ''}],
