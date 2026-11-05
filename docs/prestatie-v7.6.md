@@ -143,7 +143,7 @@ Uitkomst op de werkkopie van v7.6 (5 runs, load 0,3–1,9): koud 1 933 ms, warm 
 - R3: een pagina die dagen leeft kreeg geen sw.js-check, en met cache-eerst hangt de update-balk daaraan. Fix: `registration.update()` als de app weer in beeld komt, hoogstens eens per tien minuten.
 - R4: telemetrie op het kritieke pad van elke `run()` (JSON van de hele buffer per aanroep, 1–3 ms op een oudere iPhone). Fix: buffer in het geheugen, wegschrijven met setTimeout 0.
 - O2: de oude worker kon na een release met `caches.open` een achtergebleven cache maken. Fix: `caches.has(CACHE)` vóór de put en `cacheName` in `uitCache`.
-Ronde 2 (op de fixes): [uitkomst volgt].
+Ronde 2 (op de fixes): niets blokkerends. Twee kleine risico's, beide verwerkt: de bundel kon na een lange periode zonder geslaagde verzending boven de 200 rijen van de backend en de 64 KiB van keepalive uitkomen en dan nooit meer aankomen (nu hoogstens 150 ruwe metingen per keer, de rest bij de volgende gelegenheid); twee desktop-tabbladen lieten `METING.lijst` en `aa_metingen` uit elkaar lopen (nu een `storage`-listener die de lijst opnieuw laat lezen). Verder: B1 dicht (install doet een conditioneel verzoek met de ETag; alleen een CDN dat sw.js seconden eerder ververst dan `./` kan het oude gedrag één keer herhalen, de volgende start herstelt dat stil), `addAll` met een Request-object werkt in Safari 11.1+, `cacheName` en `caches.has` in Safari 11.1+, `keepalive` met `signal` en de 302 van Apps Script in Safari 13+; uitloggen wist nu ook de metingen van die gebruiker.
 
 **Suites** op de laatste commit: [lijst volgt].
 

@@ -4,7 +4,7 @@ var CACHE = 'athena-assistent-v7.6';  // bump bij elke release (zie /release)
 // skipWaiting + clients.claim meteen over en herlaadt nooit zelf, zodat een open venster of composer niet verloren gaat.
 // v7.6: './index.html' staat niet meer apart in SHELL: dat was hetzelfde bestand (609 kB) twee keer downloaden bij elke installatie; install zet de
 // response van './' ook onder die sleutel, zodat uitCache() en een navigatie naar /index.html hem blijven vinden.
-var SHELL = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+var SHELL = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];  // './' moet vooraan blijven: install haalt hem apart op (zie hieronder)
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {

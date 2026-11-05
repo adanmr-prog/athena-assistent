@@ -1355,7 +1355,7 @@
   function uitloggen() {
     var t = leesOpslag('aa_token');
     if (SERVER && t) { try { fetch(SERVER.supabaseUrl + '/auth/v1/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t, apikey: SERVER.anonKey } }).catch(function () {}); } catch (e) {} }
-    wisToken(); ['aa_cache_home', 'aa_cache_vandaag', 'aa_cache_crm', 'aa_chat'].forEach(function (k) { zetOpslag(k, ''); });
+    wisToken(); ['aa_cache_home', 'aa_cache_vandaag', 'aa_cache_crm', 'aa_chat'].forEach(function (k) { zetOpslag(k, ''); }); metingenZet([]);  // v7.6: de metingen van deze gebruiker gaan niet onder de volgende login mee
     CRM.basis = null; DESK.mails = null; S.chat = leesChat(); el('statusInfo').innerHTML = ''; checkKoppeling();
   }
   // v6.1: terug naar de map van de app (gelijk aan de scope van het manifest), ook vanaf …/index.html: dan volstaat één adres in de Supabase-allowlist
@@ -1431,7 +1431,7 @@
      iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
   var APP_VERSIE = '7.6';  // v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
-  var METING = { max: 400, drempel: 50, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
+  var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
   function tijdNu() { return (window.performance && typeof performance.now === 'function') ? performance.now() : Date.now(); }
   function kortFout(s) { return String(s == null ? '' : s).replace(/[^\s@<>"'()]+@[^\s@<>"'()]+/g, '…').replace(/\s+/g, ' ').trim().slice(0, 120); }  // e-mailadressen eruit, hoogstens 120 tekens
   function foutCode(err) {
@@ -1447,6 +1447,7 @@
     return METING.lijst;
   }
   function metingenSchrijf() { METING.schrijfTimer = null; try { zetOpslag('aa_metingen', JSON.stringify(METING.lijst || [])); } catch (e) {} }
+  try { window.addEventListener('storage', function (ev) { if (ev && ev.key === 'aa_metingen') METING.lijst = null; }); } catch (e) {}  // v7.6 (iOS-review r2): een ander tabblad (desktop) schreef of verzond; de volgende metingenLees leest opnieuw (het storage-event vuurt alleen in de andere tabbladen, dus geen lus)
   function metingenZet(l) { METING.lijst = l; metingenSchrijf(); }
   function metingVast(m) {
     if (PORTAAL) return;
@@ -1482,7 +1483,8 @@
     if (METING.poging && Date.now() - METING.poging < METING.wachtNaFout) return;  // na een mislukte verzending even wachten (geen lus)
     if (SERVER && (Number(leesOpslag('aa_token_tot')) || 0) - Date.now() < 60 * 1000) return;  // v7.6 (iOS-review R1): geen tokenvernieuwing vanuit een verzending bij het wegzwaaien (raakt het antwoord zoek, dan is het refresh-token verbruikt)
     var l = metingenLees(); if (!metingenTijd(l)) return;
-    var grens = ymd(new Date(Date.now() - 30 * METING.dag24)), n = l.length, bundel = metingenBundel(l.filter(function (m) { return m && typeof m.fn === 'string' && m.dag >= grens; }));  // de backend weigert dagen ouder dan 30 dagen
+    var deel = l.slice(0, METING.perKeer), grens = ymd(new Date(Date.now() - 30 * METING.dag24)), n = deel.length;  // v7.6 (iOS-review r2): hoogstens 150 ruwe metingen per keer, zodat de bundel onder de 200 rijen van de backend en de 64 KiB van keepalive blijft; de rest gaat de volgende keer
+    var bundel = metingenBundel(deel.filter(function (m) { return m && typeof m.fn === 'string' && m.dag >= grens; }));  // de backend weigert dagen ouder dan 30 dagen
     if (!bundel.length) { metingenZet([]); return; }
     METING.bezig = true; METING.poging = Date.now();
     runKern('apiMetingenOpslaan', [bundel], { stil: true }).then(function () {
@@ -5768,7 +5770,7 @@
     navigator.serviceWorker.register('sw.js').catch(function () {});
     var toonUpdateBalk = function () { var u = el('updateBalk'); if (u && versieNieuw) u.hidden = false; };
     if (hadController) navigator.serviceWorker.addEventListener('controllerchange', function () { versieNieuw = true; toonUpdateBalk(); });
-    var swCheckOp = 0;
+    var swCheckOp = Date.now();  // register() hieronder is de eerste check
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
       toonUpdateBalk();
