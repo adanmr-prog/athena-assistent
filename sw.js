@@ -1,12 +1,15 @@
-/* Athena Assistent — service worker: HTML network-first (cache als fallback), statische shell cache-first, API altijd via netwerk */
+/* Athena Assistent — service worker: HTML cache-first met verversen op de achtergrond (v7.6, stale-while-revalidate), statische shell cache-first, API altijd via netwerk */
 var CACHE = 'athena-assistent-v7.5';  // bump bij elke release (zie /release)
 // v7.3 (iOS-review R2): de app luistert op controllerchange en toont dan de vaste balk #updateBalk (Herladen / Later); deze worker neemt met
 // skipWaiting + clients.claim meteen over en herlaadt nooit zelf, zodat een open venster of composer niet verloren gaat.
-var SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
-var NET_TIMEOUT_MS = 3000;  // v1.0: bij trage verbinding na 3 s de gecachte shell tonen; het netwerk werkt op de achtergrond door
+// v7.6: './index.html' staat niet meer apart in SHELL: dat was hetzelfde bestand (609 kB) twee keer downloaden bij elke installatie; install zet de
+// response van './' ook onder die sleutel, zodat uitCache() en een navigatie naar /index.html hem blijven vinden.
+var SHELL = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return c.addAll(SHELL).then(function () { return c.match('./'); }).then(function (r) { return r ? c.put('./index.html', r.clone()) : null; });  // v7.6: één download, twee sleutels
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {
@@ -33,29 +36,31 @@ function zonderRedirect(resp) {
   return resp.blob().then(function (b) { return new Response(b, { status: resp.status, statusText: resp.statusText, headers: resp.headers }); });
 }
 
-// v1.0: network-first voor HTML, zodat een geïnstalleerde PWA altijd de nieuwste index.html krijgt (cache-first zou die vasthouden).
-function netwerkEerst(e) {
-  var req = e.request;
+// v7.6: cache-first met verversen op de achtergrond (stale-while-revalidate) voor HTML. Tot v7.5 was dit network-first met een time-out van 3 s:
+// ook een warme start wachtte dan op het netwerk (gemeten: scriptstart 366 ms tegenover 239 ms uit de cache bij 150 ms RTT, en 3,5 s bij een hangende
+// server). Nu komt de gecachte shell meteen; het netwerk ververst de cache voor de volgende keer. Een nieuwe release bumpt CACHE in dit bestand,
+// waarna install de nieuwe shell ophaalt en de app via controllerchange de balk #updateBalk toont (v7.3) — de gebruiker kiest zelf Herladen.
+function cacheEerst(e) {
+  var req = e.request, sleutel = htmlSleutel(req);
   var vanNet = fetch(req.url, { cache: 'no-cache' }).then(function (resp) {
-    if (!(resp && resp.ok)) return uitCache(req).then(function (hit) { return hit || resp; });  // serverfout: liever de oude shell dan een foutpagina
+    if (!(resp && resp.ok)) return resp;  // serverfout: niet in de cache zetten
     return zonderRedirect(resp).then(function (schoon) {
       var kopie = schoon.clone();
-      e.waitUntil(caches.open(CACHE).then(function (c) { return c.put(htmlSleutel(req), kopie); }));  // waitUntil: iOS mag de SW anders stoppen vóór de put klaar is
-      return schoon;
+      return caches.open(CACHE).then(function (c) { return c.put(sleutel, kopie); }).then(function () { return schoon; }, function () { return schoon; });
     });
   });
-  vanNet.catch(function () {});  // als de timeout al gewonnen heeft en het netwerk daarna faalt, is dat geen onafgehandelde fout
-  var naTimeout = new Promise(function (klaar) { setTimeout(klaar, NET_TIMEOUT_MS); })
-    .then(function () { return uitCache(req); })
-    .then(function (hit) { return hit || vanNet; });  // niets in cache: dan toch op het netwerk wachten
-  return Promise.race([vanNet, naTimeout]).catch(function () { return uitCache(req); });  // offline: gecachte shell
+  e.waitUntil(vanNet.then(null, function () {}));  // de verversing loopt door na het antwoord; iOS mag de worker anders stoppen vóór de put klaar is
+  return uitCache(req).then(function (hit) {
+    if (hit) return hit;  // warme start: meteen de shell uit de cache
+    return vanNet.then(function (resp) { return resp && resp.ok ? resp : uitCache(req).then(function (h2) { return h2 || resp; }); });  // eerste bezoek: netwerk
+  }).catch(function () { return uitCache(req); });  // offline zonder cache: niets te doen
 }
 
 self.addEventListener('fetch', function (e) {
   var url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;  // API (POST, ander domein) nooit cachen
   if (/\/api(\/|$)/.test(url.pathname)) return;  // v6.0: de eigen server (Vercel: /api, /api/config) altijd via het netwerk
-  if (isHtml(e.request, url)) { e.respondWith(netwerkEerst(e)); return; }
+  if (isHtml(e.request, url)) { e.respondWith(cacheEerst(e)); return; }  // v7.6: stale-while-revalidate
   // v4.3: demo-code en de backend die de demo draait network-first; de cache is alleen de offline-terugval (nooit index.html als JS)
   if (/\/demo\/[\w-]+\.js$|\/backend\/Code\.gs$/.test(url.pathname)) {
     e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).then(function (resp) {
