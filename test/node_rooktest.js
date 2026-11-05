@@ -1080,7 +1080,7 @@ eis(won2.traject && !ctx.lees('Vacatures').some(function (v) { return v.trajectI
 (function () {
   ctx.GEBRUIKER = null;
   var c1 = ctx.controleer();
-  eis(c1.indexOf('backend 7.5') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.5 en geen afwijkende koppen in de demo-sheet');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch; v7.5: release
+  eis(c1.indexOf('backend 7.6') >= 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1), 'controleer(): versie 7.6 en geen afwijkende koppen in de demo-sheet');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch; v7.5: release; v7.6: metingen
   var b = ctx.blad('Scholen'), kop = ctx.TABELLEN.Scholen, was = b.getRange(1, 2, 1, 1).getValues()[0][0];
   b.getRange(1, 2, 1, 1).setValues([['schoolnaam']]);
   var c2 = ctx.controleer(), regel = c2.split('\n').filter(function (r) { return r.indexOf('- Scholen:') === 0; })[0] || '';
@@ -1430,6 +1430,58 @@ function tel(tab, fn) { return ctx.lees(tab).filter(fn).length; }
   var vf = roep(SOPHIE, 'apiExactImport', fs.readFileSync(path.join(R, 'test/voorbeelden/facturen_export.csv'), 'utf8'), {});
   eis(vf.creditnotas.length === 1 && vf.creditnotas[0].nummer === '20261060' && vf.creditnotas[0].origineel === '20261052' && vf.deelsBetaald.some(function (x) { return x.nummer === '20261051' && x.open === 50000; }) && nrs(vf.alleenExact).indexOf('20261055') >= 0 && nrs(vf.alleenExact).indexOf('20261061') >= 0 && nrs(vf.alleenExact).indexOf('20261060') < 0, 'voorbeeld facturen_export.csv: creditnota-paar, deels betaald en alleen in Exact');
 } catch (e) { eis(false, 'v7.4 Exact-afstemming: onverwachte fout ' + e.message); } })();
+
+/* ---- v7.6: metingen — aanleveren (geldig, ongeldig, upsert, eigen rijen), het overzicht (rechten, p50/p95 uit een bekende verdeling) en opruimen na 90 dagen ---- */
+(function () {
+  var vandaag = plusDagen(0);
+  function mRij(extra) { var r = { dag: vandaag, fn: 'apiHome', aantal: 100, fouten: 2, b250: 50, b500: 30, b1000: 15, b2000: 5, b5000: 0, bMeer: 0, somMs: 40000, maxMs: 1800, laatsteFout: 'netwerk', appVersie: '7.6' }; Object.keys(extra || {}).forEach(function (k) { r[k] = extra[k]; }); return r; }
+  function metingen(fn) { return ctx.lees('Metingen').filter(function (m) { return !fn || m.fn === fn; }); }
+  var r1 = roep(LARS, 'apiMetingenOpslaan', [mRij(), { dag: vandaag, fn: 'js', aantal: 1, fouten: 1, b250: 1, b500: 0, b1000: 0, b2000: 0, b5000: 0, bMeer: 0, somMs: 0, maxMs: 0, laatsteFout: 'TypeError: x is undefined @ index.html:12:3', appVersie: '7.6' }]);
+  var m1 = metingen('apiHome')[0];
+  eis(r1.ontvangen === 2 && metingen().length === 2 && !!m1 && m1.gebruiker === 'g-lars' && m1.aantal === 100 && m1.maxMs === 1800 && m1.laatsteFout === 'netwerk' && m1.appVersie === '7.6' && !!m1.id && !!m1.aangemaakt, 'apiMetingenOpslaan: twee geldige rijen (api en js) komen in Metingen onder de eigen gebruikers-id');
+  var r2 = roep(LARS, 'apiMetingenOpslaan', [mRij({ maxMs: 900, fouten: 1, laatsteFout: '', gebruiker: 'beheer' })]), m2 = metingen('apiHome');
+  eis(r2.ontvangen === 1 && m2.length === 1 && m2[0].id === m1.id && m2[0].aantal === 200 && m2[0].fouten === 3 && m2[0].b250 === 100 && m2[0].somMs === 80000 && m2[0].maxMs === 1800 && m2[0].laatsteFout === 'netwerk' && m2[0].gebruiker === 'g-lars', 'apiMetingenOpslaan: upsert op (gebruiker, dag, fn) telt op, maxMs blijft het maximum, de laatste fout blijft staan; gebruiker uit de invoer telt niet');
+  roep(FEMKE, 'apiMetingenOpslaan', [mRij()]);
+  eis(metingen('apiHome').length === 2 && metingen('apiHome').some(function (m) { return m.gebruiker === 'g-femke' && m.aantal === 100; }), 'apiMetingenOpslaan: een andere gebruiker krijgt een eigen rij voor dezelfde dag en api');
+  var voor = metingen().length, fouten = [
+    [faalt(LARS, 'apiMetingenOpslaan', 'x'), /lijst/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ fn: 'eval' })]), /bekende api/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ fn: 'api' + 'BestaatNiet' })]), /bekende api/],  // samengesteld, zodat kruistabel.js hem niet als app-aanroep leest
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ fn: 'apiPortaalToon' })]), /bekende api/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ dag: plusDagen(1) })]), /geldige dag/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ dag: plusDagen(-31) })]), /geldige dag/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ dag: '2026-02-30' })]), /geldige dag/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ fouten: 101 })]), /meer fouten/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ b250: 51 })]), /emmers/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ somMs: -1 })]), /geheel getal/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ maxMs: '1800' })]), /geheel getal/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ aantal: 0, fouten: 0, b250: 0, b500: 0, b1000: 0, b2000: 0 })]), /aantal 0/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ laatsteFout: new Array(122).join('x') })]), /120 tekens/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ laatsteFout: { a: 1 } })]), /verwacht tekst/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij({ appVersie: '7.6.0-heel-lang-versienummer' })]), /20 tekens/],
+    [faalt(LARS, 'apiMetingenOpslaan', [null]), /geen object/],
+    [faalt(LARS, 'apiMetingenOpslaan', [mRij(), 'x']), /rij 2/],
+    [faalt(LARS, 'apiMetingenOpslaan', new Array(201).join(',').split(',').map(function () { return mRij(); })), /hoogstens 200/]
+  ];
+  var mis = fouten.filter(function (f) { return !f[1].test(f[0]) || /undefined|TypeError|\[object/.test(f[0]); }).map(function (f) { return f[0] || '(geen fout)'; });
+  eis(!mis.length && metingen().length === voor, 'apiMetingenOpslaan: ' + fouten.length + ' ongeldige invoeren geven een Nederlandse fout en schrijven niets' + (mis.length ? ' — ' + mis.join(' | ') : ''));
+  eis(/toegang/.test(faalt(LARS, 'apiMetingen', 14)) && /toegang/.test(faalt(FEMKE, 'apiMetingen')) && /toegang/.test(faalt('demo-iris', 'apiMetingen')) && /toegang/.test(faalt('demo-sem', 'apiMetingen')), 'apiMetingen: alleen management (consultancy, accountmanagement en talent, ook een teamlead, krijgen "geen toegang")');
+  var ov = roep(SOPHIE, 'apiMetingen'), home = ov.apis.filter(function (a) { return a.fn === 'apiHome'; })[0];
+  // bekende verdeling over Lars (200) en Femke (100): 300 aanroepen, 150 ≤ 250 ms, 90 ≤ 500, 45 ≤ 1000, 15 ≤ 2000: p50 valt precies op de grens van de eerste emmer (250), p95 (rang 285) precies op de grens van de derde (1000)
+  eis(ov.dagen === 14 && ov.schatting === true && /schatting/.test(ov.uitleg) && !!home && home.aantal === 300 && home.fouten === 5 && home.foutPct === 1.7 && home.p50 === 250 && home.p95 === 1000 && home.gemMs === 400 && home.maxMs === 1800 && home.laatsteFout === 'netwerk' && ov.gebruikers === 2, 'apiMetingen: per api over alle gebruikers; p50 = 250 en p95 = 1000 uit de bekende verdeling, gemiddelde 400, foutpercentage 1,7');
+  eis(ov.jsFouten.aantal === 1 && /TypeError: x is undefined @ index\.html:12:3/.test(ov.jsFouten.laatste) && !ov.apis.some(function (a) { return a.fn === 'js'; }), 'apiMetingen: JS-fouten apart (aantal en laatste melding), niet in de api-lijst');
+  roep(FEMKE, 'apiMetingenOpslaan', [mRij({ fn: 'apiCrm', aantal: 10, fouten: 0, b250: 0, b500: 0, b1000: 0, b2000: 0, b5000: 5, bMeer: 5, somMs: 60000, maxMs: 9000, laatsteFout: '' })]);
+  var ov2 = roep(SOPHIE, 'apiMetingen', 90), crm = ov2.apis[0];
+  // 10 aanroepen: 5 in 2000–5000 en 5 daarboven (tot maxMs 9000): p50 (rang 5) = 5000, p95 (rang 9,5) = 5000 + 4000 × 4,5 / 5 = 8600
+  eis(ov2.dagen === 90 && crm.fn === 'apiCrm' && crm.p50 === 5000 && crm.p95 === 8600 && ov2.apis[1].fn === 'apiHome', 'apiMetingen: gesorteerd op p95 aflopend; de laatste emmer interpoleert tot de langste aanroep (p95 = 8600)');
+  eis(roep(SOPHIE, 'apiMetingen', 'x').dagen === 14 && roep(SOPHIE, 'apiMetingen', 500).dagen === 90 && roep(SOPHIE, 'apiMetingen', -3).dagen === 1, 'apiMetingen: dagen standaard 14, hoogstens 90, minstens 1');
+  ctx.GEBRUIKER = null;
+  ctx.schrijf('Metingen', { id: 'm-oud-rooktest', dag: plusDagen(-91), gebruiker: 'g-lars', fn: 'apiHome', aantal: 1, fouten: 0, b250: 1, b500: 0, b1000: 0, b2000: 0, b5000: 0, bMeer: 0, somMs: 10, maxMs: 10, laatsteFout: '', appVersie: '7.6', aangemaakt: ctx.nu() });
+  ctx.schrijf('Metingen', { id: 'm-net-rooktest', dag: plusDagen(-89), gebruiker: 'g-lars', fn: 'apiHome', aantal: 1, fouten: 0, b250: 1, b500: 0, b1000: 0, b2000: 0, b5000: 0, bMeer: 0, somMs: 10, maxMs: 10, laatsteFout: '', appVersie: '7.6', aangemaakt: ctx.nu() });
+  var n = metingen().length, ar = roep(SOPHIE, 'apiArchiveer');
+  eis(ar.metingen === 1 && !ctx.vind('Metingen', 'm-oud-rooktest') && !!ctx.vind('Metingen', 'm-net-rooktest') && metingen().length === n - 1 && roep(SOPHIE, 'apiArchiveer').metingen === 0, 'archiveer: een meting ouder dan 90 kalenderdagen gaat weg, de rest blijft; een tweede run ruimt niets op');
+  eis(!faalt(SOPHIE, 'apiMetingenOpslaan', []) && roep(SOPHIE, 'apiMetingenOpslaan', []).ontvangen === 0, 'apiMetingenOpslaan: een lege lijst is geen fout (ontvangen 0)');
+})();
 
 /* ---- bestaande schermen blijven werken ---- */
 ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem', 'demo-iris'].forEach(function (c) { eis(!faalt(c, 'apiOverzicht') && !faalt(c, 'apiHome') && !faalt(c, 'apiTaken') && !faalt(c, 'apiAgenda', plusDagen(-3), plusDagen(10)) && !faalt(c, 'apiTrajecten') && (c === 'demo-lars' || !faalt(c, 'apiBezetting')), 'schermen laden als ' + c); });
