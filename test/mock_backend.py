@@ -2,7 +2,14 @@
 # v7.3 (FL-1): de mock houdt state vast; POST /api met {"fn":"_reset"} (of GET /reset) zet alle gegevens terug op de seed, zodat een tweede run
 # van test/test_app.py tegen dezelfde mock dezelfde uitgangsstand ziet. v7.3 (H2): {"fn":"_faal","args":["apiAgenda",1]} laat de volgende n
 # aanroepen van die api mislukken (ok:false met een Nederlandse melding, status 200), om de foutpaden van de app te testen; _reset wist dat ook.
-import json, datetime, uuid, copy, os, time
+# v7.6: MOCK_VERTRAAG_MS=<ms> (standaard 0) laat elke POST /api zo lang wachten, als nabootsing van de Apps Script-latentie; de server is een
+# ThreadingHTTPServer, dus parallelle aanroepen wachten onafhankelijk van elkaar (de testhulpen _reset en _faal wachten niet).
+# v7.6: de bestanden zoals GitHub Pages en Vercel ze sturen, voor test/prestatie.py: MOCK_GZIP=1 (gzip voor tekstbestanden als de browser dat vraagt;
+# zonder gzip gaat index.html als 609 kB over de lijn in plaats van 165 kB), MOCK_ETAG=1 (ETag, Cache-Control: no-cache en HTTP/1.1 met 304 bij
+# If-None-Match; Chromium bewaart HTTP/1.0-antwoorden met no-store niet in de HTTP-cache, waardoor de service worker alles opnieuw ophaalde),
+# MOCK_PACE=1 (trage 4G in de server zelf: 150 ms per aanvraag en 1,6 Mbit/s als één gedeelde pijp — ook voor de fetches van de service worker,
+# die de netwerkrem van CDP op de pagina niet raakt) en MOCK_HTML_VERTRAAG_MS=<ms> (index.html pas na zo lang als de url ?traag= bevat: hangende server).
+import json, datetime, uuid, copy, os, time, io, gzip, hashlib, threading
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 from urllib.parse import urlparse, parse_qs
@@ -11,6 +18,37 @@ SECRET = 'test123'
 # v6.0: met MOCK_GOOGLE=1 bootst de mock de eigen server na (api/config + Supabase Auth op /supa): de app logt dan in met Google in plaats van een koppelcode
 MOCK_GOOGLE = os.environ.get('MOCK_GOOGLE') == '1'
 POORT = int(os.environ.get('MOCK_POORT') or 8765)
+MOCK_VERTRAAG_MS = int(os.environ.get('MOCK_VERTRAAG_MS') or 0)  # v7.6: nagebootste backendlatentie per api-aanroep
+MOCK_GZIP = os.environ.get('MOCK_GZIP') == '1'; MOCK_ETAG = os.environ.get('MOCK_ETAG') == '1'; MOCK_PACE = os.environ.get('MOCK_PACE') == '1'  # v7.6
+MOCK_HTML_VERTRAAG_MS = int(os.environ.get('MOCK_HTML_VERTRAAG_MS') or 0)  # v7.6
+PACE_LAT_S = 0.150; PACE_BPS = 1.6 * 1024 * 1024 / 8; PACE_CHUNK = 8 * 1024  # v7.6: trage 4G zoals test/ux_prestatie.py (150 ms, 1,6 Mbit/s omlaag)
+GZIP_EXT = ('.html', '.js', '.css', '.json', '.webmanifest', '.gs', '.svg', '.txt', '.md')
+_GZ = {}
+def gz_van(path):  # v7.6: gzip per bestand, één keer (sleutel op mtime en grootte)
+    st = os.stat(path); k = (path, st.st_mtime, st.st_size)
+    if k not in _GZ: _GZ[k] = gzip.compress(open(path, 'rb').read(), 6)
+    return _GZ[k]
+class Pijp:  # v7.6: één gedeelde pijp van 1,6 Mbit/s: elke verbinding reserveert per stuk tijd (FIFO), zoals op één 4G-verbinding
+    def __init__(self): self.lock = threading.Lock(); self.t = time.monotonic()
+    def wacht(self, n):
+        with self.lock:
+            nu = time.monotonic(); self.t = max(self.t, nu) + n / PACE_BPS; w = self.t - nu
+        if w > 0: time.sleep(w)
+PIJP = Pijp()
+class PacedWriter:
+    def __init__(self, w): self.w = w
+    def write(self, b): PIJP.wacht(len(b)); return self.w.write(b)
+    def flush(self): return self.w.flush()
+    def __getattr__(self, k): return getattr(self.w, k)
+class Paced(io.RawIOBase):  # leest een buffer in stukjes van 8 KiB en reserveert per stuk tijd op de pijp (copyfile leest blokken van 16 KiB)
+    def __init__(self, data): self.b = memoryview(data); self.i = 0
+    def readable(self): return True
+    def read(self, n=-1):
+        if self.i >= len(self.b): return b''
+        n = PACE_CHUNK if n < 0 else min(n, PACE_CHUNK)
+        uit = self.b[self.i:self.i + n].tobytes(); self.i += len(uit); PIJP.wacht(len(uit)); return uit
+    def readinto(self, buf):
+        d = self.read(len(buf)); buf[:len(d)] = d; return len(d)
 SUPA_POORT = POORT + 1  # "Supabase" op een eigen origin, zoals echt: dan bemoeit de service worker van de app zich niet met de terugkeer na het inloggen
 TOKENS = {'testtoken-menno': 'test123', 'testtoken-menno-vers': 'test123', 'testtoken-joris': 'am123'}
 vandaag = datetime.date.today()
@@ -133,16 +171,17 @@ FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'b
             {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
 KEUZES = {'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
 # v4.0: twee gebruikers. test123 = Menno (management), am123 = Joris (accountmanager): ziet geen pipeline, alleen zijn eigen projecten en facturatie
-ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen', 'financien')}  # v5.0: talenten, beoordelingen
+ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen', 'financien', 'metingen')}  # v5.0: talenten, beoordelingen; v7.6: metingen
 IKKEN = {'test123': {'naam': 'Menno', 'team': 'management', 'rol': 'management', 'beheer': True, 'gekoppeld': True, 'rechten': dict(ALLES, beheer=True, teamlead=False, doelen=True)},
          'am123': {'naam': 'Joris', 'team': 'accountmanagement', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'alles'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
                    'projecten': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'facturatie': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'vacatures': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'kandidaten': {'zien': 'eigen', 'wijzigen': 'eigen'},
-                   'talenten': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beoordelingen': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'financien': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},  # v6.5: financien
+                   'talenten': {'zien': 'eigen', 'wijzigen': 'geen'}, 'beoordelingen': {'zien': 'eigen', 'wijzigen': 'eigen'}, 'financien': {'zien': 'eigen', 'wijzigen': 'geen'}, 'metingen': {'zien': 'geen', 'wijzigen': 'geen'}, 'beheer': False, 'teamlead': False, 'doelen': False}},  # v6.5: financien; v7.6: metingen
          # v4.1: talentscout Lotte (code talent123): bezetting, geen pipeline of facturatie; v5.0: het hele talentbestand
          'talent123': {'naam': 'Lotte', 'team': 'talent', 'rol': 'medewerker', 'beheer': False, 'gekoppeld': False, 'rechten': {'relaties': {'zien': 'alles', 'wijzigen': 'geen'}, 'pipeline': {'zien': 'geen', 'wijzigen': 'geen'},
-                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'financien': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'},
+                   'projecten': {'zien': 'opstart', 'wijzigen': 'geen'}, 'facturatie': {'zien': 'geen', 'wijzigen': 'geen'}, 'financien': {'zien': 'geen', 'wijzigen': 'geen'}, 'metingen': {'zien': 'geen', 'wijzigen': 'geen'}, 'vacatures': {'zien': 'alles', 'wijzigen': 'alles'}, 'kandidaten': {'zien': 'alles', 'wijzigen': 'alles'},
                    'talenten': {'zien': 'alles', 'wijzigen': 'alles'}, 'beoordelingen': {'zien': 'alles', 'wijzigen': 'alles'}, 'beheer': False, 'teamlead': False, 'doelen': False}}}
 HUIDIG = ['test123']
+METINGEN = {}  # v7.6: (code, dag, fn) → gebundelde rij uit apiMetingenOpslaan
 def ik(): return dict(IKKEN[HUIDIG[0]])
 def beheer(): return ik()['beheer']
 def eigen_project(t):
@@ -807,6 +846,45 @@ def handle(fn, args):
                 'herinneringTrigger': True, 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True), 'email': 'menno@voorbeeld.nl',  # v4.6
                 'talentTrigger': True, 'urenTrigger': True, 'xpsExportMap': True, 'laatsteUrenImport': d(-1) + ' 06:05'}  # v5.0
     if fn == 'apiImporteer': return {'ingevoegd': len(args[1]), 'bijgewerkt': 0}
+    # v7.6: metingen uit de app (per dag en api gebundeld); de mock controleert de vorm zoals Code.gs en telt per gebruiker op
+    if fn == 'apiMetingenOpslaan':
+        lijst = args[0] if args else None
+        if not isinstance(lijst, list): raise ValueError('Metingen: verwacht een lijst met rijen.')
+        if len(lijst) > 200: raise ValueError('Metingen: hoogstens 200 rijen per keer.')
+        for i, r in enumerate(lijst):
+            if not isinstance(r, dict): raise ValueError('Metingen: rij %d is geen object.' % (i + 1))
+            if r.get('fn') != 'js' and not str(r.get('fn', '')).startswith('api'): raise ValueError('Metingen: rij %d noemt geen bekende api (%s).' % (i + 1, r.get('fn')))
+            if not isinstance(r.get('dag'), str) or not (d(-30) <= r['dag'] <= d(0)): raise ValueError('Metingen: rij %d heeft geen geldige dag (yyyy-MM-dd, niet in de toekomst, hoogstens 30 dagen oud).' % (i + 1))
+            for k in ('aantal', 'fouten', 'b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer', 'somMs', 'maxMs'):
+                if not isinstance(r.get(k), int) or isinstance(r.get(k), bool) or r[k] < 0: raise ValueError('Metingen: rij %d heeft geen geheel getal ≥ 0 in %s.' % (i + 1, k))
+            if r['fouten'] > r['aantal']: raise ValueError('Metingen: rij %d telt meer fouten dan aanroepen.' % (i + 1))
+            if sum(r[k] for k in ('b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer')) != r['aantal']: raise ValueError('Metingen: rij %d heeft emmers die niet optellen tot het aantal.' % (i + 1))
+            if len(str(r.get('laatsteFout') or '')) > 120: raise ValueError('Metingen: rij %d heeft een foutmelding langer dan 120 tekens.' % (i + 1))
+            sleutel = (HUIDIG[0], r['dag'], r['fn']); oud = METINGEN.get(sleutel)
+            if oud:
+                for k in ('aantal', 'fouten', 'b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer', 'somMs'): oud[k] += r[k]
+                oud['maxMs'] = max(oud['maxMs'], r['maxMs']); oud['laatsteFout'] = r.get('laatsteFout') or oud['laatsteFout']
+            else: METINGEN[sleutel] = dict(r, gebruiker=HUIDIG[0])
+        return {'ontvangen': len(lijst)}
+    if fn == 'apiMetingen':
+        if not beheer(): geen_toegang()
+        apis = [{'fn': 'apiCrm', 'aantal': 120, 'fouten': 3, 'foutPct': 2.5, 'p50': 410, 'p95': 1900, 'gemMs': 520, 'maxMs': 4200, 'laatsteFout': 'de server reageert niet — probeer het zo nog eens'},
+                {'fn': 'apiHome', 'aantal': 300, 'fouten': 0, 'foutPct': 0, 'p50': 180, 'p95': 640, 'gemMs': 230, 'maxMs': 1100, 'laatsteFout': ''},
+                {'fn': 'apiTaken', 'aantal': 90, 'fouten': 0, 'foutPct': 0, 'p50': 150, 'p95': 420, 'gemMs': 190, 'maxMs': 800, 'laatsteFout': ''}]
+        per = {}  # wat de app zelf al heeft aangeleverd telt mee, zodat de tabel in de browsertest ook de echte aanroepen toont
+        for (wie, dag, f), r in METINGEN.items():
+            if f == 'js': continue
+            p = per.setdefault(f, {'fn': f, 'aantal': 0, 'fouten': 0, 'somMs': 0, 'maxMs': 0, 'laatsteFout': ''})
+            p['aantal'] += r['aantal']; p['fouten'] += r['fouten']; p['somMs'] += r['somMs']; p['maxMs'] = max(p['maxMs'], r['maxMs']); p['laatsteFout'] = r.get('laatsteFout') or p['laatsteFout']
+        vast = {a['fn'] for a in apis}
+        for f, p in per.items():
+            if f in vast: continue
+            gem = round(p['somMs'] / p['aantal']) if p['aantal'] else 0
+            apis.append({'fn': f, 'aantal': p['aantal'], 'fouten': p['fouten'], 'foutPct': round(1000 * p['fouten'] / p['aantal']) / 10 if p['aantal'] else 0, 'p50': gem, 'p95': p['maxMs'], 'gemMs': gem, 'maxMs': p['maxMs'], 'laatsteFout': p['laatsteFout']})
+        apis.sort(key=lambda a: (-a['p95'], -a['aantal'], a['fn']))
+        js = [r for (wie, dag, f), r in METINGEN.items() if f == 'js']
+        return {'dagen': 14, 'van': d(-14), 'tot': d(0), 'schatting': True, 'uitleg': 'p50 en p95 zijn een schatting uit zes duur-emmers (lineair binnen de emmer; de laatste emmer loopt tot de langste aanroep).',
+                'apis': apis, 'jsFouten': {'aantal': sum(r['fouten'] for r in js), 'laatste': (js[-1].get('laatsteFout') if js else '') or ''}, 'rijen': len(METINGEN) + 3, 'gebruikers': 2}
     # v7.2: Financiën — prognose vastleggen en de Exact-afstemming, met de vorm van financienBevriezen en apiExactImport in Code.gs (de app leest al/maand resp. van, tot, gekoppeld, toegepast en de vier lijsten)
     if fn == 'apiFinancienBevriezen':
         if not beheer(): geen_toegang()
@@ -841,7 +919,30 @@ CSP = csp_waarde() if MOCK_CSP else ''
 
 class H(SimpleHTTPRequestHandler):
     _csp = False
+    protocol_version = 'HTTP/1.1' if MOCK_ETAG else 'HTTP/1.0'  # v7.6: met ETag ook keep-alive, zoals een echte host (elk antwoord heeft Content-Length)
     def log_message(self, *a): pass
+    def send_head(self):  # v7.6: statische bestanden met gzip, ETag/304 en pacing (MOCK_GZIP, MOCK_ETAG, MOCK_PACE); zonder die vlaggen ongewijzigd
+        if not (MOCK_GZIP or MOCK_ETAG or MOCK_PACE or MOCK_HTML_VERTRAAG_MS): return super().send_head()
+        path = self.translate_path(self.path)
+        if os.path.isdir(path):
+            if not self.path.split('?')[0].endswith('/'): return super().send_head()
+            path = os.path.join(path, 'index.html')
+        if not os.path.isfile(path): return super().send_head()
+        naam = os.path.basename(path); ext = os.path.splitext(naam)[1].lower()
+        if MOCK_HTML_VERTRAAG_MS and naam == 'index.html' and 'traag=' in self.path: time.sleep(MOCK_HTML_VERTRAAG_MS / 1000.0)
+        if MOCK_PACE: time.sleep(PACE_LAT_S)
+        with open(path, 'rb') as f: raw = f.read()
+        et = '"%s"' % hashlib.md5(raw).hexdigest()[:16]
+        if MOCK_ETAG and self.headers.get('If-None-Match') == et:
+            self.send_response(304); self.send_header('ETag', et); self.send_header('Vary', 'Accept-Encoding'); self.end_headers(); return None
+        ctype = 'application/manifest+json' if ext == '.webmanifest' else self.guess_type(path)
+        wil_gz = MOCK_GZIP and ext in GZIP_EXT and 'gzip' in (self.headers.get('Accept-Encoding') or '')
+        data = gz_van(path) if wil_gz else raw
+        self.send_response(200); self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(data)))
+        if MOCK_ETAG: self.send_header('ETag', et); self.send_header('Vary', 'Accept-Encoding')
+        if wil_gz: self.send_header('Content-Encoding', 'gzip')
+        self.end_headers()
+        return Paced(data) if MOCK_PACE else io.BytesIO(data)
     def json(self, obj, status=200):
         data = json.dumps(obj).encode()
         self.send_response(status); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data)
@@ -866,6 +967,8 @@ class H(SimpleHTTPRequestHandler):
         if body.get('fn') == '_faal':  # v7.3 (H2): testhulp: de volgende n aanroepen van een api mislukken
             try: return self.json(faal_zetten(body.get('args') or []))
             except Exception as e: return self.json({'ok': False, 'fout': str(e)})
+        if MOCK_VERTRAAG_MS: time.sleep(MOCK_VERTRAAG_MS / 1000.0)  # v7.6: elke echte api-aanroep wacht, per verzoek (eigen thread)
+        if MOCK_PACE: time.sleep(PACE_LAT_S); self.wfile = PacedWriter(self.wfile)  # v7.6: ook het api-antwoord gaat over de gedeelde pijp
         if body.get('portaal'): out = handle_portaal(str(body['portaal']), body.get('fn'), body.get('args') or [])  # v5.0: het portaal kent geen koppelcode
         else:
             code = TOKENS.get(body['token']) if body.get('token') else body.get('secret')  # v6.0: een sessietoken van de eigen server, of de koppelcode
@@ -880,7 +983,7 @@ class H(SimpleHTTPRequestHandler):
     def do_OPTIONS(self):  # v6.0: de preflight van het tokenverzoek naar "Supabase" (andere origin, JSON-header)
         self.send_response(204); self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); self.send_header('Access-Control-Allow-Headers', 'Content-Type, apikey, Authorization'); self.end_headers()
     def end_headers(self):
-        self.send_header('Cache-Control', 'no-store'); self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache' if MOCK_ETAG else 'no-store'); self.send_header('Access-Control-Allow-Origin', '*')  # v7.6: met ETag hervalideert de browser (304) in plaats van alles opnieuw te halen
         if self._csp: self.send_header('Content-Security-Policy', CSP); self._csp = False  # v6.2
         super().end_headers()
 

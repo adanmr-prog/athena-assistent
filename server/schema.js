@@ -37,6 +37,7 @@ var NUMERIEK = {
   Doelen: ['doel'],
   Facturen: ['bedrag'],
   Prognoses: ['prognose', 'kas'],  // v6.5: bevroren prognose per maand (centen)
+  Metingen: ['aantal', 'fouten', 'b250', 'b500', 'b1000', 'b2000', 'b5000', 'bMeer', 'somMs', 'maxMs'],  // v7.6: tellingen en duur in ms
   Vacatures: ['aantal', 'urenPerWeek'],
   Kandidaten: ['urenPerWeek'],
   Talenten: ['lat', 'lon', 'reisafstandKm', 'maxUrenWeek'],

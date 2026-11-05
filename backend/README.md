@@ -141,10 +141,23 @@ Twee functies zijn alleen via `doPost` aan te roepen (curl of een script met de 
 
 | fn | args | result |
 |---|---|---|
-| `apiArchiveer` | — | `{ gearchiveerd, over, uren }`: activiteit ouder dan 365 kalenderdagen naar `Activiteiten_archief` en weekuren ouder dan 26 weken naar `TalentUren_archief`; dezelfde stap als `archiveerTrigger` (1e van de maand); een tweede aanroep archiveert niets; `apiArchiefTijdlijn` haalt het archief terug |
+| `apiArchiveer` | — | `{ gearchiveerd, over, uren, metingen }`: activiteit ouder dan 365 kalenderdagen naar `Activiteiten_archief`, weekuren ouder dan 26 weken naar `TalentUren_archief` en (v7.6) metingen ouder dan 90 dagen weg; dezelfde stap als `archiveerTrigger` (1e van de maand); een tweede aanroep archiveert niets; `apiArchiefTijdlijn` haalt het archief terug |
 | `apiImporteer` | `scholen\|trajecten\|kansen\|acties`, rijen (lijst met de kolomnamen van het tabblad) | `{ ingevoegd, bijgewerkt, ongewijzigd }`: rijen zonder `id` krijgen een stabiel id (scholen: naam; trajecten: school + traject + schooljaar; kansen: school + traject; acties: tekst), een herhaalde import werkt bij in plaats van te dupliceren en telt ongewijzigde rijen apart; zie "Koppeling met de Cowork-map" onderaan |
 
 Allebei alleen voor het management; een ander krijgt "Alleen het management kan dit." (`alleenBeheerder`). In v7.3 zijn de vier v1-functies die niets meer aanriep verwijderd (vraag-en-antwoord, één huisstijlveld, de oude projectpagina en de losse notitie bij een project: `Vraag`, `ZetHuisstijl`, `Traject`, `NotitieToevoegen`, alle met het voorvoegsel api).
+
+## Metingen (v7.6)
+
+**Wat.** De app meet elke backend-aanroep (`run()`: api-naam, duur in ms, geslaagd of een korte foutcode: `secret`, `abort`, `offline`, `netwerk` of de ingekorte foutmelding) en elke onafgevangen JS-fout (`window.onerror`, `unhandledrejection`: bericht plus bestand:regel:kolom). Ruwe metingen staan in een ringbuffer in de opslag van het toestel (`aa_metingen`, hoogstens 400). Vóór het verzenden bundelt de app ze per dag en api: `aantal`, `fouten`, zes duur-emmers (`b250` ≤ 250 ms, `b500`, `b1000`, `b2000`, `b5000`, `bMeer`), `somMs`, `maxMs`, `laatsteFout` en `appVersie`. Verzenden gebeurt stil (nooit een toast) na de eerste geslaagde aanroep bij het starten en als de app uit beeld gaat, en alleen als de vorige verzending meer dan 24 uur geleden is of er 50 of meer ruwe metingen staan; na een fout blijft alles staan en probeert de app het pas tien minuten later weer. Niet in het talentportaal. Beheer (tandwiel, alleen management) toont per api aantal, p50, p95 en fout % over de laatste 14 dagen, de tien traagste bovenaan, plus het aantal JS-fouten met de laatste melding.
+
+**Privacy.** In het tabblad `Metingen` staan alleen de api-naam, de dag, de gebruikers-id, tellingen en één ingekorte foutmelding (hoogstens 120 tekens, e-mailadressen vervangen door "…"). Nooit argumenten, gegevens van scholen, personen of talenten, of een IP-adres. De gebruikers-id komt altijd uit de koppelcode of het inlogtoken, nooit uit de invoer.
+
+| fn | args | result |
+|---|---|---|
+| `apiMetingenOpslaan` | lijst (≤ 200 rijen `{dag, fn, aantal, fouten, b250, b500, b1000, b2000, b5000, bMeer, somMs, maxMs, laatsteFout, appVersie}`) | `{ ontvangen }`. Elke ingelogde gebruiker, alleen eigen rijen. Validatie: `fn` is een bestaande `api…`-functie (geen portaalfunctie) of `js`; `dag` een echte datum (yyyy-MM-dd), niet in de toekomst en hoogstens 30 dagen oud; alle getallen geheel en ≥ 0, `aantal` ≥ 1, `fouten` ≤ `aantal`, emmers tellen op tot `aantal`; `laatsteFout` ≤ 120 en `appVersie` ≤ 20 tekens (`tekstIn`). Een ongeldige rij geeft "Metingen: rij n …" en er wordt niets geschreven. Upsert op (gebruiker, dag, fn): getallen tellen op, `maxMs` wordt het maximum, de laatste fout vervangt de vorige |
+| `apiMetingen` | dagen (standaard 14, 1–90) | management (`RECHTEN.metingen`): `{ dagen, van, tot, schatting: true, uitleg, apis: [{fn, aantal, fouten, foutPct, p50, p95, gemMs, maxMs, laatsteFout}] (op p95 aflopend), jsFouten: {aantal, laatste}, rijen, gebruikers }`. p50 en p95 zijn een schatting uit de emmers (lineair binnen de emmer; de laatste emmer loopt tot `maxMs`) |
+
+**Beheerder.** Niets te doen: `blad()` maakt het tabblad `Metingen` aan bij de eerste verzending (wie het meteen wil zien kan `setup()` nog eens draaien, dat is idempotent), en het opruimen van rijen ouder dan 90 dagen rijdt mee op de bestaande `archiveerTrigger` (1e van de maand); er komt geen nieuwe trigger bij. Op Vercel: `supabase/migrations/0001_init.sql` is opnieuw gegenereerd (tabel `metingen`); `zorgSchema` maakt de tabel ook zelf aan.
 
 ## Financiën (v6.5)
 
@@ -353,7 +366,7 @@ Eén profiel per flexkracht (ondersteuners, studentdocenten, huiswerkbegeleiders
 - **Rollen** (`Gebruikers.rol`): `beheerder` (management), `adviseur` (onderwijsadviseur: haalt opdrachten binnen, eigenaar van kansen) en `am` (accountmanager: voert projecten uit, `Trajecten.am`). Sinds v4.0 vervangen door teams en rollen met een rechtentabel (zie hierboven); beheren (gebruikers, mijlpalen, tracks, export, migratie) kan alleen het management.
 - **Privé per gebruiker:** mail, agenda, nachtelijke review en Home. De backend leest alleen de Gmail en Agenda van het account waaronder hij draait (`mijnMailbox()`); andere gebruikers krijgen lege lijsten met de melding dat hun Gmail nog gekoppeld wordt. De nachtelijke review draait per actieve gebruiker (kolom `Reviews.eigenaar`) en wordt naar ieders eigen e-mailadres gestuurd.
 - **Tegelijk opslaan:** bij bewerken stuurt de app alleen de gewijzigde velden plus `_oud` (de waarden zoals geladen). `controleerConflict()` vergelijkt die binnen het lock met de Sheet; heeft iemand anders hetzelfde veld intussen gewijzigd, dan volgt de fout "Intussen gewijzigd: …" en ververst de app het scherm. Andere velden worden gewoon samengevoegd. Kolom `bijgewerktDoor` houdt bij wie het laatst wijzigde.
-- **Archief:** elke 1e van de maand (trigger `archiveerTrigger`) gaat activiteit ouder dan 12 maanden naar `Activiteiten_archief`. In een detailscherm haalt de knop "Oudere activiteit (archief)" die terug.
+- **Archief:** elke 1e van de maand (trigger `archiveerTrigger`) gaat activiteit ouder dan 12 maanden naar `Activiteiten_archief`. In een detailscherm haalt de knop "Oudere activiteit (archief)" die terug. v7.6: dezelfde trigger ruimt metingen ouder dan 90 dagen op (`opruimMetingen`).
 
 ## Brein als persoonlijke assistent (v3.5)
 
