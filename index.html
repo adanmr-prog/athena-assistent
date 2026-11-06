@@ -109,6 +109,7 @@
   .veld { margin-top: 10px; }
   .veld label { display: block; font-size: var(--fs-klein); font-weight: 600; color: var(--inkt2); margin-bottom: 4px; }
   .veld input, .veld select, .veld textarea { width: 100%; border: 1.5px solid var(--lijn); background: var(--wit); border-radius: 10px; padding: 9px 12px; outline: none; }
+  .veld input { line-height: 1.3; }  /* v7.8: vaste regelhoogte, zodat een tekstveld en een leeg datumveld even hoog zijn met elk lettertype (de datumregels hieronder rekenen ermee) */
   .veld textarea { min-height: 84px; resize: vertical; line-height: 1.45; }
   .veld input:focus, .veld select:focus, .veld textarea:focus { border-color: var(--paars); }
   .invoer:focus-within { border-color: var(--paars); box-shadow: 0 0 0 2px var(--paars-l); }  /* v7.2: zichtbare toetsenbordfocus op zoekvelden en keuzelijsten (outline none zonder vervanging, WCAG 2.4.7); los van :focus-visible, want iOS < 15.4 kent die niet en zou dan de hele lijst negeren */
@@ -244,7 +245,7 @@
   [data-taakbewerk] { cursor: pointer; }
   .veld.breed { grid-column: 1 / -1; }
   .veld input, .veld select, .veld textarea { min-width: 0; }
-  .veld input[type=date] { -webkit-appearance: none; appearance: none; min-height: 42px; }  /* v7.4 (iOS-review): ook in een gewoon veld (zoals de Exact-peildatum) maakt iOS een leeg datumveld anders lager; 42 px = een tekstveld ernaast */
+  .veld input[type=date] { -webkit-appearance: none; appearance: none; min-height: calc(1.3em + 20px); }  /* v7.4 (iOS-review): ook in een gewoon veld (zoals de Exact-peildatum) maakt iOS een leeg datumveld anders lager; v7.8: regelhoogte 1,3 em + padding 2×9 + rand (1,5 px telt per zijde als 1 px) = precies een tekstveld ernaast, met elk lettertype */
   .veld.vinkje label { display: flex; gap: 8px; align-items: center; min-height: 44px; font-size: var(--fs-tekst); font-weight: 600; color: var(--inkt); }  /* v7.7 (iOS-review): 44 px tikdoel, ook op een iPad in landschap */
   .veld.vinkje input { width: 22px; height: 22px; margin: 0; flex-shrink: 0; }
   .t-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--lijn); }
@@ -404,7 +405,7 @@
   body.desk .avatar { width: 24px; height: 24px; font-size: var(--fs-klein); }
   body.desk .veld label { font-size: var(--fs-klein); }
   body.desk .veld input, body.desk .veld select, body.desk .veld textarea { padding: 6px 9px; border-radius: 8px; }
-  body.desk .veld input[type=date] { min-height: 33px; }  /* v7.4 (iOS-review): iPad in landschap; gelijk aan een tekstveld op desktop */
+  body.desk .veld input[type=date] { min-height: calc(1.3em + 14px); }  /* v7.4 (iOS-review): iPad in landschap; v7.8: regelhoogte 1,3 em + padding 2×6 + rand (1,5 px telt per zijde als 1 px) = precies een tekstveld op desktop, met elk lettertype */
   body.desk .dtabel { font-size: var(--fs-zacht); }
   body.desk .dtabel th { padding: 6px 10px; font-size: var(--fs-klein); }
   body.desk .dtabel td { padding: 6px 10px; }
@@ -883,6 +884,7 @@
 </style>
 </head>
 <body class="v-vandaag">
+<script id="deskVroeg">if (window.matchMedia && window.matchMedia('(min-width: 1024px)').matches) document.body.className += ' desk';</script><!-- v7.8: body.desk vóór de eerste paint (dezelfde mediaquery als deskMq; zetDesk() houdt hem bij), anders tekent een brede pagina eerst de telefoonweergave en verschuift alles (CLS 0,17 op trage 4G) -->
 <!-- v3.0: zijbalk voor de desktopweergave (alleen zichtbaar met body.desk) -->
 <aside id="zijbalk">
   <div class="zb-logo"><img src="icon-192.png" alt=""><div>AthenaSchool<small>Dashboard &amp; assistent</small></div></div>
@@ -1433,7 +1435,7 @@
      maxMs en één ingekorte foutmelding zonder e-mailadressen. Nooit argumenten of gegevens. Verzenden (stil, nooit een toast, nooit een lus) zodra er
      iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
-  var APP_VERSIE = '7.7';  // v7.7: alle gegevens inladen; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
+  var APP_VERSIE = '7.8';  // v7.7: alle gegevens inladen; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
   var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
   function tijdNu() { return (window.performance && typeof performance.now === 'function') ? performance.now() : Date.now(); }
   function kortFout(s) { return String(s == null ? '' : s).replace(/[^\s@<>"'()]+@[^\s@<>"'()]+/g, '…').replace(/\s+/g, ' ').trim().slice(0, 120); }  // e-mailadressen eruit, hoogstens 120 tekens
