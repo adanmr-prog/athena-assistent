@@ -35,7 +35,7 @@ RENDER_BUDGET = [  # (naam, klik-selector, voorwaarde dat het scherm gevuld is, 
     ('Taken', '#crmTabs [data-crmtab="taken"]', '#crmInhoud .rij .vink, #crmInhoud .leeg', 325),
     ('Projecten per AM', 'nav button[data-view="trajecten"]', '#trajectLijst .p-groep .p-rij, #trajectLijst .p-groep h3, #trajectLijst .leeg', 450),
     ('Bezetting per vacature', '[data-pweergave="bezetting"]', '#trajectLijst .vac-grid .vac-kaart, #trajectLijst .leeg', 500),
-    ('Bezetting alle vacatures', '[data-bopen="0"]', '[data-bopen="0"].aan', 1400),  # v7.8: alle kaarten met al hun kandidaatrijen (±740 statuspillen; vóór v7.8 selects: 1,4 s, nu ±0,7 s → budget 2×)
+    ('Bezetting alle vacatures', '[data-bopen="0"]', '[data-bopen="0"].aan', 1000),  # v7.8: alle kaarten met al hun kandidaatrijen (±740 statuspillen; vóór v7.8 selects: 1,4 s, nu ±0,7 s → budget 1,5× de nameting, zodat een terugval naar de selects rood wordt)
     ('Financiën', '[data-naarfinancien]', '#finInhoud table.fin tbody, #finInhoud .leeg', 1050),
 ]
 STAPPEN_TELEFOON = [('Relaties', 'nav button[data-view="relaties"]'), ('Taken', '#crmTabs [data-crmtab="taken"]'), ('Rapporten', '#crmTabs [data-crmtab="rapport"]'),

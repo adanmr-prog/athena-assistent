@@ -505,14 +505,17 @@
   .p-updates { display: inline-flex; align-items: center; gap: 4px; color: var(--inkt2); cursor: pointer; font-weight: 600; }
   .p-updates .ic { width: 15px; height: 15px; }
   .p-rij .r-rechts { width: 118px; flex-shrink: 0; }
+  body.desk .p-rij .r-rechts { width: 128px; }  /* v7.8 (review C6): op desktop (14 px) past "klaar voor start" dan ook in de statuspil */
   /* v4.1: bezetting (vacatures en kandidaten), taskforce en meldingen */
   .pill.p-voorgesteld { background-color: #579BFC; } .pill.p-gesprek { background-color: #FDAB3D; } .pill.p-geselecteerd { background-color: #A25DDC; }
   .pill.p-academy { background-color: #784BD1; } .pill.p-contract { background-color: #0086C0; } .pill.p-vog { background-color: #037F4C; } .pill.p-klaar-voor-start { background-color: #00C875; } .pill.p-reserve { background-color: #9AA0A6; } .pill.p-afgewezen { background-color: #DF2F4A; }
   /* v7.8: kandidaatstatus als pil (knop of, zonder wijzigrecht, een span) met één keuzelijst voor de hele app (#kpilMenu) in plaats van een <select>
      per rij: op praktijkschaal kostten ±740 selects 1,4 s op de telefoon. Zelfde uiterlijk als de select-pil; het pijltje alleen op de knop. */
   .kpil, .kpil-vast { display: block; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpil { padding-left: 6px; padding-right: 16px; background-position: right 5px center; }  /* v7.8 (review C6/I6): iets minder ruimte om de tekst, zodat de langste status ("klaar voor start") op de telefoon past */
   .kpil-vast { display: flex; align-items: center; justify-content: center; background-image: none; padding-right: 8px; cursor: default; }
-  #kpilMenu { position: fixed; z-index: 80; display: none; min-width: 180px; max-width: calc(100vw - 16px); max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--wit); border: 1px solid var(--lijn); border-radius: 12px; box-shadow: 0 14px 34px rgba(36,26,40,.18); padding: 6px; }  /* boven kaarten, bord en tabbalk; onder #venster (90) en #toast (200) */
+  #kpilMenu { position: fixed; z-index: 80; display: none; min-width: 180px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--wit); border: 1px solid var(--lijn); border-radius: 12px; box-shadow: 0 14px 34px rgba(36,26,40,.18); padding: 6px; }  /* boven kaarten, bord en tabbalk; onder #venster (90) en #toast (200). v7.8 (review I3/I5): de hoogte begrenst kpilPlaats op de ruimte die er is (twaalf statussen × 44 px passen dan op een telefoon als er plek is); contain: een veeg aan het einde van de lijst scrolt main niet (dat zou het menu sluiten) */
+  #veiligOnder { position: fixed; left: 0; bottom: 0; width: 1px; height: env(safe-area-inset-bottom, 0px); visibility: hidden; pointer-events: none; }  /* v7.8 (review I4): meetlat voor de home-indicatorstrook (veiligOnder) */
   #kpilMenu.aan { display: block; }
   .kpil-optie { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: none; text-align: left; font-size: var(--fs-zacht); font-weight: 400; color: var(--inkt); cursor: pointer; }
   .kpil-optie[aria-selected="true"] { font-weight: 600; }
@@ -520,6 +523,7 @@
   .kpil-optie:focus-visible { outline: 2px solid var(--paars); outline-offset: -2px; background: var(--vlak); }
   .kpil-optie .pill.kpil-dot { flex: none; display: inline-block; width: 10px; min-width: 10px; height: 10px; min-height: 0; padding: 0; border-radius: 50%; background-image: none; }  /* wint van body:not(.desk) .pill (min-height) */
   body.desk .kpil-optie { min-height: 32px; padding: 5px 10px; }
+  @media (hover: none) { body.desk .kpil-optie { min-height: 44px; padding: 8px 12px; } body.desk .kpil { min-height: 36px; } }  /* v7.8 (review I2): iPad in landschap (desktopbreedte, touch): tikdoelen als op de telefoon, waar de native picker 44 pt gaf */
   .tag.open { background: var(--oranje-l); color: #975A00; } .tag.ingevuld { background: var(--groen-l); color: var(--groen); } .tag.gesloten { background: var(--vlak); color: var(--inkt2); }
   .tag.concept { background: var(--paars-l); color: var(--paars); }  /* v6.4: conceptvacature uit het winformulier */
   .vac-kaart { margin: 10px 0; }
@@ -2262,7 +2266,7 @@
   function kandidaatPil(k, wijzig) {
     var st = esc(k.status), naam = esc(k.naam), kl = esc(pillKlasse(k.status));
     return wijzig ? '<button type="button" class="pill kpil ' + kl + '" data-kpil="' + esc(k.id) + '" aria-haspopup="listbox" aria-expanded="false" aria-label="Status van ' + naam + ': ' + st + '">' + st + '</button>'
-      : '<span class="pill kpil-vast ' + kl + '" aria-label="Status van ' + naam + '">' + st + '</span>';
+      : '<span class="pill kpil-vast ' + kl + '"><span class="vh">Status van ' + naam + ': </span>' + st + '</span>';  // v7.8 (review C3/I7): geen aria-label op een span zonder rol (ARIA 1.2); de naam als verborgen tekst, de status blijft hoorbaar
   }
   function bezettingKeuzes() { return (CRM.detail && CRM.detail.data && CRM.detail.data.keuzesBezetting) || (S.bezetting && S.bezetting.keuzes) || {}; }
   function alleVacatures() { var l = []; if (CRM.detail && CRM.detail.data && CRM.detail.data.vacatures) l = l.concat(CRM.detail.data.vacatures); if (S.bezetting) l = l.concat(S.bezetting.vacatures); return l; }
@@ -2271,7 +2275,9 @@
   /* --- v7.8: één keuzelijst (#kpilMenu, role=listbox) voor alle statuspillen van kandidaten. Klik, Enter, Space of ArrowDown op [data-kpil] opent
      hem onder de pil (erboven als eronder geen ruimte is, altijd binnen het venster); kiezen slaat op zoals de oude change-tak voor [data-kstatus].
      ArrowUp/ArrowDown lopen rond, Home/End eerste/laatste, Escape en Tab sluiten; een pointerdown buiten het menu, scrollen (ook in main) en resize
-     sluiten ook. Bij sluiten gaat de focus terug naar de pil (als die er nog staat) en aria-expanded naar false; hertekenen sluit een open menu. --- */
+     sluiten ook. Bij sluiten gaat de focus terug naar de pil (als die er nog staat) en aria-expanded naar false; hertekenen sluit een open menu.
+     Review: de gefocuste optie staat altijd in beeld in het menu zelf (kpilInBeeld; focusStil scrolt niets), de wegtik buiten het menu gaat niet
+     door naar wat eronder ligt (kpilSlik, zoals de native picker), en de onderrand houdt de home-indicatorstrook vrij (veiligOnder). --- */
   var KPIL = { knop: null };
   function kpilMenu() {
     var m = el('kpilMenu');
@@ -2289,13 +2295,13 @@
     KPIL.knop = knop; knop.setAttribute('aria-expanded', 'true');
     m.classList.add('aan'); kpilPlaats(knop, m);
     var r = knop.getBoundingClientRect(); KPIL.top = r.top; KPIL.left = r.left;  // waar de pil stond: een scroll die hem verplaatst sluit het menu (kpilScroll)
-    focusStil(m.querySelector('[aria-selected="true"]') || m.querySelector('[data-kkies]'));
+    var o = m.querySelector('[aria-selected="true"]') || m.querySelector('[data-kkies]'); focusStil(o); kpilInBeeld(o, true);  // v7.8 (review C1/I3): ook als het menu scrolt staat de huidige status in beeld (in het midden)
     document.addEventListener('pointerdown', kpilBuiten, true);
     window.addEventListener('scroll', kpilScroll, true);  // capture: ook de scroller main en de tabel-scrollers
     window.addEventListener('resize', kpilScroll);
   }
   function kpilPlaats(knop, m) {
-    var r = knop.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, marge = 8;
+    var r = knop.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight - veiligOnder(), marge = 8;  // v7.8 (review I4): de home-indicatorstrook (viewport-fit=cover) telt niet mee
     m.style.maxHeight = ''; m.style.width = '';
     if (m.offsetWidth > vw - 2 * marge) m.style.width = (vw - 2 * marge) + 'px';
     var h = m.offsetHeight, onder = vh - r.bottom - 4 - marge, boven = r.top - 4 - marge, top;
@@ -2315,8 +2321,35 @@
   function kpilBuiten(ev) {
     var m = el('kpilMenu'), t = ev.target;
     if (!m || (t && t.nodeType === 1 && (m.contains(t) || (KPIL.knop && KPIL.knop.contains(t))))) return;  // in het menu, of de pil zelf (de klik erop sluit)
-    var neemtFocus = t && t.closest && t.closest('button, [tabindex], a[href], input, select, textarea');
+    var neemtFocus = t && t.closest && t.closest('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');  // v7.8 (review C4): main heeft tabindex -1 en neemt bij een tik geen focus (iOS)
     kpilSluit(!neemtFocus);  // een tik op iets wat zelf focus krijgt, houdt die focus
+    if (!(t && t.closest && t.closest('[data-kpil]'))) kpilSlik();  // v7.8 (review I1): de wegtik sluit alleen; een tik op een andere pil wisselt in één keer
+  }
+  // v7.8 (review I1): de click die op de wegtik volgt, zou doorgaan naar de rij, link of tabknop onder het menu (op de telefoon beslaat het tot het hele
+  // scherm): die ene click slikken we in, op window in de capture-fase (vóór elke handler op document). Een tik die een scroll wordt, geeft geen click;
+  // daarom vervalt het na een halve seconde vanzelf.
+  function kpilSlik() {
+    if (KPIL.slikAf) KPIL.slikAf();
+    var f = function (e) { af(); e.preventDefault(); e.stopPropagation(); }, af = function () { window.removeEventListener('click', f, true); clearTimeout(timer); if (KPIL.slikAf === af) KPIL.slikAf = null; };
+    var timer = setTimeout(af, 500);
+    window.addEventListener('click', f, true); KPIL.slikAf = af;
+  }
+  // v7.8 (review C1/I3): de optie in beeld brengen in het menu zelf, zonder de pagina te scrollen (focusStil focust met preventScroll, dus ook het
+  // menu scrolt niet mee; scrollIntoView zou main kunnen meenemen). Bij openen (midden) komt de huidige status in het midden, zoals de native picker;
+  // bij de pijltjes net zover dat de optie past. #kpilMenu is position: fixed en dus de offsetParent van de opties.
+  function kpilInBeeld(o, midden) {
+    var m = el('kpilMenu'); if (!o || !m || m.scrollHeight <= m.clientHeight) return;
+    var p = parseFloat(getComputedStyle(m).paddingTop) || 0, boven = o.offsetTop - p, onder = o.offsetTop + o.offsetHeight + p;
+    if (midden) m.scrollTop = Math.max(0, o.offsetTop - (m.clientHeight - o.offsetHeight) / 2);
+    else if (boven < m.scrollTop) m.scrollTop = boven;
+    else if (onder > m.scrollTop + m.clientHeight) m.scrollTop = onder - m.clientHeight;
+  }
+  // v7.8 (review I4): de hoogte van de home-indicatorstrook (env(safe-area-inset-bottom), de app heeft viewport-fit=cover) als getal, gemeten aan een
+  // verborgen element; 0 op een apparaat zonder strook.
+  function veiligOnder() {
+    var e = el('veiligOnder');
+    if (!e) { e = document.createElement('div'); e.id = 'veiligOnder'; e.setAttribute('aria-hidden', 'true'); document.body.appendChild(e); }
+    return e.offsetHeight || 0;
   }
   // Scrollen in het menu zelf mag. Een scroll-event dat de pil niet verplaatst heeft (bijv. een scroll van vlak vóór de tik, die pas een frame later
   // als event binnenkomt, of een andere scroller) laat het menu staan: het staat dan nog goed. Resize komt hier ook langs (zonder event).
@@ -2337,7 +2370,7 @@
     else if (ev.key === 'Tab') { ev.stopPropagation(); kpilSluit(); return; }  // Tab gaat verder vanaf de pil
     else if (ev.key === 'Enter' || ev.key === ' ') { ev.stopPropagation(); return; }  // de knop zelf vuurt click (kiezen)
     else return;
-    ev.preventDefault(); ev.stopPropagation(); if (naar) focusStil(naar);
+    ev.preventDefault(); ev.stopPropagation(); if (naar) { focusStil(naar); kpilInBeeld(naar); }  // v7.8 (review C1): in een afgeknipt menu scrolt de optie in beeld
   }
   function kpilKies(optie) {
     var knop = KPIL.knop, w = optie.getAttribute('data-kkies'); kpilSluit();
@@ -2358,7 +2391,11 @@
     var D = CRM.detail;
     if (D && D.soort === 'project' && D.data && D.id === b.trajectId) {
       Object.keys(b).forEach(function (k) { D.data[k] = b[k]; }); if (b.projectStatus) D.data.project.status = b.projectStatus;
-      if (el('view-relaties').classList.contains('actief') && el('crmDetailScherm').style.display !== 'none') renderDetail();
+      if (el('view-relaties').classList.contains('actief') && el('crmDetailScherm').style.display !== 'none') {
+        var ds = el('crmDetailScherm'), af = document.activeElement, sleutel = af && af !== document.body && ds.contains(af) ? focusSleutel(af) : null;  // v7.8 (review C5): zoals herlaadDetail: de statuspil houdt de focus na het hertekenen
+        renderDetail();
+        if (sleutel) focusStil(zoekMetSleutel(ds, sleutel));
+      }
     }
     if (S.bezetting) {
       var nieuw = {}; (b.vacatures || []).forEach(function (v) { nieuw[v.id] = v; });

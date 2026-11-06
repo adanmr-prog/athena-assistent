@@ -152,7 +152,11 @@ with sync_playwright() as p:
     # het kandidatenbord bij "Alle vacatures": per kolom begrensd, de teller blijft het totaal
     pg.click('#projectWeergaven [data-pweergave="bezetting"]')
     if wacht(pg, '#trajectLijst [data-bopen="0"]'):
-        pg.click('#trajectLijst [data-bopen="0"]'); rust(pg, 200); pg.click('#trajectLijst [data-bweergave="status"]'); rust(pg, 400)
+        pg.click('#trajectLijst [data-bopen="0"]'); rust(pg, 200)
+        # v7.8 (review C6/I6): geen enkele statuspil is afgekapt (met de echte Nunito; "klaar voor start" is de langste)
+        pil = pg.evaluate("""() => { var l = Array.prototype.slice.call(document.querySelectorAll('#trajectLijst [data-kpil]')); return { n: l.length, over: l.filter(function (e) { return e.scrollWidth > e.clientWidth; }).map(function (e) { return e.textContent.trim(); }).filter(function (v, i, a) { return a.indexOf(v) === i; }) }; }""")
+        ok('sophie telefoon: geen afgekapte statuspil onder %d kandidaten%s' % (pil['n'], (': ' + ', '.join(pil['over'])) if pil['over'] else ''), pil['n'] > 300 and not pil['over'])
+        pg.click('#trajectLijst [data-bweergave="status"]'); rust(pg, 400)
         kb = pg.evaluate("""() => { var k = Array.prototype.slice.call(document.querySelectorAll('#trajectLijst .bord .kolom')); return { kolommen: k.length,
             kaarten: k.map(function (x) { return x.querySelectorAll('.kaartje').length; }), som: k.map(function (x) { return Number((x.querySelector('.k-som') || {}).textContent) || 0; }),
             hints: document.querySelectorAll('#trajectLijst .bord .kolom .hint').length }; }""")
@@ -195,6 +199,18 @@ with sync_playwright() as p:
     pg.on('pageerror', lambda e: meld.append('pageerror: %s' % e)); pg.on('console', lambda m: meld.append('console-error: %s' % m.text) if m.type == 'error' else None)
     pg.goto(url('sophie'))
     if wacht(pg, '#homeInhoud .hkaart'):
+        # v7.8 (review I2/C6): de statuskeuzelijst van een kandidaat heeft op de iPad (body.desk, hover: none) tikdoelen van 44 px en de pil 36 px, en
+        # geen statuspil is afgekapt bij 14 px (dezelfde maat als desktop)
+        pg.evaluate("deskNaar('bezetting')")
+        if wacht(pg, '#trajectLijst [data-kpil]'):
+            pg.click('#trajectLijst [data-kpil]'); wacht(pg, '#kpilMenu.aan .kpil-optie')
+            kp = pg.evaluate("""() => { var l = Array.prototype.slice.call(document.querySelectorAll('#trajectLijst [data-kpil]')); return { hover: matchMedia('(hover: none)').matches, desk: document.body.classList.contains('desk'),
+                optie: document.querySelector('#kpilMenu .kpil-optie').getBoundingClientRect().height, pil: document.querySelector('#trajectLijst [data-kpil]').getBoundingClientRect().height,
+                n: l.length, over: l.filter(function (e) { return e.scrollWidth > e.clientWidth; }).map(function (e) { return e.textContent.trim(); }).filter(function (v, i, a) { return a.indexOf(v) === i; }) }; }""")
+            ok('ipad: statuskeuzelijst met opties van %d px en een pil van %d px (hover: none %s, desk %s)' % (kp['optie'], kp['pil'], kp['hover'], kp['desk']), kp['hover'] and kp['desk'] and kp['optie'] >= 44 and kp['pil'] >= 36)
+            ok('ipad: geen afgekapte statuspil onder %d kandidaten%s' % (kp['n'], (': ' + ', '.join(kp['over'])) if kp['over'] else ''), kp['n'] > 0 and not kp['over'])
+            pg.keyboard.press('Escape'); rust(pg, 100)
+        else: ok('ipad: Bezetting met statuspillen', False)
         pg.evaluate("deskNaar('financien')")
         if wacht(pg, '[data-finexact]'):
             pg.click('[data-finexact]'); wacht(pg, '#venster #vf-exactpeil')

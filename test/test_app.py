@@ -38,6 +38,12 @@ else:
     print('mock gestart op poort %d (MOCK_CSP=1); wordt aan het eind gestopt' % POORT)
 
 API_LOG = []  # v7.3: elk POST /api van de hoofdpagina als {fn, args}, voor de scenario's die tellen welke api's de app aanroept
+# v7.8 (review C1/I3): staat de gefocuste optie van de statuskeuzelijst binnen het zichtbare deel van #kpilMenu, en scrolt het menu?
+KPIL_IN_BEELD = """() => { var m = document.getElementById('kpilMenu'), o = document.activeElement, mr = m.getBoundingClientRect(), r = o.getBoundingClientRect();
+  return { optie: o.getAttribute('data-kkies'), inBeeld: r.top >= mr.top - 0.5 && r.bottom <= mr.bottom + 0.5, scrolt: m.scrollHeight > m.clientHeight, scrollTop: m.scrollTop }; }"""
+# v7.8 (review I1): het midden van de eerste kandidaatrij of tabknop die helemaal buiten het open menu ligt (om met de vinger "weg te tikken")
+KPIL_WEGTIK = """() => { var m = document.getElementById('kpilMenu').getBoundingClientRect(), l = document.querySelectorAll('.r-body.klik[data-kandidaat], nav button[data-view]');
+  for (var i = 0; i < l.length; i++) { var r = l[i].getBoundingClientRect(); if (r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && (r.bottom < m.top || r.top > m.bottom)) return { x: r.left + r.width / 2, y: r.top + r.height / 2, wat: l[i].getAttribute('data-kandidaat') || l[i].getAttribute('data-view') }; } return null; }"""
 def log_api(r):
     if r.method == 'POST' and r.url.startswith(BASIS + '/api'):
         try: API_LOG.append(json.loads(r.post_data or '{}'))
@@ -360,7 +366,25 @@ with sync_playwright() as p:
     assert page.locator('#kpilMenu.aan').count() == 0 and page.get_attribute('[data-kpil="c1"]', 'aria-expanded') == 'false' and page.evaluate("document.activeElement.getAttribute('data-kpil')") == 'c1' and not page.locator('#venster.aan').count(), 'Escape sluit de keuzelijst (geen venster) en zet de focus op de pil'
     page.click('[data-kpil="c1"]'); page.wait_for_selector('#kpilMenu.aan [data-kkies]'); page.mouse.click(195, 30); page.wait_for_timeout(200)
     assert page.locator('#kpilMenu.aan').count() == 0 and page.get_attribute('[data-kpil="c1"]', 'aria-expanded') == 'false', 'een klik buiten het menu sluit het'
-    assert page.evaluate("kandidaatPil({ id: 'x', naam: 'Test', status: 'gesprek' }, false)").startswith('<span class="pill kpil-vast p-gesprek"'), 'zonder wijzigrecht is de status een span (geen rol in de mock heeft kandidatenZien zonder kandidaten, dus direct via kandidaatPil)'
+    # v7.8 (review I1): een wegtik met de vinger buiten het menu sluit het alleen; de click erachter gaat niet door naar de kandidaatrij of tabknop eronder
+    page.click('[data-kpil="c1"]'); page.wait_for_selector('#kpilMenu.aan [data-kkies]'); doel = page.evaluate(KPIL_WEGTIK)
+    assert doel, 'een kandidaatrij of tabknop buiten het open menu om op te tikken'
+    page.touchscreen.tap(doel['x'], doel['y']); page.wait_for_timeout(400)
+    assert page.locator('#kpilMenu.aan').count() == 0 and page.locator('#venster.aan').count() == 0 and page.locator('#view-trajecten.actief').count() == 1, 'de wegtik (op %s) sluit het menu en opent niets eronder' % doel['wat']
+    # v7.8 (review C1/I3): op een laag scherm is het menu afgeknipt en scrolt het; de gefocuste optie komt in beeld (End, Home) en bij openen staat de
+    # huidige status in beeld, ook een late (reserve: End, ArrowUp, Enter slaat op; daarna terug naar gesprek)
+    page.set_viewport_size({'width': 390, 'height': 500}); page.wait_for_timeout(200); page.evaluate("document.querySelector('[data-kpil=\"c1\"]').scrollIntoView({ block: 'center' })")
+    page.focus('[data-kpil="c1"]'); page.keyboard.press('Enter'); page.wait_for_selector('#kpilMenu.aan [data-kkies]')
+    page.keyboard.press('End'); r = page.evaluate(KPIL_IN_BEELD); assert r['scrolt'] and r['inBeeld'] and r['optie'] == 'afgewezen', 'End: de laatste optie staat in beeld in het scrollende menu: ' + str(r)
+    page.keyboard.press('Home'); r = page.evaluate(KPIL_IN_BEELD); assert r['inBeeld'] and r['optie'] == 'voorgesteld' and r['scrollTop'] == 0, 'Home: de eerste optie in beeld, het menu bovenaan: ' + str(r)
+    page.keyboard.press('End'); page.keyboard.press('ArrowUp')
+    with page.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiKandidaatOpslaan' in (r.request.post_data or '')):
+        page.keyboard.press('Enter')
+    page.wait_for_selector('.pill.p-reserve[data-kpil="c1"]'); page.wait_for_timeout(300)
+    page.keyboard.press('Enter'); page.wait_for_selector('#kpilMenu.aan [data-kkies][aria-selected="true"]'); r = page.evaluate(KPIL_IN_BEELD)
+    assert r['scrolt'] and r['inBeeld'] and r['optie'] == 'reserve', 'bij openen staat de huidige status (laat in de lijst) in beeld: ' + str(r)
+    page.keyboard.press('Escape'); page.set_viewport_size({'width': 390, 'height': 844}); page.wait_for_timeout(200)
+    assert page.evaluate("kandidaatPil({ id: 'x', naam: 'Test', status: 'gesprek' }, false)") == '<span class="pill kpil-vast p-gesprek"><span class="vh">Status van Test: </span>gesprek</span>', 'zonder wijzigrecht is de status een span zonder aria-label, met de naam als verborgen tekst (review C3/I7; geen rol in de mock heeft kandidatenZien zonder kandidaten, dus direct via kandidaatPil)'
     page.click('[data-kpil="c1"]'); page.wait_for_selector('#kpilMenu [data-kkies]'); page.click('[data-kkies="gesprek"]'); page.wait_for_selector('.pill.p-gesprek[data-kpil="c1"]'); page.wait_for_timeout(300)  # terug naar gesprek voor de rest van de test
     page.screenshot(path=OUT + '/07c_bezetting.png', full_page=True)
     assert page.inner_text('#meldTeller') == '1', 'bel telt ongelezen meldingen'
@@ -377,6 +401,7 @@ with sync_playwright() as p:
     page.locator('.vac-kaart:has-text("Taalcoach") [data-kpil]').click(); page.wait_for_selector('#kpilMenu [data-kkies]'); page.click('[data-kkies="klaar voor start"]')  # v7.8: ook op de projectpagina een pil met keuzelijst
     page.wait_for_selector('.vac-kaart:has-text("Taalcoach") .pill.p-klaar-voor-start[data-kpil]'); page.wait_for_selector('.vac-kaart:has-text("Taalcoach") .vac-teller.vol')
     page.wait_for_timeout(300); assert '1/3' in page.inner_text('[data-dtab="bezetting"]'), 'tab telt de bezetting: ' + page.inner_text('[data-dtab="bezetting"]')
+    assert page.evaluate("document.activeElement && document.activeElement.getAttribute('data-kpil')") == page.get_attribute('.vac-kaart:has-text("Taalcoach") [data-kpil]', 'data-kpil'), 'v7.8 (review C5): op de projecttab houdt de statuspil de focus na het kiezen en hertekenen'
     page.locator('.vac-kaart:has-text("Taalcoach") [data-kandidaat]:not([data-kandidaat="nieuw"])').first.click(); page.wait_for_selector('#venster.aan [data-kopieerxps]'); page.click('#venster [data-cf-annuleer]')
     page.screenshot(path=OUT + '/07f_project_bezetting.png', full_page=True)
     assert page.locator('[data-kopieerxpsproject]').count() == 1, 'knop Kopieer voor XPS op het project'  # v4.1
