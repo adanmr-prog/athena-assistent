@@ -8,7 +8,7 @@ Vervolg op `docs/prestatie-v7.6.md`: de drie punten uit §6 en §7 daarvan die o
 |---|---|---|---|---|
 | A. Bezetting → Alle vacatures zonder 742 `<select>` | tik tot getekend, telefoon 4× CPU, demo op praktijkschaal (195 kaarten, 742 kandidaatrijen), mediaan van vijf | 1 416 ms (p95 1 530) | 678 ms (p95 697); na de reviewronde 664–686 ms | −52 % (−51,6 % bij de verificatie) |
 | B. `body.desk` vóór de eerste paint | CLS koude start Home, desktop 1 280 px, trage 4G (mock met `MOCK_PACE`), mediaan van vijf | 0,169 | 0,006 | −96 % |
-| C. Datumveldhoogte fontonafhankelijk | `min-height` van een leeg datumveld tegenover een tekstveld ernaast, met en zonder Nunito | 2 px verschil zonder Nunito (33 tegenover 31) | 0 px, met en zonder Nunito (32,2 tegenover 32) | `test/demo_groot.py` groen zonder `--fonts` |
+| C. Datumveldhoogte fontonafhankelijk | `min-height` van een leeg datumveld tegenover een tekstveld ernaast, met en zonder Nunito | 2 px verschil zonder Nunito (33 tegenover 31) | 0 px, met en zonder Nunito (34,6 tegenover 34,6; één gedeelde `min-height`) | `test/demo_groot.py` groen zonder `--fonts` |
 
 Geen backendwijziging: `Code.gs` blijft op 7.7; CACHE `athena-assistent-v7.8`, `APP_VERSIE` 7.8.
 
@@ -55,18 +55,18 @@ Zonder `MOCK_PACE` (snelle lijn) is de CLS vóór en ná 0,006: de sprong bestaa
 
 **Probleem** (`docs/prestatie-v7.6.md` §7): de v7.4-regel `body.desk .veld input[type=date] { min-height: 33px }` is gemeten met Nunito. Zonder Nunito (zoals in een container zonder fonts) is een tekstveld 31 px en meldt `test/demo_groot.py` een FOUT op de iPad-controle; met de telefoonregel (42 px) hetzelfde.
 
-**Wijziging.** `.veld input { line-height: 1.3 }` legt de regelhoogte van elk invoerveld vast, en de datumregels rekenen daarmee: `calc(1.3em + 20px)` op de telefoon (padding 2 × 9, rand 2 × 1,5 die Chromium per zijde als 1 px telt) en `calc(1.3em + 14px)` op desktop (padding 2 × 6). De `min-height` is daarmee per constructie de hoogte van het tekstveld ernaast, met elk lettertype. De regels van `.le-rij` (40 px) en `.ftabel` (30 px) zijn niet aangeraakt.
+**Wijziging.** Eén gedeelde regel voor tekst-, keuze- en datumvelden: `.veld input:not([type=checkbox]):not([type=radio]), .veld select { line-height: 1.4; min-height: calc(1.4em + 21px) }` op de telefoon (padding 2 × 9, rand 2 × 1,5) en `min-height: calc(1.4em + 15px)` onder `body.desk` (padding 2 × 6). Omdat tekst- én datumveld dezelfde `min-height` hebben, zijn ze per constructie even hoog, met elk lettertype, in elke engine en bij elke pixeldichtheid; de datumregels zelf houden alleen `appearance: none`. De regelhoogte is 1,4 en niet lager, omdat WebKit in een éénregelig tekstveld een `line-height` onder de normale regelhoogte van het lettertype (Nunito: 1,364) terugzet op `normal` (bevinding van de iOS-review; Chromium doet dat pas onder 1 em, waardoor een eerste versie met 1,3 alleen in Chromium klopte). Erbij: `::-webkit-date-and-time-value { margin: 0 }`, zodat op iOS een gevuld datumveld even hoog is als een leeg (de UA-marge van 1 px boven en onder bestond sinds v4.1). De regels van `.le-rij` (40 px) en `.ftabel` (30 px) staan buiten `.veld`, hebben eigen padding en zijn niet aangeraakt (volgende post met hetzelfde patroon zodra dit op een iPad is bevestigd).
 
-**Meting** (`prestatie/veldhoogte.py` in de scratchpad: demo, bewerkvenster van een taak, hoogte van het tekstveld en het datumveld met `getBoundingClientRect`, met en zonder lokale Nunito):
+**Meting** (`prestatie/veldhoogte.py` in de scratchpad: demo, bewerkvenster van een taak, hoogte van het tekstveld, het datumveld en de keuzelijst met `getBoundingClientRect`, met en zonder lokale Nunito; Chromium op DPR 1):
 
-| | Telefoon 390 px, tekst / datum | Desktop 1 280 px, tekst / datum |
+| | Telefoon 390 px, tekst / datum / keuzelijst | Desktop 1 280 px, tekst / datum / keuzelijst |
 |---|---|---|
-| Vóór, zonder Nunito | 40 / 42 (min 42) | 31 / 33 (min 33) |
-| Vóór, met Nunito | 42 / 44 (min 42) | 33 / 35 (min 33) |
-| Ná, zonder Nunito | 40,8 / 42,8 (min 40,8) | 32,2 / 34,2 (min 32,2) |
-| Ná, met Nunito | 40,8 / 42,8 (min 40,8) | 32,2 / 34,2 (min 32,2) |
+| Vóór, zonder Nunito | 40 / 42 / 42 (min datum 42) | 31 / 33 / 33 (min datum 33) |
+| Vóór, met Nunito | 42 / 44 / 44 (min datum 42) | 33 / 35 / 35 (min datum 33) |
+| Ná, zonder Nunito | 43,4 / 44,4 / 43,4 (min 43,4 op alle drie) | 34,6 / 35,6 / 34,6 (min 34,6) |
+| Ná, met Nunito | 43,4 / 44,4 / 44 (min 43,4) | 34,6 / 35,6 / 35 (min 34,6) |
 
-Het datumveld is in Chromium altijd 2 px hoger dan het tekstveld (de interne datumbewerker heeft eigen padding); dat was al zo en is geen onderdeel van de regel. Met Nunito worden tekstvelden 0,8–1,2 px lager dan voorheen; zonder Nunito 0,8–1,2 px hoger. `test/demo_groot.py` is nu groen met én zonder `--fonts` (iPad-controle: `min-height 32.2px … 34 px naast een tekstveld van 32 px`). ⚠️ Op iOS zelf niet gemeten; de iOS-review van deze release kijkt ernaar.
+Het datumveld is in Chromium 1 px hoger dan het tekstveld (de interne datumbewerker heeft eigen padding; vóór de wijziging 2 px); dat is geen onderdeel van de regel. Velden worden met Nunito 1,4–1,6 px hoger dan voorheen (de telefoon komt daarmee op 43,4 px, dichter bij de 44 px-norm). Rekensom voor iOS uit de review (WebKit rondt ascent en descent apart af en telt de rand als 1,5 px): telefoon tekstveld 43,4 = min-height 43,4, iPad in landschap 34,6 = 34,6. `test/demo_groot.py` is groen met én zonder `--fonts` (iPad-controle: `min-height 34.6px … naast een tekstveld van 34 px`). ⚠️ Op iOS zelf niet gemeten: op een iPad de hoogte van `#vf-exactpeil` en `[data-exactkol]` in het Exact-venster vergelijken (Web Inspector, `getBoundingClientRect().height`).
 
 ## 4. Verificatie
 

@@ -109,7 +109,7 @@
   .veld { margin-top: 10px; }
   .veld label { display: block; font-size: var(--fs-klein); font-weight: 600; color: var(--inkt2); margin-bottom: 4px; }
   .veld input, .veld select, .veld textarea { width: 100%; border: 1.5px solid var(--lijn); background: var(--wit); border-radius: 10px; padding: 9px 12px; outline: none; }
-  .veld input { line-height: 1.3; }  /* v7.8: vaste regelhoogte, zodat een tekstveld en een leeg datumveld even hoog zijn met elk lettertype (de datumregels hieronder rekenen ermee) */
+  .veld input:not([type=checkbox]):not([type=radio]), .veld select { line-height: 1.4; min-height: calc(1.4em + 21px); }  /* v7.8 (iOS-review): 1,4 ≥ de normale regelhoogte van Nunito (1,364), anders zet WebKit een tekstveld terug op normal; dezelfde min-height op tekst-, keuze- én datumveld (padding 2×9 + rand 2×1,5), zodat engine en randafronding er niet toe doen en een leeg datumveld even hoog is als het veld ernaast */
   .veld textarea { min-height: 84px; resize: vertical; line-height: 1.45; }
   .veld input:focus, .veld select:focus, .veld textarea:focus { border-color: var(--paars); }
   .invoer:focus-within { border-color: var(--paars); box-shadow: 0 0 0 2px var(--paars-l); }  /* v7.2: zichtbare toetsenbordfocus op zoekvelden en keuzelijsten (outline none zonder vervanging, WCAG 2.4.7); los van :focus-visible, want iOS < 15.4 kent die niet en zou dan de hele lijst negeren */
@@ -245,7 +245,8 @@
   [data-taakbewerk] { cursor: pointer; }
   .veld.breed { grid-column: 1 / -1; }
   .veld input, .veld select, .veld textarea { min-width: 0; }
-  .veld input[type=date] { -webkit-appearance: none; appearance: none; min-height: calc(1.3em + 20px); }  /* v7.4 (iOS-review): ook in een gewoon veld (zoals de Exact-peildatum) maakt iOS een leeg datumveld anders lager; v7.8: regelhoogte 1,3 em + padding 2×9 + rand (1,5 px telt per zijde als 1 px) = precies een tekstveld ernaast, met elk lettertype */
+  .veld input[type=date] { -webkit-appearance: none; appearance: none; }  /* v7.4 (iOS-review): ook in een gewoon veld (zoals de Exact-peildatum) maakt iOS een leeg datumveld anders lager; v7.8: de min-height staat in de gedeelde regel hierboven
+  .veld input[type=date]::-webkit-date-and-time-value { margin: 0; }  /* v7.8 (iOS-review): iOS geeft de waarde een marge van 1 px boven en onder; zo is een gevuld datumveld even hoog als een leeg */
   .veld.vinkje label { display: flex; gap: 8px; align-items: center; min-height: 44px; font-size: var(--fs-tekst); font-weight: 600; color: var(--inkt); }  /* v7.7 (iOS-review): 44 px tikdoel, ook op een iPad in landschap */
   .veld.vinkje input { width: 22px; height: 22px; margin: 0; flex-shrink: 0; }
   .t-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--lijn); }
@@ -405,7 +406,7 @@
   body.desk .avatar { width: 24px; height: 24px; font-size: var(--fs-klein); }
   body.desk .veld label { font-size: var(--fs-klein); }
   body.desk .veld input, body.desk .veld select, body.desk .veld textarea { padding: 6px 9px; border-radius: 8px; }
-  body.desk .veld input[type=date] { min-height: calc(1.3em + 14px); }  /* v7.4 (iOS-review): iPad in landschap; v7.8: regelhoogte 1,3 em + padding 2×6 + rand (1,5 px telt per zijde als 1 px) = precies een tekstveld op desktop, met elk lettertype */
+  body.desk .veld input:not([type=checkbox]):not([type=radio]), body.desk .veld select { min-height: calc(1.4em + 15px); }  /* v7.4 (iOS-review): iPad in landschap; v7.8: padding 2×6 + rand 2×1,5, dezelfde min-height voor tekst-, keuze- en datumveld */
   body.desk .dtabel { font-size: var(--fs-zacht); }
   body.desk .dtabel th { padding: 6px 10px; font-size: var(--fs-klein); }
   body.desk .dtabel td { padding: 6px 10px; }
