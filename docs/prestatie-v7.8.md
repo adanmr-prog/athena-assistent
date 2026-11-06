@@ -70,7 +70,11 @@ Het datumveld is in Chromium 1 px hoger dan het tekstveld (de interne datumbewer
 
 ## 4. Verificatie
 
-_Wordt aangevuld: suites op de samengevoegde branch, iOS-review._
+**Post A** is gebouwd, gereviewd (correctheid en iOS, onafhankelijk) en geverifieerd in een eigen worktree (§1). **Post B en C** kregen een aparte iOS-review (`ios-pwa-reviewer`): 0 blokkerend, 2 risico's en 3 nits, alle op post C: WebKit zet een `line-height` onder de normale regelhoogte van het lettertype terug op `normal` (R1) en de rand van 1,5 px telt alleen in Chromium op DPR 1 als 1 px (R2) → één gedeelde `min-height` met regelhoogte 1,4 (§3); `.veld select` doet mee (N3); de `.le-rij`- en `.ftabel`-regels blijven terecht buiten deze post (N4); `::-webkit-date-and-time-value { margin: 0 }` (N5). Post B in orde bevonden: dezelfde mediaquery als `deskMq` met de viewport-meta al verwerkt, CSP staat inline scripts toe, de service worker heeft geen nieuw shell-bestand nodig, portaal en demo kregen `desk` al vóór `startApp`/`startPortaal` (alleen het moment verschuift), niets overschrijft `body.className` behalve de `v-*`-wissel, geen flits of dubbele layout.
+
+**Suites** op de samengevoegde branch (eerst de volledige run van 25 suites, daarna test_app, demo_groot met en zonder fonts, golf4, ux_taken en handelingen opnieuw na de laatste aanpassing van post C): node_rooktest, parser_test, kruistabel, handelingen, fuzz (0 interne fouten, 0 rechtenlekken), rechten_test, server/dekking (0 gaten), server/vergelijk (0 onverklaarde verschillen), server_test, security_test, demo_groot_test, tz_test `--snel`, mutatie_test, test_app, storing, toetsenbord, golf1–golf4, demo_groot (met én zonder `--fonts`), demo_shots rooktest, ux_taken en prestatie: alle ALLES GOED. `prestatie.py`: Vandaag koud, warm en bij een hangende server binnen het budget, ketens binnen het budget, render op praktijkschaal Relaties 190, Taken 144, Projecten 200, Bezetting per vacature 214, Bezetting alle vacatures 647 (budget 1 000), Financiën 417 ms, 0 JS-fouten. Hook `check-index.sh`: syntax van het inline script schoon (de melding over `sw.js` is de bedoelde CACHE-bump).
+
+**Niet gemeten:** iOS zelf (post C, zie §3) en Vercel (niet in gebruik).
 
 ## 5. Open punten
 
