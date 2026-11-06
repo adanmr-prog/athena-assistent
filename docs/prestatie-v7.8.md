@@ -6,7 +6,7 @@ Vervolg op `docs/prestatie-v7.6.md`: de drie punten uit §6 en §7 daarvan die o
 
 | Post | Maat | Vóór | Ná | Verschil |
 |---|---|---|---|---|
-| A. Bezetting → Alle vacatures zonder 742 `<select>` | tik tot getekend, telefoon 4× CPU, demo op praktijkschaal (195 kaarten, 742 kandidaatrijen), mediaan van vijf | 1 416 ms (p95 1 530) | _zie §1_ | _zie §1_ |
+| A. Bezetting → Alle vacatures zonder 742 `<select>` | tik tot getekend, telefoon 4× CPU, demo op praktijkschaal (195 kaarten, 742 kandidaatrijen), mediaan van vijf | 1 416 ms (p95 1 530) | 678 ms (p95 697); na de reviewronde 664–686 ms | −52 % (−51,6 % bij de verificatie) |
 | B. `body.desk` vóór de eerste paint | CLS koude start Home, desktop 1 280 px, trage 4G (mock met `MOCK_PACE`), mediaan van vijf | 0,169 | 0,006 | −96 % |
 | C. Datumveldhoogte fontonafhankelijk | `min-height` van een leeg datumveld tegenover een tekstveld ernaast, met en zonder Nunito | 2 px verschil zonder Nunito (33 tegenover 31) | 0 px, met en zonder Nunito (32,2 tegenover 32) | `test/demo_groot.py` groen zonder `--fonts` |
 
@@ -16,11 +16,25 @@ Geen backendwijziging: `Code.gs` blijft op 7.7; CACHE `athena-assistent-v7.8`, `
 
 **Probleem** (`docs/prestatie-v7.6.md` §6): bij "Alle vacatures" (`[data-bopen="0"]`) tekent elke `kandidaatRij` een `<select class="pill">` met alle statussen; op praktijkschaal zijn dat er 742 in één hertekening. Een `<select>` is het duurste formulierelement om te maken en te layouten (innerHTML 346 ms, layout 1 371 ms in de nulmeting van v7.6).
 
-**Wijziging.** De status is een pil-knop (`[data-kpil]`, class `pill kpil p-<slug>`) die pas bij een tik, Enter, spatie of pijl-omlaag één keuzelijst opent (`#kpilMenu`, `role="listbox"`, opties `[data-kkies]` met `role="option"`); zonder wijzigrecht is het een `<span>`. Kiezen slaat op zoals voorheen (`apiKandidaatOpslaan` met `_oud.status`, `bezettingLokaal`). Escape, Tab, een tik buiten het menu, scrollen, resize en hertekenen sluiten het menu; de focus gaat terug naar de pil. `pillSelect` blijft voor de projectvelden, factuurstatus en kansfase.
+**Wijziging.** `kandidaatPil(k, wijzig)` tekent de status als pil-knop (`<button class="pill kpil p-<slug>" data-kpil aria-haspopup="listbox" aria-expanded>`) die pas bij een tik, Enter, spatie of pijl-omlaag de ene keuzelijst van de app opent: `#kpilMenu` (`role="listbox"`, `position: fixed`, z-index 80: boven kaarten, bord en tabbalk, onder `#venster` en `#toast`), rechts uitgelijnd met de pil, eronder of erboven, begrensd op de ruimte in het venster minus `env(safe-area-inset-bottom)` (`veiligOnder()`), met per status een `<button role="option" data-kkies aria-selected>` met kleurstip; de huidige status staat bij openen in beeld (`kpilInBeeld`). Kiezen slaat op zoals de oude change-tak (`apiKandidaatOpslaan` met `_oud.status`, `bezettingLokaal`, niets bij een gelijke status). Pijltjes (rond), Home/End, Enter/spatie; Escape en Tab sluiten; een pointerdown buiten het menu sluit en slikt de bijbehorende click in (`kpilSlik`, 500 ms), zodat een wegtik niet de rij eronder opent; scrollen sluit alleen als de pil werkelijk verplaatst is (`kpilScroll`; een momentumscroll van vlak vóór de tik sluit dus niet), resize en hertekenen sluiten altijd; de focus gaat terug naar de pil, ook na het hertekenen van het bord en de projecttab. Zonder wijzigrecht is de status een `<span class="pill kpil-vast">` met "Status van <naam>: " als verborgen tekst (geen `aria-label` op een span, ARIA 1.2). Op een iPad met `body.desk` en touch (`@media (hover: none)`) zijn de opties 44 px en de pil 36 px. `pillSelect` blijft voor de projectvelden, factuurstatus en kansfase; de `[data-kstatus]`-tak uit de change-handler is weg omdat nergens meer een `<select data-kstatus>` wordt getekend.
 
-**Meting.** Harnas `prestatie/render_bezetting.py` (scratchpad, buiten de repo), naar het voorbeeld van `test/prestatie.py` deel 2: demo `?demo=1&schaal=groot&kaal=1&rol=sophie`, telefoon 390 × 844 met CPU-rem 4×, Projecten → Bezetting (maat "per vacature") → "Alle vacatures" (maat: klik tot `[data-bopen="0"].aan` plus twee frames).
+**Meting.** Harnas `prestatie/render_bezetting.py` (scratchpad, buiten de repo), naar het voorbeeld van `test/prestatie.py` deel 2: demo `?demo=1&schaal=groot&kaal=1&rol=sophie`, telefoon 390 × 844 met CPU-rem 4×, Projecten → Bezetting (maat "per vacature": klik tot `.vac-kaart` plus twee frames) → "Alle vacatures" (maat: klik tot `[data-bopen="0"].aan` plus twee frames). Vijf runs, rustige machine (load < 0,2), vóór en ná kort na elkaar.
 
-_Cijfers, reviews en verificatie: worden aangevuld zodra de bouw- en reviewronde klaar is._
+| | Alle vacatures, runs | Mediaan | p95 | Per vacature, mediaan |
+|---|---|---|---|---|
+| Vóór (`<select>`) | 1 367, 1 428, 1 416, 1 530, 1 314 | 1 416 ms | 1 530 | 240 ms |
+| Ná de bouw | 678, 697, 647, 630, 679 | 678 ms | 697 | 214 ms |
+| Ná de reviewronde | 631 … | 664 ms | 680 | — |
+| Verificatie (onafhankelijk) | 686, 664, 729, 729, 645 | 686 ms | 729 | — |
+
+Winst −52 % (bouw) tot −51,6 % (verificatie), ruim boven de 10 %-drempel; "per vacature" niet slechter (binnen de ruis). `test/prestatie.py` heeft de rij `Bezetting alle vacatures` gekregen (budget 1 000 ms ≈ 1,5× de nameting, zodat een terugval naar de oude 1 416 ms rood wordt; deel 2 meet 664–697 ms).
+
+**Reviews** (twee onafhankelijke, op de bouw): correctheid/toegankelijkheid/tests (C1–C6) en iOS-PWA (I1–I7): 0 blokkerend, 4 risico's, 9 nits.
+- Risico's: C1/I3 de gefocuste optie bleef buiten beeld in een scrollend menu (`focusStil` met `preventScroll`) → `kpilInBeeld` scrolt alleen het menu; I1 spookklik: de click na een wegtik ging door naar de rij eronder → `kpilSlik`; I2 iPad in landschap kreeg opties van 32 px → 44 px onder `(hover: none)`.
+- Nits, verwerkt: C2 budget 1 400 → 1 000 ms; C3/I7 geen `aria-label` op de span; C4 `main` (tabindex −1) telde als focusnemer bij een wegtik; C5 focus na kiezen op de projecttab; C6/I6 "klaar voor start" werd afgekapt op desktop (kolom 128 px, padding 6/16); I4 safe-area in de plaatsing; I5 `overscroll-behavior: contain`.
+- Bewust open: I6 (lettergrootte): de pil volgt het token `--fs-klein` (12,5 px op de telefoon), terwijl de overgebleven statusselects daar 16 px zijn door de anti-zoomregel voor velden; een knop zoomt iOS niet in, en een losse `font-size` in px is tegen de huisregel.
+
+**Verificatie** (onafhankelijke agent op commit 62dc3f1): elk reviewpunt met regelnummer nagetrokken en dicht (I6 deels, met reden); conventiescan van de diff schoon; handelingen, kruistabel, test_app (282 api-aanroepen), golf1, golf4, toetsenbord, ux_taken, ux_rust, demo_groot (met en zonder fonts, met drie nieuwe controles: geen afgekapte statuspil onder 742 kandidaten, iPad-tikdoelen, menu binnen het venster) en prestatie deel 2 groen; eigen controle in de mock op telefoon, desktop (ook 1 280 × 420), iPad en de iOS-paden die Chromium zelf niet laat zien (focus na een niet-focussende pointerdown, slik-timer, safe-area 34 px via CDP). Restpunt ter kennisgeving: na een wegtik op desktop eindigt de focus op `main` omdat de browser het getikte element zelf focust (bestaand gedrag); de slik vangt elke eerstvolgende click na een wegtik, ook op Herladen in `#updateBalk` (dan een tweede tik), zoals een native picker.
 
 ## 2. Post B: `body.desk` vóór de eerste paint
 
