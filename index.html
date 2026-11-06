@@ -508,6 +508,18 @@
   /* v4.1: bezetting (vacatures en kandidaten), taskforce en meldingen */
   .pill.p-voorgesteld { background-color: #579BFC; } .pill.p-gesprek { background-color: #FDAB3D; } .pill.p-geselecteerd { background-color: #A25DDC; }
   .pill.p-academy { background-color: #784BD1; } .pill.p-contract { background-color: #0086C0; } .pill.p-vog { background-color: #037F4C; } .pill.p-klaar-voor-start { background-color: #00C875; } .pill.p-reserve { background-color: #9AA0A6; } .pill.p-afgewezen { background-color: #DF2F4A; }
+  /* v7.8: kandidaatstatus als pil (knop of, zonder wijzigrecht, een span) met één keuzelijst voor de hele app (#kpilMenu) in plaats van een <select>
+     per rij: op praktijkschaal kostten ±740 selects 1,4 s op de telefoon. Zelfde uiterlijk als de select-pil; het pijltje alleen op de knop. */
+  .kpil, .kpil-vast { display: block; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpil-vast { display: flex; align-items: center; justify-content: center; background-image: none; padding-right: 8px; cursor: default; }
+  #kpilMenu { position: fixed; z-index: 80; display: none; min-width: 180px; max-width: calc(100vw - 16px); max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--wit); border: 1px solid var(--lijn); border-radius: 12px; box-shadow: 0 14px 34px rgba(36,26,40,.18); padding: 6px; }  /* boven kaarten, bord en tabbalk; onder #venster (90) en #toast (200) */
+  #kpilMenu.aan { display: block; }
+  .kpil-optie { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: none; text-align: left; font-size: var(--fs-zacht); font-weight: 400; color: var(--inkt); cursor: pointer; }
+  .kpil-optie[aria-selected="true"] { font-weight: 600; }
+  .kpil-optie:hover { background: var(--vlak); }
+  .kpil-optie:focus-visible { outline: 2px solid var(--paars); outline-offset: -2px; background: var(--vlak); }
+  .kpil-optie .pill.kpil-dot { flex: none; display: inline-block; width: 10px; min-width: 10px; height: 10px; min-height: 0; padding: 0; border-radius: 50%; background-image: none; }  /* wint van body:not(.desk) .pill (min-height) */
+  body.desk .kpil-optie { min-height: 32px; padding: 5px 10px; }
   .tag.open { background: var(--oranje-l); color: #975A00; } .tag.ingevuld { background: var(--groen-l); color: var(--groen); } .tag.gesloten { background: var(--vlak); color: var(--inkt2); }
   .tag.concept { background: var(--paars-l); color: var(--paars); }  /* v6.4: conceptvacature uit het winformulier */
   .vac-kaart { margin: 10px 0; }
@@ -1433,7 +1445,7 @@
      maxMs en één ingekorte foutmelding zonder e-mailadressen. Nooit argumenten of gegevens. Verzenden (stil, nooit een toast, nooit een lus) zodra er
      iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
-  var APP_VERSIE = '7.7';  // v7.7: alle gegevens inladen; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
+  var APP_VERSIE = '7.8';  // v7.8: prestatie, ronde 2; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
   var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
   function tijdNu() { return (window.performance && typeof performance.now === 'function') ? performance.now() : Date.now(); }
   function kortFout(s) { return String(s == null ? '' : s).replace(/[^\s@<>"'()]+@[^\s@<>"'()]+/g, '…').replace(/\s+/g, ' ').trim().slice(0, 120); }  // e-mailadressen eruit, hoogstens 120 tekens
@@ -1607,6 +1619,9 @@
     snelToevoegen(inp);
   });
   document.addEventListener('click', function (e) {
+    var kp;  // v7.8: de statuspil van een kandidaat en haar keuzelijst, vóór de andere takken (een klik erop mag de rij eronder niet openen)
+    if ((kp = e.target.closest('[data-kkies]'))) { kpilKies(kp); return; }
+    if ((kp = e.target.closest('[data-kpil]'))) { kpilOpen(kp); return; }
     var k = e.target.closest('[data-kies]'); if (!k) return;
     var chip = k.closest('.p-chip'), inp = chip && (chip.id ? document.querySelector('[data-snel="' + chip.id + '"]') : chip.parentNode.querySelector('[data-snel]'));
     if (!inp) return; inp.dataset.kies = k.dataset.kies; snelBijwerken(inp);
@@ -1924,6 +1939,7 @@
   }
   function renderTrajecten() {
     var T = S.trajecten;
+    kpilSluit();  // v7.8: hertekenen sluit een open statuskeuzelijst (de pil eronder verdwijnt of verschuift); de focus gaat terug naar de pil en komt via bezettingFocusVoor op de nieuwe
     if (!T) {  // v7.5: na bezettingLokaal is S.trajecten gewist (anders deden filters, zoeken en de weergavechips daarna niets meer)
       if (!el('view-trajecten').classList.contains('actief')) return;
       el('projectAms').querySelectorAll('[data-pam]').forEach(function (c) { c.classList.toggle('aan', c.getAttribute('data-pam') === (S.pAm || '')); });
@@ -2239,14 +2255,105 @@
     var naam = k.talentId ? crmLink('talent', k.talentId, k.naam) : esc(k.naam);
     var beoordeel = k.talentId && magApp('beoordelingen', 'wijzigen') && ['klaar voor start', 'geplaatst', 'afgerond', 'gestopt'].indexOf(k.status) >= 0 ? '<div style="margin-top:6px;text-align:right"><button class="knop-mini" data-beoordeel="' + esc(k.id) + '" data-talentid="' + esc(k.talentId) + '" data-naam="' + esc(k.naam) + '">Beoordelen</button></div>' : '';
     return '<div class="rij p-rij"><div class="r-body' + (wijzig ? ' klik" data-kandidaat="' + esc(k.id) + '"' : '"') + '><div class="r-titel">' + naam + (k.vog ? ' ' + vogBadge(k.vog) : '') + '</div><div class="r-meta">' + meta.filter(Boolean).map(esc).join(' · ') + '</div></div>' +
-      '<div class="r-rechts">' + pillSelect('data-kstatus="' + esc(k.id) + '"' + (wijzig ? '' : ' disabled') + ' aria-label="Status van ' + esc(k.naam) + '"', (K || {}).kandidaatStatussen, k.status, true) + beoordeel + '</div></div>';
+      '<div class="r-rechts">' + kandidaatPil(k, wijzig) + beoordeel + '</div></div>';  // v7.8: een pil in plaats van een <select> per rij (K blijft voor de keuzelijst: bezettingKeuzes)
+  }
+  // v7.8: de status als pil. Met wijzigrecht een knop die de keuzelijst opent (kpilOpen), anders een span zonder pijltje. Op praktijkschaal tekent
+  // "Alle vacatures" ±740 kandidaatrijen; een <select> per rij kostte 1,4 s op de telefoon, een knop een fractie daarvan.
+  function kandidaatPil(k, wijzig) {
+    var st = esc(k.status), naam = esc(k.naam), kl = esc(pillKlasse(k.status));
+    return wijzig ? '<button type="button" class="pill kpil ' + kl + '" data-kpil="' + esc(k.id) + '" aria-haspopup="listbox" aria-expanded="false" aria-label="Status van ' + naam + ': ' + st + '">' + st + '</button>'
+      : '<span class="pill kpil-vast ' + kl + '" aria-label="Status van ' + naam + '">' + st + '</span>';
   }
   function bezettingKeuzes() { return (CRM.detail && CRM.detail.data && CRM.detail.data.keuzesBezetting) || (S.bezetting && S.bezetting.keuzes) || {}; }
   function alleVacatures() { var l = []; if (CRM.detail && CRM.detail.data && CRM.detail.data.vacatures) l = l.concat(CRM.detail.data.vacatures); if (S.bezetting) l = l.concat(S.bezetting.vacatures); return l; }
   function zoekVacature(id) { return alleVacatures().filter(function (v) { return v.id === id; })[0] || null; }
   function zoekKandidaat(id) { var k = null; alleVacatures().forEach(function (v) { (v.kandidaten || []).forEach(function (x) { if (x.id === id) k = k || x; }); }); return k; }
+  /* --- v7.8: één keuzelijst (#kpilMenu, role=listbox) voor alle statuspillen van kandidaten. Klik, Enter, Space of ArrowDown op [data-kpil] opent
+     hem onder de pil (erboven als eronder geen ruimte is, altijd binnen het venster); kiezen slaat op zoals de oude change-tak voor [data-kstatus].
+     ArrowUp/ArrowDown lopen rond, Home/End eerste/laatste, Escape en Tab sluiten; een pointerdown buiten het menu, scrollen (ook in main) en resize
+     sluiten ook. Bij sluiten gaat de focus terug naar de pil (als die er nog staat) en aria-expanded naar false; hertekenen sluit een open menu. --- */
+  var KPIL = { knop: null };
+  function kpilMenu() {
+    var m = el('kpilMenu');
+    if (!m) { m = document.createElement('div'); m.id = 'kpilMenu'; m.setAttribute('role', 'listbox'); m.setAttribute('tabindex', '-1'); m.addEventListener('keydown', kpilToets); document.body.appendChild(m); }
+    return m;
+  }
+  function kpilNaam(knop, k) { return k ? k.naam : String(knop.getAttribute('aria-label') || '').replace(/^Status van /, '').replace(/:[^:]*$/, ''); }
+  function kpilOpen(knop) {
+    if (KPIL.knop === knop) { kpilSluit(); return; }  // nog een tik op dezelfde pil sluit
+    if (KPIL.knop) kpilSluit(false);
+    var id = knop.getAttribute('data-kpil'), k = zoekKandidaat(id), huidig = k ? k.status : (knop.textContent || '').trim(), m = kpilMenu();
+    var lijst = metHuidig((bezettingKeuzes().kandidaatStatussen || []).slice(), huidig);
+    m.setAttribute('aria-label', 'Status van ' + kpilNaam(knop, k));
+    m.innerHTML = lijst.map(function (s) { return '<button type="button" role="option" class="kpil-optie" data-kkies="' + esc(s) + '" aria-selected="' + (s === huidig ? 'true' : 'false') + '"><i class="pill kpil-dot ' + esc(pillKlasse(s)) + '" aria-hidden="true"></i>' + esc(s) + '</button>'; }).join('');
+    KPIL.knop = knop; knop.setAttribute('aria-expanded', 'true');
+    m.classList.add('aan'); kpilPlaats(knop, m);
+    var r = knop.getBoundingClientRect(); KPIL.top = r.top; KPIL.left = r.left;  // waar de pil stond: een scroll die hem verplaatst sluit het menu (kpilScroll)
+    focusStil(m.querySelector('[aria-selected="true"]') || m.querySelector('[data-kkies]'));
+    document.addEventListener('pointerdown', kpilBuiten, true);
+    window.addEventListener('scroll', kpilScroll, true);  // capture: ook de scroller main en de tabel-scrollers
+    window.addEventListener('resize', kpilScroll);
+  }
+  function kpilPlaats(knop, m) {
+    var r = knop.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, marge = 8;
+    m.style.maxHeight = ''; m.style.width = '';
+    if (m.offsetWidth > vw - 2 * marge) m.style.width = (vw - 2 * marge) + 'px';
+    var h = m.offsetHeight, onder = vh - r.bottom - 4 - marge, boven = r.top - 4 - marge, top;
+    if (h <= onder || onder >= boven) { top = r.bottom + 4; if (h > onder) { m.style.maxHeight = Math.max(88, onder) + 'px'; h = m.offsetHeight; } }  // eronder
+    else { if (h > boven) { m.style.maxHeight = Math.max(88, boven) + 'px'; h = m.offsetHeight; } top = r.top - 4 - h; }  // erboven
+    m.style.top = Math.max(marge, Math.min(top, vh - h - marge)) + 'px';
+    m.style.left = Math.max(marge, Math.min(r.right - m.offsetWidth, vw - m.offsetWidth - marge)) + 'px';  // rechts uitgelijnd met de pil
+  }
+  function kpilSluit(terug) {
+    var m = el('kpilMenu'), knop = KPIL.knop; KPIL.knop = null;
+    if (m && m.classList.contains('aan')) { m.classList.remove('aan'); m.innerHTML = ''; }
+    document.removeEventListener('pointerdown', kpilBuiten, true); window.removeEventListener('scroll', kpilScroll, true); window.removeEventListener('resize', kpilScroll);
+    if (!knop) return;
+    knop.setAttribute('aria-expanded', 'false');
+    if (terug !== false && document.contains(knop)) focusStil(knop);
+  }
+  function kpilBuiten(ev) {
+    var m = el('kpilMenu'), t = ev.target;
+    if (!m || (t && t.nodeType === 1 && (m.contains(t) || (KPIL.knop && KPIL.knop.contains(t))))) return;  // in het menu, of de pil zelf (de klik erop sluit)
+    var neemtFocus = t && t.closest && t.closest('button, [tabindex], a[href], input, select, textarea');
+    kpilSluit(!neemtFocus);  // een tik op iets wat zelf focus krijgt, houdt die focus
+  }
+  // Scrollen in het menu zelf mag. Een scroll-event dat de pil niet verplaatst heeft (bijv. een scroll van vlak vóór de tik, die pas een frame later
+  // als event binnenkomt, of een andere scroller) laat het menu staan: het staat dan nog goed. Resize komt hier ook langs (zonder event).
+  function kpilScroll(ev) {
+    var m = el('kpilMenu'), knop = KPIL.knop; if (!knop) return;
+    if (ev && ev.type === 'scroll' && ev.target && ev.target.nodeType === 1 && m && m.contains(ev.target)) return;
+    var r = knop.getBoundingClientRect(); if (ev && ev.type === 'scroll' && Math.abs(r.top - KPIL.top) < 1 && Math.abs(r.left - KPIL.left) < 1) return;
+    kpilSluit();
+  }
+  function kpilToets(ev) {
+    var m = el('kpilMenu'), l = Array.prototype.slice.call(m.querySelectorAll('[data-kkies]')), i = l.indexOf(document.activeElement), n = l.length, naar = null;
+    if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    if (ev.key === 'ArrowDown') naar = l[i < 0 ? 0 : (i + 1) % n];
+    else if (ev.key === 'ArrowUp') naar = l[i < 0 ? n - 1 : (i - 1 + n) % n];
+    else if (ev.key === 'Home') naar = l[0];
+    else if (ev.key === 'End') naar = l[n - 1];
+    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); kpilSluit(); return; }  // vóór de globale handler: die zou #venster sluiten
+    else if (ev.key === 'Tab') { ev.stopPropagation(); kpilSluit(); return; }  // Tab gaat verder vanaf de pil
+    else if (ev.key === 'Enter' || ev.key === ' ') { ev.stopPropagation(); return; }  // de knop zelf vuurt click (kiezen)
+    else return;
+    ev.preventDefault(); ev.stopPropagation(); if (naar) focusStil(naar);
+  }
+  function kpilKies(optie) {
+    var knop = KPIL.knop, w = optie.getAttribute('data-kkies'); kpilSluit();
+    if (!knop) return;
+    var id = knop.getAttribute('data-kpil'), kk = zoekKandidaat(id);
+    knop.className = 'pill kpil ' + pillKlasse(w); knop.textContent = w; knop.setAttribute('aria-label', 'Status van ' + kpilNaam(knop, kk) + ': ' + w);
+    if (!kk || kk.status === w) return;
+    run('apiKandidaatOpslaan', { id: id, status: w, _oud: { status: kk.status } }).then(bezettingLokaal).catch(bezettingFout);
+  }
+  document.addEventListener('keydown', function (ev) {  // ArrowDown of ArrowUp op een pil opent de keuzelijst (Enter en Space doen dat via click)
+    var t = ev.target; if (!t || t.nodeType !== 1 || !t.hasAttribute('data-kpil') || (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    ev.preventDefault(); ev.stopPropagation(); if (KPIL.knop !== t) kpilOpen(t);
+  });
   // Antwoord van de backend (bezetting van één project) lokaal verwerken: projectpagina en bezettingsbord
   function bezettingLokaal(b) {
+    kpilSluit();  // v7.8: een open statuskeuzelijst sluit vóór het hertekenen (de focus gaat terug naar de pil en komt na het hertekenen op de nieuwe)
     S.trajecten = null;  // bezetting en status op het projectenbord zijn verouderd
     var D = CRM.detail;
     if (D && D.soort === 'project' && D.data && D.id === b.trajectId) {
@@ -2332,6 +2439,7 @@
   }
   function bezettingTab(d) {
     var rb = d.rechtenBezetting || {}, vs = d.vacatures, b = d.bezetting || {};
+    kpilSluit();  // v7.8: de tab tekent opnieuw; een open statuskeuzelijst hoort bij de oude pillen
     if (vs === null || vs === undefined) return '<div class="leeg">Je ziet de bezetting van dit project niet.</div>';
     return '<div class="cijfers">' + cijfer(esc(b.gevuld || 0) + ' / ' + esc(b.nodig || 0), 'Plekken gevuld') + cijfer(esc(b.inProces || 0), 'In proces') + cijfer(esc(b.openVacatures || 0), 'Open vacatures') + '</div>' +
       (rb.vacatures ? '<div class="d-acties"><button class="knop-mini" data-vacature="nieuw" data-tid="' + esc(d.project.id) + '">+ Vacature</button></div>' : '') +
@@ -4813,10 +4921,7 @@
     if (t.matches('[data-pveld]')) { if (t.tagName === 'SELECT') t.className = 'pill ' + pillKlasse(t.value);  // alleen de kleur: scrollpositie en een open formulier blijven staan
       zetProjectVeld(t.getAttribute('data-pid'), t.getAttribute('data-pveld'), t.value.trim(), false); return; }
     if (t.matches('[data-fstatus]')) { t.className = 'pill ' + pillKlasse(t.value); zetFactuurVeld(t.getAttribute('data-fstatus'), 'status', t.value); return; }
-    if (t.matches('[data-kstatus]')) {  // v4.1: status van een kandidaat meteen opslaan
-      var kid = t.getAttribute('data-kstatus'), kk = zoekKandidaat(kid); t.className = 'pill ' + pillKlasse(t.value); if (!kk || kk.status === t.value) return;
-      run('apiKandidaatOpslaan', { id: kid, status: t.value, _oud: { status: kk.status } }).then(bezettingLokaal).catch(bezettingFout); return;
-    }
+    // v7.8: de tak voor [data-kstatus] (v4.1, status van een kandidaat uit een <select>) is weg: de kandidaatstatus is een pil met keuzelijst (kpilKies)
     if (t.matches('[data-fveld]')) { zetFactuurVeld(t.getAttribute('data-fid'), t.getAttribute('data-fveld'), t.value.trim()); return; }
     if (t.id === 'factAm') { FACT.am = t.value; renderFacturatie(); }
   });

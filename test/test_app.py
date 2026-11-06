@@ -173,9 +173,9 @@ def scenario_bezetting_per_project(b):
     pg.screenshot(path=OUT + '/07i_bezetting_per_project.png', full_page=True)
     volgorde = pg.evaluate("S.bVolgorde.join()")
     with pg.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiKandidaatOpslaan' in (r.request.post_data or '')):
-        pg.select_option('#bp-t4 [data-kstatus="c1"]', 'geselecteerd')
-    pg.wait_for_timeout(300)
-    assert pg.get_attribute(t4, 'aria-expanded') == 'true' and pg.input_value('#bp-t4 [data-kstatus="c1"]') == 'geselecteerd', 'de statuspil slaat op en het project blijft open na bezettingLokaal'
+        pg.click('#bp-t4 [data-kpil="c1"]'); pg.wait_for_selector('#kpilMenu [data-kkies]'); pg.click('#kpilMenu [data-kkies="geselecteerd"]')  # v7.8: de statuspil opent een keuzelijst
+    pg.wait_for_selector('#bp-t4 .pill.p-geselecteerd[data-kpil="c1"]'); pg.wait_for_timeout(300)
+    assert pg.get_attribute(t4, 'aria-expanded') == 'true' and pg.inner_text('#bp-t4 [data-kpil="c1"]').strip() == 'geselecteerd', 'de statuspil slaat op en het project blijft open na bezettingLokaal'
     assert pg.evaluate("S.bVolgorde.join()") == volgorde and pg.evaluate("S.trajecten") is None, 'na het opslaan verschuift er niets (en S.trajecten is gewist)'
     pg.click('#bp-t4 .vac-kaart:has-text("NT2-ondersteuner") [data-vacature]'); pg.wait_for_selector('#venster.aan #vf-titel')
     assert pg.input_value('#venster #vf-titel') == 'NT2-ondersteuner', 'Vacature bewerken opent de vacature uit het uitgeklapte project'
@@ -346,7 +346,22 @@ with sync_playwright() as p:
     page.click('[data-crm-terug]'); page.wait_for_selector('#view-trajecten.actief .rij[data-crm-open="talent:tl1"]'); page.click('[data-pweergave="am"]'); page.wait_for_selector('[data-crm-open="project:t1"]')
     # v4.1: bezettingsbord, meldingen, taskforce, vacature en kandidaat
     page.click('[data-pweergave="bezetting"]'); page.wait_for_selector('.vac-kaart:has-text("NT2-ondersteuner")')
-    page.select_option('[data-kstatus="c1"]', 'gesprek'); page.wait_for_selector('select.pill.p-gesprek[data-kstatus="c1"]'); page.wait_for_timeout(300)
+    page.click('[data-kpil="c1"]'); page.wait_for_selector('#kpilMenu [data-kkies]'); page.click('[data-kkies="gesprek"]'); page.wait_for_selector('.pill.p-gesprek[data-kpil="c1"]'); page.wait_for_timeout(300)  # v7.8: pil met keuzelijst in plaats van een select
+    # v7.8: de keuzelijst met het toetsenbord: Enter opent (focus op de huidige status), ArrowDown, Enter kiest (opslaan, hertekenen, focus terug op de
+    # pil); Enter opent weer en Escape sluit zonder een venster te raken, met de focus op de pil; een klik buiten het menu sluit het ook
+    page.focus('[data-kpil="c1"]'); page.keyboard.press('Enter'); page.wait_for_selector('#kpilMenu.aan [data-kkies][aria-selected="true"]')
+    assert page.get_attribute('[data-kpil="c1"]', 'aria-expanded') == 'true' and page.get_attribute('#kpilMenu', 'role') == 'listbox' and page.evaluate("document.activeElement.getAttribute('data-kkies')") == 'gesprek', 'Enter opent de keuzelijst (listbox) met de focus op de huidige status'
+    page.keyboard.press('ArrowDown'); volgende = page.evaluate("document.activeElement.getAttribute('data-kkies')"); assert volgende == 'geselecteerd', 'ArrowDown gaat naar de volgende status: ' + str(volgende)
+    with page.expect_response(lambda r: r.url.startswith(BASIS + '/api') and 'apiKandidaatOpslaan' in (r.request.post_data or '')):
+        page.keyboard.press('Enter')
+    page.wait_for_selector('.pill.p-geselecteerd[data-kpil="c1"]'); page.wait_for_timeout(300)
+    assert page.locator('#kpilMenu.aan').count() == 0 and page.evaluate("document.activeElement && document.activeElement.getAttribute('data-kpil')") == 'c1', 'Enter kiest, het menu sluit en de focus staat na het hertekenen weer op de pil'
+    page.keyboard.press('Enter'); page.wait_for_selector('#kpilMenu.aan [data-kkies]'); page.keyboard.press('Escape'); page.wait_for_timeout(100)
+    assert page.locator('#kpilMenu.aan').count() == 0 and page.get_attribute('[data-kpil="c1"]', 'aria-expanded') == 'false' and page.evaluate("document.activeElement.getAttribute('data-kpil')") == 'c1' and not page.locator('#venster.aan').count(), 'Escape sluit de keuzelijst (geen venster) en zet de focus op de pil'
+    page.click('[data-kpil="c1"]'); page.wait_for_selector('#kpilMenu.aan [data-kkies]'); page.mouse.click(195, 30); page.wait_for_timeout(200)
+    assert page.locator('#kpilMenu.aan').count() == 0 and page.get_attribute('[data-kpil="c1"]', 'aria-expanded') == 'false', 'een klik buiten het menu sluit het'
+    assert page.evaluate("kandidaatPil({ id: 'x', naam: 'Test', status: 'gesprek' }, false)").startswith('<span class="pill kpil-vast p-gesprek"'), 'zonder wijzigrecht is de status een span (geen rol in de mock heeft kandidatenZien zonder kandidaten, dus direct via kandidaatPil)'
+    page.click('[data-kpil="c1"]'); page.wait_for_selector('#kpilMenu [data-kkies]'); page.click('[data-kkies="gesprek"]'); page.wait_for_selector('.pill.p-gesprek[data-kpil="c1"]'); page.wait_for_timeout(300)  # terug naar gesprek voor de rest van de test
     page.screenshot(path=OUT + '/07c_bezetting.png', full_page=True)
     assert page.inner_text('#meldTeller') == '1', 'bel telt ongelezen meldingen'
     page.click('#meldKnop'); page.wait_for_selector('#venster.aan .rij.nieuw[data-crm-open="project:t4"]'); page.screenshot(path=OUT + '/07d_meldingen.png')
@@ -359,7 +374,8 @@ with sync_playwright() as p:
     page.click('[data-dtab="bezetting"]'); page.click('[data-vacature="nieuw"]'); page.wait_for_selector('#venster.aan #vf-titel'); page.fill('#vf-titel', 'Taalcoach'); page.fill('#vf-aantal', '1'); page.click('#venster [data-cf-opslaan]')
     page.wait_for_selector('.vac-kaart:has-text("Taalcoach")'); page.locator('.vac-kaart:has-text("Taalcoach") [data-kandidaat="nieuw"]').click(); page.wait_for_selector('#venster.aan #vf-naam')
     page.fill('#vf-naam', 'Ali Bakker'); page.select_option('#vf-bron', 'LinkedIn'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('.vac-kaart:has-text("Ali Bakker")')
-    ali = page.locator('.vac-kaart:has-text("Taalcoach") [data-kstatus]'); ali.select_option('klaar voor start'); page.wait_for_selector('.vac-kaart:has-text("Taalcoach") .vac-teller.vol')
+    page.locator('.vac-kaart:has-text("Taalcoach") [data-kpil]').click(); page.wait_for_selector('#kpilMenu [data-kkies]'); page.click('[data-kkies="klaar voor start"]')  # v7.8: ook op de projectpagina een pil met keuzelijst
+    page.wait_for_selector('.vac-kaart:has-text("Taalcoach") .pill.p-klaar-voor-start[data-kpil]'); page.wait_for_selector('.vac-kaart:has-text("Taalcoach") .vac-teller.vol')
     page.wait_for_timeout(300); assert '1/3' in page.inner_text('[data-dtab="bezetting"]'), 'tab telt de bezetting: ' + page.inner_text('[data-dtab="bezetting"]')
     page.locator('.vac-kaart:has-text("Taalcoach") [data-kandidaat]:not([data-kandidaat="nieuw"])').first.click(); page.wait_for_selector('#venster.aan [data-kopieerxps]'); page.click('#venster [data-cf-annuleer]')
     page.screenshot(path=OUT + '/07f_project_bezetting.png', full_page=True)
