@@ -8,7 +8,7 @@
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
-import os, sys, time, json, datetime, threading, functools, http.server, socketserver
+import os, re, sys, time, json, shutil, datetime, tempfile, threading, functools, subprocess, http.server, socketserver
 from playwright.sync_api import sync_playwright
 R = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(R, 'test', 'shots', 'robuust'); os.makedirs(OUT, exist_ok=True)
@@ -61,6 +61,19 @@ def venster_open(sel='#vensterInhoud'): pg.wait_for_selector('#venster.aan ' + s
 def venster_dicht(): pg.wait_for_selector('#venster.aan', state='hidden', timeout=6000)
 def detail(hash_):
     pg.evaluate("routeHash(%r)" % hash_); pg.wait_for_selector('#crmDetailScherm .d-naam h2'); pg.wait_for_timeout(500)
+# v7.9 (iOS-review): de pdf van het MT-overzicht nakijken: pagina's tellen in de bytes, de tekst via pdftotext of pypdf (wat er is; None = geen van beide)
+def pdf_paginas(pdf): return len(re.findall(rb'/Type\s*/Page(?![A-Za-z])', pdf))
+def pdf_tekst(pdf):
+    if shutil.which('pdftotext'):
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, 'mt.pdf'); open(f, 'wb').write(pdf)
+            r = subprocess.run(['pdftotext', '-enc', 'UTF-8', f, '-'], capture_output=True)
+            if r.returncode == 0: return r.stdout.decode('utf8', 'replace')
+    try:
+        import io, pypdf
+        return '\n'.join((x.extract_text() or '') for x in pypdf.PdfReader(io.BytesIO(pdf)).pages)
+    except Exception: return None
+def zonder_wit(t): return re.sub(r'\s+', '', t or '')
 def kol(sel): return pg.evaluate("(function(){var k=document.querySelector(%r);return k?k.closest('[data-sleepdoel]').getAttribute('data-sleepdoel'):null})()" % sel)
 def muis(sel, doel, dy=60):
     a = pg.locator(sel).first.bounding_box(); b = pg.locator(doel).first.bounding_box()
@@ -322,8 +335,14 @@ with sync_playwright() as p:
         pg.wait_for_selector('#mtStand option[value="%s"]' % dag(0), state='attached'); ok('mt: een tussenstand van vandaag in de keuze; hoogstens één per dag', pg.locator('[data-mtbevries]').count() == 0)
         pg.select_option('#mtStand', dag(0)); pg.wait_for_selector('.mt .hint:has-text("bevroren tussenstand")'); ok('mt: de tussenstand toont de bevroren definities', pg.locator('.mt .t-def').count() >= 10)
         pg.evaluate("window.print = function () { window.__geprint = (window.__geprint || 0) + 1; }"); pg.click('[data-mtprint]'); ok('mt: Afdrukken', (pg.evaluate("window.__geprint") or 0) >= 1)
-        pg.emulate_media(media='print'); ok('mt: print verbergt zijbalk en knoppen, toont de kop van het maanddocument en de inforegel (live of bevroren, schooljaar, scope; review I5)', not pg.locator('#zijbalk').is_visible() and not pg.locator('[data-mtprint]').is_visible() and pg.locator('.mt-print-kop').is_visible() and pg.locator('.mt .mt-info').is_visible() and 'bevroren' in pg.inner_text('.mt .mt-info')); pg.emulate_media(media='screen')
-        n0 = n_calls(); pdf = pg.pdf(format='A4'); pg.wait_for_timeout(300)  # review I1: echt afdrukken (de breedte van het papier laat (min-width: 1024px) omklappen)
+        titels = pg.eval_on_selector_all('.mt .mt-blok h3', 'function (l) { return l.map(function (x) { return x.textContent; }); }')
+        pg.emulate_media(media='print'); ok('mt: print verbergt zijbalk en knoppen, toont de kop van het maanddocument en de inforegel (live of bevroren, schooljaar, scope; review I5)', not pg.locator('#zijbalk').is_visible() and not pg.locator('[data-mtprint]').is_visible() and pg.locator('.mt-print-kop').is_visible() and pg.locator('.mt .mt-info').is_visible() and 'bevroren' in pg.inner_text('.mt .mt-info'))
+        ok('mt: print zet html en body los (geen vaste hoogte, flex of overflow: hidden; iOS-review)', pg.evaluate("[document.documentElement, document.body].every(function (x) { var c = getComputedStyle(x); return c.overflow === 'visible' && c.display === 'block' && c.height !== window.innerHeight + 'px'; })"))
+        n0 = n_calls(); pdf = pg.pdf(format='A4'); pg.wait_for_timeout(300)  # review I1: echt afdrukken (de breedte van het papier laat (min-width: 1024px) omklappen); v7.9 (iOS-review): met de print-opmaak, niet die van het scherm
+        pg.emulate_media(media='screen')
+        tekst = pdf_tekst(pdf); laatste = zonder_wit(titels[-1] if titels else '')[:16]
+        ok('mt: de pdf heeft meer dan één pagina en het laatste MT-blok staat erin (iOS-review: niet alleen het eerste deel)', pdf_paginas(pdf) > 1 and bool(laatste) and (tekst is None or laatste in zonder_wit(tekst)), 'pagina\'s %d, laatste blok %r, tekst %s' % (pdf_paginas(pdf), laatste, 'onbekend' if tekst is None else len(tekst)))
+        if tekst is None: print('     (geen pdftotext of pypdf: alleen de pagina\'s geteld)')
         ok('mt: afdrukken (pdf) laat het MT-overzicht staan: geen terugval naar Teams en geen nieuwe aanroep', len(pdf) > 1000 and pg.locator('.mt .mt-blok').count() > 0 and pg.evaluate("document.body.classList.contains('desk')") and not calls('apiTeamRapport', n0) and not calls('apiSturing', n0), [x['fn'] for x in calls(None, n0)])
         pg.click('[data-mtlink]'); pg.wait_for_timeout(400)
         try: kl = pg.evaluate("navigator.clipboard.readText()")
@@ -406,6 +425,8 @@ with sync_playwright() as p:
         ok('ipad: desktopweergave met (hover: none)', pg.evaluate("document.body.classList.contains('desk') && matchMedia('(hover: none)').matches"))
         detail('kans:k9'); m = pg.evaluate("[].map.call(document.querySelectorAll('.fasewissel-rij input[type=date], .fasewissel-rij select'), function (x) { return x.getBoundingClientRect().height; })")
         ok('ipad: datumveld en keuzelijst van de wissel minstens 44 px', len(m) == 2 and all(x >= 44 for x in m), m)
+        pb = pg.evaluate("[].map.call(document.querySelectorAll('.fw-regel .t-bewerk'), function (x) { var r = x.getBoundingClientRect(); return Math.min(r.width, r.height); })")
+        ok('ipad: het potlood naast een wissel minstens 44 × 44 px (iOS-review)', pb and all(x >= 44 for x in pb), pb)
         pg.select_option('[data-kansfase="k9"]', 'gesprek'); pg.wait_for_selector('#toast.aan [data-toastactie="1"]'); pg.wait_for_timeout(300)
         t = pg.evaluate("[].map.call(document.querySelectorAll('#toast [data-toastactie]'), function (x) { return x.getBoundingClientRect().height; })")
         ok('ipad: Ongedaan maken en Andere datum in de melding minstens 44 px', len(t) == 2 and all(x >= 44 for x in t), t)
@@ -414,6 +435,9 @@ with sync_playwright() as p:
         k = pg.evaluate("[].map.call(document.querySelectorAll('.mt-kop .knop, .mt-kop select'), function (x) { return x.getBoundingClientRect().height; })")
         ch = pg.evaluate("[].map.call(document.querySelectorAll('#crmBalk [data-rweergave], #crmBalk [data-defs]'), function (x) { return x.getBoundingClientRect().height; })")
         ok('ipad: MT-kop (Afdrukken, Tussenstand, Link, Stand) minstens 44 px; chips Teams, Week, MT en Definities minstens 36 px', k and all(x >= 44 for x in k) and ch and all(x >= 36 for x in ch), [k, ch])
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok', timeout=8000); pg.evaluate("document.querySelectorAll('#crmInhoud .dq-eigenaar').forEach(function (d) { d.open = true; })"); pg.wait_for_timeout(200)
+        hd = pg.evaluate("[].map.call(document.querySelectorAll('#crmInhoud .dq-eigenaar summary, #crmInhoud .legenda-defs summary, #crmInhoud .dq-regel[data-crm-open]'), function (x) { return x.getBoundingClientRect().height; })")
+        ok('ipad: uitklapregels en doorklikregels in Datakwaliteit minstens 44 px (iOS-review)', hd and all(x >= 44 for x in hd), hd)
     stap('g5_ipad', g5_ipad)
     c.close()
     b.close()

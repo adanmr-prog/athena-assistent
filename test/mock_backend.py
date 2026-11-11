@@ -943,6 +943,7 @@ def handle_crm(fn, args):
 BREIN_UITGEVOERD = []
 INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt']}
 FAAL = {}  # v7.3 (H2): api-naam -> hoeveel aanroepen nog moeten mislukken (gezet met {"fn":"_faal","args":[naam, n]})
+FAAL_FOUT = {}  # v7.9 (iOS-review): api-naam -> eigen melding van die storing (derde argument van _faal, bijv. "Herlaad de app: er is een nieuwe versie.")
 BACKEND_VERSIE = ['7.9']  # v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
 # v7.3 (FL-1): de seed bevriezen zodra alle tabellen gevuld zijn. reset() zet elke lijst en dict in place terug (de handlers houden de modulevariabelen
 # bij naam vast), dus een draaiende mock begint daarna weer bij dezelfde uitgangsstand; ook HUIDIG (de ingelogde code) en FAAL gaan terug.
@@ -956,7 +957,10 @@ def reset():
 def faal_zetten(args):
     naam = str(args[0] if args else ''); n = int(args[1]) if len(args) > 1 and args[1] not in (None, '') else 1
     if not naam: raise ValueError('Geef de naam van de api die moet mislukken.')
-    FAAL[naam] = max(0, n); return {'ok': True, 'faal': dict(FAAL)}
+    FAAL[naam] = max(0, n)
+    if len(args) > 2 and args[2]: FAAL_FOUT[naam] = str(args[2])  # v7.9 (iOS-review)
+    else: FAAL_FOUT.pop(naam, None)
+    return {'ok': True, 'faal': dict(FAAL)}
 
 
 def handle(fn, args):
@@ -1178,7 +1182,7 @@ class H(SimpleHTTPRequestHandler):
             code = TOKENS.get(body['token']) if body.get('token') else body.get('secret')  # v6.0: een sessietoken van de eigen server, of de koppelcode
             if code not in IKKEN: out = {'ok': False, 'fout': 'secret'}
             elif FAAL.get(body.get('fn')):  # v7.3 (H2): een geplande storing op precies deze api
-                FAAL[body['fn']] -= 1; out = {'ok': False, 'fout': 'Tijdelijke storing in de mock (gepland door de test).'}
+                FAAL[body['fn']] -= 1; out = {'ok': False, 'fout': FAAL_FOUT.get(body['fn']) or 'Tijdelijke storing in de mock (gepland door de test).'}
             else:
                 HUIDIG[0] = code
                 try: out = {'ok': True, 'result': handle(body.get('fn'), body.get('args') or [])}

@@ -875,6 +875,13 @@ with sync_playwright() as p:
     p8.click('.zb-item[data-desk="rapporten"]'); p8.wait_for_selector('#crmInhoud .tabel'); p8.wait_for_timeout(500)
     assert p8.locator('[data-rweergave]').count() == 0 and p8.locator('[data-beheer="cijfers"], [data-beheer="aannames"], [data-beheer="v79"], [data-beheer="werkelijkedatums"]').count() == 0 and p8.locator('#dqBlok').count() == 0, 'oude backend: geen Week, MT, datakwaliteit of v7.9-beheer'
     assert p8.locator('#toast.aan:has-text("Niet gelukt")').count() == 0, 'oude backend: geen foutmelding'
+    # v7.9 (iOS-review): antwoordt de backend "Herlaad de app" (eisNieuweApp), dan de balk #updateBalk met Herladen en Later en een update-check van de
+    # worker, want in standalone heeft de toast geen herlaadknop; nooit vanzelf herladen
+    assert mock_post({'fn': '_faal', 'args': ['apiHome', 1, 'Herlaad de app: er is een nieuwe versie.']}).get('ok'), 'de mock kent _faal met een eigen melding'
+    p8.evaluate("() => { window.__blijft = 1; window.__swUpdate = 0; var sw = navigator.serviceWorker, g = sw.getRegistration.bind(sw); sw.getRegistration = function () { window.__swUpdate++; return g(); }; }")
+    p8.evaluate("() => run('apiHome').catch(function () {})"); p8.wait_for_selector('#updateBalk:not([hidden])', timeout=5000); p8.wait_for_timeout(300)
+    assert p8.locator('#toast.aan:has-text("Herlaad de app")').count() == 1 and p8.locator('#updateBalk [data-update="herladen"]').is_visible() and p8.evaluate("window.__swUpdate") >= 1 and p8.evaluate("window.__blijft") == 1, 'Herlaad de app: de balk Nieuwe versie met Herladen, een update-check en geen automatisch herladen'
+    p8.click('#updateBalk [data-update="later"]'); assert p8.locator('#updateBalk:not([hidden])').count() == 0 and p8.evaluate("window.__blijft") == 1, 'Herlaad de app: Later verbergt de balk'
     c8.close(); mock_post({'fn': '_reset'})
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht

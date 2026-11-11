@@ -922,6 +922,9 @@
     body.desk #toast .toast-knoppen .toast-knop { min-height: 44px; padding: 8px 12px; }
     body.desk .mt-kop .knop, body.desk .mt-kop select, body.desk .fasewissel-rij input[type=date], body.desk .fasewissel-rij select { min-height: 44px; }
     body.desk [data-rweergave], body.desk [data-defs] { min-height: 36px; }
+    body.desk .fw-regel .t-bewerk { width: 44px; height: 44px; }  /* v7.9 (iOS-review): het potlood van een wissel, uitklapregels en doorklikregels ook 44 px op de iPad */
+    body.desk .legenda-defs summary, body.desk .dq-eigenaar summary { min-height: 44px; }
+    body.desk .dq-regel[data-crm-open] { min-height: 44px; display: flex; align-items: center; }
   }
   /* De definitie naast elk getal: één schakelaar per scherm (body.defs-aan); in het MT-overzicht altijd zichtbaar */
   .t-def { display: none; font-size: var(--fs-klein); font-weight: 400; color: var(--gedempt); margin-top: 4px; line-height: 1.35; text-align: left; }
@@ -986,6 +989,7 @@
     #zijbalk, nav, header, #crmBalk, #crmTabs, #crmZoekVak, #crmSnel, .mt-kop, button, #toast, #updateBalk, #venster, .hint, #deskKop, .selectie-balk, #palet { display: none !important; }
     .mt .chips .chip { border-color: #999; color: #000; background: #fff; }
     body, body.desk { background: #fff !important; color: #000 !important; }
+    html, body, body.desk { height: auto !important; overflow: visible !important; display: block !important; }  /* v7.9 (iOS-review): geen vaste hoogte, flex of overflow: hidden op papier, anders drukt iOS WebKit alleen het eerste deel van het MT-overzicht af */
     main { overflow: visible !important; height: auto !important; padding: 0 !important; }
     .mt-print-kop { display: block; font-size: var(--fs-kop); font-weight: 800; margin-bottom: 8px; }
     .mt-blokken { display: block; }
@@ -1545,6 +1549,10 @@
         if (err && err.name === 'AbortError') m = 'de server reageert niet — probeer het zo nog eens';  // v7.2: de time-out van metTimeout (een hangende fetch geeft op iOS geen TypeError)
         else if (err && err.name === 'TypeError') m = navigator.onLine === false ? 'je bent offline' : 'geen verbinding met de server — probeer het zo nog eens';  // v7.2: fetch-fouten zijn Engels en per browser anders ("Failed to fetch", "Load failed")
         meet(fn, t0, false, foutCode(err), opties);  // v7.6
+        if (/^Herlaad de app/.test(m)) {  // v7.9 (iOS-review): eisNieuweApp() in Code.gs; in standalone heeft de toast geen herlaadknop, dus de balk "Nieuwe versie" (nooit vanzelf herladen)
+          NIEUWE_VERSIE();
+          try { if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistration().then(function (r) { if (r) return r.update(); }).catch(function () {}); } catch (e) {}
+        }
         if (!opties.stil && (!err || err.message !== 'secret')) toast('Niet gelukt — ' + m);
         throw err;
       });
@@ -1558,6 +1566,7 @@
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
   var APP_VERSIE = '7.9';  // v7.9: sturing; gaat ook als v mee in elke aanroep (versiewacht); v7.8: prestatie, ronde 2; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
   var SW_REGISTREER = function () {};  // v7.9: wordt onderaan gezet als er een service worker kan zijn (zie de registratie)
+  var NIEUWE_VERSIE = function () {};  // v7.9 (iOS-review): toont #updateBalk (Herladen, Later); onderaan gezet bij de service worker, zoals SW_REGISTREER
   var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
   function tijdNu() { return (window.performance && typeof performance.now === 'function') ? performance.now() : Date.now(); }
   function kortFout(s) { return String(s == null ? '' : s).replace(/[^\s@<>"'()]+@[^\s@<>"'()]+/g, '…').replace(/\s+/g, ' ').trim().slice(0, 120); }  // e-mailadressen eruit, hoogstens 120 tekens
@@ -6672,6 +6681,10 @@
     var AFDRUKKEN = false;
     window.addEventListener('beforeprint', function () { AFDRUKKEN = true; });
     window.addEventListener('afterprint', function () { AFDRUKKEN = false; });
+    // v7.9 (iOS-review): komt afterprint niet (geannuleerd printvenster op iOS), dan zet het einde van print in matchMedia de vlag terug (en visibilitychange, bij de service worker)
+    var printMq = window.matchMedia ? window.matchMedia('print') : null;
+    var printKlaar = function (e) { if (!(e && e.matches)) AFDRUKKEN = false; };
+    if (printMq) { if (printMq.addEventListener) printMq.addEventListener('change', printKlaar); else if (printMq.addListener) printMq.addListener(printKlaar); }
     var deskWissel = function () {
       // v7.9 (review I1): bij afdrukken is de pagina zo breed als het papier en klapt (min-width: 1024px) om; dan niets wisselen (geen hertekening, geen
       // terugval van MT naar Teams, geen aanroepen tijdens het afdrukken). Volgorde in Chromium: beforeprint, change met print, afterprint, change zonder print.
@@ -6828,15 +6841,20 @@
     // v7.9 (prestatie): registreren kort na de eerste geslaagde aanroep (uiterlijk na 5 s), niet al tijdens het laden. Bij een eerste bezoek haalt de
     // installatie de hele app nog een keer op; op een trage verbinding stond het antwoord van het eerste scherm daar achter in de rij. Updates, de
     // controllerchange en #updateBalk werken zoals voorheen.
-    var swGeregistreerd = false;
-    SW_REGISTREER = function () { if (swGeregistreerd) return; swGeregistreerd = true; try { navigator.serviceWorker.register('sw.js').catch(function () {}); } catch (e) {} };
+    // v7.9 (iOS-review): mislukt register() (offline, storing), dan gaat de vlag terug en probeert de volgende keer dat de app in beeld komt het opnieuw
+    // (visibilitychange hieronder); vóór de eerste poging niet, zodat de registratie bij een eerste bezoek niet alsnog tijdens het laden valt.
+    var swGeregistreerd = false, swGeprobeerd = false;
+    SW_REGISTREER = function () { if (swGeregistreerd) return; swGeregistreerd = swGeprobeerd = true; try { navigator.serviceWorker.register('sw.js').catch(function () { swGeregistreerd = false; }); } catch (e) { swGeregistreerd = false; } };
     if (hadController) SW_REGISTREER(); else setTimeout(SW_REGISTREER, 5000);  // met een controller is de app al geïnstalleerd: meteen de update-check
     var toonUpdateBalk = function () { var u = el('updateBalk'); if (u && versieNieuw) u.hidden = false; };
     if (hadController) navigator.serviceWorker.addEventListener('controllerchange', function () { versieNieuw = true; toonUpdateBalk(); });
+    NIEUWE_VERSIE = function () { versieNieuw = true; toonUpdateBalk(); };  // v7.9 (iOS-review): ook als de backend "Herlaad de app" antwoordt (zie runKern)
     var swCheckOp = Date.now();  // register() hieronder is de eerste check
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
       toonUpdateBalk();
+      if (swGeprobeerd) SW_REGISTREER();  // v7.9 (iOS-review): een mislukte registratie opnieuw (idempotent: na een geslaagde doet dit niets)
+      AFDRUKKEN = false;  // v7.9 (iOS-review): een geannuleerd printvenster op iOS stuurt soms geen afterprint; anders blijft deskWissel uit staan
       // v7.6 (iOS-review R3): een pagina die dagen leeft (desktop-tab, iOS hervat uit het geheugen) krijgt anders geen sw.js-check, en met cache-eerst
       // hangt de balk "Nieuwe versie" daaraan; hoogstens één keer per tien minuten (een GET van 5 kB, 304 met ETag)
       if (Date.now() - swCheckOp > 10 * 60 * 1000) { swCheckOp = Date.now(); try { navigator.serviceWorker.getRegistration().then(function (r) { if (r) return r.update(); }).catch(function () {}); } catch (e) {} }

@@ -39,9 +39,10 @@ v7.9 registreert de service worker bij een eerste bezoek pas 500 ms na de eerste
 **Besluit: behouden, expliciet.** De winst is kleiner dan 10 %, dus volgens de huisregel zou de wijziging terug moeten. Ze blijft toch, omdat zonder haar de groei uit T1 het budget "Vandaag koud" rood maakt (2 243–2 249 ms tegen een grens van 2 200 ms): ze compenseert de groei van `index.html`, en dat is precies de uitzondering die de review noemt.
 
 **Gevolgen voor de eerste sessie** (de punten voor `ios-pwa-reviewer`; die review kon in deze sessie niet draaien ⚠️):
-- Een eerste sessie die binnen 5 s sluit, of op het koppelscherm blijft zonder geslaagde aanroep, laat geen worker achter; het volgende bezoek registreert hem dan. Tot die tijd werkt de app niet offline.
-- Installeren als PWA op iOS ("Zet op beginscherm") gebeurt in de praktijk na de eerste sessie; dan is de worker er. Te controleren: installeren binnen 5 s na het eerste laden.
-- `#updateBalk` en `controllerchange` zijn ongewijzigd, want een pagina met een controller registreert meteen.
+- Een eerste sessie die binnen 5 s sluit zonder geslaagde aanroep laat geen worker achter; het volgende bezoek registreert hem dan. Tot die tijd werkt de app niet offline. De terugval na 5 s registreert óók op het koppelscherm, dus wie daar blijft staan krijgt de worker wel.
+- Mislukt `register()` (offline, storing), dan gaat de vlag terug en probeert de app het opnieuw zodra ze weer in beeld komt (`visibilitychange`); vóór de eerste poging niet, zodat een eerste bezoek niet alsnog tijdens het laden registreert (iOS-review van v7.9).
+- De beginscherm-app op iOS ("Zet op beginscherm") heeft eigen opslag, los van Safari: een worker uit de Safari-sessie gaat niet mee. De eerste start vanaf het icoon is dus opnieuw een eerste sessie zonder controller, met dezelfde vertraging (na de eerste geslaagde aanroep of na 5 s); pas vanaf de tweede start registreert de app meteen. Te controleren: de app vanaf het icoon binnen 5 s weer sluiten en offline openen.
+- `#updateBalk` en `controllerchange` zijn ongewijzigd, want een pagina met een controller registreert meteen. Sinds de iOS-review verschijnt `#updateBalk` ook als de backend "Herlaad de app" antwoordt (`eisNieuweApp()`), met een update-check van de worker; nooit vanzelf herladen.
 
 ## 3. T4: `apiTeamRapport` en de tabbladen per api
 
