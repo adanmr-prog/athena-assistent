@@ -370,7 +370,7 @@ with sync_playwright() as p:
         breed(900); ok('afdrukvlag: daarna werkt deskWissel weer (telefoonweergave op 900 px)', not is_desk())
         breed(1440); pg.wait_for_selector('#zijbalk', state='visible'); ok('afdrukvlag: en terug naar de desktopweergave', is_desk())
         pg.evaluate("window.dispatchEvent(new Event('beforeprint'))"); pg.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
-        ok('afdrukvlag: visibilitychange (weer in beeld) zet de vlag ook terug, los van de service worker', pg.evaluate("AFDRUKKEN === false"))
+        ok('afdrukvlag: visibilitychange (weer in beeld) zet de vlag ook terug (in de demo met service worker; de listener staat in het deskMq-blok)', pg.evaluate("AFDRUKKEN === false"))
         desk('rapporten', '#crmBalk [data-rweergave="teams"]')
     stap('g5_afdrukvlag', g5_afdrukvlag)
 

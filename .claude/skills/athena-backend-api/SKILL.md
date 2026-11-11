@@ -8,7 +8,7 @@ user-invocable: false
 
 ## Transport
 - De backend-URL staat niet in de code: de gebruiker vult hem in op het koppelscherm; `index.html` bewaart hem in `localStorage.aa_api` en de koppelcode in `localStorage.aa_secret`.
-- Eén helper: `run(fn, arg1, ...)` → `Promise` met `result`. Request: `POST <url>?app=1`, body `JSON.stringify({ fn, args, secret, v })`. v7.9: `v` = `APP_VERSIE` van de app, in de body (nooit als header); `doPost` zet hem in `KLANT_VERSIE` (`null` buiten `doPost`: triggers, demo, tests) en `eisNieuweApp()` geeft een oudere app "Herlaad de app: er is een nieuwe versie." waar een schrijfcontract veranderde.
+- Eén helper: `run(fn, arg1, ...)` → `Promise` met `result`. Request: `POST <url>?app=1`, body `JSON.stringify({ fn, args, secret, v })`. v7.9: `v` = `APP_VERSIE` van de app, in de body (nooit als header); `doPost` zet hem in `KLANT_VERSIE` (`null` buiten `doPost`: triggers, demo, tests) en `eisNieuweApp()` geeft een oudere app "Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw." waar een schrijfcontract veranderde.
 - Geen request-headers toevoegen: een `Content-Type: application/json` header triggert een CORS-preflight en Apps Script beantwoordt geen OPTIONS.
 - Response: `{ ok: true, result }` of `{ ok: false, fout }`. Bij `fout === 'secret'` wist `run()` de koppelcode en toont het koppelscherm. `run()` toast zelf bij fouten; in `.catch` alleen de UI herstellen.
 - Functienamen beginnen met `api` + hoofdletter; de dispatcher in `Code.gs` accepteert niets anders.
