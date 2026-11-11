@@ -256,7 +256,8 @@ function demoVul() {
   schrijfVeel('Scholen', scholen.map(function (x, i) {
     var dom = x[1].toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '') + '.example', c = co[x[2]] || [];
     return { id: x[0], naam: x[1], plaats: x[2], type: x[3], status: x[4], eigenaar: x[5], leerlingen: x[6], bestuur: x[7], email: 'info@' + dom, website: 'www.' + dom, telefoon: '0' + (30 + i) + '-' + (2000000 + i * 37123),
-      adres: 'Schoolstraat ' + (i + 3) + ', ' + x[2], tags: x[3].toLowerCase(), aangemaakt: dt(-400 + i * 25), laatsteContact: d(-(i % 6) - 1), lat: c[0] || '', lon: c[1] || '' };
+      adres: 'Schoolstraat ' + (i + 3) + ', ' + x[2], tags: x[3].toLowerCase(), aangemaakt: dt(-400 + i * 25), laatsteContact: d(-(i % 6) - 1), lat: c[0] || '', lon: c[1] || '',
+      brin: x[0] === 's11' ? '' : '99Z' + 'ABCDEFGHIJKL'.charAt(i), vestiging: x[0] === 's11' ? '' : '00' };  // v7.9: verzonnen BRIN-codes (99ZA–99ZL); s11 zonder, zodat het contract school_heeft_brin iets laat zien
   }));
   var personen = [
     ['p1', 'Marieke', 'Jansen', 'Teamleider onderbouw', 's1'], ['p2', 'Joost', 'van Leeuwen', 'Conrector', 's1'], ['p3', 'Anouk', 'de Vries', 'Zorgcoördinator', 's2'], ['p4', 'Erik', 'Mol', 'Directeur', 's2'],
@@ -282,14 +283,18 @@ function demoVul() {
     ['k11', 's11', 'p13', 'Ondersteuning praktijkvakken', 'gesprek', 19500, M.noor, '', -14, null, 40, 'Hulpvraag uitwerken', 3, -5],
     ['k12', 's6', 'p8', 'NT2 voor nieuwkomers', 'lead', 12000, M.yara, '', -4, null, 75, 'Behoefte peilen', 7, -4],
     ['k16', 's1', 'p2', 'Examentraining voorjaar', 'gesprek', 9600, M.lars, '', -11, null, 50, 'Offerte opstellen', 5, -6],
-    ['k13', 's12', 'p14', 'Onderwijsondersteuning', 'verloren', 26000, M.yara, '', -60, -25, null, '', null, -25, 'Te duur'],
-    ['k14', 's7', 'p9', 'Huiswerkklas', 'verloren', 7200, M.lars, '', -45, -8, null, '', null, -8, 'Eigen oplossing gevonden'],
+    ['k13', 's12', 'p14', 'Onderwijsondersteuning', 'verloren', 26000, M.yara, '', -60, -25, null, '', null, -25, 'te duur'],  // v7.9: redenen uit de keuzelijst verliesRedenen
+    ['k14', 's7', 'p9', 'Huiswerkklas', 'verloren', 7200, M.lars, '', -45, -8, null, '', null, -8, 'eigen oplossing'],
     ['k17', 's8', 'p10', 'Surveillance toetsweken', 'gewonnen', 5600, M.noor, M.femke, -28, -1]  // v6.4: net gewonnen, met winformulier (conceptvacature, nog geen talentscout)
   ];
+  // v7.9: klant (nieuw of bestaand), het schooljaar van de opdracht en de productsoort (keuzelijst) bij elke kans
+  var productVan = function (naam) { var n = String(naam).toLowerCase(); return /nt2/.test(n) ? 'nt2-ondersteuning' : /huiswerk/.test(n) ? 'huiswerkbegeleiding' : /examen/.test(n) ? 'examentraining' : /studentdocent/.test(n) ? 'studentdocent' : /surveillance/.test(n) ? 'surveillance' : /ondersteuning|assistentie/.test(n) ? 'onderwijsondersteuning' : 'overig'; };
+  var bestaandeKlant = { s1: 1, s4: 1, s12: 1 };  // project in het vorige schooljaar (t7, t8, t11)
   schrijfVeel('Kansen', kansen.map(function (k) {
     return { id: k[0], schoolId: k[1], school: sn[k[1]], persoonId: k[2], naam: k[3], traject: k[3], fase: k[4], pipeline: 'Scholen', waarde: k[5], eigenaar: k[6], am: k[7], aangemaakt: dt(k[8], '09:30'),
       gesloten: k[9] === null || k[9] === undefined ? '' : d(k[9]), verwachteSluiting: k[10] ? d(k[10]) : '', volgendeActie: k[11] || '', deadline: k[12] === null || k[12] === undefined ? '' : d(k[12]),
-      laatsteContact: d(k[13] || k[9] || -3), verliesReden: k[14] || '', notities: k[4] === 'gewonnen' ? 'Vaste ondersteuners gewenst; start na de herfstvakantie bespreekbaar.' : '' };
+      laatsteContact: d(k[13] || k[9] || -3), verliesReden: k[14] || '', notities: k[4] === 'gewonnen' ? 'Vaste ondersteuners gewenst; start na de herfstvakantie bespreekbaar.' : '',
+      klant: bestaandeKlant[k[1]] ? 'bestaand' : 'nieuw', schooljaar: k[0] === 'k15' ? sj : k[10] ? schooljaarVan(d(k[10])) : sj, productsoort: productVan(k[3]) };
   }));
 
   var tf4 = { datum: d(-15), deelnemers: M.lars + ', ' + M.bas + ', ' + M.sem, hulpvraag: 'Twee NT2-ondersteuners voor de instroomklassen, zodat leerlingen in kleine groepjes kunnen oefenen.',
@@ -320,6 +325,7 @@ function demoVul() {
       factuurDatum: t[14] === 'ja' ? (t[13] === 'vooraf' ? t[15] : datumStr(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0))) : '', bijzonderheden: { t1: 'Uren volgens rooster; meerwerk apart', t5: 'Inkoopnummer op de factuur', t6: 'Alleen toetsweken', t4: 'Start na kennismaking' }[t[0]] || '',
       contactpersoon: (contact[t[1]] || '').split('\n')[0], contactgegevens: contact[t[1]] || '', voorstelUrl: 'https://docs.google.com/document/d/demo-voorstel-' + t[0], documentenUrl: 'https://drive.google.com/drive/folders/demo-' + t[0],
       xpsProject: t[4] === 'bezig' || t[4] === 'afgelopen' ? '10.' + (880 + i * 7) : '', taskforce: t[0] === 't4' ? j(tf4) : t[0] === 't3' ? j(tf3) : t[0] === 't12' ? j(tf12) : '', talentscout: scouts[t[0]] || '',
+      contractwaarde: ['t2', 't3', 't4', 't5', 't12'].indexOf(t[0]) >= 0 ? t[8] : '', klant: bestaandeKlant[t[1]] && t[3] === sj ? 'bestaand' : 'nieuw', productsoort: productVan(t[2]),  // v7.9: getekende waarde (t9 zonder: datakwaliteit), klant en productsoort
       samenvatting: t[4] === 'bezig' ? 'Vaste ondersteuners in de onderbouw; evaluatie aan het eind van elke periode.' : '', bijgewerkt: dt(-(i % 7) - 1) };
   }));
 
@@ -529,7 +535,8 @@ function demoVul() {
     var eig = consultants[h % 3], dicht = -340 + h * 13 + Math.round(toeval(h) * 6), wint = toeval(h * 3 + 1) < 0.62, sid = eig[1][h % eig[1].length];
     var ko = { id: 'kh' + h, schoolId: sid, school: sn[sid], naam: kansNamen[h % kansNamen.length], traject: kansNamen[h % kansNamen.length], fase: wint ? 'gewonnen' : 'verloren', pipeline: 'Scholen',
       waarde: 1000 * (6 + Math.round(toeval(h * 5) * 26)), eigenaar: eig[0], aangemaakt: dt(dicht - 35 - Math.round(toeval(h * 7) * 30), '09:30'), gesloten: d(dicht), laatsteContact: d(dicht),
-      verliesReden: wint ? '' : ['Te duur', 'Eigen oplossing gevonden', 'Geen budget', 'Andere aanbieder'][h % 4] };
+      verliesReden: wint ? '' : ['te duur', 'eigen oplossing', 'geen budget', 'andere aanbieder'][h % 4],  // v7.9: uit de keuzelijst
+      klant: h % 3 ? 'bestaand' : 'nieuw', schooljaar: schooljaarVan(d(dicht)), productsoort: productVan(kansNamen[h % kansNamen.length]) };
     oudeKansen.push(ko);
     act('fase', dicht - 14, '15:00', eig[0], sid, { kansId: ko.id }, 'Mijlpaal: gesprek → voorstel');
     act('fase', dicht, '16:00', eig[0], sid, { kansId: ko.id }, 'Mijlpaal: onderhandeling → ' + ko.fase);
@@ -556,6 +563,32 @@ function demoVul() {
   schrijfVeel('Kandidaten', oudeKand);
   schrijfVeel('Facturen', oudeFact.map(function (f) { f.aangemaakt = dt(-300); return f; }));
   schrijfVeel('Activiteiten', acts);
+
+  // v7.9: elke kans als reeks fasewissels (bron demo, via het schrijfpunt faseWisselRij): een aanmaakevent, de tussenwissels die ook als tijdlijnregel bestaan
+  // (zelfde dag) en voor elke gewonnen en verloren kans de sluitende wissel op gesloten. Ingebouwd: twee kansen direct in gesprek aangemaakt (k11, k16),
+  // drie wissels met registratievertraging (k7, k8, k3), één ongedaan gemaakte wissel (k9), twee reconstructies met zekerheid midden (kh0, kh1) en één
+  // import zonder werkelijke datum (kh2, die test/voorbeelden/werkelijke_datums.csv aanvult).
+  var wisselPlan = {  // [fase, dag van de werkelijke datum, dagen later ingevoerd]
+    k6: [['lead', -26], ['gesprek', -16], ['voorstel', -6]], k7: [['lead', -40], ['gesprek', -30], ['voorstel', -20], ['onderhandeling', -8, 3]],
+    k8: [['lead', -30], ['gesprek', -20, 4]], k9: [['lead', -9]], k10: [['lead', -21], ['gesprek', -17], ['voorstel', -12]], k11: [['gesprek', -14]], k12: [['lead', -4]], k16: [['gesprek', -11]] };
+  var dagVan = function (s0) { return Math.round((middag(parseDatum(String(s0).slice(0, 10))) - middag(new Date())) / 86400000); };
+  var wisselRijen = [];
+  lees('Kansen').forEach(function (k) {
+    var stappen = wisselPlan[k.id];
+    if (!stappen) {  // gesloten: lead bij het aanmaken, dan gesprek, voorstel en onderhandeling, en de sluitende wissel op gesloten
+      var a0 = dagVan(k.aangemaakt), g0 = dagVan(k.gesloten), hist = /^kh/.test(k.id), vo = hist ? g0 - 14 : Math.round(a0 + (g0 - a0) * 0.6);
+      stappen = [['lead', a0], ['gesprek', Math.round((a0 + vo) / 2)], ['voorstel', vo], ['onderhandeling', hist ? g0 - 7 : Math.round(a0 + (g0 - a0) * 0.85)], [k.fase, g0, k.id === 'k3' ? 2 : 0]];
+    }
+    stappen.forEach(function (st, i) {
+      var x = { bron: 'demo', datum: d(st[1]), ingevoerdOp: dt(st[1] + (st[2] || 0), '10:' + _p2(10 + i)), door: k.eigenaar, id: 'fw-' + k.id + '-' + i };
+      if ((k.id === 'kh0' || k.id === 'kh1') && st[0] === 'voorstel') { x.bron = 'reconstructie'; x.zekerheid = 'midden'; x.bewijs = 'mail'; x.ingevoerdOp = dt(-30, '10:00'); }
+      if (k.id === 'kh2' && st[0] === 'gesprek') { x.bron = 'import'; x.datum = ''; x.ingevoerdOp = dt(-60, '10:00'); }
+      wisselRijen.push(faseWisselRij(k, i ? stappen[i - 1][0] : '', st[0], x));
+    });
+  });
+  var fw9 = faseWisselRij(lees('Kansen').filter(function (k) { return k.id === 'k9'; })[0], 'lead', 'gesprek', { bron: 'demo', datum: d(-5), ingevoerdOp: dt(-5, '11:00'), door: M.yara, id: 'fw-k9-ongedaan' });
+  fw9.ongedaan = dt(-5, '11:02'); wisselRijen.push(fw9);  // per ongeluk gesleept en meteen ongedaan gemaakt: telt nergens
+  fasewisselsSchrijven(wisselRijen);
 
   // Open taken per persoon
   var taak = function (id, tekst, eigenaar, dagen, prio, cat, koppel) { var o = { id: id, tekst: tekst, eigenaar: eigenaar, deadline: d(dagen), prio: prio, categorie: cat, status: 'open', bron: 'crm', aangemaakt: dt(-3) }; Object.keys(koppel || {}).forEach(function (k) { o[k] = koppel[k]; }); return o; };
@@ -603,6 +636,10 @@ function demoVul() {
     doel('team:talent', 'kwartaal', 'voordrachten', 24), doel('team:talent', 'halfjaar', 'voordrachten', 45),
     doel(M.femke, 'maand', 'evaluaties', 6), doel(M.ruben, 'maand', 'evaluaties', 6), doel(M.sem, 'maand', 'voordrachten', 6), doel(M.iris, 'maand', 'voordrachten', 4)
   ]);
+  // v7.9 (M17): concrete weekdoelen voor deze week voor twee van de drie OC's (Yara heeft er geen: het contract weekdoel_voor_deze_week laat dat zien)
+  var wk = isoWeekStr(new Date()), wdoel = function (eig, m, w) { return { id: doelId(eig, 'week', m, wk), eigenaar: eig, periode: 'week', metric: m, doel: w, periodeSleutel: wk }; };
+  schrijfVeel('Doelen', [wdoel(M.lars, 'contactmomenten', 15), wdoel(M.lars, 'ap', 2), wdoel(M.lars, 'voorstellen', 1), wdoel(M.lars, 'gewonnen', 1),
+    wdoel(M.noor, 'contactmomenten', 12), wdoel(M.noor, 'ap', 2), wdoel(M.noor, 'ad', 1), wdoel(M.noor, 'voorstellen', 1)]);
 
   // Meldingen (de bel)
   var meld = function (voor, tekst, link, dagen, gelezen) { return { voor: voor, tekst: tekst, link: link, datum: dt(dagen, '09:15'), gelezen: gelezen ? dt(dagen, '10:00') : '', door: 'Athena' }; };
@@ -677,11 +714,11 @@ function demoRun(fn, argsJson, code) {
   DEMO_HUIDIG = code || 'demo-sophie';
   _demoProps.CODES = _demoCodes(); _demoProps.SECRET = 'demo-sophie';  // een code die in Beheer vernieuwd is, werkt in de demo gewoon door
   // Apps Script begint elk verzoek met een schone globale scope; hier blijven de globals staan, dus de geheugens per verzoek legen
-  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null;  // v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)  // v5.0: talentindex en talenten-via-project
-  return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), secret: DEMO_HUIDIG }) } });
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null; _ROLLEN = null; _WISSELS = null; _AANNAMES = null;  // v7.9: rollen, wissels en aannames; v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)  // v5.0: talentindex en talenten-via-project
+  return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), secret: DEMO_HUIDIG, v: null }) } });  // v7.9: v null = geen versiewacht (app en backend uit dezelfde deploy)
 }
 // v5.0: het portaal (?t=<token>&api=…) in de demo: dezelfde doPost, met het token in plaats van een koppelcode
 function demoPortaal(fn, argsJson, token) {
-  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null;  // v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)
-  return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), portaal: token }) } });
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null; _ROLLEN = null; _WISSELS = null; _AANNAMES = null;  // v7.9: rollen, wissels en aannames; v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)
+  return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), portaal: token, v: null }) } });
 }

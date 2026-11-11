@@ -334,6 +334,50 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
   eis(veelvoud === 0, 'privacy: het verzonnen particuliere uurtarief is geen deler van een echt factuurbedrag (' + veelvoud + ')');
 })();
 
+/* ---- 11. v7.9 (pakket 1): fasewissels in beide seeds en de schrijfpaden op praktijkschaal (R2: één schrijfVeel per pad, gemeten bovengrens) ---- */
+(function () {
+  function controle(X, naam) {
+    var kansen = X.lees('Kansen'), wissels = X.lees('Fasewissels'), per = {}, lijst = X.keuzelijst('verliesRedenen');
+    wissels.forEach(function (w) { (per[w.kansId] = per[w.kansId] || []).push(w); });
+    var zonder = kansen.filter(function (k) { return !per[k.id]; }).length;
+    var gesloten = kansen.filter(function (k) { return k.fase === 'gewonnen' || k.fase === 'verloren'; }), slecht = gesloten.filter(function (k) { var l = X.laatsteSluitendeWissel(k.id, k.fase); return !l || !l.werkelijkeDatum || l.werkelijkeDatum !== k.gesloten; }).length;
+    var redenen = kansen.filter(function (k) { return k.fase === 'verloren' && lijst.indexOf(String(k.verliesReden)) < 0; }).length + wissels.filter(function (w) { return w.naar === 'verloren' && lijst.indexOf(String(w.reden)) < 0; }).length;
+    eis(kansen.length > 0 && zonder === 0, naam + ': elke kans heeft minstens één wissel (' + kansen.length + ' kansen, ' + wissels.length + ' wissels)');
+    eis(gesloten.length > 0 && slecht === 0, naam + ': elke gewonnen en verloren kans heeft een sluitende wissel met datum = Kansen.gesloten (' + gesloten.length + ')');
+    eis(redenen === 0, naam + ': alleen verliesredenen uit de keuzelijst (kans en wissel)');
+    eis(X.apiMigratieV79 && (function () { X.GEBRUIKER = null; var st = X.apiMigratieV79('status'); return st.tijdlijn.teOmzetten === 0 && st.redenen.gekoppeld && st.rollen.ingesteld; })(), naam + ': de overstap staat op nul (geen tijdlijnregel zonder wissel, redenen gekoppeld, rollen ingesteld)');
+  }
+  var Z = context({ klok: KLOK }); Z.demoStart(''); controle(Z, 'standaardseed');
+  var Gr = context({ klok: KLOK }); Gr.demoGrootStart(''); controle(Gr, 'profiel groot');
+  var Gr2 = context({ klok: KLOK }); Gr2.demoGrootStart('');
+  eis(hash(JSON.stringify(Gr.lees('Fasewissels'))) === hash(JSON.stringify(Gr2.lees('Fasewissels'))) && Gr.lees('Fasewissels').length > 300, 'de wissels van het grote profiel zijn deterministisch (' + Gr.lees('Fasewissels').length + ')');
+  function telVeel(X, fn) { var echt = X.schrijfVeel, n = 0; X.schrijfVeel = function (naam, l) { if (naam === 'Fasewissels') n++; return echt(naam, l); }; var t0 = Date.now(); try { var uit = fn(); return { n: n, ms: Date.now() - t0, uit: uit }; } finally { X.schrijfVeel = echt; } }
+  function roepX(X, fn) { var args = Array.prototype.slice.call(arguments, 2), d = JSON.parse(X.demoRun(fn, JSON.stringify(args), 'demo-sophie')); if (!d.ok) throw new Error(d.fout); return d.result; }
+  // hernoemen: alle mijlpalen tegelijk, zodat elke open kans verhuist
+  var H = context({ klok: KLOK }); H.demoGrootStart('');
+  var open = H.lees('Kansen').filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; }).length;
+  var hn = telVeel(H, function () { return roepX(H, 'apiMijlpalenOpslaan', H.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal + ' v2', kans: m.kans, dagenNorm: m.dagenNorm, oud: { pipeline: m.pipeline, mijlpaal: m.mijlpaal } }; })); });
+  var hern = H.lees('Fasewissels').filter(function (w) { return w.bron === 'hernoemd'; }).length;
+  eis(hn.n === 1 && hern === open && hn.ms < 2000, 'hernoemen op praktijkschaal: ' + open + ' open kansen, één schrijfVeel op Fasewissels, ' + hn.ms + ' ms (bovengrens 2 s)');
+  // de tijdlijnomzetting op een Sheet zonder wissels (zoals vóór v7.9)
+  var T = context({ klok: KLOK }); T.demoGrootStart(''); T.verwijderRijen('Fasewissels', function () { return true; });
+  var nFase = T.lees('Activiteiten').filter(function (a) { return a.type === 'fase'; }).length, acts = T.lees('Activiteiten').length;
+  var tl = telVeel(T, function () { return roepX(T, 'apiMigratieV79', 'tijdlijn', { toepassen: true }); });
+  eis(tl.n === 1 && tl.uit.geschreven > 0 && tl.uit.geschreven + tl.uit.zonderKans + tl.uit.alOmgezet === nFase && tl.ms < 2000, 'tijdlijnomzetting op praktijkschaal (' + acts + ' activiteiten, ' + nFase + ' faseregels): ' + tl.uit.geschreven + ' wissels in één schrijfVeel, ' + tl.ms + ' ms (bovengrens 2 s)');
+  // de eenmalige import met één regel per kans
+  var I = context({ klok: KLOK }); I.demoGrootStart('');
+  var regels = ['kans;fase;werkelijke datum;zekerheid;soort bewijs']; I.lees('Kansen').forEach(function (k) { regels.push(k.id + ';lead;' + I.datumStr(I.plusDagen(-900)) + ';laag;notitie'); });  // ouder dan elke kans van het profiel
+  var im = telVeel(I, function () { return roepX(I, 'apiFasewisselsImport', regels.join('\n'), { toepassen: true }); });
+  eis(im.n === 1 && im.uit.nieuw === regels.length - 1 && im.ms < 2000, 'import van werkelijke datums op praktijkschaal (' + (regels.length - 1) + ' regels): één schrijfVeel, ' + im.ms + ' ms (bovengrens 2 s)' + (im.uit.nieuw === regels.length - 1 ? '' : ': ' + JSON.stringify(im.uit)));
+  // N10 (optioneel): de verzonnen BRIN-codes tegen de lijst van DUO (buiten de repo); alleen het aantal overeenkomsten (norm 0)
+  var pad = process.env.BRIN_LIJST;
+  if (!pad) { info('BRIN: BRIN_LIJST niet gezet; de vergelijking met de lijst van DUO is overgeslagen'); return; }
+  var tekst; try { tekst = fs.readFileSync(pad, 'utf8'); } catch (e) { eis(false, 'BRIN: de lijst in BRIN_LIJST is niet leesbaar'); return; }
+  var echt = {}; (tekst.toUpperCase().match(/\b\d{2}[A-Z0-9]{2}\b/g) || []).forEach(function (b) { echt[b] = 1; });
+  var demo = Z.lees('Scholen').concat(Gr.lees('Scholen')).map(function (x) { return String(x.brin || '').toUpperCase(); }).filter(Boolean), raak = demo.filter(function (b) { return echt[b]; }).length;
+  eis(raak === 0, 'BRIN: geen verzonnen BRIN-code komt in de lijst van DUO voor (' + raak + ' van ' + demo.length + ')');
+})();
+
 console.log('looptijd ' + Math.round((Date.now() - T0) / 100) / 10 + ' s');
 console.log(fouten ? 'FOUTEN: ' + fouten : 'ALLES GOED');
 process.exit(fouten ? 1 : 0);

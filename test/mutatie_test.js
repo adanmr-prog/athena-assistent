@@ -1,12 +1,12 @@
-// v7.2: mutatietest van de rooktest. Tien mutanten breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
+// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: twaalf) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
 // onaangeraakt); per mutant draait `CODE_GS=<kopie> node test/node_rooktest.js`. Een mutant is "gedood" als de rooktest faalt
 // (exitcode ≠ 0, crash of timeout) en "OVERLEEFD" als hij ALLES GOED geeft: dan mist de rooktest een eis(...) voor die invariant.
-// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 9 van 10 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1).
+// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 11 van 12 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij.
 // Resultaat als json in test/shots/robuust/mutatie.json (staat in .gitignore).
 var fs = require('fs'), path = require('path'), cp = require('child_process');
 var R = path.join(__dirname, '..'), BRON = path.join(R, 'backend/Code.gs'), ROOKTEST = path.join(__dirname, 'node_rooktest.js');
 var UIT_MAP = path.join(R, 'test/shots/robuust'), UIT = path.join(UIT_MAP, 'mutatie.json');
-var TIMEOUT_MS = 120000, MIN_GEDOOD = 9;
+var TIMEOUT_MS = 120000, MIN_GEDOOD = 11;  // v7.9: twaalf mutanten, norm ≥ 11
 
 // De kopieën staan buiten de repo: standaard in de scratchpad van de sessie (--map overschrijft), nooit naast het origineel.
 var argMap = process.argv.indexOf('--map');
@@ -55,7 +55,17 @@ var MUTANTEN = [
   { id: 'portaal_whitelist_weg', gebied: 'portaal', invariant: 'het portaal (doPost met portaal) kent alleen PORTAAL_FUNCTIES',
     zoek: "      if (PORTAAL_FUNCTIES.indexOf(fn) < 0) uit = { ok: false, fout: 'onbekende functie ' + fn };",
     vervang: "      if (false) uit = { ok: false, fout: 'onbekende functie ' + fn };  // MUTANT",
-    voorstel: "eis(!portaal(TOKEN, 'apiTalent', 'tl2').ok && /onbekende functie/.test(portaal(TOKEN, 'apiTalent', 'tl2').fout), 'portaal: andere api-functies zijn via een token niet aan te roepen');" }
+    voorstel: "eis(!portaal(TOKEN, 'apiTalent', 'tl2').ok && /onbekende functie/.test(portaal(TOKEN, 'apiTalent', 'tl2').fout), 'portaal: andere api-functies zijn via een token niet aan te roepen');" },
+  // v7.9: een ongedaan gemaakte wissel telt nergens (de vlag, geen tweede event)
+  { id: 'fw_ongedaan_telt', gebied: 'fasewissels', invariant: 'tellendeWissels laat ongedaan gemaakte wissels weg',
+    zoek: "    if (!w.ongedaan && !w.verwijderd && FASE_TELT_NIET.indexOf(w.bron) < 0) tellend.push(w);",
+    vervang: "    if (!w.verwijderd && FASE_TELT_NIET.indexOf(w.bron) < 0) tellend.push(w);  // MUTANT",
+    voorstel: "eis(!ctx.tellendeWissels().some(function (w) { return w.id === 'fw-k9-ongedaan'; }), 'een ongedaan gemaakte wissel telt nergens');" },
+  // v7.9: een weekdoel geldt alleen voor precies zijn week (de fout uit de Mac-code vergeleek op het einde van het weeknummer)
+  { id: 'weekdoel_einde_nummer', gebied: 'doelen', invariant: 'doelenVan vergelijkt de periodeSleutel exact',
+    zoek: "  if (sleutel) rijen.filter(function (d) { return String(d.periodeSleutel || '') === String(sleutel); }).forEach(zet);",
+    vervang: "  if (sleutel) rijen.filter(function (d) { return String(d.periodeSleutel || '').slice(-1) === String(sleutel).slice(-1); }).forEach(zet);  // MUTANT",
+    voorstel: "eis(ctx.doelenVan('week', wk)['Lars Visser'].ap === 2, 'een week met hetzelfde laatste cijfer telt niet mee');" }
 ];
 
 var fouten = 0, overleefd = 0, gedood = 0, t0 = Date.now();
@@ -112,8 +122,8 @@ MUTANTEN.forEach(function (m, i) {
   r.exitcode = u.status; r.signaal = u.signaal; r.duurS = u.duurS; r.eersteFouten = u.eersteFouten;
   var isGedood = !(u.status === 0 && u.allesGoed);
   r.uitkomst = isGedood ? 'gedood' : 'OVERLEEFD';
-  if (isGedood) { gedood++; eis(true, 'gedood    ' + (i + 1) + '/10 ' + m.id + ' [' + m.gebied + '] — ' + (u.eersteFouten[0] || ('exitcode ' + u.status)).slice(0, 160)); }
-  else { overleefd++; eis(false, 'OVERLEEFD ' + (i + 1) + '/10 ' + m.id + ' [' + m.gebied + '] — ' + m.invariant + '\n     voorstel voor node_rooktest.js: ' + m.voorstel); }
+  if (isGedood) { gedood++; eis(true, 'gedood    ' + (i + 1) + '/' + MUTANTEN.length + ' ' + m.id + ' [' + m.gebied + '] — ' + (u.eersteFouten[0] || ('exitcode ' + u.status)).slice(0, 160)); }
+  else { overleefd++; eis(false, 'OVERLEEFD ' + (i + 1) + '/' + MUTANTEN.length + ' ' + m.id + ' [' + m.gebied + '] — ' + m.invariant + '\n     voorstel voor node_rooktest.js: ' + m.voorstel); }
   resultaat.mutanten.push(r);
 });
 
@@ -122,7 +132,7 @@ resultaat.gedood = gedood; resultaat.overleefd = overleefd; resultaat.looptijdS 
 resultaat.geslaagd = gedood >= MIN_GEDOOD && resultaat.mutanten.every(function (r) { return r.toegepast; });
 fs.writeFileSync(UIT, JSON.stringify(resultaat, null, 2));
 console.log('     ' + gedood + ' van ' + MUTANTEN.length + ' gedood, ' + overleefd + ' overleefd; json: ' + path.relative(R, UIT) + '; looptijd ' + looptijdS + ' s');
-// Oordeel: ≥ 9 van 10 gedood en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
+// Oordeel: ≥ 11 van 12 gedood (v7.9; was ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
 if (resultaat.geslaagd) console.log('ALLES GOED' + (overleefd ? ' (met ' + overleefd + ' overlevende mutant: zie de FOUT-regel hierboven)' : ''));
 else console.log('FOUTEN: ' + fouten);
 process.exit(resultaat.geslaagd ? 0 : 1);

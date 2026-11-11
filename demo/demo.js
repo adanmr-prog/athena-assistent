@@ -42,7 +42,7 @@
   var groot = /[?&]schaal=groot(&|$)/.test(location.search);  // v7.4: profiel op echte schaal (alleen via de url, zodat ?demo=1 altijd de gewone demo is)
   var klaar = null, opslaanTimer = null, gestopt = false, venster = null;
   // met versie: een sessie van een oudere demo wordt niet teruggezet; v7.4: het grote profiel heeft een eigen sleutel (andere vorm: alleen de wijzigingen)
-  var SLEUTEL = groot ? 'athena_demo_groot_v7.4' : 'athena_demo_data_v4.3';
+  var SLEUTEL = groot ? 'athena_demo_groot_v7.9' : 'athena_demo_data_v7.9';  // v7.9: nieuwe tabbladen en kolommen (Fasewissels); een bewaarde oudere sessie zou zonder wissels terugkomen
   var schaalParam = groot ? '&schaal=groot' : '';
 
   function haal(pad) {

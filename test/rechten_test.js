@@ -344,6 +344,43 @@ log(!!toon.ok, 'portaal: het eigen profiel blijft via het portaal gewoon bereikb
   herstel();
 })();
 
+/* ---- 6. v7.9 (pakket 1): fasewissels, de overstap, de eenmalige import en de weekdoelen ---- */
+(function () {
+  function noteer(naam, wie, fn, res, ok, verwacht) {
+    AANVALLEN.push({ naam: 'v7.9: ' + naam, wie: wie, fn: fn, verwacht: verwacht || 'geweigerd, Sheet onaangeroerd', toegestaan: res.ok, melding: res.ok ? '' : String(res.fout || ''), ok: ok });
+    log(ok, 'aanval  ' + pad('v7.9: ' + naam, 78) + (res.ok ? 'toegestaan' : 'geweigerd: ' + res.fout)); if (!ok) schendingen++;
+  }
+  var wNoor = lees('Fasewissels').filter(function (w) { return w.eigenaar === 'Noor Hendriks' && w.werkelijkeDatum >= ctx.ondergrensWerkelijkeDatum() && !w.ongedaan; })[0];
+  // een wissel van een ander: een collega-medewerker en een ander team worden geweigerd, de teamlead van het team mag
+  [[LARS, 'een collega-OC (Lars)'], [FEMKE, 'een accountmanager (Femke, pipeline geen)'], [SEM, 'talent (Sem)']].forEach(function (x) {
+    var r = roepRuw(x[0], 'apiFasewisselDatum', [wNoor.id, wNoor.werkelijkeDatum]); aantalAanroepen++;
+    noteer('apiFasewisselDatum op een wissel van Noor door ' + x[1], x[0], 'apiFasewisselDatum', r, !r.ok && TOEGANG.test(r.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+  });
+  var rY = roepRuw(YARA, 'apiFasewisselDatum', [wNoor.id, wNoor.werkelijkeDatum]); aantalAanroepen++;
+  noteer('apiFasewisselDatum door de teamlead consultancy (Yara) op een wissel van haar team', YARA, 'apiFasewisselDatum', rY, rY.ok === true, 'toegestaan (team)'); herstel(); aantalHerstel++;
+  // de overstap en de eenmalige import: alleen management (ook een teamlead niet), ook met toepassen
+  var csv = fs.readFileSync(path.join(R, 'test/voorbeelden/werkelijke_datums.csv'), 'utf8');
+  [[YARA, 'teamlead consultancy'], [BAS, 'teamlead accountmanagement'], [IRIS, 'teamlead talent'], [LARS, 'medewerker']].forEach(function (x) {
+    var r1 = roepRuw(x[0], 'apiFasewisselsImport', [csv, { toepassen: true }]); aantalAanroepen++;
+    noteer('apiFasewisselsImport (toepassen) door een ' + x[1], x[0], 'apiFasewisselsImport', r1, !r1.ok && netteWeigering(r1.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+    ['status', 'rollen', 'tijdlijn', 'wissels', 'kansen', 'redenen'].forEach(function (stap) {
+      var r2 = roepRuw(x[0], 'apiMigratieV79', [stap, { toepassen: true, rollen: { 'scholen-lead': 'lead' }, koppeling: {} }]); aantalAanroepen++;
+      noteer('apiMigratieV79 ' + stap + ' (toepassen) door een ' + x[1], x[0], 'apiMigratieV79', r2, !r2.ok && netteWeigering(r2.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+    });
+  });
+  // R1: een interne bron als derde argument wordt genegeerd; de wissel krijgt een app-bron
+  var k = lees('Kansen').filter(function (x) { return x.eigenaar === 'Lars Visser' && x.fase === 'gesprek'; })[0];
+  var r3 = roepRuw(LARS, 'apiKansOpslaan', [{ id: k.id, fase: 'voorstel', _oud: { fase: 'gesprek' }, wissel: { bron: 'import' } }, false, { bron: 'import', datum: '2020-01-01' }]); aantalAanroepen++;
+  var w3 = r3.ok ? lees('Fasewissels').filter(function (w) { return w.id === r3.result.fasewissel.id; })[0] : null;
+  noteer('R1: apiKansOpslaan(obj, false, { bron: import }) door een medewerker', LARS, 'apiKansOpslaan', r3, !!w3 && ctx.FASE_BRONNEN_APP.indexOf(w3.bron) >= 0 && w3.werkelijkeDatum === vandaag(), 'toegestaan met een app-bron (detail) en vandaag als datum'); herstel(); aantalHerstel++;
+  // weekdoelen: een medewerker, een teamlead buiten zijn team en een teamlead van een ander team worden geweigerd
+  var wk = ctx.isoWeekStr(ctx.plusDagen(0));
+  [[LARS, 'Lars Visser', 'een medewerker voor zichzelf'], [YARA, 'Femke de Wit', 'de teamlead consultancy voor een accountmanager'], [BAS, 'Lars Visser', 'de teamlead accountmanagement voor een OC']].forEach(function (x) {
+    var r = roepRuw(x[0], 'apiWeekdoelenOpslaan', [wk, [{ eigenaar: x[1], metric: 'ap', doel: 5 }]]); aantalAanroepen++;
+    noteer('apiWeekdoelenOpslaan door ' + x[2], x[0], 'apiWeekdoelenOpslaan', r, !r.ok && /teamlead/.test(r.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+  });
+})();
+
 /* ---- json en slot ---- */
 var looptijd = Math.round((Date.now() - T0) / 100) / 10;
 var perOordeel = {}; MATRIX.forEach(function (r) { perOordeel[r.oordeel] = (perOordeel[r.oordeel] || 0) + 1; });
