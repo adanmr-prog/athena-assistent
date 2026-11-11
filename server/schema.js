@@ -43,12 +43,14 @@ var NUMERIEK = {
   Talenten: ['lat', 'lon', 'reisafstandKm', 'maxUrenWeek'],
   TalentUren: ['uren', 'diensten', 'noShows', 'lateAfmeldingen'], TalentUren_archief: ['uren', 'diensten', 'noShows', 'lateAfmeldingen'],
   Fasewissels: ['waarde'],  // v7.9: de waarde van de kans op het moment van de wissel (bij gewonnen de getekende waarde)
-  Aannames: ['versie']      // v7.9: versienummer van een aanname (de waarde zelf is JSON-tekst)
+  Aannames: ['versie'],     // v7.9: versienummer van een aanname (de waarde zelf is JSON-tekst)
+  // v7.9 (pakket 2): versies in het register, tellingen in de datakwaliteit, de voorspellingslog (N4: versie ook, anders toont vergelijk.js een verschil) en de bevroren standen
+  Cijferdefinities: ['versie'], Datakwaliteit: ['aantal'], Voorspellingen: ['verwacht', 'onder', 'boven', 'werkelijk', 'fout', 'versie'], Standen: ['waarde', 'versie']
 };
 // Sleutelkolom per tabblad; zonder sleutel (Aanmeldingen) telt de hele tabel als één geheel
 var SLEUTEL = { Huisstijl: 'sleutel', Instellingen: 'sleutel', Aanmeldingen: null };
 var INDEXEN = [['Activiteiten', 'schoolId'], ['Activiteiten', 'persoonId'], ['Activiteiten', 'talentId'], ['Activiteiten', 'datum'], ['Acties', 'status'], ['Acties', 'eigenaar'], ['Kandidaten', 'trajectId'], ['Kandidaten', 'talentId'], ['TalentUren', 'talentId'], ['Personen', 'schoolId'], ['Kansen', 'schoolId'],
-  ['Fasewissels', 'kansId'], ['Fasewissels', 'werkelijkeDatum'], ['Aannames', 'naam']];  // v7.9
+  ['Fasewissels', 'kansId'], ['Fasewissels', 'werkelijkeDatum'], ['Aannames', 'naam'], ['Datakwaliteit', 'dag']];  // v7.9
 
 function snake(k) { return String(k).replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/__+/g, '_').toLowerCase(); }
 function tabelNaam(tab) { return snake(tab); }

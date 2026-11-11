@@ -132,6 +132,7 @@ function plan(rol, basis, tabellen) {
   p.push(['apiMetingen', [14]]);  // v7.6: management krijgt het (lege) overzicht, de rest dezelfde weigering
   p.push(['apiMigratieV79', ['status', {}]], ['apiMigratieV79', ['redenen', {}]]);  // v7.9: de overstap (proefdraai, schrijft niets); management de tellingen, de rest dezelfde weigering
   p.push(['apiTeamRapport', ['week', 'consultancy', '', 0]]);  // v7.9: AP, AD, VO, deals en conversie uit Fasewissels, met de weekdoelen per week
+  p.push(['apiSturing', ['week', {}]], ['apiSturing', ['mt', {}]], ['apiSturing', ['datakwaliteit', {}]], ['apiCijfers', [{ kort: true }]], ['apiCijfers', [{}]], ['apiAannames', []]);  // v7.9 (pakket 2): de sturingsweergaven, het register en de aannames (lezen)
   p.push(['apiAgenda', [VAN, TOT]], ['apiRapport', ['maand', '', 0]], ['apiRapport', ['kwartaal', '', -1]], ['apiTeamRapport', ['maand', 'alle', '', 0]], ['apiTeamRapport', ['kwartaal', rol.team, '', 0]], ['apiTalentRapport', ['maand', 0]], ['apiActiviteiten', ['', VAN, TOT, '']]);
   scholen.forEach(function (id) { p.push(['apiSchool', [id]], ['apiArchiefTijdlijn', ['school', id]]); });
   personen.forEach(function (id) { p.push(['apiPersoon', [id]]); });

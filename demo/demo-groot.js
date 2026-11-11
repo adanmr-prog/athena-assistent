@@ -712,6 +712,24 @@ function demoGrootVul() {
   });
   schrijfVeel('Prognoses', prog);
 
+  /* ----- v7.9 (pakket 2): verzonnen aannames als rijen in Aannames, zodat het MT-overzicht op deze schaal volledig rekent (scope, jaardoel, aannames, curve, basislijn) ----- */
+  var aRij = function (naam, waarde, eig, onderbouwing) { return { id: 'aa-' + naam + '-v1', naam: naam, versie: 1, waarde: JSON.stringify(waarde), eigenaar: eig, onderbouwing: onderbouwing + ' (verzonnen, demo)', besluitdatum: d(-60), ingang: d(-60), door: M.sophie, vastgelegd: dt(-60, '16:00') }; };
+  var nieuwe = huidig.filter(function (t) { return t.klant === 'nieuw' && t.contractwaarde > 0; }), dealW = nieuwe.length ? rond(nieuwe.reduce(function (a, t) { return a + t.contractwaarde; }, 0) / nieuwe.length, 500) : 10000;
+  var curve = [], L = function (x) { return 1 / (1 + Math.exp(-(x - 130) / 45)); };
+  for (var cd = 0; cd <= 364; cd += 14) curve.push([cd, Math.round(10000 * (L(cd) - L(0)) / (L(364) - L(0))) / 10000]);
+  curve.push([365, 1]);
+  var urenNu = urenPerMaand(sj, d(0)).filter(function (x) { return x.uren > 0; }), basis = urenNu.length ? urenNu.reduce(function (a, x) { return a + x.uren; }, 0) / urenNu.length : 1200;
+  var vorm = [0.15, 0.85, 1, 0.8, 1, 0.75, 1, 0.85, 1, 0.9, 0.8, 0.2], basislijn = {};
+  [1, 2].forEach(function (terug) { var vsj = (j1 - terug) + '-' + (j1 - terug + 1), ms = schooljaarMaanden(vsj), m = {}; ms.forEach(function (x, i) { m[x] = Math.round(basis * vorm[i] * (1 - 0.06 * terug)); }); basislijn[vsj] = m; });
+  schrijfVeel('Aannames', [aRij('scope', ['particulier'], 'FD', 'Particulieren vallen buiten het jaardoel'),
+    { id: 'aa-jaardoel-v1', naam: 'jaardoel', versie: 1, waarde: JSON.stringify({ soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: rond(omzetNu * 1.6, 50000), schooljaar: sj }), eigenaar: 'FD',
+      onderbouwing: 'Contractwaarde per schooljaar, groei ten opzichte van nu (verzonnen, demo)', besluitdatum: d(-59), ingang: d(-59), door: M.sophie, vastgelegd: dt(-59, '16:00') },
+    aRij('retentie', 0.8, 'beheerder', 'Verlengingen van vorig jaar'), aRij('dealwaarde', dealW, 'beheerder', 'Gemiddelde getekende waarde van een nieuwe school'),
+    aRij('conversieApVoorstel', 0.5, 'beheerder', 'Schatting uit de weekstart'), aRij('conversieVoorstelDeal', 0.4, 'beheerder', 'Schatting uit de weekstart'),
+    aRij('werkweken', 36, 'beheerder', 'Schoolweken zonder vakanties'), aRij('aantalOcs', 3, 'beheerder', 'Drie OC\'s'),
+    aRij('doelpadCurve', { totaal: curve, bron: 'reconstructie' }, 'beheerder', 'S-curve uit eerdere schooljaren'), aRij('urenBasislijn', basislijn, 'beheerder', 'Maandtotalen van de boekhouding')]);
+  demoSturingVul();  // de voorspellingslog en de datacontracten op deze schaal (zie demo/demo-backend.js)
+
   /* ----- XPS: de dienstenexport per dienst (laatste twee weken) in de map XPS-export, zonder salariskolommen ----- */
   var kop = ['Datum', 'Datum: Van', 'Datum: Tot', 'Gewerkte tijd', 'Uitgevoerd door', 'Omschrijving', 'Status', 'Project', 'Projectleider', 'Accountnummer', 'E-mail', 'Projectnummer'];
   var cel = function (v) { v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };

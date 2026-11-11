@@ -693,6 +693,27 @@ function demoVul() {
     });
   });
   schrijfVeel('Prognoses', prog);
+  // v7.9 (pakket 2): het register met twee afgetekende versies (M14 en M16 voorstellen; de rest staat op concept), en de voorspellingslog en de dagelijkse datacontracten
+  var reg = function (m, dagen) { return { id: 'cd-' + m.toLowerCase() + '-v1', metriek: m, versie: 1, definitie: METRIEKEN[m].definitie, eigenaar: METRIEKEN[m].eigenaar, besluit: METRIEKEN[m].besluit, ingang: d(dagen),
+    status: 'afgetekend', tolerantie: METRIEKEN[m].tolerantie, onderbouwing: 'Afgetekend in de weekstart (demo).', door: M.sophie, aangemaakt: dt(dagen - 2), afgetekendDoor: M.sophie, afgetekendOp: dt(dagen, '16:00') }; };
+  schrijfVeel('Cijferdefinities', [reg('contactmomenten', -21), reg('voorstellen', -21)]);
+  demoSturingVul();
+}
+// v7.9 (pakket 2): voorspellingslog (vier gescoorde weken en de lopende week) en de datacontracten van vandaag, op de gegevens zoals ze nu zijn.
+// Ook aan het eind van het profiel groot (demo/demo-groot.js), zodat beide rekenen met hun eigen gegevens. Zonder meldingen (de bel blijft zoals de seed hem zet).
+function demoSturingVul() {
+  verwijderRijen('Voorspellingen', function () { return true; }); verwijderRijen('Datakwaliteit', function () { return true; });
+  var ma = maandagVan(datumStr(new Date())), rijen = [];
+  for (var k = 4; k >= 0; k--) {
+    var m0 = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() - 7 * k, 12), mS = datumStr(m0), vd = voorspelDealsWeek(m0), vo = voorspelOpdrachten30(mS);
+    vd.aangemaakt = mS + ' 06:45'; vo.aangemaakt = mS + ' 06:46'; rijen.push(vd); if (k === 0) rijen.push(vo);
+  }
+  schrijfVeel('Voorspellingen', rijen);
+  scoorVoorspellingen(datumStr(new Date()));
+  datakwaliteitDag(datumStr(new Date()), { stil: true });
+  // vaste tijdstempels (de maandag na de week, vandaag 06:45), zodat de seed op elk uur van dezelfde dag dezelfde rijen heeft (demo/demo-groot.js bewaart alleen wijzigingen)
+  schrijfVeel('Voorspellingen', lees('Voorspellingen').filter(function (r) { return r.gescoord; }).map(function (r) { return { id: r.id, gescoord: plusDagenVan(String(r.tot), 1) + ' 06:45' }; }));
+  schrijfVeel('Datakwaliteit', lees('Datakwaliteit').map(function (r) { return { id: r.id, aangemaakt: datumStr(new Date()) + ' 06:45' }; }));
 }
 
 /* ----- Ingang vanuit de app ----- */
@@ -714,11 +735,11 @@ function demoRun(fn, argsJson, code) {
   DEMO_HUIDIG = code || 'demo-sophie';
   _demoProps.CODES = _demoCodes(); _demoProps.SECRET = 'demo-sophie';  // een code die in Beheer vernieuwd is, werkt in de demo gewoon door
   // Apps Script begint elk verzoek met een schone globale scope; hier blijven de globals staan, dus de geheugens per verzoek legen
-  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null; _ROLLEN = null; _WISSELS = null; _AANNAMES = null;  // v7.9: rollen, wissels en aannames; v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)  // v5.0: talentindex en talenten-via-project
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null; _ROLLEN = null; _WISSELS = null; _AANNAMES = null; _REGISTER = null;  // v7.9: rollen, wissels, aannames en het register; v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)  // v5.0: talentindex en talenten-via-project
   return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), secret: DEMO_HUIDIG, v: null }) } });  // v7.9: v null = geen versiewacht (app en backend uit dezelfde deploy)
 }
 // v5.0: het portaal (?t=<token>&api=…) in de demo: dezelfde doPost, met het token in plaats van een koppelcode
 function demoPortaal(fn, argsJson, token) {
-  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null; _ROLLEN = null; _WISSELS = null; _AANNAMES = null;  // v7.9: rollen, wissels en aannames; v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)
+  _LEES = {}; _BLAD = {}; _TRAJECTNAMEN = null; _TEAMNAMEN = null; _OPENVAC = null; _TALENTINDEX = null; _VIAPROJECT = null; GEBRUIKER = null; _TAAKINDEX = null; _TALENTNAMEN = null; _INSTELLINGEN = null; _ROLLEN = null; _WISSELS = null; _AANNAMES = null; _REGISTER = null;  // v7.9: rollen, wissels, aannames en het register; v7.6: ook de taakindex, de talentnamen en de instellingenmap (nieuw in v7.6)
   return doPost({ postData: { contents: JSON.stringify({ fn: fn, args: JSON.parse(argsJson || '[]'), portaal: token, v: null }) } });
 }

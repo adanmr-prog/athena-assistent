@@ -1704,6 +1704,7 @@ function kalDag(n, u, mi) { var x = new CtxDate79(); return new CtxDate79(x.getF
 function od(cw, akk, extra) { var o = { aantal: 1, rol: 'Onderwijsondersteuner', startdatum: plusDagen(20), contractwaarde: cw, akkoorddatum: akk }; Object.keys(extra || {}).forEach(function (k) { o[k] = extra[k]; }); return o; }
 function consultancyTotaal(van, tot) { ctx.GEBRUIKER = null; ctx._LEES = {}; return ctx.teamCijfers('consultancy', van, tot, ctx.rapportData()); }
 function tVan(c, m) { return c.totaal[m] ? c.totaal[m].t : 0; }
+var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: plusDagen(0) };  // v7.9 (pakket 2, N6): een gewijzigd fasegewicht vraagt een onderbouwing en een besluitdatum
 
 /* ---- v7.9: fasewissels — één schrijfpunt ---- */
 (function () {
@@ -1786,7 +1787,7 @@ function tVan(c, m) { return c.totaal[m] ? c.totaal[m].t : 0; }
     eis(aantalWissels() === nTl && ctx.apiMigratieV79('status').tijdlijn.teOmzetten === 0, 'pad tijdlijn: een tweede run en de regels die kansOpslaan naast zijn wissel schrijft, geven geen dubbele wissel');
     // pipelinewissel (R7): andere effectieve rol = één wissel met bron detail; een pipeline zonder die mijlpaal wordt geweigerd
     roep(SOPHIE, 'apiMijlpalenOpslaan', ctx.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol }; })
-      .concat([{ pipeline: 'Particulier', mijlpaal: 'lead', kans: 10, dagenNorm: 7, rol: 'lead' }, { pipeline: 'Particulier', mijlpaal: 'gesprek', kans: 50, dagenNorm: 7, rol: 'voorstel' }]));
+      .concat([{ pipeline: 'Particulier', mijlpaal: 'lead', kans: 10, dagenNorm: 7, rol: 'lead' }, { pipeline: 'Particulier', mijlpaal: 'gesprek', kans: 50, dagenNorm: 7, rol: 'voorstel' }]), GEWICHT_OK);  // pakket 2 (N6): nieuwe gewichten vragen een onderbouwing
     var pv = wisselsVan('k8').length, pw = roep(NOOR, 'apiKansOpslaan', { id: 'k8', pipeline: 'Particulier', _oud: { pipeline: 'Scholen' } });
     var pwr = pw.fasewissel ? wisselRij(pw.fasewissel.id) : null;
     eis(wisselsVan('k8').length === pv + 1 && pwr && pwr.bron === 'detail' && pwr.van === 'gesprek' && pwr.naar === 'gesprek' && pwr.vanRol === 'ap' && pwr.naarRol === 'voorstel' && ctx.telRol(pwr) === 'voorstel',
@@ -1887,7 +1888,7 @@ function tVan(c, m) { return c.totaal[m] ? c.totaal[m].t : 0; }
     eis(tVan(c3, 'voorstellen') === tVan(c2, 'voorstellen') && tVan(c3, 'ap') === tVan(c2, 'ap') && ctx.mijlpalen().filter(function (m) { return m.mijlpaal === 'offerte'; })[0].rol === 'voorstel', 'hernoemen (voorstel → offerte) houdt de tellingen en de rol');
     // geen tellende code leest de naam: een mijlpaal die "voorstel" heet maar geen rol heeft, telt niet als VO
     roep(SOPHIE, 'apiMijlpalenOpslaan', [{ pipeline: 'Scholen', mijlpaal: 'lead', kans: 10, dagenNorm: 14, rol: 'lead' }, { pipeline: 'Scholen', mijlpaal: 'gesprek', kans: 25, dagenNorm: 10, rol: 'ap' },
-      { pipeline: 'Scholen', mijlpaal: 'voorstel', kans: 40, dagenNorm: 7, rol: '' }, { pipeline: 'Scholen', mijlpaal: 'offerte', kans: 50, dagenNorm: 7, rol: 'voorstel' }, { pipeline: 'Scholen', mijlpaal: 'onderhandeling', kans: 75, dagenNorm: 7, rol: '' }]);
+      { pipeline: 'Scholen', mijlpaal: 'voorstel', kans: 40, dagenNorm: 7, rol: '' }, { pipeline: 'Scholen', mijlpaal: 'offerte', kans: 50, dagenNorm: 7, rol: 'voorstel' }, { pipeline: 'Scholen', mijlpaal: 'onderhandeling', kans: 75, dagenNorm: 7, rol: '' }], GEWICHT_OK);
     var nk2 = roep(LARS, 'apiKansOpslaan', { naam: 'Naamkans', schoolId: 's7', fase: 'gesprek' }), c4 = consultancyTotaal(vanM, totM);
     var nw2 = roep(LARS, 'apiKansOpslaan', { id: nk2.kans.id, fase: 'voorstel', _oud: { fase: 'gesprek' } }), c5 = consultancyTotaal(vanM, totM);
     eis(wisselRij(nw2.fasewissel.id).naarRol === 'ap' && tVan(c5, 'voorstellen') === tVan(c4, 'voorstellen'), 'een mijlpaal die "voorstel" heet zonder rol erft ap en telt niet als VO (tellingen lezen de rol, nooit de naam)');
@@ -2092,8 +2093,9 @@ function tVan(c, m) { return c.totaal[m] ? c.totaal[m].t : 0; }
       /Onbekende maatstaf/.test(faalt(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'maand', metric: 'constructor', doel: 3 })) && /Onbekende maatstaf/.test(faalt(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'maand', metric: '__proto__', doel: 3 })),
       'een ongeldige sleutel en constructor/__proto__ als maatstaf worden geweigerd (N1)');
     roep(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'maand', metric: 'vo', doel: 3 }); roep(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'Lars Visser', periode: 'maand', metric: 'deal', doel: 2 });
-    eis(ctx.doelenVan('maand', '')['Lars Visser'].voorstellen === 3 && ctx.doelenVan('maand', '')['Lars Visser'].gewonnen === 2 && roep(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'bedrijf', periode: 'schooljaar', metric: 'omzet', doel: 1000 }).doelen.some(function (x) { return x.metric === 'omzet' && x.doel === 1000; }),
-      'alias: vo → voorstellen, deal → gewonnen; omzet blijft omzet zolang contractwaarde geen eigen cijfer is');
+    eis(ctx.doelenVan('maand', '')['Lars Visser'].voorstellen === 3 && ctx.doelenVan('maand', '')['Lars Visser'].gewonnen === 2 && roep(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'bedrijf', periode: 'schooljaar', metric: 'omzet', doel: 1000 }).doelen.some(function (x) { return x.metric === 'contractwaarde' && x.doel === 1000; }) &&
+      ctx.doelenVan('schooljaar', '').bedrijf.contractwaarde === 1000 && /Onbekende maatstaf/.test(faalt(SOPHIE, 'apiDoelOpslaan', { eigenaar: 'bedrijf', periode: 'schooljaar', metric: 'gecontracteerd', doel: 1 })),
+      'alias: vo → voorstellen, deal → gewonnen, omzet → contractwaarde (pakket 2); een cijfer uit de sturing is geen doel');
     // N2: een Date en een getal in de cel periodeSleutel
     var kop = ctx.TABELLEN.Doelen, rij = function (id, per, sleutel) { var r = kop.map(function () { return ''; }); r[kop.indexOf('id')] = id; r[kop.indexOf('eigenaar')] = 'Noor Hendriks'; r[kop.indexOf('periode')] = per; r[kop.indexOf('metric')] = 'gesprekken'; r[kop.indexOf('doel')] = 6; r[kop.indexOf('periodeSleutel')] = sleutel; return r; };
     ctx._demoBladen.Doelen.rijen.push(rij('rk-d-datum', 'maand', new CtxDate79(2026, 10, 1)), rij('rk-d-getal', 'jaar', 2026)); ctx._LEES = {};
@@ -2171,6 +2173,426 @@ function tVan(c, m) { return c.totaal[m] ? c.totaal[m].t : 0; }
     ctx.schrijfVeel('Kansen', [{ id: 'k16', waarde: 0 }]); ctx._LEES = {};
     eis(!faalt(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'voorstel', _oud: { fase: 'onderhandeling' }, wissel: { ongedaan: terug.fasewissel.id } }) && !faalt(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'lead', _oud: { fase: 'voorstel' } }), 'aan: ongedaan maken en terug naar een fase vóór voorstel vragen niets');
   } catch (e) { eis(false, 'v7.9 sturingVerplicht: onverwachte fout ' + e.message); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: sturing, pakket 2 (register van cijfers, één definitie per naam, datacontracten, datakwaliteit, voorspellingen, sturingsweergaven, stand bevriezen,
+   aannames en jaardoel). Elk blok begint met de verse seed en zet de stand aan het eind terug. Alle namen, scholen en bedragen zijn verzonnen (demo-seed). ---- */
+var CtxJSON79 = vm.runInContext('JSON', ctx), THOMAS = 'demo-thomas';
+function cx(v) { return CtxJSON79.parse(JSON.stringify(v)); }  // een waarde uit de context zelf (instanceof Array in Code.gs)
+function vers79() { standTerug(SEED79); ctx._LEES = {}; ctx.GEBRUIKER = null; }
+function contractenOp(wijzig) { ctx.GEBRUIKER = null; ctx._LEES = {}; var S = ctx.standVoorContracten(plusDagen(0)); if (wijzig) wijzig(S); var u = {}; ctx.datacontracten(S).forEach(function (c) { u[c.id] = c; }); return u; }
+function mtCijfers(code) { var r = roep(code || SOPHIE, 'apiSturing', 'mt', {}), u = {}; r.blokken.forEach(function (b) { b.cijfers.forEach(function (c) { u[c.m || c.id] = c; u[c.id] = c; }); }); u._r = r; return u; }
+function aannameZet(naam, waarde, extra) { var o = { waarde: waarde, onderbouwing: 'Rooktest (verzonnen)', besluitdatum: plusDagen(-1) }; Object.keys(extra || {}).forEach(function (k) { o[k] = extra[k]; }); return roep(SOPHIE, 'apiAannameOpslaan', naam, o); }
+function leesTeller(fn) {
+  var echt = ctx.lees, tel = {};
+  ctx.lees = function (naam, licht) { tel[naam] = (tel[naam] || 0) + 1; return echt(naam, licht); };
+  try { fn(); return tel; } finally { ctx.lees = echt; }
+}
+function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function (m, i) { return { id: m.id || 'mp' + i, pipeline: m.pipeline, mijlpaal: m.mijlpaal, volgorde: m.volgorde, kans: m.kans, dagenNorm: m.dagenNorm, rol: '' }; })); ctx._LEES = {}; }
+
+/* ---- v7.9: register van cijfers ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var M = ctx.METRIEKEN, ids = Object.keys(M), mist = ids.filter(function (id) { var d = M[id]; return !d.definitie || !d.eigenaar || !d.soort || (d.m && !d.besluit) || ctx.CIJFER_EIGENAREN.indexOf(d.eigenaar) < 0; });
+    eis(!mist.length, 'register: elke sleutel heeft een definitie, een eigenaar uit de lijst, een soort en (bij een M-code) een besluit' + (mist.length ? ': ' + mist.join(', ') : ''));
+    var codes = {}, ontbreekt = []; ids.forEach(function (id) { if (M[id].m) codes[M[id].m] = true; });
+    for (var i = 1; i <= 36; i++) { var c0 = 'M' + ('0' + i).slice(-2); if (!codes[c0]) ontbreekt.push(c0); }
+    eis(!ontbreekt.length, 'register: M01 t/m M36 staan erin' + (ontbreekt.length ? ' (ontbreekt: ' + ontbreekt.join(', ') + ')' : ''));
+    var VERBODEN = ['activiteitPerType', 'trendZesWeken', 'dealwaardePerWeek', 'nieuwePerWeek', 'omzetprognose', 'mtPunten', 'gefactureerdTegenTarget', 'perMedewerker', 'perRegio', 'perTypeWerk', 'topScholen', 'productiviteitPerUur', 'omzetPerUurAm', 'urenPerStudent', 'activiteitVorigJaar', 'icpBacktest'];
+    eis(VERBODEN.every(function (v) { return !ctx.uitMap(M, v); }), 'register: geen enkel geschrapt cijfer (deel A §2)');
+    eis(M.afsprakenGehouden && M.afspraken && M.afsprakenGehouden.definitie !== M.afspraken.definitie && M.afsprakenGehouden.m === 'M15' && !M.afspraken.m, 'R18: afsprakenGehouden (M15) en afspraken (teammetriek, ongewijzigd) zijn twee sleutels met elk een eigen definitie');
+    var oc = ctx.registerVan('ocActiviteit');
+    eis(oc.m === 'M23' && oc.status === 'concept' && oc.wachtOp === 'besluit 8' && /besluit 8/.test(faalt(SOPHIE, 'apiCijferAftekenen', 'ocActiviteit', 1)), 'N13: M23 (ingepland = aanmaakdatum) staat op concept (besluit 8) en kan pas na besluit 8 afgetekend worden');
+    // versie → concept → afgetekend; een nieuwe conceptversie verandert de geldende afgetekende versie niet tot ze afgetekend is
+    var r0 = ctx.registerVan('gesprekken');
+    eis(r0.versie === 0 && r0.status === 'concept' && r0.definitie === M.gesprekken.definitie, 'register: zonder rij in Cijferdefinities geldt de code (versie 0, concept)');
+    roep(SOPHIE, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'Rooktest: gesprekken versie 1', eigenaar: 'beheerder', besluit: 'B4', tolerantie: '0', onderbouwing: 'Rooktest' });
+    var r1 = ctx.registerVan('gesprekken'); ctx._LEES = {};
+    eis(r1.versie === 1 && r1.status === 'concept' && r1.definitie === 'Rooktest: gesprekken versie 1', 'register: een nieuwe versie is een concept met versie 1');
+    var af = roep(SOPHIE, 'apiCijferAftekenen', 'gesprekken', 1), g1 = af.cijfers.filter(function (c) { return c.id === 'gesprekken'; })[0];
+    eis(g1.status === 'afgetekend' && g1.versie === 1 && g1.historie.length === 1 && g1.historie[0].afgetekendDoor === 'Sophie de Graaf', 'register: aftekenen door management zet de versie op afgetekend (met wie en wanneer)');
+    roep(SOPHIE, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'Rooktest: gesprekken versie 2', eigenaar: 'beheerder', ingang: plusDagen(0) }); ctx._LEES = {};
+    eis(ctx.registerVan('gesprekken').versie === 1 && ctx.registerVan('gesprekken').status === 'afgetekend', 'register: een nieuwere conceptversie verdringt de afgetekende versie niet');
+    roep(SOPHIE, 'apiCijferAftekenen', 'gesprekken', 2); ctx._LEES = {};
+    var r2 = ctx.registerVan('gesprekken');
+    eis(r2.versie === 2 && r2.definitie === 'Rooktest: gesprekken versie 2' && roep(SOPHIE, 'apiCijfers', {}).cijfers.filter(function (c) { return c.id === 'gesprekken'; })[0].historie.length === 2, 'register: na aftekenen geldt versie 2; versie 1 blijft in de historie');
+    eis(/toegang/.test(faalt(YARA, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'x', eigenaar: 'beheerder' })) && /toegang/.test(faalt(LARS, 'apiCijferAftekenen', 'gesprekken', 2)) && /toegang/.test(faalt(FEMKE, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'x', eigenaar: 'beheerder' })),
+      'register: een teamlead en een medewerker mogen geen versie maken of aftekenen');
+    eis(/Onbekend cijfer/.test(faalt(SOPHIE, 'apiCijferOpslaan', { metriek: 'constructor', definitie: 'x', eigenaar: 'beheerder' })) && /Onbekend cijfer/.test(faalt(SOPHIE, 'apiCijferOpslaan', { metriek: '__proto__', definitie: 'x', eigenaar: 'beheerder' })) &&
+      /Onbekend cijfer/.test(faalt(SOPHIE, 'apiCijferAftekenen', 'toString', 1)) && /tolerantie/.test(faalt(SOPHIE, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'x', eigenaar: 'beheerder', tolerantie: 'veel' })) &&
+      /eigenaar/.test(faalt(SOPHIE, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'x', eigenaar: 'iemand' })), 'N1: constructor, __proto__ en toString als cijfer geven "Onbekend cijfer."; een ongeldige tolerantie of eigenaar wordt geweigerd');
+    var kort = roep(LARS, 'apiCijfers', { kort: true });
+    eis(ids.every(function (id) { return kort.defs[id] && kort.defs[id].definitie && typeof kort.defs[id].versie === 'number'; }) && /^7\.9\|/.test(kort.stempel) && kort.defs.contactmomenten.status === 'afgetekend', 'apiCijfers({ kort: true }): een definitie voor elke sleutel (ook voor een medewerker), met versie, status en een stempel');
+    // R9: Home, Vandaag, Financiën, het teamrapport en het oude rapport lezen het register niet
+    var tel = leesTeller(function () { roep(SOPHIE, 'apiHome'); roep(SOPHIE, 'apiOverzicht'); roep(SOPHIE, 'apiFinancien', ''); roep(SOPHIE, 'apiTeamRapport', 'maand', 'consultancy', '', 0); roep(SOPHIE, 'apiRapport', 'maand', '', 0); });
+    eis(!tel.Cijferdefinities && ['apiHome', 'apiOverzicht', 'apiFinancien', 'apiTeamRapport', 'apiRapport'].every(function (f) { return String(ctx[f]).indexOf('definitiesVan(') < 0 && String(ctx[f]).indexOf('registerVan(') < 0; }),
+      'R9: apiHome, apiOverzicht, apiFinancien, apiTeamRapport en apiRapport lezen Cijferdefinities niet en roepen definitiesVan niet aan');
+    var mt = roep(SOPHIE, 'apiSturing', 'mt', {}), wk = roep(SOPHIE, 'apiSturing', 'week', {}), dq = roep(SOPHIE, 'apiSturing', 'datakwaliteit', {});
+    eis(mt.blokken.every(function (b) { return b.cijfers.every(function (c) { return mt.defs[c.id] && mt.defs[c.id].definitie && c.def.definitie && typeof c.def.versie === 'number'; }); }) && ['contactmomenten', 'ap', 'voorstellen', 'gewonnen', 'registratievertraging'].every(function (k) { return wk.defs[k] && wk.defs[k].definitie; }) && dq.defs.datakwaliteit,
+      'apiSturing geeft defs voor elk getoond cijfer (MT, week en datakwaliteit)');
+  } catch (e) { eis(false, 'v7.9 register van cijfers: onverwachte fout ' + e.message); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: één definitie per naam (punt 17; R9, R10) ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var sj = sjNu(), D = ctx.financienData();
+    function homeTe(code) { return roep(code, 'apiHome').kerncijfers.teFactureren; }
+    // Home (euro's) tegen Financiën (centen) voor dezelfde projecten: de zichtbare lopende projecten van het management
+    var lopend = ctx.lees('Trajecten').filter(function (t) { return ctx.projectLopend(t); }), som = 0;
+    lopend.forEach(function (t) { var F = ctx.financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], ctx.termijnDagenVan(t, D)); som += Math.max(0, F.nogTeFactureren); });
+    var fin = roep(SOPHIE, 'apiFinancien', sj), perP = {}; fin.scholen.forEach(function (s) { s.projecten.forEach(function (p) { perP[p.id] = p; }); });
+    var gelijk = lopend.filter(function (t) { return perP[t.id]; }).every(function (t) { return perP[t.id].nogTeFactureren === ctx.nogTeFacturerenVan(t, D.fac[t.id] || []); });
+    eis(Math.round(homeTe(SOPHIE) * 100) === som && gelijk, 'R10: Home teFactureren × 100 = de som van max(0, nogTeFactureren) in centen van dezelfde projecten; Financiën rekent per project met dezelfde helper (' + homeTe(SOPHIE) + ' euro)');
+    // één verzonnen project: contract € 1.200, één verzonden termijn van € 200 → precies 1000 euro erbij (niet 100000)
+    var voor = homeTe(FEMKE);
+    ctx.schrijf('Trajecten', { id: 'rk-nf', school: 'Esdoorn Lyceum', schoolId: 's1', traject: 'Rooktest nog te factureren', schooljaar: sj, status: 'bezig', am: 'Femke de Wit', contractwaarde: 1200, omzet: 1200, start: plusDagen(-30), eind: plusDagen(60) });
+    ctx.schrijf('Facturen', { id: 'rk-nf-1', trajectId: 'rk-nf', omschrijving: 'Termijn 1', bedrag: 200, datum: plusDagen(-5), status: 'verzonden', verzonden: plusDagen(-5) });
+    var na = homeTe(FEMKE), tNf = ctx.vind('Trajecten', 'rk-nf');
+    eis(Math.round((na - voor) * 100) === 100000 && ctx.nogTeFacturerenVan(tNf, [ctx.vind('Facturen', 'rk-nf-1')]) === 100000, 'R10: één project met contract € 1.200 en een verzonden termijn van € 200 geeft op Home precies 1000 (euro) erbij, de helper 100000 (centen)');
+    var telH = leesTeller(function () { roep(FEMKE, 'apiHome'); roep(SOPHIE, 'apiHome'); });
+    eis(!telH.TalentUren && !telH.TalentUren_archief, 'R9: Home leest TalentUren niet (nog te factureren zonder uren)');
+    // contractwaarde: bedrijfscijfer = Vandaag = de som van het contract uit Financiën voor de projecten van het schooljaar (niet gestopt, offerte, onduidelijk)
+    var fin2 = roep(SOPHIE, 'apiFinancien', sj), contract = 0;
+    fin2.scholen.forEach(function (s) { s.projecten.forEach(function (p) { if (p.schooljaar === sj && ['gestopt', 'offerte', 'onduidelijk'].indexOf(p.status) < 0) contract += p.contract; }); });
+    var bc = ctx.bedrijfCijfers(), ov = roep(SOPHIE, 'apiOverzicht');
+    eis(Math.round(bc.cijfers.contractwaarde * 100) === contract && Math.round(ov.kpi.omzet * 100) === contract && !('omzet' in bc.cijfers) && bc.metrieken.some(function (m) { return m.id === 'contractwaarde'; }),
+      'contractwaarde: het bedrijfscijfer en Vandaag (kpi.omzet) zijn de som van het contract uit Financiën voor het schooljaar (' + contract / 100 + ')');
+    // gewogen pijplijn: waarde × fasegewicht van de mijlpaal; lead weegt 0; een percentage per kans telt niet meer
+    ctx.schrijfVeel('Kansen', [{ id: 'k8', kans: 99 }]); ctx._LEES = {};
+    var mp = ctx.mijlpaalMap(), k8 = ctx.kansUit(ctx.vind('Kansen', 'k8'), mp), k9 = ctx.kansUit(ctx.vind('Kansen', 'k9'), mp);
+    var pip = roep(SOPHIE, 'apiPipeline').kansen.filter(function (k) { return k.id === 'k8'; })[0];
+    eis(k8.fase === 'gesprek' && k8.kans === 25 && k8.gewogen === Math.round(k8.waarde * 25 / 100) && pip.gewogen === k8.gewogen && k9.fase === 'lead' && k9.kans === 0 && k9.gewogen === 0,
+      'gewogen = waarde × fasegewicht van de mijlpaal (gesprek 25%, ook als de kans zelf 99% zegt); de leadfase weegt 0');
+    var home = roep(SOPHIE, 'apiHome').pipeline, open = roep(SOPHIE, 'apiPipeline').kansen.filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; });
+    eis(home.gewogen === open.reduce(function (s, k) { return s + k.gewogen; }, 0), 'Home: de gewogen pijplijn is de som van dezelfde gewogen waarden als de pipeline');
+    // voorstellen: een losse tijdlijnregel telt niet, een wissel wel
+    var vanW = plusDagen(-3), totW = plusDagen(0), c0 = consultancyTotaal(vanW, totW);
+    ctx.schrijf('Activiteiten', { type: 'fase', datum: plusDagen(-1) + ' 10:00', door: 'Lars Visser', schoolId: 's1', kansId: 'k16', onderwerp: 'Mijlpaal: gesprek → voorstel', bron: 'app', aangemaakt: plusDagen(-1) + ' 10:00' });
+    var c1 = consultancyTotaal(vanW, totW);
+    roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'voorstel', _oud: { fase: 'gesprek' } });
+    var c2 = consultancyTotaal(vanW, totW);
+    eis(tVan(c1, 'voorstellen') === tVan(c0, 'voorstellen') && tVan(c2, 'voorstellen') === tVan(c0, 'voorstellen') + 1, 'voorstellen: een losse tijdlijnregel "Mijlpaal: x → voorstel" telt niet, een wissel wel');
+  } catch (e) { eis(false, 'v7.9 één definitie per naam: onverwachte fout ' + e.message); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: datacontracten (punt 9): per contract een geval dat slaagt en een geval dat zakt, de vijf regressies uit de Mac-code, de pure functie (R16) ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var sj = sjNu(), vandaag = plusDagen(0), wk = ctx.isoWeekStr(new CtxDate79()), open = function (S) { return S.kansen.filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; }); };
+    var C0 = contractenOp();
+    eis(ctx.CONTRACTEN.length === 19 && ctx.CONTRACTEN.every(function (c) { return C0[c[0]] && ctx.CONTRACT_STANDEN.indexOf(C0[c[0]].stand) >= 0; }), 'negentien contracten, elk met een stand uit geslaagd, gezakt, niet getoetst of geblokkeerd');
+    function paar(id, goed, fout, extra) {
+      var G = contractenOp(goed)[id], F = contractenOp(fout)[id];
+      eis(G.stand === 'geslaagd' && F.stand === 'gezakt' && F.afwijkingen.length > 0 && (!extra || extra(G, F)), 'contract ' + id + ': slaagt (' + G.stand + (G.reden ? ', ' + G.reden : '') + ') en zakt (' + F.stand + ', ' + F.afwijkingen.length + ' afwijking(en))');
+    }
+    var vulVv = function (S) { open(S).forEach(function (k) { if (S.vanafVoorstel[k.id]) { k.waarde = 1000; k.verwachteSluiting = ctx.plusDagenVan(vandaag, 10); } }); };
+    paar('waarde_vanaf_voorstel', vulVv, function (S) { vulVv(S); var k = open(S).filter(function (x) { return S.vanafVoorstel[x.id]; })[0]; k.waarde = 0; }, function (G, F) { return F.afwijkingen[0].soort === 'kans'; });
+    paar('sluitdatum_vanaf_voorstel', vulVv, function (S) { vulVv(S); open(S).filter(function (x) { return S.vanafVoorstel[x.id]; })[0].verwachteSluiting = plusDagen(-1); });
+    eis(contractenOp()['dekking_robuust'].stand === 'niet getoetst', 'contract dekking_robuust: zonder aanname dekkingTolerantie niet getoetst (nooit geslaagd)');
+    paar('dekking_robuust', function (S) { S.normen.dekkingTolerantie = 0.5; open(S).forEach(function (k) { k.waarde = 1000; }); },
+      function (S) { S.normen.dekkingTolerantie = 0.0001; var k = open(S).filter(function (x) { return String(x.schooljaar) === sj && S.gewicht[x.id] > 0; })[0]; k.waarde = 0; });
+    eis(contractenOp()['geen_bulk_op_werkelijke_datum'].stand === 'niet getoetst', 'contract geen_bulk_op_werkelijke_datum: zonder aanname bulkDrempel niet getoetst');
+    paar('geen_bulk_op_werkelijke_datum', function (S) { S.normen.bulkDrempel = 100; }, function (S) {
+      S.normen.bulkDrempel = 1; ['rk-bulk1', 'rk-bulk2'].forEach(function (id, i) { S.wissels.push(cx({ id: id, kansId: 'k8', van: 'lead', naar: 'gesprek', werkelijkeDatum: vandaag, ingevoerdOp: vandaag + ' 10:0' + i, eigenaar: 'Noor Hendriks', bron: 'bulk', zekerheid: 'vastgelegd' })); }); });
+    paar('actieve_eigenaar', null, function (S) { open(S)[0].eigenaar = 'Oud-collega Verzonnen'; }, function (G, F) { return F.afwijkingen[0].eigenaar === 'beheerder'; });
+    paar('geen_dubbele_open_kansen', null, function (S) { var k = open(S)[0], kopie = cx(k); kopie.id = 'rk-dubbel'; kopie.eigenaar = k.eigenaar === 'Lars Visser' ? 'Noor Hendriks' : 'Lars Visser'; S.kansen.push(kopie); },
+      function (G, F) { return F.afwijkingen.some(function (a) { return a.id === 'rk-dubbel'; }); });
+    // verliesdiscipline: (a) elke eigenaar met open kansen zette dit schooljaar een kans op verloren; (b) geen open kans langer stil dan de norm
+    var verlorenVoorIeder = function (S) { S.normen.verliesNormWeken = 1000; open(S).forEach(function (k, i) { S.wissels.push(cx({ id: 'rk-vl' + i, kansId: 'rk-x' + i, van: 'voorstel', naar: 'verloren', werkelijkeDatum: vandaag, ingevoerdOp: vandaag + ' 10:00', eigenaar: k.eigenaar, bron: 'verloren', reden: 'te duur', zekerheid: 'vastgelegd' })); }); };
+    paar('verliesdiscipline', verlorenVoorIeder, function (S) { verlorenVoorIeder(S); S.wissels = S.wissels.filter(function (w) { return !(w.naar === 'verloren' && w.eigenaar === 'Lars Visser'); }); },
+      function (G, F) { return F.afwijkingen.some(function (a) { return a.eigenaar === 'Lars Visser' && a.soort === 'regel'; }); });
+    var alleenGewonnen = contractenOp(function (S) { S.normen.verliesNormWeken = 1000; S.wissels = S.wissels.filter(function (w) { return w.naar !== 'verloren'; }); open(S).forEach(function (k, i) { S.wissels.push(cx({ id: 'rk-w' + i, kansId: 'rk-y' + i, van: 'voorstel', naar: 'gewonnen', werkelijkeDatum: vandaag, ingevoerdOp: vandaag + ' 10:00', eigenaar: k.eigenaar, bron: 'winformulier', zekerheid: 'vastgelegd' })); }); }).verliesdiscipline;
+    eis(alleenGewonnen.stand === 'gezakt', 'regressie 1 (Mac-code): een eigenaar die alleen kansen won, zakt voor verliesdiscipline (gewonnen telt niet als gesloten)');
+    eis(contractenOp(function (S) { verlorenVoorIeder(S); S.normen.verliesNormWeken = null; }).verliesdiscipline.stand === 'niet getoetst', 'contract verliesdiscipline: zonder aanname verliesNormWeken is het tweede deel niet getoetst (nooit geslaagd)');
+    // weekdoel: exact deze ISO-week (regressie 2: de vergelijking op het einde van het weeknummer)
+    var metDoelen = function (sleutel) { return function (S) { S.doelen = S.doelen.filter(function (d) { return d.periode !== 'week'; }); S.consultancy.forEach(function (n) { S.doelen.push(cx({ id: 'rk-wd-' + n, eigenaar: n, periode: 'week', metric: 'ap', doel: 2, periodeSleutel: sleutel })); }); }; };
+    var nep = wk.slice(0, 6) + '0' + wk.slice(-1);  // hetzelfde laatste cijfer, een andere week (bijv. 2026-W46 → 2026-W06)
+    if (nep === wk) nep = wk.slice(0, 6) + '1' + wk.slice(-1);
+    paar('weekdoel_voor_deze_week', metDoelen(wk), metDoelen(nep));
+    eis(nep !== wk && nep.slice(-1) === wk.slice(-1) && contractenOp(metDoelen(nep)).weekdoel_voor_deze_week.afwijkingen.length === ctx.teamNamen('consultancy').length, 'regressie 2 (Mac-code): een weekdoel voor ' + nep + ' telt niet voor ' + wk + ' (exacte vergelijking)');
+    var schoneWissels = function (S) { S.wissels = S.wissels.filter(function (w) { var inv = String(w.ingevoerdOp).slice(0, 10); return !(inv >= sj.slice(0, 4) + '-08-01') || (w.werkelijkeDatum && w.werkelijkeDatum <= inv && (['import', 'capsule', 'reconstructie', 'tijdlijn'].indexOf(w.bron) < 0 || w.zekerheid)); }); };
+    paar('fasewissel_heeft_werkelijke_datum', schoneWissels, function (S) { schoneWissels(S); S.wissels.push(cx({ id: 'rk-zd', kansId: 'k6', van: 'gesprek', naar: 'voorstel', werkelijkeDatum: '', ingevoerdOp: vandaag + ' 09:00', eigenaar: 'Noor Hendriks', bron: 'import', zekerheid: '' })); });
+    var ld = contractenOp(function (S) { S.normen.bulkDrempel = 100; }).logdekking;
+    eis(ld.stand === 'geblokkeerd' && /agenda-toegang/.test(ld.reden) && C0.logdekking.stand === 'geblokkeerd', 'regressie 3 (Mac-code): logdekking is geblokkeerd tot besluit 10 en nooit geslaagd zonder meting');
+    var brinAlle = function (S) { S.scholen.forEach(function (s, i) { s.brin = s.brin || '98X' + String.fromCharCode(65 + (i % 26)); }); };
+    paar('school_heeft_brin', brinAlle, function (S) { brinAlle(S); S.scholen.filter(function (s) { return s.id === 's11'; })[0].brin = ''; });
+    // R12: een verzonnen particulier zonder BRIN met een open kans in een gewogen fase zakt zonder scope en niet met scope ['particulier']
+    var part = function (scope) { return function (S) { brinAlle(S); S.scholen.push(cx({ id: 'rk-part', naam: 'Bijles Verzonnen', type: 'Particulier', brin: '', eigenaar: 'Noor Hendriks' })); var k = cx({ id: 'rk-pk', naam: 'Bijles', school: 'Bijles Verzonnen', schoolId: 'rk-part', fase: 'gesprek', pipeline: 'Scholen', eigenaar: 'Noor Hendriks', schooljaar: sj, klant: 'nieuw', productsoort: 'overig' }); S.kansen.push(k); S.rol[k.id] = 'ap'; S.vanafVoorstel[k.id] = false; S.scope = scope ? cx(scope) : null; }; };
+    eis(contractenOp(part(null)).school_heeft_brin.stand === 'gezakt' && contractenOp(part(['particulier'])).school_heeft_brin.stand === 'geslaagd', 'R12: een particulier zonder BRIN zakt school_heeft_brin zonder scope en niet met scope [particulier]');
+    // noemerbewaking (N12, B3)
+    var scopes = cx({ 1: ['particulier'] });
+    var nb = function (j) { return contractenOp(function (S) { S.jaardoel = j ? cx(j) : null; S.scopeVersies = scopes; }).noemerbewaking; };
+    eis(nb(null).stand === 'geblokkeerd' && /besluit jaardoel/.test(nb(null).reden) && nb({ noemer: 'contracteerdoel', contracteerdoel: { waarde: 100000 } }).stand === 'geblokkeerd', 'N12: noemerbewaking zonder (volledig) jaardoel geblokkeerd, ook met een los contracteerdoel');
+    eis(nb({ soort: 'netto-omzet', periode: 'boekjaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000 }).stand === 'gezakt' && nb({ soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000 }).stand === 'geslaagd' &&
+      nb({ soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v7', noemer: 'jaardoel', waarde: 500000 }).stand === 'geblokkeerd', 'contract noemerbewaking: zakt met een netto-omzetdoel als noemer, slaagt met contractwaarde per schooljaar; een scope zonder vastgelegde versie maakt het jaardoel onvolledig');
+    paar('geen_target_op_facturatie', function (S) { S.doelVersies = cx([]); }, function (S) { S.doelVersies = cx([{ id: 'aa-doelpadCurve-v1', naam: 'doelpadCurve', waarde: { bron: 'gefactureerd', totaal: [[0, 0]] } }]); });
+    var getekendAlle = function (S) { S.wissels.forEach(function (w) { if (w.naar === 'gewonnen' && !w.werkelijkeDatum) w.werkelijkeDatum = String(w.ingevoerdOp).slice(0, 10); }); S.kansen.filter(function (k) { return k.fase === 'gewonnen'; }).forEach(function (k) { S.trajecten.push(cx({ id: 'rk-t-' + k.id, kansId: k.id, contractwaarde: 1000, status: 'afgelopen', schooljaar: sj })); }); };
+    paar('gewonnen_is_getekend', getekendAlle, function (S) { getekendAlle(S); S.wissels.push(cx({ id: 'rk-gw', kansId: 'rk-gk', van: 'voorstel', naar: 'gewonnen', werkelijkeDatum: vandaag, ingevoerdOp: vandaag + ' 11:00', eigenaar: 'Lars Visser', bron: 'winformulier', zekerheid: 'vastgelegd' })); S.trajecten.push(cx({ id: 'rk-gt', kansId: 'rk-gk', contractwaarde: '', status: 'opstart', schooljaar: sj })); },
+      function (G, F) { return F.afwijkingen.some(function (a) { return a.id === 'rk-gk' && a.eigenaar === 'Lars Visser'; }); });
+    var contractAlle = function (S) { S.normen.overstapDatum = '2999-01-01'; S.trajecten.forEach(function (t) { t.contractwaarde = t.contractwaarde || 1000; }); };
+    eis(contractenOp(function (S) { S.trajecten.forEach(function (t) { t.contractwaarde = t.contractwaarde || 1000; }); }).lopend_project_heeft_contract.stand === 'niet getoetst', 'contract lopend_project_heeft_contract: zonder overstapdatum is het kansId-deel niet getoetst');
+    paar('lopend_project_heeft_contract', contractAlle, function (S) { contractAlle(S); S.trajecten.filter(function (t) { return ctx.projectLopend(t); })[0].contractwaarde = ''; });
+    paar('kans_heeft_schooljaar_en_klant', null, function (S) { open(S)[0].klant = ''; });
+    var nummersUniek = function (S) { S.facturen.forEach(function (f, i) { f.factuurnummer = String(20260000 + i); }); };
+    paar('termijn_verzonden_heeft_factuurnummer', nummersUniek, function (S) { nummersUniek(S); var v = S.facturen.filter(function (f) { return f.status === 'verzonden' || f.status === 'betaald'; }); v[1].factuurnummer = v[0].factuurnummer; });
+    var tariefGoed = function (S) { S.normen.standaardTarief = 1; S.trajecten.forEach(function (t) { t.tarief = 45; t.xpsProject = t.xpsProject || '10.000'; }); };
+    eis(contractenOp(function (S) { S.trajecten.forEach(function (t) { t.tarief = 45; t.xpsProject = t.xpsProject || '10.000'; }); }).tarief_echt.stand === 'niet getoetst', 'contract tarief_echt: zonder aanname standaardTarief is het standaarddeel niet getoetst');
+    paar('tarief_echt', tariefGoed, function (S) { tariefGoed(S); var metUren = {}; S.uren.forEach(function (u) { metUren[u.trajectId] = true; }); S.trajecten.filter(function (t) { return ctx.projectLopend(t) && metUren[t.id]; })[0].tarief = 0; });
+    var vorig = ctx.vorigSchooljaar(sj), verlAlle = function (S) { S.trajecten.forEach(function (t) { if (t.schooljaar === vorig) t.verlenging = t.verlenging || 'verlengd'; }); };
+    paar('verlenging_bekend', verlAlle, function (S) { verlAlle(S); S.trajecten.push(cx({ id: 'rk-vb', schooljaar: vorig, status: 'afgelopen', am: 'Femke de Wit', verlenging: '' })); });
+    // rolcontracten geblokkeerd zonder rollen (B1), nooit geslaagd
+    rollenWeg(); var CR = contractenOp(); standTerug(SEED79); ctx._LEES = {};
+    eis(['waarde_vanaf_voorstel', 'sluitdatum_vanaf_voorstel', 'school_heeft_brin'].every(function (id) { return CR[id].stand === 'geblokkeerd' && /rollen niet ingesteld/.test(CR[id].reden); }), 'B1: zonder ingestelde rollen staan waarde_vanaf_voorstel, sluitdatum_vanaf_voorstel en school_heeft_brin op geblokkeerd');
+    // regressie 4: een sluiting zonder wissel gaf geen event; apiImporteer('kansen') met fase gewonnen geeft een wissel (bron import) die als deal telt
+    roep(SOPHIE, 'apiImporteer', 'kansen', [{ id: 'rk-imp', naam: 'Import gewonnen', school: 'Esdoorn Lyceum', schoolId: 's1', fase: 'gewonnen', gesloten: plusDagen(-2), eigenaar: 'Noor Hendriks', waarde: 4000 }]); ctx._LEES = {};
+    eis(ctx.dealWissels().some(function (w) { return w.kansId === 'rk-imp' && w.bron === 'import'; }), 'regressie 4 (Mac-code): een sluiting uit de import geeft een wissel die als deal telt');
+    // regressie 5: een gesloten kans zonder reden telde als gewonnen; verloren zonder reden is nooit een deal (M08, score van M13)
+    var m08voor = mtCijfers().gewonnenWaarde.extra.aantal, dealsVoor = ctx.dealsTussen(plusDagen(-3), plusDagen(0));
+    ctx.schrijf('Kansen', { id: 'rk-vz', naam: 'Verloren zonder reden', school: 'Esdoorn Lyceum', schoolId: 's1', fase: 'verloren', verliesReden: '', gesloten: plusDagen(-1), eigenaar: 'Lars Visser', waarde: 5000, pipeline: 'Scholen' });
+    ctx.fasewisselsSchrijven([ctx.faseWisselRij(ctx.vind('Kansen', 'rk-vz'), 'voorstel', 'verloren', { bron: 'import', datum: plusDagen(-1), zekerheid: 'laag', id: 'rk-vz-w' })]); ctx._LEES = {};
+    eis(!ctx.dealWissels().some(function (w) { return w.kansId === 'rk-vz'; }) && mtCijfers().gewonnenWaarde.extra.aantal === m08voor && ctx.dealsTussen(plusDagen(-3), plusDagen(0)) === dealsVoor, 'regressie 5 (Mac-code): verloren zonder reden telt nooit als deal (M08 en de score van M13)');
+    // R16: de pure functie geeft voor elke GEBRUIKER dezelfde uitkomst en zet GEBRUIKER niet om
+    vers79(); var S = ctx.standVoorContracten(vandaag), uit = [];
+    [null, { id: 'g-lars', naam: 'Lars Visser', team: 'consultancy', rol: 'medewerker' }, { id: 'g-femke', naam: 'Femke de Wit', team: 'accountmanagement', rol: 'medewerker' }].forEach(function (g) { ctx.GEBRUIKER = g; uit.push(JSON.stringify(ctx.datacontracten(S))); uit.push(ctx.GEBRUIKER === g ? 'zelfde' : 'OMGEZET'); });
+    ctx.GEBRUIKER = null;
+    eis(uit[0] === uit[2] && uit[2] === uit[4] && uit[1] === 'zelfde' && uit[3] === 'zelfde' && uit[5] === 'zelfde' && !/\bmag\(|isBeheerder\(|ikNaam\(|GEBRUIKER/.test(String(ctx.datacontracten)), 'R16: datacontracten is puur: dezelfde uitkomst voor drie gebruikers, GEBRUIKER blijft staan, geen mag/isBeheerder/ikNaam in de functie');
+  } catch (e) { eis(false, 'v7.9 datacontracten: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: datakwaliteit en meldingen (punt 10; R3, N12) ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var vandaag = plusDagen(0), dqMeld = function () { return ctx.lees('Meldingen').filter(function (m) { return m.link === 'rapport:datakwaliteit'; }); };
+    eis(ctx.lees('Datakwaliteit').some(function (r) { return r.dag === vandaag; }) && ctx.datakwaliteitDag(vandaag).al === true, 'de seed heeft de datacontracten van vandaag; een tweede run dezelfde dag schrijft niets');
+    ctx.verwijderRijen('Datakwaliteit', function () { return true; });
+    // een open kans met een eigenaar die niet (meer) actief is: actieve_eigenaar zakt; de beheerder (management, ook de eigenaar van het script) krijgt de melding
+    ctx.schrijf('Kansen', { id: 'rk-oud', naam: 'Kans van een oud-collega', school: 'Esdoorn Lyceum', schoolId: 's1', fase: 'gesprek', pipeline: 'Scholen', eigenaar: 'Oud-collega Verzonnen', waarde: 1000, schooljaar: sjNu(), klant: 'nieuw', productsoort: 'overig', aangemaakt: plusDagen(-3) + ' 09:00' });
+    ctx._LEES = {}; ctx.GEBRUIKER = null;
+    var r = ctx.datakwaliteitDag(vandaag), rijen = ctx.lees('Datakwaliteit').filter(function (x) { return x.dag === vandaag; }), C = {}; ctx.datacontracten(ctx.standVoorContracten(vandaag)).forEach(function (c) { C[c.id] = c; });
+    var klopt = Object.keys(C).every(function (id) {
+      var eigen = rijen.filter(function (x) { return x.contract === id; });
+      if (C[id].stand !== 'gezakt') return eigen.length === 1 && eigen[0].eigenaar === 'beheerder' && eigen[0].stand === C[id].stand && Number(eigen[0].aantal) === 0;
+      var per = {}; C[id].afwijkingen.forEach(function (a) { per[a.eigenaar] = (per[a.eigenaar] || 0) + 1; });
+      return eigen.length === Object.keys(per).length && eigen.every(function (x) { return x.stand === 'gezakt' && Number(x.aantal) === per[x.eigenaar] && JSON.parse(x.verwijzingen).length === Math.min(50, per[x.eigenaar]); });
+    });
+    eis(!r.al && r.rijen === rijen.length && klopt, 'datakwaliteit: per gezakt contract één rij per eigenaar (aantal en hoogstens 50 verwijzingen), per ander contract één rij voor de beheerder');
+    var m = dqMeld(), perVoor = {}; m.forEach(function (x) { perVoor[x.voor] = (perVoor[x.voor] || 0) + 1; });
+    var beheer = m.filter(function (x) { return x.voor === 'Sophie de Graaf'; })[0];
+    eis(m.length === r.meldingen && Object.keys(perVoor).every(function (v) { return perVoor[v] === 1; }) && !!beheer && beheer.door === 'Athena' && /Elke open kans heeft een actieve eigenaar/.test(beheer.tekst),
+      'R3: één melding per ontvanger; de beheerder (eigenaar van het script, in een trigger ikNaam()) krijgt de melding voor actieve_eigenaar met door Athena');
+    eis(m.every(function (x) { return !/Logdekking|Noemerbewaking/.test(x.tekst); }), 'N12: geblokkeerd of niet getoetst geeft geen melding (logdekking, noemerbewaking)');
+    var n0 = ctx.lees('Datakwaliteit').length, nm = dqMeld().length, r2 = ctx.datakwaliteitDag(vandaag);
+    eis(r2.al && ctx.lees('Datakwaliteit').length === n0 && dqMeld().length === nm, 'datakwaliteit: een tweede run dezelfde dag schrijft geen rijen en geen meldingen');
+    // R3: tijdbewaking per stap (nagebootste klok: elke aanroep van Date.now() drie minuten later)
+    var echtKlok = ctx.sturingKlok, n = 0, t0 = echtKlok(); ctx.sturingKlok = function () { return t0 + (n++) * 3 * 60000; };
+    var uit; try { uit = ctx.sturingTrigger(); } finally { ctx.sturingKlok = echtKlok; }
+    eis(uit && typeof uit.datakwaliteit === 'object' && uit.voorspelling === 'overgeslagen (tijd)' && uit.bevroren === 'overgeslagen (tijd)' && ctx._demoProps.LAATSTE_STURING, 'R3: na vier minuten slaat sturingTrigger de volgende stappen over ("overgeslagen (tijd)"); de volgende run haalt ze in');
+    // archiveer: datakwaliteit ouder dan 90 dagen weg, Fasewissels blijven staan
+    ctx.schrijf('Datakwaliteit', { id: 'dq-oud', dag: plusDagen(-100), contract: 'logdekking', eigenaar: 'beheerder', stand: 'geblokkeerd', aantal: 0, verwijzingen: '[]', aangemaakt: plusDagen(-100) + ' 06:45' });
+    var fw = ctx.lees('Fasewissels').length, ar = ctx.archiveer();
+    eis(!ctx.vind('Datakwaliteit', 'dq-oud') && ar.datakwaliteit >= 1 && ctx.lees('Fasewissels').length === fw && ctx.lees('Datakwaliteit').some(function (x) { return x.dag === vandaag; }), 'archiveer(): datakwaliteit ouder dan 90 dagen weg, die van vandaag en alle Fasewissels blijven');
+  } catch (e) { eis(false, 'v7.9 datakwaliteit en meldingen: onverwachte fout ' + e.message); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: voorspellingen (punt 18; R3, N8) ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var ma = ctx.maandagVan(plusDagen(-14)), maS = ctx.datumStr(ma), dag = function (basis, n) { return ctx.plusDagenVan(basis, n); };  // een maandag twee weken terug: elke werkelijke datum ligt in het verleden
+    // een bekende reeks: twaalf hele weken vóór deze week met 0, 1, 2, 0, 3, 1, 0, 0, 2, 1, 4, 0 deals (oudste eerst); per kans één deal
+    var REEKS = [0, 1, 2, 0, 3, 1, 0, 0, 2, 1, 4, 0], kop = ctx.TABELLEN.Fasewissels, nr = 0;
+    ctx._demoBladen.Fasewissels.rijen.length = 1; ctx._demoBladen.Voorspellingen.rijen.length = 1; ctx._LEES = {};
+    var rij = function (o) { nr++; var k = { id: o.kansId, schoolId: 's1', eigenaar: 'Lars Visser', waarde: 1000, pipeline: 'Scholen', fase: o.naar }; return ctx.faseWisselRij(k, o.van || 'voorstel', o.naar, { bron: 'demo', datum: o.datum, ingevoerdOp: o.datum + ' 10:00', door: 'Lars Visser', id: 'rk-vs-' + nr }); };
+    var rijen = [];
+    REEKS.forEach(function (c, i) { var woensdag = dag(maS, -7 * (12 - i) + 2); for (var j = 0; j < c; j++) rijen.push(rij({ kansId: 'rk-vk-' + i + '-' + j, naar: 'gewonnen', datum: woensdag })); });
+    ctx.fasewisselsSchrijven(rijen); ctx._LEES = {};
+    var v = ctx.voorspelDealsWeek(ma);
+    eis(v.verwacht === 1.2 && v.onder === 0 && v.boven === 3 && v.model === 'gemiddelde-hele-weken' && v.id === 'vd-' + ctx.isoWeekStr(ma) && v.van === maS && v.tot === dag(maS, 6), 'M13: twaalf hele weken met nulweken → verwacht 1,2, p10 0, p90 3 (nearest rank); id per ISO-week, van maandag t/m zondag');
+    var r1 = ctx.voorspellingenRun(maS), n1 = ctx.lees('Voorspellingen').length, r2 = ctx.voorspellingenRun(maS);
+    eis(r1.voorspeld === 2 && r2.voorspeld === 0 && ctx.lees('Voorspellingen').length === n1, 'een tweede run op dezelfde maandag schrijft niets (idempotent op id)');
+    // deze week: twee deals, een verloren kans zonder reden (telt nooit) en een kans die gewonnen, heropend en opnieuw gewonnen wordt (telt één keer, N8)
+    var extra = [rij({ kansId: 'rk-dw-1', naar: 'gewonnen', datum: dag(maS, 1) }), rij({ kansId: 'rk-dw-2', naar: 'gewonnen', datum: dag(maS, 2) }), rij({ kansId: 'rk-vz', naar: 'verloren', datum: dag(maS, 2) }),
+      rij({ kansId: 'rk-her', naar: 'gewonnen', datum: dag(maS, 1) }), rij({ kansId: 'rk-her', van: 'gewonnen', naar: 'gesprek', datum: dag(maS, 2) }), rij({ kansId: 'rk-her', van: 'gesprek', naar: 'gewonnen', datum: dag(maS, 3) })];
+    ctx.fasewisselsSchrijven(extra); ctx._LEES = {};
+    var volgendeMa = dag(maS, 7), r3 = ctx.voorspellingenRun(volgendeMa), vd = ctx.vind('Voorspellingen', 'vd-' + ctx.isoWeekStr(ma)), vo = ctx.vind('Voorspellingen', 'vo30-' + maS);
+    eis(r3.gescoord >= 1 && Number(vd.werkelijk) === 3 && vd.gescoord && Number(vd.fout) === 1.8 && vd.binnenInterval === 'ja', 'scoren na de week: werkelijk 3 (twee deals plus één keer de heropende kans; verloren zonder reden telt niet), fout 1,8, binnen het interval');
+    eis(!vo.gescoord, 'M19 (opdrachten in 30 dagen) wordt pas na 30 dagen gescoord');
+    ctx.voorspellingenRun(dag(maS, 31)); ctx._LEES = {};
+    eis(!!ctx.vind('Voorspellingen', 'vo30-' + maS).gescoord, 'M19 na 30 dagen gescoord');
+    // R3: een run op dinsdag zonder maandagrij schrijft "gemist" (geen getal) en een gemiste rij wordt niet gescoord
+    ctx._demoBladen.Voorspellingen.rijen.length = 1; ctx._LEES = {};
+    var dinsdag = dag(maS, 1), r4 = ctx.voorspellingenRun(dinsdag), gemist = ctx.vind('Voorspellingen', 'vd-' + ctx.isoWeekStr(ma));
+    eis(r4.gemist === 2 && r4.voorspeld === 0 && gemist.model === 'gemist' && gemist.verwacht === '', 'R3: een run op dinsdag zonder maandagrij legt "gemist" vast, nooit een voorspelling achteraf');
+    ctx.voorspellingenRun(dag(maS, 8)); ctx._LEES = {};
+    eis(!ctx.vind('Voorspellingen', 'vd-' + ctx.isoWeekStr(ma)).gescoord && mtCijfers().voorspellingDeals.extra.gemist >= 1, 'een gemiste week wordt niet gescoord; het MT-overzicht telt hem bij M13');
+  } catch (e) { eis(false, 'v7.9 voorspellingen: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: sturingsweergaven (punt 11, 19, 20; B1, B3, R6, R12, R15, R16) ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    // --- week: rechten, beheerderregel, direct en zonder datum, exacte week, vertraging in kalenderdagen, geblokkeerd zonder rollen ---
+    var wS = roep(SOPHIE, 'apiSturing', 'week', {}), wL = roep(LARS, 'apiSturing', 'week', {}), wY = roep(YARA, 'apiSturing', 'week', {});
+    var namen = function (w) { return w.rijen.map(function (r) { return r.naam; }).sort().join(','); };
+    eis(namen(wL) === 'Lars Visser' && namen(wY) === 'Lars Visser,Noor Hendriks,Yara El Amrani' && namen(wS) === 'Lars Visser,Noor Hendriks,Yara El Amrani,beheerder' && /toegang/.test(faalt(FEMKE, 'apiSturing', 'week', {})) && /toegang/.test(faalt('demo-sem', 'apiSturing', 'week', {})),
+      'week: een OC ziet zichzelf, de teamlead zijn team, management iedereen plus de regel beheerder; AM en talent geen toegang');
+    var somTeam = wS.rijen.filter(function (r) { return r.naam !== 'beheerder'; }).reduce(function (s, r) { return s + r.cijfers.contactmomenten; }, 0);
+    eis(wS.totaal.cijfers.contactmomenten === somTeam && wL.totaal.cijfers.contactmomenten === somTeam, 'week: het teamtotaal is de som van de OC\'s (de beheerder telt niet mee) en een OC ziet hetzelfde teamtotaal (R8)');
+    var w0 = wL.rijen[0].cijfers;
+    roep(LARS, 'apiKansOpslaan', { naam: 'Direct in voorstel', schoolId: 's7', fase: 'voorstel', waarde: 2000, verwachteSluiting: plusDagen(20) });
+    ctx.fasewisselsSchrijven([ctx.faseWisselRij(ctx.vind('Kansen', 'k16'), 'gesprek', 'voorstel', { bron: 'import', datum: '', zekerheid: '', id: 'rk-zd-w', ingevoerdOp: ctx.nu() })]);
+    ctx.fasewisselsSchrijven([ctx.faseWisselRij(ctx.vind('Kansen', 'k16'), 'lead', 'gesprek', { bron: 'demo', datum: plusDagen(-7 - ctx.isoDag(new CtxDate79())), id: 'rk-vw-w' })]); ctx._LEES = {};
+    var w1 = roep(LARS, 'apiSturing', 'week', {}).rijen[0].cijfers;
+    eis(w1.direct === w0.direct + 1 && w1.voorstellen === w0.voorstellen + 1 && w1.zonderDatum === w0.zonderDatum + 1 && w1.ap === w0.ap, 'week: aangemaakt in voorstel telt als VO met label direct; een wissel zonder werkelijke datum staat apart; een wissel van vorige week telt niet (exacte week)');
+    var D7 = vm.runInContext('Date', ctx), van0 = plusDagen(0), gisteren = plusDagen(-1);
+    eis(ctx.registratieDagen({ werkelijkeDatum: van0, ingevoerdOp: van0 + ' 23:30' }) === 0 && ctx.registratieDagen({ werkelijkeDatum: gisteren, ingevoerdOp: van0 + ' 00:01' }) === 1 && ctx.mediaan(cx([3, 1, 2])) === 2 && ctx.mediaan(cx([1, 2, 3, 4])) === 2.5,
+      'R15: registratievertraging in kalenderdagen (vandaag 23:30 = 0, gisteren → vandaag 00:01 = 1); mediaan');
+    vers79(); rollenWeg();
+    var wB = roep(SOPHIE, 'apiSturing', 'week', {}), r0 = wB.totaal;
+    eis(!wB.rollenIngesteld && r0.cijfers.ap === null && r0.cijfers.voorstellen === null && /rollen niet ingesteld/.test(r0.geblokkeerd.ap) && typeof r0.cijfers.gewonnen === 'number', 'B1: zonder rollen geven AP, AD en VO in de week geen 0 maar geblokkeerd; deals tellen wel');
+    var mB = mtCijfers();
+    eis(['M12', 'M18', 'M19'].every(function (m) { return /rollen niet ingesteld/.test(mB[m].geblokkeerd) && mB[m].waarde === ''; }) && mB.M08.waarde !== '' && !mB.M08.geblokkeerd, 'B1: zonder rollen zijn M12, M18 en M19 geblokkeerd; M08 telt wel');
+    vers79();
+    // --- mt: definitie bij elk cijfer, uitsplitsingen sommeren, de noemerregel (B3), scope (R12), rechten ---
+    var M0 = mtCijfers(), r = M0._r;
+    eis(r.blokken.length === 9 && r.blokken.every(function (b) { return b.cijfers.every(function (c) { return c.def && c.def.definitie && typeof c.def.versie === 'number' && c.def.status; }); }), 'mt: negen blokken; elk cijfer heeft een definitie, versie en status uit het register');
+    var somFout = []; r.blokken.forEach(function (b) { b.cijfers.forEach(function (c) { if (!c.uitsplitsing.length || c.waarde === '') return; var s = c.uitsplitsing.reduce(function (a, u) { return a + Number(u.waarde); }, 0); if (Math.abs(s - Number(c.waarde)) > 0.011) somFout.push(c.m + ' ' + s + ' ≠ ' + c.waarde); }); });
+    eis(!somFout.length, 'mt: de uitsplitsingen sommeren tot het totaal' + (somFout.length ? ': ' + somFout.join('; ') : ''));
+    var geenJd = ['M01', 'M05', 'M07', 'M11'].every(function (m) { return /besluit jaardoel/.test(M0[m].geblokkeerd) && M0[m].waarde === ''; });
+    eis(geenJd, 'B3: zonder jaardoel zijn M01, M05, M07 en M11 geblokkeerd ("besluit jaardoel") met waarde leeg');
+    aannameZet('scope', ['particulier']); aannameZet('doelpadCurve', { totaal: [[0, 0], [180, 0.5], [365, 1]], bron: 'reconstructie' });
+    aannameZet('jaardoel', { noemer: 'contracteerdoel', contracteerdoel: { waarde: 400000, afleiding: 'Rooktest' } });
+    var Ma = mtCijfers();
+    eis(['M01', 'M05', 'M07', 'M11'].every(function (m) { return /besluit jaardoel/.test(Ma[m].geblokkeerd) && Ma[m].waarde === ''; }), 'B3: een ingevuld contracteerdoel zonder volledig jaardoel → M01, M05, M07 en M11 geblokkeerd, waarde leeg (geen terugval)');
+    aannameZet('jaardoel', { soort: 'netto-omzet', periode: 'boekjaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 900000 });
+    var Mb = mtCijfers();
+    eis(Mb.M01.waarde === 900000 && /teller is contractwaarde per schooljaar/.test(Mb.M05.geblokkeerd) && /teller is contractwaarde per schooljaar/.test(Mb.M07.geblokkeerd) && Mb.M07.waarde === '', 'B3: een netto-omzetdoel per boekjaar met noemer jaardoel → M05 en M07 geblokkeerd (de teller is contractwaarde per schooljaar)');
+    aannameZet('retentie', 0.8);
+    aannameZet('jaardoel', { soort: 'netto-omzet', periode: 'boekjaar', scope: 'scope v1', noemer: 'contracteerdoel', waarde: 900000, contracteerdoel: { waarde: 400000, afleiding: 'Rooktest' } });
+    var Mc = mtCijfers();
+    eis(typeof Mc.M07.waarde === 'number' && Mc.M07.extra.noemerLabel === 'afgeleid contracteerdoel' && Mc.M07.extra.noemer === 400000 && typeof Mc.M05.waarde === 'number' && /afgeleid contracteerdoel/.test(Mc.M11.geblokkeerd || Mc.M03.extra.verdeling || ''),
+      'B3: noemer contracteerdoel met een geneste waarde → M05 en M07 berekend met het label "afgeleid contracteerdoel"');
+    aannameZet('jaardoel', { soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000 });
+    var Md = mtCijfers();
+    eis(Md.M07.waarde === Math.round(1000 * (Md.M04.waarde + Md.M06.waarde) / 500000) / 10 && Md.M07.extra.noemerLabel === 'jaardoel' && Md.M05.waarde === Math.round(500000 * ctx.curveOp(cx([[0, 0], [180, 0.5], [365, 1]]), Md.M05.extra.dag)),
+      'B3: een contractwaardedoel per schooljaar met noemer jaardoel → dekking = (M04 + M06) ÷ jaardoel en het doelpad op de curve');
+    // R12: een verzonnen particulier met een gewonnen kans telt mee in M04 zonder scope, niet met scope [particulier]
+    vers79();
+    ctx.schrijf('Scholen', { id: 'rk-part', naam: 'Bijles Verzonnen', type: 'Particulier', eigenaar: 'Noor Hendriks' });
+    ctx.schrijf('Kansen', { id: 'rk-pg', naam: 'Bijles', school: 'Bijles Verzonnen', schoolId: 'rk-part', fase: 'gewonnen', gesloten: plusDagen(-3), eigenaar: 'Noor Hendriks', waarde: 3000, schooljaar: sjNu(), klant: 'nieuw', pipeline: 'Scholen' });
+    ctx.schrijf('Trajecten', { id: 'rk-pt', school: 'Bijles Verzonnen', schoolId: 'rk-part', traject: 'Bijles', schooljaar: sjNu(), status: 'bezig', kansId: 'rk-pg', contractwaarde: 3000, omzet: 3000 }); ctx._LEES = {};
+    var zonder = mtCijfers().M04.waarde; aannameZet('scope', ['particulier']); var met = mtCijfers().M04;
+    eis(Math.round((zonder - met.waarde) * 100) === 300000 && /zonder: particulier/.test(met.extra.scope), 'R12: de particulier telt mee in M04 zonder scope en niet met scope [particulier]');
+    // R6: zolang er een verloren kans met een reden buiten de lijst is, zijn M12 en M21 niet getoetst; na de koppeling berekend
+    vers79();
+    ctx.schrijfVeel('Kansen', [{ id: 'k13', verliesReden: 'Te duur' }]); ctx._LEES = {};
+    var Mr = mtCijfers();
+    eis(/niet getoetst: verliesredenen niet gekoppeld/.test(Mr.M12.geblokkeerd) && /niet getoetst: verliesredenen niet gekoppeld/.test(Mr.M21.geblokkeerd) && Mr.M21.waarde === '', 'R6: met een vrije verliesreden buiten de lijst staan M12 en M21 op niet getoetst');
+    roep(SOPHIE, 'apiMigratieV79', 'redenen', { toepassen: true, koppeling: { 'Te duur': 'te duur' } }); var Mr2 = mtCijfers();
+    eis(!Mr2.M12.geblokkeerd && !Mr2.M21.geblokkeerd && typeof Mr2.M21.waarde === 'number', 'R6: na de koppeling (apiMigratieV79 redenen) worden M12 en M21 berekend');
+    eis(/toegang/.test(faalt(LARS, 'apiSturing', 'mt', {})) && /toegang/.test(faalt(YARA, 'apiSturing', 'mt', {})) && /toegang/.test(faalt(FEMKE, 'apiSturing', 'mt', {})) && !faalt(THOMAS, 'apiSturing', 'mt', {}) && /weergave/.test(faalt(SOPHIE, 'apiSturing', 'onzin', {})),
+      'mt: alleen management (ook geen teamlead); een onbekende weergave geeft een Nederlandse fout');
+    // --- datakwaliteit: eigen/team/alles, aantallen over zichtbare afwijkingen, vers alleen management, "kans van een collega" (R16) ---
+    vers79();
+    ctx.schrijf('Kansen', { id: 'rk-d1', naam: 'Dubbel', school: 'Esdoorn Lyceum', schoolId: 's1', fase: 'gesprek', pipeline: 'Scholen', eigenaar: 'Lars Visser', waarde: 1000, schooljaar: sjNu(), klant: 'nieuw', productsoort: 'surveillance' });
+    ctx.schrijf('Kansen', { id: 'rk-d2', naam: 'Dubbel van Noor', school: 'Esdoorn Lyceum', schoolId: 's1', fase: 'gesprek', pipeline: 'Scholen', eigenaar: 'Noor Hendriks', waarde: 1000, schooljaar: sjNu(), klant: 'nieuw', productsoort: 'surveillance' });
+    ctx.verwijderRijen('Datakwaliteit', function () { return true; }); ctx._LEES = {}; ctx.GEBRUIKER = null; ctx.datakwaliteitDag(plusDagen(0), { stil: true });
+    var dL = roep(LARS, 'apiSturing', 'datakwaliteit', {}), dY = roep(YARA, 'apiSturing', 'datakwaliteit', {}), dS = roep(SOPHIE, 'apiSturing', 'datakwaliteit', {}), dF = roep(FEMKE, 'apiSturing', 'datakwaliteit', {});
+    var eigenaren = function (d) { return d.perEigenaar.map(function (x) { return x.eigenaar; }); };
+    var somZicht = function (d) { return d.contracten.reduce(function (s, c) { return s + c.aantal; }, 0) === d.perEigenaar.reduce(function (s, x) { return s + x.aantal; }, 0); };
+    eis(eigenaren(dL).every(function (e) { return e === 'Lars Visser'; }) && eigenaren(dY).every(function (e) { return ['Lars Visser', 'Noor Hendriks', 'Yara El Amrani'].indexOf(e) >= 0; }) && eigenaren(dS).indexOf('beheerder') >= 0 && eigenaren(dF).every(function (e) { return e === 'Femke de Wit'; }) && somZicht(dL) && somZicht(dF) && somZicht(dS),
+      'datakwaliteit: een medewerker ziet alleen zichzelf, de teamlead zijn team, management iedereen (ook beheerder); contracten[].aantal telt alleen zichtbare afwijkingen');
+    var dub = dL.perEigenaar[0].gezakt.filter(function (g) { return g.contract === 'geen_dubbele_open_kansen'; })[0], coll = dub ? dub.verwijzingen.filter(function (v) { return !v.open; })[0] : null;
+    eis(!!dub && !!coll && coll.naam === 'kans van een collega' && coll.id === '' && dub.verwijzingen.some(function (v) { return v.open && v.id === 'rk-d1'; }), 'R16: bij een dubbele open kans ziet de OC de kans van een collega zonder naam en zonder doorklik, de eigen kans met doorklik');
+    eis(/toegang/.test(faalt(LARS, 'apiSturing', 'datakwaliteit', { vers: true })) && roep(SOPHIE, 'apiSturing', 'datakwaliteit', { vers: true }).bron === 'vers' && dS.bron === 'trigger' && dS.dag === plusDagen(0), 'datakwaliteit: de rijen van vandaag uit het tabblad; vers (live rekenen) alleen management');
+  } catch (e) { eis(false, 'v7.9 sturingsweergaven: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: stand bevriezen (punt 21; R3, R4, N5) ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    eis(ctx.laatsteDonderdag('2026-10-05') === '2026-10-29' && ctx.laatsteDonderdag('2026-11-30') === '2026-11-26' && ctx.laatsteDonderdag('2026-12-01') === '2026-12-31' && ctx.laatsteDonderdag('2027-01-15') === '2027-01-28' && ctx.laatsteDonderdag('2026-03-29') === '2026-03-26',
+      'laatste donderdag: een maand met vijf (oktober) en met vier donderdagen (november), december naar januari, rond de zomertijdwissel (maart)');
+    var t5 = ctx.sturingBevriezen('2026-10-05', 'tussenstand');
+    eis(!t5.al && t5.rijen > 30 && ctx.sturingBevriezen('2026-10-05', 'tussenstand').al === true, 'tussenstand: hoogstens één per dag');
+    var nogNiet = ctx.maandstandAlsNodig('2026-10-28'), m1 = ctx.maandstandAlsNodig('2026-10-29'), m2 = ctx.maandstandAlsNodig('2026-10-30');
+    eis(nogNiet.nogNiet && !m1.al && m1.peildatum === '2026-10-29' && m2.al === true, 'R4: een tussenstand op de 5e houdt de maandstand op de laatste donderdag niet tegen; daarna geen tweede maandstand die maand');
+    var gem = ctx.maandstandAlsNodig('2026-11-27'), zat = ctx.maandstandAlsNodig('2026-11-28'), lijst = ctx.standenLijst();
+    eis(!gem.al && gem.peildatum === '2026-11-27' && zat.al === true && lijst.some(function (x) { return x.soort === 'maand' && x.sleutel === '2026-11' && x.ingehaald && /ingehaald/.test(x.label); }) && lijst.some(function (x) { return x.soort === 'tussenstand' && x.sleutel === '2026-10-05'; }) && lijst.some(function (x) { return x.soort === 'maand' && x.sleutel === '2026-10' && !x.ingehaald; }),
+      'R3: na een gemiste donderdag bevriest de vrijdag alsnog (peildatum vrijdag, label ingehaald), de zaterdag niet nog eens; de lijst toont maand- en tussenstanden met hun soort');
+    // de bevroren waarden blijven, ook als er daarna een deal bij komt; de bevroren definitie blijft (N5)
+    var vandaag = plusDagen(0), b = ctx.sturingBevriezen(vandaag, 'tussenstand'), live0 = mtCijfers(), vast0 = roep(SOPHIE, 'apiSturing', 'mt', { stand: vandaag });
+    var waarden = function (r) { var u = {}; r.blokken.forEach(function (bl) { bl.cijfers.forEach(function (c) { u[c.id] = JSON.stringify([c.waarde, c.uitsplitsing.map(function (x) { return [x.label, x.waarde]; })]); }); }); return u; };
+    var wl = waarden(live0._r), wv = waarden(vast0);
+    eis(!b.al && vast0.bevroren && vast0.standSoort === 'tussenstand' && Object.keys(wl).every(function (k) { return wl[k] === wv[k]; }), 'apiSturing(mt, { stand }) geeft precies de waarden van het moment van bevriezen');
+    roep(LARS, 'apiKansOpslaan', { id: 'k10', fase: 'gewonnen', _oud: { fase: 'voorstel' }, overdracht: od(25000, plusDagen(0)) });
+    var live1 = mtCijfers(), vast1 = roep(SOPHIE, 'apiSturing', 'mt', { stand: vandaag });
+    eis(live1.M08.extra.aantal === live0.M08.extra.aantal + 1 && JSON.stringify(waarden(vast1)) === JSON.stringify(wv), 'een deal na het bevriezen verandert het live overzicht, niet de bevroren stand');
+    var oudeTekst = ctx.METRIEKEN.gecontracteerd.definitie;
+    ctx.METRIEKEN.gecontracteerd.definitie = 'Rooktest: een latere concepttekst van M04';
+    var vast2 = roep(SOPHIE, 'apiSturing', 'mt', { stand: vandaag }), m04v = vast2.blokken[0].cijfers.filter(function (c) { return c.id === 'gecontracteerd'; })[0], m04l = mtCijfers().M04;
+    ctx.METRIEKEN.gecontracteerd.definitie = oudeTekst;
+    eis(m04v.def.definitie === oudeTekst && vast2.defs.gecontracteerd.definitie === oudeTekst && m04l.def.definitie === 'Rooktest: een latere concepttekst van M04', 'N5: een bevroren stand toont de definitie van toen, niet de tekst uit de huidige code');
+    var mm = roep(SOPHIE, 'apiSturing', 'mt', { stand: '2026-10' });
+    eis(mm.bevroren && mm.standSoort === 'maand' && mm.peildatum === '2026-10-29' && /bestaat niet/.test(faalt(SOPHIE, 'apiSturing', 'mt', { stand: '2025-01' })) && /maandstand/.test(faalt(SOPHIE, 'apiSturing', 'mt', { stand: 'oktober' })), 'een maandstand op yyyy-MM; een onbekende of ongeldige stand geeft een Nederlandse fout');
+    eis(/management/.test(faalt(LARS, 'apiSturingBevriezen')) && /management/.test(faalt(YARA, 'apiSturingBevriezen')) && roep(SOPHIE, 'apiSturingBevriezen').al === true, 'apiSturingBevriezen: alleen management; vandaag stond er al een tussenstand');
+  } catch (e) { eis(false, 'v7.9 stand bevriezen: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9: aannames en jaardoel (punt 13 en 24; N1, N6, R9, R11, R18) ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    aannameZet('retentie', 0.8); aannameZet('retentie', 0.75); aannameZet('retentie', 0.7, { ingang: plusDagen(30) });
+    var rijen = ctx.lees('Aannames').filter(function (r) { return r.naam === 'retentie'; }), a = roep(SOPHIE, 'apiAannames').aannames.filter(function (x) { return x.naam === 'retentie'; })[0];
+    eis(rijen.length === 3 && rijen.map(function (r) { return r.id; }).sort().join() === 'aa-retentie-v1,aa-retentie-v2,aa-retentie-v3' && ctx.aanname('retentie').versie === 2 && ctx.aanname('retentie').waarde === 0.75 && ctx.aanname('retentie', plusDagen(30)).versie === 3 && a.historie.length === 3 && a.huidig.versie === 2,
+      'aannames: elke versie een eigen rij (aa-<naam>-v<n>); aanname() kiest de hoogste versie met ingang t/m de datum; de historie blijft');
+    eis(/toegang/.test(faalt(YARA, 'apiAannameOpslaan', 'retentie', { waarde: 0.5, onderbouwing: 'x', besluitdatum: plusDagen(0) })) && /toegang/.test(faalt(LARS, 'apiAannames')) && /toegang/.test(faalt(FEMKE, 'apiAannames')), 'aannames: alleen management (een teamlead en een medewerker niet)');
+    var f = function (naam, w, o) { var x = { waarde: w, onderbouwing: 'x', besluitdatum: plusDagen(0) }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return faalt(SOPHIE, 'apiAannameOpslaan', naam, x); };
+    eis(/tussen 0 en 1/.test(f('retentie', 1.5)) && /0 of meer/.test(f('dealwaarde', -1)) && /Ongeldige datum/.test(f('overstapDatum', 'morgen')) && /aan of uit/.test(f('sturingVerplicht', 'misschien')) && /soort/.test(f('jaardoel', { soort: 'omzet' })) &&
+      /vastgelegde versie/.test(f('jaardoel', { scope: 'scope v9' })) && /contracteerdoel/.test(f('jaardoel', { noemer: 'contracteerdoel' })) && /getal/.test(f('werkweken', 'veel')), 'aannames: validatie per soort (fractie, euro, datum, aan/uit, jaardoel met lijsten, scope naar een vastgelegde versie, contracteerdoel bij die noemer)');
+    eis(/D13/.test(f('doelpadCurve', { bron: 'gefactureerd', totaal: [[0, 0]] })) && /D13/.test(f('jaardoel', { verdeling: 'gefactureerd' })), 'aannames: een doelpad of jaardoel op het factuurpatroon wordt geweigerd (D13)');
+    eis(/onderbouwing/.test(faalt(SOPHIE, 'apiAannameOpslaan', 'retentie', { waarde: 0.5, besluitdatum: plusDagen(0) })) && /besluitdatum/.test(faalt(SOPHIE, 'apiAannameOpslaan', 'retentie', { waarde: 0.5, onderbouwing: 'x' })), 'N6: onderbouwing en besluitdatum zijn bij elke versie verplicht');
+    eis(/Onbekende aanname/.test(faalt(SOPHIE, 'apiAannameOpslaan', 'constructor', { waarde: 1, onderbouwing: 'x', besluitdatum: plusDagen(0) })) && /Onbekende aanname/.test(faalt(SOPHIE, 'apiAannameOpslaan', '__proto__', { waarde: 1, onderbouwing: 'x', besluitdatum: plusDagen(0) })), 'N1: constructor en __proto__ als aanname → "Onbekende aanname."');
+    // N6: fasegewichten via Beheer → Mijlpalen: alleen een echte wijziging met onderbouwing en besluitdatum; hetzelfde nog eens = geen nieuwe versie
+    var basis = ctx.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.mijlpaal === 'voorstel' ? 60 : m.kans, dagenNorm: m.dagenNorm, rol: m.rol }; });
+    var fg = function () { return ctx.lees('Aannames').filter(function (r) { return r.naam === 'fasegewichten'; }).length; };
+    eis(/onderbouwing en een besluitdatum/.test(faalt(SOPHIE, 'apiMijlpalenOpslaan', basis)) && fg() === 0 && ctx.mijlpaalMap().voorstel.kans === 50, 'N6: een gewijzigd fasegewicht zonder onderbouwing wordt geweigerd (de mijlpalen blijven)');
+    roep(SOPHIE, 'apiMijlpalenOpslaan', basis, GEWICHT_OK); var n1 = fg(); roep(SOPHIE, 'apiMijlpalenOpslaan', basis); roep(SOPHIE, 'apiMijlpalenOpslaan', basis.map(function (m) { var x = JSON.parse(JSON.stringify(m)); if (x.mijlpaal === 'onderhandeling') x.rol = 'voorstel'; if (x.mijlpaal === 'voorstel') x.rol = 'ap'; if (x.mijlpaal === 'gesprek') x.rol = 'lead'; if (x.mijlpaal === 'lead') x.rol = ''; return x; }));
+    eis(n1 === 1 && fg() === 1 && ctx.aanname('fasegewichten').waarde['Scholen|voorstel'] === 60 && ctx.mijlpaalMap().voorstel.kans === 60, 'N6: met onderbouwing één versie van fasegewichten; hetzelfde nog eens opslaan of alleen rollen wijzigen maakt geen nieuwe versie');
+    // R11: een doelpadcurve van 366 punten × 3 groepen × 5 versies past; een te grote waarde wordt geweigerd
+    var curve = function (fac) { var l = []; for (var d0 = 0; d0 < 366; d0++) l.push([d0, Math.round(10000 * Math.min(1, fac * d0 / 365)) / 10000]); return l; };
+    for (var v = 1; v <= 5; v++) aannameZet('doelpadCurve', { totaal: curve(1), bestaand: curve(1.02), nieuw: curve(0.98), bron: 'reconstructie' });
+    var cr = ctx.lees('Aannames').filter(function (r) { return r.naam === 'doelpadCurve'; });
+    eis(cr.length === 5 && cr.every(function (r) { return String(r.waarde).length < 45000; }) && ctx.aanname('doelpadCurve').versie === 5 && ctx.aanname('doelpadCurve').waarde.totaal.length === 366, 'R11: een doelpadcurve van 366 punten × 3 groepen past in één cel per versie (< 45.000 tekens); versie 5 geldt');
+    var groot = {}; for (var i = 0; i < 2000; i++) groot['pipeline-met-een-lange-naam-' + i + '|mijlpaal'] = 50;
+    var teGroot = ''; try { ctx.aannameVastleggen('fasegewichten', cx(groot), { onderbouwing: 'x', besluitdatum: plusDagen(0) }); } catch (e) { teGroot = e.message; }
+    eis(/te groot/.test(teGroot), 'R11: een waarde boven 45.000 tekens wordt geweigerd');
+    // punt 24: M09 leest ook het archief, maar alleen vanaf het begin van het schooljaar; Financiën "geleverd" verandert niet (K1)
+    vers79();
+    var sj = sjNu(), j1 = Number(sj.slice(0, 4)), wkIn = ctx.isoWeekStr(new CtxDate79(j1, 8, 15, 12)), wkVorig = ctx.isoWeekStr(new CtxDate79(j1 - 1, 9, 15, 12)), t1 = 't1';
+    var finVoor = JSON.stringify(roep(SOPHIE, 'apiFinancien', sj).reeksen.geleverd), maandIn = ctx.maandVan(ctx.maandagVanWeek(wkIn)), voor9 = ctx.urenPerMaand(sj, plusDagen(0)), urenVoor = voor9.filter(function (x) { return x.maand === maandIn; })[0].uren, totVoor = voor9.reduce(function (s, x) { return s + x.uren; }, 0);
+    ctx.schrijfVeel('TalentUren_archief', [{ id: 'rk-ua1', talentId: 'tl1', trajectId: t1, week: wkIn, uren: 12.5, diensten: 3 }, { id: 'rk-ua2', talentId: 'tl1', trajectId: t1, week: wkVorig, uren: 40, diensten: 8 }]); ctx._LEES = {};
+    var urenNa = ctx.urenPerMaand(sj, plusDagen(0)), m09 = urenNa.filter(function (x) { return x.maand === maandIn; })[0];
+    eis(m09.uren === Math.round((urenVoor + 12.5) * 100) / 100 && Math.abs(urenNa.reduce(function (s, x) { return s + x.uren; }, 0) - totVoor - 12.5) < 0.001 && JSON.stringify(roep(SOPHIE, 'apiFinancien', sj).reeksen.geleverd) === finVoor,
+      'punt 24: een archiefweek van dit schooljaar telt mee in M09, een week uit het vorige schooljaar niet; Financiën "geleverd" is ongewijzigd (K1)');
+    var telF = leesTeller(function () { roep(SOPHIE, 'apiFinancien', sj); roep(SOPHIE, 'apiHome'); });
+    eis(!telF.TalentUren_archief, 'R9: Financiën en Home lezen TalentUren_archief niet (alleen M09 in het MT-overzicht)');
+    var M9 = mtCijfers().M09;
+    eis(/basislijn vorige jaren ontbreekt/.test(M9.geblokkeerd) && M9.extra.maanden.length === 12, 'M09 zonder urenbasislijn: geblokkeerd, met de maanden van dit schooljaar als toelichting');
+    var vsj = ctx.vorigSchooljaar(sj), bl = {}; bl[vsj] = {}; ctx.schooljaarMaanden(vsj).forEach(function (m) { bl[vsj][m] = 100; });
+    aannameZet('urenBasislijn', bl); var M9b = mtCijfers().M09, heel = M9b.extra.maanden.filter(function (x) { return x.maand < plusDagen(0).slice(0, 7); }).length;
+    eis(!M9b.geblokkeerd && typeof M9b.waarde === 'number' && M9b.extra.basislijn[vsj] === 100 * heel, 'M09 met urenbasislijn: de uren t/m de laatste hele maand naast dezelfde maanden van vorig jaar (' + heel + ' maanden)');
+    var S2 = require(path.join(R, 'server/schema.js'));
+    eis(S2.NUMERIEK.Voorspellingen.indexOf('versie') >= 0 && S2.NUMERIEK.Aannames.indexOf('versie') >= 0 && S2.NUMERIEK.Standen.indexOf('waarde') >= 0 && S2.NUMERIEK.Cijferdefinities.indexOf('versie') >= 0, 'N4: versie en waarde zijn getalkolommen in Postgres (Voorspellingen, Aannames, Standen, Cijferdefinities)');
+  } catch (e) { eis(false, 'v7.9 aannames en jaardoel: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
 })();
 
 /* ---- bestaande schermen blijven werken ---- */

@@ -63,7 +63,8 @@ function plusDagen(n) { return ctx.datumStr(ctx.plusDagen(n)); }
 
 /* ---------- rechten: welke onderdelen mag deze rol niet wijzigen, en welke tabbladen horen daarbij ---------- */
 var ONDERDEEL_TABS = { relaties: ['Scholen', 'Personen'], pipeline: ['Kansen', 'Fasewissels'],  // v7.9: de wissels horen bij de kans projecten: ['Trajecten'], facturatie: ['Facturen'], vacatures: ['Vacatures'], kandidaten: ['Kandidaten'],
-  talenten: ['Talenten', 'TalentDocumenten', 'TalentSchool', 'TalentUren'], beoordelingen: ['Beoordelingen'], financien: ['Prognoses'] };
+  talenten: ['Talenten', 'TalentDocumenten', 'TalentSchool', 'TalentUren'], beoordelingen: ['Beoordelingen'], financien: ['Prognoses'],
+  cijfers: ['Cijferdefinities'], aannames: ['Aannames'], sturingMt: ['Standen', 'Voorspellingen'], datakwaliteit: ['Datakwaliteit'] };  // v7.9 (pakket 2): het register, de aannames, de standen en de datakwaliteit
 function geenOnderdelen(rol) {
   if (rol.team === 'management') return [];
   if (rol.team === 'extern') return Object.keys(ONDERDEEL_TABS);
@@ -107,6 +108,7 @@ var OBJ_TAB = { apiTrajectOpslaan: 'Trajecten', apiGebruikerOpslaan: 'Gebruikers
   apiDoelOpslaan: 'Doelen', apiContentOpslaan: 'Content', apiVacatureOpslaan: 'Vacatures', apiKandidaatOpslaan: 'Kandidaten', apiFactuurOpslaan: 'Facturen', apiTalentOpslaan: 'Talenten', apiTalentDocumentOpslaan: 'TalentDocumenten',
   apiTalentSchoolOpslaan: 'TalentSchool', apiBeoordelingOpslaan: 'Beoordelingen' };
 function soortParam(naam, api) {
+  if (/^(weergave|sleutel|naam|stap)$/.test(naam) && /^api(Sturing|Weekdoelen|Aanname|Migratie)/.test(api)) return 'tekst';  // v7.9: weergave, sleutel, naam en stap zijn tekst
   if (/^(obj|actie|extra|opties|filter|raster|bestand|koppeling)$/.test(naam)) return 'object';
   if (/^(lijst|rijen|talentIds|uitzonderingen|gesprek)$/.test(naam)) return 'lijst';
   if (/^(aan|mailen|maakTraject|nieuweCodeMaken|alleenBevestigen)$/.test(naam)) return 'bool';
@@ -148,6 +150,14 @@ var BASIS = {
   apiFasewisselsImport: function () { return [fs.readFileSync(path.join(R, 'test/voorbeelden/werkelijke_datums.csv'), 'utf8'), {}]; },
   apiMigratieV79: function () { return ['status', {}]; },
   apiWeekdoelenOpslaan: function (rol) { var oc = rol.team === 'consultancy' ? rol.naam : 'Lars Visser'; return [ctx.isoWeekStr(new CtxDate()), [{ eigenaar: oc, metric: 'ap', doel: 2 }]]; },
+  // v7.9 (pakket 2): het register, de aannames en de sturingsweergaven (om en om ook constructor als naam, N1; de mutaties op weergave en stap raken de andere weergaven en onzin)
+  apiCijfers: function (rol, i) { return [i % 2 ? {} : { kort: true }]; },
+  apiCijferOpslaan: function (rol, i) { return [{ metriek: i % 3 === 1 ? 'constructor' : 'contactmomenten', definitie: 'Fuzz', eigenaar: 'beheerder', ingang: plusDagen(0) }]; },
+  apiCijferAftekenen: function () { return ['contactmomenten', 1]; },
+  apiAannames: function () { return []; },
+  apiAannameOpslaan: function (rol, i) { return [i % 3 === 1 ? 'constructor' : 'retentie', { waarde: 0.5, onderbouwing: 'Fuzz', besluitdatum: plusDagen(0), ingang: plusDagen(0) }]; },
+  apiSturing: function (rol, i) { return [['week', 'mt', 'datakwaliteit'][i % 3], i % 4 === 3 ? { vers: true, stap: -1 } : {}]; },
+  apiSturingBevriezen: function () { return []; },
   apiTaakOpslaan: function (rol) { var t = eigenRij('Acties', rol); return [{ id: t.id, prio: 'laag', _oud: { prio: t.prio } }]; },
   apiTaak: function (rol) { return [eigenId('Acties', rol)]; },
   apiTaakWeergavenOpslaan: function () { return [[{ naam: 'Fuzz', filter: { tag: 'rooster', weergave: 'komende', mijn: true } }]]; },

@@ -550,6 +550,68 @@ create table if not exists "aannames" (
   "vastgelegd" text,
   rij bigserial
 );
+create table if not exists "cijferdefinities" (
+  "id" text primary key,
+  "metriek" text,
+  "versie" numeric,
+  "definitie" text,
+  "eigenaar" text,
+  "besluit" text,
+  "ingang" text,
+  "status" text,
+  "tolerantie" text,
+  "onderbouwing" text,
+  "door" text,
+  "aangemaakt" text,
+  "afgetekend_door" text,
+  "afgetekend_op" text,
+  rij bigserial
+);
+create table if not exists "datakwaliteit" (
+  "id" text primary key,
+  "dag" text,
+  "contract" text,
+  "eigenaar" text,
+  "stand" text,
+  "aantal" numeric,
+  "verwijzingen" text,
+  "aangemaakt" text,
+  rij bigserial
+);
+create table if not exists "voorspellingen" (
+  "id" text primary key,
+  "aangemaakt" text,
+  "soort" text,
+  "periode" text,
+  "verwacht" numeric,
+  "onder" numeric,
+  "boven" numeric,
+  "model" text,
+  "versie" numeric,
+  "werkelijk" numeric,
+  "gescoord" text,
+  "fout" numeric,
+  "binnen_interval" text,
+  "van" text,
+  "tot" text,
+  rij bigserial
+);
+create table if not exists "standen" (
+  "id" text primary key,
+  "peildatum" text,
+  "soort" text,
+  "metriek" text,
+  "m" text,
+  "uitsplitsing" text,
+  "waarde" numeric,
+  "versie" numeric,
+  "status" text,
+  "eigenaar" text,
+  "geblokkeerd" text,
+  "definitie" text,
+  "aangemaakt" text,
+  rij bigserial
+);
 -- scripteigenschappen (PropertiesService) en de korte cache (CacheService)
 create table if not exists eigenschappen (sleutel text primary key, waarde text);
 create table if not exists cache (sleutel text primary key, waarde text, verloopt timestamptz);
@@ -567,6 +629,7 @@ create index if not exists "ix_kansen_school_id" on "kansen" ("school_id");
 create index if not exists "ix_fasewissels_kans_id" on "fasewissels" ("kans_id");
 create index if not exists "ix_fasewissels_werkelijke_datum" on "fasewissels" ("werkelijke_datum");
 create index if not exists "ix_aannames_naam" on "aannames" ("naam");
+create index if not exists "ix_datakwaliteit_dag" on "datakwaliteit" ("dag");
 -- Row Level Security aan zonder policies: alleen de service role (de server) kan erbij; de app praat nooit rechtstreeks met Postgres.
 alter table "scholen" enable row level security;
 alter table "trajecten" enable row level security;
@@ -600,5 +663,9 @@ alter table "aanmeldingen" enable row level security;
 alter table "metingen" enable row level security;
 alter table "fasewissels" enable row level security;
 alter table "aannames" enable row level security;
+alter table "cijferdefinities" enable row level security;
+alter table "datakwaliteit" enable row level security;
+alter table "voorspellingen" enable row level security;
+alter table "standen" enable row level security;
 alter table "eigenschappen" enable row level security;
 alter table "cache" enable row level security;

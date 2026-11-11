@@ -224,6 +224,7 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
     apiVoorstellen: function () { var v = rijenVan('Vacatures').filter(function (x) { return /^gv/.test(x.id) && x.status === 'open'; })[0]; return [v.id, [rijenVan('Talenten').filter(function (x) { return /^gtl/.test(x.id) && x.status === 'actief'; })[5].id], 'Proef']; },
     apiTalentRapport: function () { return ['kwartaal', 0]; }, apiTalentExport: function () { return [rijenVan('Talenten').filter(function (x) { return /^gtl/.test(x.id); })[6].id]; },
     apiTalentAnonimiseer: function () { return [rijenVan('Talenten').filter(function (x) { return /^gtl/.test(x.id) && x.status === 'slapend'; })[0].id]; },
+    apiSturing: function (n, team) { return [team === 'consultancy' ? 'week' : team === 'management' ? 'mt' : 'datakwaliteit', {}]; },  // v7.9 (pakket 2); alle weergaven × rollen staan in deel 12
     apiFinancien: function () { return [X.huidigSchooljaar()]; }, apiExactImport: function () { var f = rijenVan('Facturen').filter(function (x) { return /^gf/.test(x.id) && x.factuurnummer; })[0]; return ['Factuurnummer;Factuurdatum;Bedrag;Betaaldatum\n' + f.factuurnummer + ';' + f.verzonden + ';' + String(f.bedrag).replace('.', ',') + ';', {}]; }
   };
   var ROLLEN = ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem'].map(function (c) { var p = X.DEMO_MENSEN.filter(function (x) { return x.code === c; })[0]; return { code: c, naam: p.naam, team: p.team }; });
@@ -376,6 +377,52 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
   var echt = {}; (tekst.toUpperCase().match(/\b\d{2}[A-Z0-9]{2}\b/g) || []).forEach(function (b) { echt[b] = 1; });
   var demo = Z.lees('Scholen').concat(Gr.lees('Scholen')).map(function (x) { return String(x.brin || '').toUpperCase(); }).filter(Boolean), raak = demo.filter(function (b) { return echt[b]; }).length;
   eis(raak === 0, 'BRIN: geen verzonnen BRIN-code komt in de lijst van DUO voor (' + raak + ' van ' + demo.length + ')');
+})();
+
+/* ---- 12. v7.9 (pakket 2): de sturing op praktijkschaal. apiSturing (week, mt, datakwaliteit) en de schermen die het register níet mogen lezen (R9) × vier rollen
+   < 500 ms; sturingTrigger < 2 s; met de verzonnen aannames van het profiel rekent het MT-overzicht M05 en M07. R9_BASIS=<git-ref> meet daarnaast vijf runs van
+   apiHome, apiFinancien en apiTeamRapport met de bestanden van die versie tegen de huidige (afwisselend, op dezelfde machine): mediaan ≤ 10 % hoger. ---- */
+(function () {
+  var X = context(); X.demoGrootStart('');
+  var ROLLEN = ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem'], traag = [], intern = [], hoogste = { ms: 0 };
+  var GEVALLEN = [['apiSturing', ['week', {}]], ['apiSturing', ['mt', {}]], ['apiSturing', ['datakwaliteit', {}]], ['apiSturing', ['datakwaliteit', { vers: true }]], ['apiHome', []], ['apiFinancien', [X.huidigSchooljaar()]], ['apiTeamRapport', ['kwartaal', '', '', 0]],
+    ['apiCijfers', [{ kort: true }]], ['apiAannames', []]];
+  ROLLEN.forEach(function (c) {
+    GEVALLEN.forEach(function (g) {
+      var t0 = Date.now(), d0 = JSON.parse(X.demoRun(g[0], JSON.stringify(g[1]), c)), ms = Date.now() - t0, naam = g[0] + (g[0] === 'apiSturing' ? '(' + g[1][0] + (g[1][1].vers ? ', vers' : '') + ')' : '');
+      if (ms > hoogste.ms) hoogste = { ms: ms, wat: naam + ' als ' + c };
+      if (ms >= 500) traag.push(naam + ' als ' + c + ' ' + ms + ' ms');
+      if (!d0.ok && INTERN.test(String(d0.fout))) intern.push(naam + ' als ' + c + ': ' + String(d0.fout).slice(0, 100));
+    });
+  });
+  eis(!traag.length && !intern.length, 'v7.9: apiSturing (week, mt, datakwaliteit en vers), apiHome, apiFinancien, apiTeamRapport, apiCijfers en apiAannames × vier rollen < 500 ms zonder interne fout (traagste: ' + hoogste.wat + ', ' + hoogste.ms + ' ms)' + (traag.concat(intern).length ? ': ' + traag.concat(intern).join(', ') : ''));
+  var mt = JSON.parse(X.demoRun('apiSturing', JSON.stringify(['mt', {}]), 'demo-sophie')).result, c = {};
+  mt.blokken.forEach(function (b) { b.cijfers.forEach(function (x) { c[x.m] = x; }); });
+  eis(typeof c.M05.waarde === 'number' && !c.M05.geblokkeerd && typeof c.M07.waarde === 'number' && !c.M07.geblokkeerd && c.M07.extra.noemerLabel === 'jaardoel' && /particulier/.test(c.M04.extra.scope),
+    'v7.9: met de verzonnen aannames van het profiel rekent het MT-overzicht M05 (doelpad ' + c.M05.waarde + ') en M07 (dekking ' + c.M07.waarde + ' %), binnen de scope zonder particulier');
+  // sturingTrigger op praktijkschaal: de datacontracten van vandaag opnieuw, de voorspelling van deze week opnieuw
+  X.GEBRUIKER = null; X._LEES = {}; X.verwijderRijen('Datakwaliteit', function () { return true; }); X.verwijderRijen('Voorspellingen', function () { return true; }); X._LEES = {};
+  var tT = Date.now(), uit = X.sturingTrigger(), msT = Date.now() - tT;
+  eis(msT < 2000 && uit.datakwaliteit && uit.datakwaliteit.rijen > 0 && typeof uit.voorspelling === 'object', 'v7.9: sturingTrigger op praktijkschaal (datacontracten, voorspelling, maandstand) in ' + msT + ' ms (bovengrens 2 s): ' + JSON.stringify(uit).slice(0, 160));
+  // R9: vijf runs voor en na (alleen met R9_BASIS)
+  var basis = process.env.R9_BASIS;
+  if (!basis) { info('R9: R9_BASIS niet gezet; de vergelijking met een eerdere versie (vijf runs, mediaan, ≤ 10 %) is overgeslagen'); return; }
+  var cp = require('child_process'), os = require('os'), map = fs.mkdtempSync(path.join(os.tmpdir(), 'r9-')), bron = {};
+  try {
+    ['backend/Code.gs', 'demo/demo-backend.js', 'demo/demo-groot.js'].forEach(function (f) { bron[f] = cp.execFileSync('git', ['show', basis + ':' + f], { cwd: R, maxBuffer: 64 * 1024 * 1024 }).toString(); });
+    var maak = function (demo, code, groot) { var ctx = { console: console }; ctx.globalThis = ctx; vm.createContext(ctx); vm.runInContext(demo + '\n;\n' + code + '\n;\n' + groot, ctx, { filename: 'demo.js' }); ctx.demoGrootStart(''); return ctx; };
+    var A = maak(bron['demo/demo-backend.js'], bron['backend/Code.gs'], bron['demo/demo-groot.js']), N = maak(BRON_DEMO, BRON_CODE, BRON_GROOT), API = { apiHome: function () { return []; }, apiFinancien: function (Y) { return [Y.huidigSchooljaar()]; }, apiTeamRapport: function () { return ['kwartaal', '', '', 0]; } };
+    var meet = function (Y, api) { var t1 = process.hrtime.bigint(); ROLLEN.forEach(function (rc) { Y.demoRun(api, JSON.stringify(API[api](Y)), rc); }); return Number(process.hrtime.bigint() - t1) / 1e6; };
+    var med = function (l) { var s = l.slice().sort(function (a, b) { return a - b; }); return s[2]; }, slecht = [];
+    Object.keys(API).forEach(function (api) {
+      meet(A, api); meet(N, api);  // opwarmen
+      var a = [], n = []; for (var i = 0; i < 5; i++) { a.push(meet(A, api)); n.push(meet(N, api)); }
+      var mA = med(a), mN = med(n), ok = mN <= mA * 1.10 + 5;  // 5 ms absolute ruis bovenop de 10 %
+      info('R9 ' + api + ' × vier rollen: mediaan voor ' + Math.round(mA) + ' ms, na ' + Math.round(mN) + ' ms (' + (mA ? Math.round(100 * (mN - mA) / mA) : 0) + ' %)');
+      if (!ok) slecht.push(api);
+    });
+    eis(!slecht.length, 'R9: apiHome, apiFinancien en apiTeamRapport zijn na pakket 2 niet meer dan 10 % trager dan ' + basis + ' (mediaan van vijf runs)' + (slecht.length ? ': ' + slecht.join(', ') : ''));
+  } finally { try { fs.rmSync(map, { recursive: true, force: true }); } catch (e) {} }
 })();
 
 console.log('looptijd ' + Math.round((Date.now() - T0) / 100) / 10 + ' s');
