@@ -435,7 +435,7 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
     });
   });
   eis(!traagZ.length, 'review T4: met vijf keer zoveel Fasewissels (' + (Wz.length + extraW.length) + ' rijen) blijven apiKans en apiTeamRapport × vier rollen < 500 ms (traagste: ' + hoogZ.wat + ', ' + hoogZ.ms + ' ms)' + (traagZ.length ? ': ' + traagZ.join('; ') : ''));
-  // R9: vijf runs voor en na (alleen met R9_BASIS; de releasebasis is de merge-base met main, git merge-base main HEAD)
+  // R9: vijf runs voor en na (alleen met R9_BASIS; de releasebasis is de merge-base met main, git merge-base origin/main HEAD)
   var basis = process.env.R9_BASIS;
   if (!basis) { info('R9: R9_BASIS niet gezet; de vergelijking met een eerdere versie (vijf runs, mediaan, ≤ 10 %) is overgeslagen'); return; }
   var cp = require('child_process'), os = require('os'), map = fs.mkdtempSync(path.join(os.tmpdir(), 'r9-')), bron = {};

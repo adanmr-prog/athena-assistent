@@ -64,7 +64,7 @@ v7.9 registreert de service worker bij een eerste bezoek pas 500 ms na de eerste
 
 Verder rekent `teamCijfers` per verzoek één keer per activiteit of ze een contactmoment of gehouden afspraak is en per wissel de rol (een rapport telt tot zo'n dertig periodes met dezelfde gegevens).
 
-**Besluit.** De resterende +13 % voor consultancy is de bewuste prijs van de definitie: AP, AD, VO en deals tellen uit `Fasewissels` (§7.1 punt 1 van `docs/sturing-v7.9.md`), dus het rapport leest één tabblad meer. `test/demo_groot_test.js` staat tegen een basis van vóór v7.9 voor `apiTeamRapport` 20 % toe en meldt dat in de uitvoer; tegen een basis vanaf v7.9 geldt weer 10 %. Neem voor R9 de releasebasis (`git merge-base main HEAD`).
+**Besluit.** De resterende +13 % voor consultancy is de bewuste prijs van de definitie: AP, AD, VO en deals tellen uit `Fasewissels` (§7.1 punt 1 van `docs/sturing-v7.9.md`), dus het rapport leest één tabblad meer. `test/demo_groot_test.js` staat tegen een basis van vóór v7.9 voor `apiTeamRapport` 20 % toe en meldt dat in de uitvoer; tegen een basis vanaf v7.9 geldt weer 10 %. Neem voor R9 de releasebasis (`git merge-base origin/main HEAD`).
 
 **Bewaking.** De rooktest pint met een leesteller de tabbladen van `apiCrm`, `apiOverzicht`, `apiHome` en `apiTeamRapport`; een nieuw tabblad op zo'n pad is daarmee een bewuste keuze. `Fasewissels` wordt nooit gearchiveerd; met vijf keer zoveel wissels (vier eerdere jaren erbij, 5 605 rijen in het profiel) blijven `apiKans` en `apiTeamRapport` × vier rollen onder 500 ms (traagste 217 ms). Op Apps Script ziet `test/prestatie.py` dit niet, want die rekent met een vast model van 600 ms per aanroep.
 

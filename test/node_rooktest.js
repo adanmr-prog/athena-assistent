@@ -2168,7 +2168,7 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
       !ctx.lees('Fasewissels').some(function (w) { return w.eigenaar === 'Lars Visser' || w.door === 'Lars Visser'; }) && ctx.doelenVan('week', wk)['Lars Visser-Proef'].contactmomenten === 20, 'R5: hernoemen neemt de weekdoelen met hun eigen sleutel (' + nd.length + ') en de wissels (eigenaar en door) mee');
     roep(SOPHIE, 'apiGebruikerOpslaan', { id: 'g-lars', naam: 'Lars Visser' });
     // review C6: een naam van 40 tekens en twee weken geven twee ids (de sleutel wordt nooit afgekapt); hernoemen naar die naam verliest niets
-    var lang = 'Jan-Willem van den Heuvel-Smitsen Bakker', wkA = '2026-W46', wkB = '2026-W47';
+    var lang = 'Verzonnen Testpersoon met een Lange Naam', wkA = '2026-W46', wkB = '2026-W47';
     eis(lang.length === 40 && ctx.doelId(lang, 'week', 'contactmomenten', wkA) !== ctx.doelId(lang, 'week', 'contactmomenten', wkB) && /-2026-w47$/.test(ctx.doelId(lang, 'week', 'contactmomenten', wkB)) && ctx.doelId('Lars Visser', 'week', 'ap', '') === ctx.slug('Lars Visser-week-ap'),
       'review C6: doelId met een lange naam houdt de periodesleutel heel (twee weken, twee ids); zonder sleutel het oude id');
     roep(SOPHIE, 'apiWeekdoelenOpslaan', wkA, [{ eigenaar: 'Lars Visser', metric: 'contactmomenten', doel: 7 }]); roep(SOPHIE, 'apiWeekdoelenOpslaan', wkB, [{ eigenaar: 'Lars Visser', metric: 'contactmomenten', doel: 8 }]);
