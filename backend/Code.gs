@@ -356,11 +356,13 @@ function schrijfVeel(naam, lijst) {
   if (!lijst.length) return stats;
   var kop = TABELLEN[naam], b = blad(naam), bestaand = {}, nieuw = [];
   lees(naam).forEach(function (r) { bestaand[String(r.id)] = r; });
+  var nieuwPlek = {};  // v7.9 (review C6): hetzelfde id twee keer in één lijst: de tweede werkt de nog niet geschreven nieuwe rij bij (getRange zonder rijnummer gooide)
   lijst.forEach(function (obj) {
     if (!obj.id) obj.id = nieuwId();
     var hit = bestaand[String(obj.id)], samen = samenvoegen(naam, obj, hit), rij = kop.map(function (k) { return celUit(samen[k]); });
-    if (hit) { b.getRange(hit._rij, 1, 1, kop.length).setValues([rij]); stats.bijgewerkt++; }
-    else { nieuw.push(rij); bestaand[String(obj.id)] = samen; stats.ingevoegd++; }
+    if (hit && hit._rij) { b.getRange(hit._rij, 1, 1, kop.length).setValues([rij]); stats.bijgewerkt++; }
+    else if (hit && uitMap(nieuwPlek, String(obj.id)) !== undefined) { nieuw[nieuwPlek[String(obj.id)]] = rij; bestaand[String(obj.id)] = samen; }
+    else { nieuwPlek[String(obj.id)] = nieuw.length; nieuw.push(rij); bestaand[String(obj.id)] = samen; stats.ingevoegd++; }
   });
   if (nieuw.length) b.getRange(b.getLastRow() + 1, 1, nieuw.length, kop.length).setValues(nieuw);
   vergeet(naam);
@@ -1245,8 +1247,9 @@ function apiCrm() {
     teams: { consultancy: teamNamen('consultancy'), accountmanagement: teamNamen('accountmanagement'), talent: teamNamen('talent'), management: teamNamen('management') },
     meldingen: ongelezenMeldingen(), schooljaar: huidigSchooljaar(),  // v4.1
     // v7.9: het klantvoorstel in het kansformulier (alleen ids: welke scholen waren klant in het vorige en het huidige schooljaar), de schooljaren
-    // voor een nieuwe kans, de instelling sturingVerplicht, of de rollen ingesteld zijn, en de versie van de backend (de app verbergt v7.9-schermen bij een oudere)
-    klantIn: klantInVan(scholen), schooljaren: [huidigSchooljaar(), volgendSchooljaar(huidigSchooljaar())], sturingVerplicht: sturingVerplicht(), rollenIngesteld: rollenStatus().ingesteld, backendVersie: VERSIE
+    // voor een nieuwe kans, of de rollen ingesteld zijn, en de versie van de backend (de app verbergt v7.9-schermen bij een oudere). Review T4: sturingVerplicht
+    // staat in apiPipeline (het bord, waar bulk en het voorstelvenster het nodig hebben); kansOpslaan controleert het hoe dan ook.
+    klantIn: klantInVan(scholen), schooljaren: [huidigSchooljaar(), volgendSchooljaar(huidigSchooljaar())], rollenIngesteld: rollenStatus().ingesteld, backendVersie: VERSIE
   };
 }
 // v7.9: { '<schooljaar>': [schoolId, …] } voor het vorige en het huidige schooljaar (alleen ids; op schoolSleutel, dus ook een tweede vestiging met dezelfde BRIN)
@@ -1435,7 +1438,8 @@ function apiPipeline() {
   eis('pipeline', 'zien');  // v4.0
   var kansen = lees('Kansen').filter(function (k) { return (kansOpen(k) || (dagenSinds(k.gesloten || k.bijgewerkt) || 0) <= 60) && mag('pipeline', 'zien', k); });
   return { mijlpalen: ms, pipelines: uniek(ms.map(function (m) { return m.pipeline; })), kansen: kansen.map(function (k) { return kansUit(k, mp); }),
-    verliesRedenen: keuzelijst('verliesRedenen') };  // v7.9: de keuzelijst (met opgeschoond), niet meer de vrije waarden uit de data
+    verliesRedenen: keuzelijst('verliesRedenen'),  // v7.9: de keuzelijst (met opgeschoond), niet meer de vrije waarden uit de data
+    sturingVerplicht: sturingVerplicht() };  // v7.9 (review T4): hier en niet in apiCrm, zodat elke opening van Relaties het tabblad Aannames niet leest
 }
 function apiKans(id) {
   var k = vind('Kansen', id); if (!k) throw new Error('Kans niet gevonden.');
@@ -1529,9 +1533,12 @@ function kansOpslaan(obj, intern) {
     if (raakt && kansOpen({ fase: fase }) && vanafVoorstel(fase, plNa) && sturingVerplicht() && (!(Number(waardeNa) > 0) || !sluitingNa))
       throw new Error('Vul de waarde en de verwachte tekendatum in (verplicht vanaf de voorstelfase).');
     // 6. De werkelijke datum van de wissel: niet in de toekomst, vóór het vorige schooljaar alleen bevestigd; Kansen.gesloten = die datum (niet de invoerdag)
-    if (faseWissel || !oud || rolWissel) datumW = fase === 'gewonnen' && overdracht ? overdracht.akkoorddatum : werkelijkeDatumIn((intern && intern.datum) || w.datum, { oudBevestigd: w.oudBevestigd === true });
+    // v7.9 (review C1): en nooit vóór de vorige mijlpaal van deze kans (ook de akkoorddatum)
+    var nietVoor = oud && (faseWissel || rolWissel) ? wisselBuren(oud.id).nietVoor : '';
+    if (faseWissel || !oud || rolWissel) datumW = fase === 'gewonnen' && overdracht ? overdracht.akkoorddatum : werkelijkeDatumIn((intern && intern.datum) || w.datum, { oudBevestigd: w.oudBevestigd === true, nietVoor: nietVoor });
+    if (nietVoor && datumW && datumW < nietVoor) throw new Error(NIET_VOOR_FOUT);
     if (faseWissel || !oud) o.gesloten = (fase === 'gewonnen' || fase === 'verloren') ? datumW : '';
-    if (faseWissel && !kansOpen(oud) && kansOpen({ fase: fase })) o.verliesReden = '';  // v3.7: heropend
+    if (faseWissel && !kansOpen(oud) && kansOpen({ fase: fase })) { o.verliesReden = ''; o.verliesToelichting = ''; }  // v3.7: heropend; v7.9 (review C8): ook de toelichting
   }
   if ((faseWissel || !oud) && (o.kans === undefined || o.kans === '')) o.kans = fase === 'gewonnen' ? 100 : fase === 'verloren' ? 0 : (uitMap(mp, fase) ? mp[fase].kans : '');
   if (o.tags !== undefined) o.tags = tagsIn(o.tags);
@@ -1543,15 +1550,19 @@ function kansOpslaan(obj, intern) {
     var k = schrijf('Kansen', o);
     if (w.ongedaan) {
       var proj = oud.fase === 'gewonnen' ? lees('Trajecten').filter(function (t) { return String(t.kansId) === String(k.id); })[0] : null;
-      schrijf('Activiteiten', { type: 'fase', datum: nu(), door: ikNaam(), schoolId: k.schoolId, persoonId: k.persoonId, kansId: k.id, trajectId: proj ? proj.id : '', bron: 'app', aangemaakt: nu(),
+      schrijf('Activiteiten', { type: 'fase', datum: nu(), door: ikNaam(), schoolId: k.schoolId, persoonId: k.persoonId, kansId: k.id, trajectId: proj ? proj.id : '', bron: 'wissel', aangemaakt: nu(),
         onderwerp: 'Mijlpaal teruggezet: ' + oud.fase + ' → ' + k.fase, tekst: proj ? 'Het project blijft bestaan.' : '' });  // leesbaarheid; telt nergens
     } else if (faseWissel || !oud || rolWissel) {
       var bron = intern && intern.bron && FASE_BRONNEN.indexOf(intern.bron) >= 0 ? intern.bron : k.fase === 'gewonnen' ? 'winformulier' : k.fase === 'verloren' ? 'verloren' : !oud ? 'aanmaken'
         : (FASE_BRONNEN_APP.indexOf(w.bron) >= 0 && w.bron !== 'aanmaken' ? w.bron : 'detail');
       if (faseWissel || !oud) fw = faseWisselVastleggen(k, oud ? oud.fase : '', k.fase, { datum: datumW, bron: bron, vanPipeline: plOud, oudBevestigd: w.oudBevestigd === true });
       else fw = fasewisselsSchrijven([faseWisselRij(k, k.fase, k.fase, { datum: datumW, bron: bron, vanPipeline: plOud })])[0];  // R7: alleen de pipeline (en daarmee de effectieve rol) veranderde
+      if (faseWissel && (k.fase === 'gewonnen' || k.fase === 'verloren')) {  // v7.9 (review C1, N8): gesloten volgt de laatste sluitende wissel, net als bij Andere datum
+        var lsN = laatsteSluitendeWissel(k.id, k.fase);
+        if (lsN && lsN.werkelijkeDatum && lsN.werkelijkeDatum !== k.gesloten) { schrijfVeel('Kansen', [{ id: k.id, gesloten: lsN.werkelijkeDatum }]); k.gesloten = lsN.werkelijkeDatum; }
+      }
       if (faseWissel || !oud) {  // de tijdlijnregel blijft voor de leesbaarheid, maar telt nergens meer mee
-        schrijf('Activiteiten', { type: 'fase', datum: nu(), door: ikNaam(), schoolId: k.schoolId, persoonId: k.persoonId, kansId: k.id, bron: 'app', aangemaakt: nu(),
+        schrijf('Activiteiten', { type: 'fase', datum: nu(), door: ikNaam(), schoolId: k.schoolId, persoonId: k.persoonId, kansId: k.id, bron: 'wissel', aangemaakt: nu(),  // v7.9 (review C2): bron wissel, nooit omgezet
           onderwerp: oud ? 'Mijlpaal: ' + oud.fase + ' → ' + k.fase : 'Kans aangemaakt: ' + (k.naam || k.traject) + ' (' + k.fase + ')', tekst: k.fase === 'verloren' && k.verliesReden ? 'Reden: ' + k.verliesReden + (k.verliesToelichting ? '\n' + k.verliesToelichting : '') : '' });
       }
     } else if (oud && fase === 'verloren' && o.verliesReden !== undefined && o.verliesReden !== oud.verliesReden) {
@@ -1567,7 +1578,8 @@ function kansOpslaan(obj, intern) {
 
 // De werkelijke datum van een wissel. Leeg = vandaag; nooit na vandaag en nooit na het invoermoment; kalenderdagen (datumIn en datumStr),
 // dus 23:59 vandaag mag en morgen 00:01 niet, in elke tijdzone. N7: vóór 1 augustus van het vorige schooljaar alleen met oudBevestigd.
-// opties = { oudBevestigd, ingevoerdOp, zonderOndergrens, leegMag }
+// opties = { oudBevestigd, ingevoerdOp, zonderOndergrens, leegMag, nietVoor, nietNa }
+// v7.9 (review C1): nietVoor/nietNa = de datum van de vorige/volgende mijlpaal van dezelfde kans (wisselBuren), zodat Kansen.gesloten en de laatste sluitende wissel niet uiteenlopen
 function werkelijkeDatumIn(d, opties) {
   opties = opties || {};
   var vandaag = datumStr(new Date());
@@ -1577,8 +1589,26 @@ function werkelijkeDatumIn(d, opties) {
   if (!x || x !== s.slice(0, 10)) throw new Error('Ongeldige datum.');
   if (x > vandaag) throw new Error('De datum ligt in de toekomst.');
   if (opties.ingevoerdOp && x > String(opties.ingevoerdOp).slice(0, 10)) throw new Error('De datum ligt na het invoermoment.');
+  if (opties.nietVoor && x < String(opties.nietVoor).slice(0, 10)) throw new Error(NIET_VOOR_FOUT);
+  if (opties.nietNa && x > String(opties.nietNa).slice(0, 10)) throw new Error('De datum ligt na de volgende mijlpaal van deze kans.');
   if (!opties.oudBevestigd && !opties.zonderOndergrens && x < ondergrensWerkelijkeDatum()) throw new Error('Deze datum ligt vóór het vorige schooljaar. Bevestig de datum.');
   return x;
+}
+var NIET_VOOR_FOUT = 'De datum ligt vóór de vorige mijlpaal van deze kans.';
+// v7.9 (review C1): de keten van een kans: geldige wissels die op het moment zelf zijn vastgelegd (niet import, capsule, tijdlijn of reconstructie, want
+// hun invoermoment zegt niets over de volgorde; niet hernoemd), met een datum, in volgorde van invoer. buren(id) = de grenzen voor die wissel;
+// zonder id de grens voor een nieuwe wissel (de laatste datum in de keten).
+function wisselBuren(kansId, fwId) {
+  var keten = wisselsVanKans(kansId).filter(function (w) { return wisselGeldig(w) && w.werkelijkeDatum && FASE_ROL_OPNIEUW.indexOf(w.bron) < 0 && FASE_TELT_NIET.indexOf(w.bron) < 0; }).sort(volgordeIngevoerd);
+  var i = -1, uit = { nietVoor: '', nietNa: '' };
+  keten.forEach(function (w, j) { if (fwId && String(w.id) === String(fwId)) i = j; });
+  if (fwId && i < 0) return uit;  // een wissel buiten de keten (import, reconstructie): alleen de gewone grenzen
+  keten.forEach(function (w, j) {
+    var d = String(w.werkelijkeDatum).slice(0, 10);
+    if (!fwId || j < i) { if (d > uit.nietVoor) uit.nietVoor = d; }
+    else if (j > i && (!uit.nietNa || d < uit.nietNa)) uit.nietNa = d;
+  });
+  return uit;
 }
 function ondergrensWerkelijkeDatum() { return (Number(huidigSchooljaar().slice(0, 4)) - 1) + '-08-01'; }
 
@@ -1605,7 +1635,7 @@ function faseWisselRij(k, van, naar, o) {
     door: o.door || ikNaam(), eigenaar: k.eigenaar || '', zekerheid: zekerheid, bron: bron, ongedaan: '',
     vanRol: van ? effectieveRol(van, o.vanPipeline || pl) : '', naarRol: effectieveRol(naar, pl),
     waarde: o.waarde !== undefined ? Number(o.waarde) || 0 : Number(k.waarde) || 0, reden: naar === 'verloren' ? String(o.reden !== undefined ? o.reden : k.verliesReden || '') : '',
-    bewijs: o.bewijs || '', rolBron: bron === 'capsule' ? 'volgorde' : (pl ? status.pipelinesZonder.indexOf(pl) >= 0 : !status.ingesteld) ? 'leeg' : 'mijlpaal', verwijderd: ''
+    bewijs: o.bewijs ? bewijsSoort(o.bewijs) : '', rolBron: bron === 'capsule' ? 'volgorde' : (pl ? status.pipelinesZonder.indexOf(pl) >= 0 : !status.ingesteld) ? 'leeg' : 'mijlpaal', verwijderd: ''
   };
 }
 // Nieuwe wissels (en bij de reconstructie ook aangevulde): één schrijfVeel; altijd binnen metLock
@@ -1650,13 +1680,16 @@ function laatsteSluitendeWissel(kansId, naar, zonder) {
   l.sort(volgordeWerkelijk);
   return l.length ? l[l.length - 1] : null;
 }
-// N8: per kans hoogstens één deal: de laatste tellende sluitende wissel, als die naar gewonnen gaat (M08, de score van M13, gewonnenWaarde)
+// N8: per kans hoogstens één deal (M08, de score van M13, gewonnenWaarde). v7.9 (review C1): alleen een kans die nu gewonnen is (Kansen.fase, zoals M04),
+// met als deal zijn laatste tellende wissel naar gewonnen (volgorde werkelijkeDatum, dan ingevoerdOp): dezelfde wissel waar Kansen.gesloten op staat.
 function dealWissels() {
-  var W = wisselsData();
-  if (!W.deals) {
-    var laatste = {};
-    W.tellend.forEach(function (w) { if (w.naar !== 'gewonnen' && w.naar !== 'verloren') return; var k = String(w.kansId), h = laatste[k]; if (!h || volgordeWerkelijk(h, w) < 0) laatste[k] = w; });
-    W.deals = Object.keys(laatste).map(function (k) { return laatste[k]; }).filter(function (w) { return w.naar === 'gewonnen'; });
+  var W = wisselsData(), kb = _LEES.Kansen || (lees('Kansen'), _LEES.Kansen);
+  if (!W.deals || W.dealsKansen !== kb) {
+    var gewonnen = {}, laatste = {};
+    kb.forEach(function (k) { if (k.fase === 'gewonnen') gewonnen[String(k.id)] = true; });
+    W.tellend.forEach(function (w) { if (w.naar !== 'gewonnen') return; var k = String(w.kansId), h = laatste[k]; if (!gewonnen[k]) return; if (!h || volgordeWerkelijk(h, w) < 0) laatste[k] = w; });
+    W.deals = Object.keys(laatste).map(function (k) { return laatste[k]; });
+    W.dealsKansen = kb;
   }
   return W.deals;
 }
@@ -1690,9 +1723,11 @@ function apiFasewisselDatum(id, datum, opties) {
   if (w.ongedaan) throw new Error('Deze wissel is ongedaan gemaakt.');
   if (FASE_TELT_NIET.indexOf(w.bron) >= 0) throw new Error('Een hernoemde mijlpaal heeft geen eigen datum.');
   if (datum === undefined || datum === null || datum === '') throw new Error('Ongeldige datum.');
-  var d = werkelijkeDatumIn(datum, { oudBevestigd: !!(opties && typeof opties === 'object' && opties.oudBevestigd === true), ingevoerdOp: w.ingevoerdOp });
+  var buren = wisselBuren(k.id, w.id);  // v7.9 (review C1): niet vóór de vorige en niet na de volgende mijlpaal van deze kans
+  var d = werkelijkeDatumIn(datum, { oudBevestigd: !!(opties && typeof opties === 'object' && opties.oudBevestigd === true), ingevoerdOp: w.ingevoerdOp, nietVoor: buren.nietVoor, nietNa: buren.nietNa });
   return metLock(function () {
-    wisselsBijwerken([{ id: w.id, werkelijkeDatum: d, zekerheid: w.zekerheid || 'hoog' }]);  // een datum die iemand bewust invult, krijgt minstens zekerheid hoog
+    // een datum die iemand bewust invult, krijgt minstens zekerheid hoog (v7.9, review C9: ook een wissel met zekerheid laag of midden)
+    wisselsBijwerken([{ id: w.id, werkelijkeDatum: d, zekerheid: ['vastgelegd', 'hoog'].indexOf(w.zekerheid) >= 0 ? w.zekerheid : 'hoog' }]);
     if (k.fase === 'gewonnen' || k.fase === 'verloren') { var ls = laatsteSluitendeWissel(k.id, k.fase); if (ls && ls.werkelijkeDatum && ls.werkelijkeDatum !== k.gesloten) schrijfVeel('Kansen', [{ id: k.id, gesloten: ls.werkelijkeDatum }]); }
     return { fasewissel: fasewisselKort(vind('Fasewissels', w.id)) };
   });
@@ -2264,7 +2299,9 @@ function periodeSleutelVan(preset, datum) {
 }
 function periodeSleutelGeldig(preset, sleutel) { var re = uitMap(PERIODE_SLEUTEL_RE, preset); return !!re && re.test(String(sleutel)) && (preset !== 'schooljaar' || Number(String(sleutel).slice(5)) === Number(String(sleutel).slice(0, 4)) + 1); }
 // De ene idregel voor apiDoelOpslaan, apiWeekdoelenOpslaan en hernoemGebruiker (R5): een concrete periode zit in het id, zodat de historie blijft
-function doelId(eigenaar, periode, metric, sleutel) { return slug(eigenaar + '-' + periode + '-' + metric + (sleutel ? '-' + sleutel : '')); }
+// v7.9 (review C6): slug() kapt af op 60 tekens; met een concrete periode komt de sleutel daarom los achteraan (nooit afgekapt), anders vielen bij een
+// lange naam twee weken op één id. Zonder sleutel (de standaarddoelen) blijft het oude id.
+function doelId(eigenaar, periode, metric, sleutel) { return sleutel ? slug(eigenaar) + '-' + slug(periode + '-' + metric) + '-' + slug(sleutel) : slug(eigenaar + '-' + periode + '-' + metric); }
 // v7.9: oude namen van een cijfer (omzet, vo, deal) naar de naam in METRIEKEN, alleen als die bestaat; uitMap (N1)
 function metriekVan(m) { var x = typeof m === 'string' ? m : '', a = uitMap(METRIEK_ALIAS, x); return a && uitMap(METRIEKEN, a) ? a : x; }
 function apiDoelen() {
@@ -2390,25 +2427,38 @@ function crmInrichten() {
 // Oude tijdlijnregels ("Mijlpaal: a → b" en "Kans aangemaakt: … (fase)") worden één keer een wissel met bron tijdlijn (id tl-<activiteitId>, zekerheid laag,
 // datum = het invoermoment van de regel). Een regel waar al een wissel bij hoort (dezelfde kans en mijlpaal op dezelfde dag, zoals een regel die
 // kansOpslaan sinds v7.9 naast zijn wissel schrijft) wordt overgeslagen. toepassen = false: alleen tellen. Altijd binnen metLock bij toepassen.
+// v7.9 (review C2, C3): een regel met bron wissel (die kansOpslaan naast zijn wissel schrijft) en elke regel die is aangemaakt na de eerste omzetting
+// (scripteigenschap V79_START, één keer gezet door setup(), Beheer → Inrichten of de overstap) wordt nooit omgezet, ook niet als iemand er later
+// de datum of het onderwerp van wijzigt. Een regel met een datum in de toekomst wordt overgeslagen en apart geteld (toekomst, alleen een aantal);
+// een regel die faseWisselRij weigert ook (fout), zodat één regel de stap niet laat mislukken.
 function fasewisselsUitTijdlijn(toepassen) {
-  var kMap = perId(lees('Kansen')), bestaand = {}, gezien = {}, rijen = [], uit = { teOmzetten: 0, alOmgezet: 0, zonderKans: 0, geschreven: 0 };
+  var kMap = perId(lees('Kansen')), bestaand = {}, gezien = {}, rijen = [], uit = { teOmzetten: 0, alOmgezet: 0, zonderKans: 0, toekomst: 0, fout: 0, geschreven: 0 };
+  var start = String(P.getProperty('V79_START') || ''), vandaag = datumStr(new Date());
   lees('Fasewissels').forEach(function (w) {
     bestaand[String(w.id)] = true;
     gezien[String(w.kansId) + '|' + w.naar + '|' + String(w.ingevoerdOp).slice(0, 10)] = true;
     if (w.werkelijkeDatum) gezien[String(w.kansId) + '|' + w.naar + '|' + w.werkelijkeDatum] = true;
   });
   lees('Activiteiten').concat(lees('Activiteiten_archief')).forEach(function (a) {
-    if (a.type !== 'fase' || !a.kansId) return;
+    if (a.type !== 'fase' || !a.kansId || a.bron === 'wissel') return;
+    if (start && a.aangemaakt && String(a.aangemaakt) >= start) { uit.alOmgezet++; return; }
     var t = String(a.onderwerp || ''), m = /^Mijlpaal: (.+) → (.+)$/.exec(t), n = m ? null : /^Kans aangemaakt: .*\(([^()]+)\)$/.exec(t);
     if (!m && !n) return;
     var van = m ? m[1].trim() : '', naar = (m ? m[2] : n[1]).trim(), dag = String(a.datum).slice(0, 10), id = 'tl-' + a.id;
     if (bestaand[id] || gezien[String(a.kansId) + '|' + naar + '|' + dag]) { uit.alOmgezet++; return; }
     var k = kMap[String(a.kansId)]; if (!k) { uit.zonderKans++; return; }
+    if (dag > vandaag) { uit.toekomst++; return; }
+    var rij = null;
+    try { rij = faseWisselRij(k, van, naar, { bron: 'tijdlijn', datum: dag, zekerheid: 'laag', id: id, door: a.door || '', ingevoerdOp: String(a.datum).length > 10 ? String(a.datum).slice(0, 16) : dag + ' 12:00' }); }
+    catch (e) { uit.fout++; return; }
     uit.teOmzetten++;
-    if (toepassen) rijen.push(faseWisselRij(k, van, naar, { bron: 'tijdlijn', datum: dag, zekerheid: 'laag', id: id, door: a.door || '', ingevoerdOp: String(a.datum).length > 10 ? String(a.datum).slice(0, 16) : dag + ' 12:00' }));
+    if (toepassen) rijen.push(rij);
     gezien[String(a.kansId) + '|' + naar + '|' + dag] = true;
   });
-  if (toepassen) uit.geschreven = fasewisselsSchrijven(rijen).length;  // R2: één schrijfVeel
+  if (toepassen) {
+    uit.geschreven = fasewisselsSchrijven(rijen).length;  // R2: één schrijfVeel
+    if (!start) P.setProperty('V79_START', nu());  // review C2: vanaf nu wordt geen nieuwe tijdlijnregel meer omgezet
+  }
   return uit;
 }
 // R6: zijn de verliesredenen gekoppeld? Geen verloren kans en geen tellende verloren-wissel met een reden buiten de keuzelijst (data-gedreven, dus ook na een import)
@@ -2435,7 +2485,7 @@ function apiMigratieV79(stap, opties) {
   var toepassen = opties.toepassen === true;
   if (stap === 'status') {
     var kOpen = lees('Kansen').filter(kansOpen), buiten = redenenBuitenLijst(), tl = fasewisselsUitTijdlijn(false);
-    return { stap: stap, rollen: rollenStatus(), tijdlijn: { teOmzetten: tl.teOmzetten, alOmgezet: tl.alOmgezet },
+    return { stap: stap, rollen: rollenStatus(), tijdlijn: { teOmzetten: tl.teOmzetten, alOmgezet: tl.alOmgezet, toekomst: tl.toekomst, fout: tl.fout },
       wissels: { teHerzien: lees('Fasewissels').filter(wisselOpnieuw).length },
       kansen: { zonderSchooljaar: kOpen.filter(function (k) { return !k.schooljaar; }).length, zonderKlant: kOpen.filter(function (k) { return !k.klant; }).length },
       redenen: { gekoppeld: !Object.keys(buiten).length, buitenLijst: Object.keys(buiten).reduce(function (n, r) { return n + buiten[r]; }, 0) } };
@@ -2513,6 +2563,11 @@ function apiMigratieV79(stap, opties) {
 // Proefdraai tenzij opties.toepassen; idempotent; 'onbekend' wordt niet geïmporteerd. Een wissel zonder datum (bron import, capsule of tijdlijn) wordt aangevuld,
 // anders komt er een nieuwe wissel met bron reconstructie. Daarna volgt Kansen.gesloten de laatste sluitende wissel (N8). Alleen tellingen en regelnummers.
 var FW_IMPORT_KOLOMMEN = { kans: ['kans', 'kansid', 'capsuleid', 'capsule'], fase: ['fase', 'naar'], datum: ['werkelijke datum', 'werkelijkedatum', 'datum'], zekerheid: ['zekerheid'], bewijs: ['soort bewijs', 'bewijs'], van: ['van'] };
+// v7.9 (review P3): van het bewijs bewaren we alleen de soort uit een vaste lijst, nooit vrije tekst (dataminimalisatie; een naam in een zin bleef anders
+// voor altijd in Fasewissels staan). Een niet herkende tekst wordt 'overig' en telt mee in de uitkomst (bewijsOverig).
+var FW_BEWIJS = ['agenda', 'mail', 'notitie', 'capsule', 'teamagenda', 'overig'];
+var FW_BEWIJS_SYNONIEMEN = { 'e-mail': 'mail', email: 'mail', 'agenda-afspraak': 'agenda', afspraak: 'agenda', 'team agenda': 'teamagenda', 'team-agenda': 'teamagenda', teamapp: 'teamagenda', notities: 'notitie' };
+function bewijsSoort(t) { var x = klein(String(t || '')).replace(/\s+/g, ' ').trim(); if (!x) return ''; if (FW_BEWIJS.indexOf(x) >= 0) return x; return uitMap(FW_BEWIJS_SYNONIEMEN, x) || 'overig'; }
 function apiFasewisselsImport(tekst, opties) {
   alleenBeheerder();
   opties = opties && typeof opties === 'object' && !(opties instanceof Array) ? opties : {};
@@ -2525,13 +2580,13 @@ function apiFasewisselsImport(tekst, opties) {
   if (idx.kans < 0 || idx.fase < 0 || idx.datum < 0 || idx.zekerheid < 0) throw new Error('De kolommen kans, fase, werkelijke datum en zekerheid zijn verplicht (kopregel op de eerste regel).');
   var kansen = lees('Kansen'), perId_ = perId(kansen), perCap = {}, mp = mijlpaalMap(), vandaag = datumStr(new Date());
   kansen.forEach(function (k) { if (k.capsuleId) perCap[String(k.capsuleId)] = k; });
-  var uit = { gelezen: 0, nieuw: 0, aangevuld: 0, ongewijzigd: 0, overgeslagen: { onbekend: 0, onbekendeKans: 0, onbekendeFase: 0, datum: 0, leeg: 0 }, regels: { onbekendeKans: [] }, kolommen: kop.filter(Boolean) };
+  var uit = { gelezen: 0, nieuw: 0, aangevuld: 0, ongewijzigd: 0, bewijsOverig: 0, overgeslagen: { onbekend: 0, onbekendeKans: 0, onbekendeFase: 0, datum: 0, leeg: 0 }, regels: { onbekendeKans: [] }, kolommen: kop.filter(Boolean) };
   var schrijfRijen = [], geraakt = {}, nieuweIds = {}, aangevuldIds = {};
   var cel = function (r, x) { return idx[x] >= 0 ? String(r[idx[x]] == null ? '' : r[idx[x]]).trim() : ''; };
   for (var i = 1; i < rijen.length; i++) {
     var r = rijen[i]; if (!r || !r.some(function (c) { return String(c).trim(); })) continue;
     uit.gelezen++;
-    var kId = cel(r, 'kans'), fase = klein(cel(r, 'fase')), dIn = cel(r, 'datum'), zk = klein(cel(r, 'zekerheid')), bewijs = cel(r, 'bewijs').slice(0, 120), vanIn = klein(cel(r, 'van'));
+    var kId = cel(r, 'kans'), fase = klein(cel(r, 'fase')), dIn = cel(r, 'datum'), zk = klein(cel(r, 'zekerheid')), bewijsT = cel(r, 'bewijs'), bewijs = bewijsSoort(bewijsT), vanIn = klein(cel(r, 'van'));
     if (zk === 'onbekend') { uit.overgeslagen.onbekend++; continue; }
     if (!kId || !fase || !dIn || ['hoog', 'midden', 'laag'].indexOf(zk) < 0) { uit.overgeslagen.leeg++; continue; }
     var k = perId_[kId] || perCap[kId]; if (!k) { uit.overgeslagen.onbekendeKans++; if (uit.regels.onbekendeKans.length < 50) uit.regels.onbekendeKans.push(i + 1); continue; }
@@ -2542,6 +2597,9 @@ function apiFasewisselsImport(tekst, opties) {
     if (bestaand.some(function (w) { return w.werkelijkeDatum === dt; }) || nieuweIds['rec-' + slug(k.id + '-' + fase + '-' + dt)]) { uit.ongewijzigd++; continue; }
     var leeg = bestaand.filter(function (w) { return !w.werkelijkeDatum && !aangevuldIds[w.id] && ['import', 'capsule', 'tijdlijn'].indexOf(w.bron) >= 0; })[0];
     if (leeg) {
+      // v7.9 (review C4): ook het aanvullen volgt werkelijkeDatumIn: niet na het invoermoment van de wissel
+      try { werkelijkeDatumIn(dt, { zonderOndergrens: true, ingevoerdOp: leeg.ingevoerdOp }); } catch (e) { uit.overgeslagen.datum++; continue; }
+      if (bewijs === 'overig' && klein(bewijsT) !== 'overig') uit.bewijsOverig++;
       aangevuldIds[leeg.id] = true; uit.aangevuld++; geraakt[k.id] = k;
       schrijfRijen.push({ id: leeg.id, werkelijkeDatum: dt, zekerheid: zk, bewijs: bewijs, bron: 'reconstructie' });
       continue;
@@ -2551,6 +2609,7 @@ function apiFasewisselsImport(tekst, opties) {
     lijst.forEach(function (m, j) { if (m.mijlpaal === fase) pos = j; });
     var van = vanIn || (fase === 'gewonnen' || fase === 'verloren' ? (lijst.length ? lijst[lijst.length - 1].mijlpaal : '') : pos > 0 ? lijst[pos - 1].mijlpaal : '');
     var id = 'rec-' + slug(k.id + '-' + fase + '-' + dt);
+    if (bewijs === 'overig' && klein(bewijsT) !== 'overig') uit.bewijsOverig++;
     nieuweIds[id] = true; uit.nieuw++; geraakt[k.id] = k;
     schrijfRijen.push(faseWisselRij(k, van, fase, { bron: 'reconstructie', datum: dt, zekerheid: zk, bewijs: bewijs, id: id, reden: fase === 'verloren' ? (k.fase === 'verloren' ? k.verliesReden : '') : '' }));
   }
@@ -2689,8 +2748,9 @@ function capsulePagina(stap, pagina) {
     lees('Fasewissels').forEach(function (w) { wisselIds[String(w.id)] = true; });
     var wissels = [];
     rijen.forEach(function (r) {
-      var oudF = faseNu[r.id], id = 'cap-f' + r.capsuleId + '-' + slug(r.fase);
-      if ((oudF !== undefined && String(oudF) === String(r.fase)) || wisselIds[id]) return;
+      var oudF = faseNu[r.id], basisId = 'cap-f' + r.capsuleId + '-' + slug(r.fase), id = basisId, n = 2;
+      if ((oudF !== undefined && String(oudF) === String(r.fase)) || (oudF === undefined && wisselIds[id])) return;
+      while (wisselIds[id]) id = basisId + '-' + n++;  // v7.9 (review C10): terug naar een fase met al een wissel (herrun): een nieuw volgnummer, geen fasewijziging zonder wissel
       var dicht = (r.fase === 'gewonnen' || r.fase === 'verloren') && r.gesloten ? datumIn(String(r.gesloten)) : '';
       if (dicht > vandaag) dicht = '';
       wissels.push(faseWisselRij(r, oudF || '', r.fase, { bron: 'capsule', datum: dicht, zekerheid: dicht ? 'laag' : '', id: id, door: r.eigenaar || '' }));
@@ -2992,6 +3052,8 @@ function apiActiviteitOpslaan(obj) {
   if (!oud) throw new Error('Activiteit niet gevonden (misschien al gearchiveerd).');
   if (!isBeheerder() && oud.door && oud.door !== ikNaam()) throw new Error('Alleen wie het vastlegde of de beheerder kan dit wijzigen.');
   if (o.type !== undefined && ACTIVITEIT_TYPES.concat(['fase', 'taak']).indexOf(o.type) < 0) throw new Error('Onbekend soort activiteit.');
+  // v7.9 (review C2): een mijlpaalregel ontstaat alleen bij een wissel; zijn datum, onderwerp en kans liggen vast (een andere datum gaat via de mijlpaal: Andere datum)
+  if (o.type === 'fase' && oud.type !== 'fase') throw new Error('Een mijlpaal leg je vast bij de kans, niet als activiteit.');
   if (o.vorm !== undefined) {  // v7.1: de vorm bepaalt het type; een mijlpaal of taakregel heeft geen vorm
     if (!TYPE_VAN_VORM.hasOwnProperty(o.vorm)) throw new Error('Onbekend soort activiteit.');
     if (oud.type === 'fase' || oud.type === 'taak') throw new Error('Een mijlpaal of afgeronde taak krijgt geen ander soort.');
@@ -3000,6 +3062,8 @@ function apiActiviteitOpslaan(obj) {
   if (o.datum !== undefined) { o.datum = datumTijdIn(o.datum); if (!o.datum) throw new Error('Ongeldige datum.'); }
   if (o.duurMin !== undefined) o.duurMin = Number(o.duurMin) || '';
   ['onderwerp', 'tekst'].forEach(function (k) { if (o[k] !== undefined) o[k] = tekstIn(o[k]); });  // v7.3: geen object als tekst
+  if (oud.type === 'fase' && oud.kansId && ['datum', 'onderwerp', 'kansId'].some(function (k) { return o[k] !== undefined && String(o[k]) !== String(k === 'datum' ? datumTijdIn(oud.datum) || oud.datum : oud[k]); }))
+    throw new Error('De datum, het onderwerp en de kans van een mijlpaalregel liggen vast. Een andere datum zet je bij de mijlpaal zelf (Andere datum).');
   [['schoolId', 'Scholen'], ['persoonId', 'Personen'], ['kansId', 'Kansen'], ['trajectId', 'Trajecten']].forEach(function (x) { if (o[x[0]] && !vind(x[1], o[x[0]])) throw new Error('Koppeling niet gevonden.'); });
   var na = function (k) { return o[k] !== undefined ? o[k] : oud[k]; };
   if (!na('schoolId') && !na('persoonId') && !na('kansId') && !na('trajectId')) throw new Error('Koppel de activiteit aan een school, persoon of kans.');
@@ -3766,7 +3830,7 @@ var METRIEKEN = {
   benodigdeActiviteit:   { team: 'sturing', label: 'Benodigde activiteit (rekenmodel)', kort: 'Nodig', soort: 'aantal', m: 'M11', besluit: 'B3', eigenaar: 'beheerder', tolerantie: '0',
     definitie: 'Deals = doel nieuw ÷ aanname dealwaarde; voorstellen = deals ÷ aanname conversie voorstel naar deal; AP\'s = voorstellen ÷ aanname conversie AP naar voorstel; per week ÷ werkweken; per OC ÷ aantal OC\'s (de beheerder telt niet mee). Elke aanname heeft een versie, eigenaar en onderbouwing; zodra M12 meetbaar is, staat de gemeten waarde ernaast.' },
   voorspellingDeals:     { team: 'sturing', label: 'Voorspelling deals volgende week', kort: 'Voorsp.', soort: 'aantal', m: 'M13', besluit: 'B3', eigenaar: 'beheerder', tolerantie: '0',
-    definitie: 'Het verwachte aantal wissels naar gewonnen in de komende ISO-week = het gemiddelde over een aaneengesloten reeks hele weken op akkoorddatum (weken zonder akkoord tellen als nul), met een interval van het 10e tot het 90e percentiel. Vastgelegd vóór de week en daarna gescoord (fout, binnen het interval).' },
+    definitie: 'Het verwachte aantal wissels naar gewonnen in de komende ISO-week = het gemiddelde over een aaneengesloten reeks hele weken op akkoorddatum (weken zonder akkoord tellen als nul), met een interval van het 10e tot het 90e percentiel. Vastgelegd vóór de week en gescoord (fout, binnen het interval) zodra na de week de registratiemarge voorbij is: de aanname registratieNorm, minstens 7 kalenderdagen.' },
   afsprakenGepland:      { team: 'sturing', label: 'Afspraken gepland (volgende werkweek)', kort: 'Gepland', soort: 'aantal', m: 'M15', besluit: 'B4', eigenaar: 'beheerder', tolerantie: '0',
     definitie: 'Afspraak-activiteiten bij een school. Gehouden = datum in de week, niet afgemeld. Gepland = datum in de volgende werkweek. Afgemeld door de school staat apart.' },
   weekdoel:              { team: 'sturing', label: 'Weekdoel', kort: 'Doel', soort: 'aantal', m: 'M17', besluit: 'B4', eigenaar: 'beheerder', tolerantie: '0',
@@ -3855,7 +3919,7 @@ function kandidaatHistorie(k) { var h = {}; try { h = JSON.parse(k.statusHistori
 function schooljaarStart(sj) { return new Date(Number(String(sj).slice(0, 4)), 7, 1); }
 
 // v4.4: één keer lezen per rapport; een rapport telt tot zo'n dertig periodes
-function rapportData() { return { acts: lees('Activiteiten'), kansen: lees('Kansen'), scholen: lees('Scholen'), ts: lees('Trajecten'), vacs: lees('Vacatures'), kands: lees('Kandidaten'), facturen: lees('Facturen'), nu: nu(), wissels: tellendeWissels() }; }  // v7.9: de tellende wissels
+function rapportData() { return { acts: lees('Activiteiten'), kansen: lees('Kansen'), scholen: lees('Scholen'), ts: lees('Trajecten'), vacs: lees('Vacatures'), kands: lees('Kandidaten'), facturen: lees('Facturen'), nu: nu() }; }  // v7.9 (review T4): de tellende wissels pas in teamCijfers (consultancy), zodat het rapport van AM en talent Fasewissels niet leest
 // Cijfers van één team in een periode: per persoon en het teamtotaal ({ per: {naam: {maatstaf: {t, n}}}, totaal: {...} }).
 function teamCijfers(team, van, tot, D) {
   D = D || rapportData();
@@ -3867,20 +3931,25 @@ function teamCijfers(team, van, tot, D) {
   };
   var sj = huidigSchooljaar(), vandaag = datumStr(new Date()), geblokkeerd = {};
   if (team === 'consultancy') {
-    D.acts.forEach(function (a) {
+    // v7.9 (review T4): per verzoek één keer per activiteit of ze een contactmoment of gehouden afspraak is, en per wissel de rol (telRol); een rapport telt
+    // tot zo'n dertig periodes met dezelfde D, en parseDatum per activiteit per periode maakte apiTeamRapport zichtbaar trager dan v7.8 (R9)
+    if (D._actBron !== D.acts) { D._actBron = D.acts; D._actC = D.acts.map(function (a) { var vorm = vormVan(a), dag = parseDatum(String(a.datum || '').slice(0, 10)); return (CONTACT_VORMEN.indexOf(vorm) >= 0 && dag && isoDag(dag) <= 5 ? 1 : 0) + (AFSPRAAK_VORMEN.indexOf(vorm) >= 0 && a.schoolId ? 2 : 0); }); }
+    var AC = D._actC;
+    D.acts.forEach(function (a, i) {
       if (!a.door || !inP(a.datum) || String(a.datum) > D.nu) return;
       if (a.type === 'gesprek') tel(a.door, 'gesprekken', 1); else if (a.type === 'mail') tel(a.door, 'mails', 1); else if (a.type === 'afspraak') tel(a.door, 'afspraken', 1);
       // v7.9: M14 contactmomenten (de vormen uit CONTACT_VORMEN op werkdagen; mail alleen verstuurd, dus met door) en M15 afspraken gehouden (bij een school)
-      var vorm = vormVan(a), dag = parseDatum(String(a.datum).slice(0, 10));
-      if (CONTACT_VORMEN.indexOf(vorm) >= 0 && dag && isoDag(dag) <= 5) tel(a.door, 'contactmomenten', 1);
-      if (AFSPRAAK_VORMEN.indexOf(vorm) >= 0 && a.schoolId) tel(a.door, 'afsprakenGehouden', 1);
+      if (AC[i] & 1) tel(a.door, 'contactmomenten', 1);
+      if (AC[i] & 2) tel(a.door, 'afsprakenGehouden', 1);
     });
     D.kansen.forEach(function (k) { if (inP(k.aangemaakt)) tel(k.eigenaar, 'nieuweKansen', 1); });
     // v7.9: AP, AD, voorstellen en deals uit Fasewissels: telRol op de rol en de werkelijke datum, op de eigenaar van de kans op dat moment (nooit de tekst van de tijdlijn)
     var W = D.wissels || tellendeWissels();
-    W.forEach(function (w) {
+    if (D._wRolBron !== W) { D._wRolBron = W; D._wRol = W.map(telRol); }
+    var WR = D._wRol;
+    W.forEach(function (w, i) {
       if (!inP(w.werkelijkeDatum)) return;
-      var r = telRol(w);
+      var r = WR[i];
       if (r === 'ap' || r === 'ad') tel(w.eigenaar, r, 1); else if (r === 'voorstel') tel(w.eigenaar, 'voorstellen', 1); else if (r === 'deal') tel(w.eigenaar, 'gewonnen', 1);
     });
     dealWissels().forEach(function (w) { if (inP(w.werkelijkeDatum)) tel(w.eigenaar, 'gewonnenWaarde', Number(w.waarde) || 0); });  // N8: per kans één deal, de getekende waarde
@@ -7635,13 +7704,14 @@ var IMPORT_BRONNEN = ['import', 'capsule', 'reconstructie', 'tijdlijn'];
 // Alles wat de contracten nodig hebben, één keer gelezen. Gebruikt geen gebruiker; de rol en het fasegewicht per kans staan erin, zodat datacontracten() puur blijft.
 function standVoorContracten(vandaag) {
   vandaag = vandaag || datumStr(new Date());
-  var kansen = lees('Kansen'), rol = {}, gewicht = {}, vv = {};
+  var kansen = lees('Kansen'), rol = {}, gewicht = {}, vv = {}, gIds = {};
   kansen.forEach(function (k) { var pl = pipelineVan(k); rol[k.id] = effectieveRol(k.fase, pl); gewicht[k.id] = fasegewichtVan(k); vv[k.id] = kansOpen(k) && vanafVoorstel(k.fase, pl); });
+  lees('Gebruikers').forEach(function (g) { if (g.naam && g.id) gIds[String(g.naam)] = String(g.id); });  // review P4: een verwijzing naar een OC met zijn id, niet zijn naam
   var aw = function (n) { return aannameWaarde(n, vandaag); };
   return {
     vandaag: vandaag, schooljaar: sjOp(vandaag), kansen: kansen, trajecten: lees('Trajecten'), facturen: lees('Facturen'), uren: lees('TalentUren'), wissels: lees('Fasewissels'),
     doelen: lees('Doelen'), scholen: lees('Scholen'), rol: rol, gewicht: gewicht, vanafVoorstel: vv, rollenIngesteld: rollenStatus().ingesteld,
-    actieven: lees('Gebruikers').filter(actief).map(function (g) { return String(g.naam); }), scriptEigenaar: P.getProperty('NAAM') || 'Menno', consultancy: teamNamen('consultancy'),
+    actieven: lees('Gebruikers').filter(actief).map(function (g) { return String(g.naam); }), gebruikerIds: gIds, scriptEigenaar: P.getProperty('NAAM') || 'Menno', consultancy: teamNamen('consultancy'),
     normen: { bulkDrempel: aw('bulkDrempel'), dekkingTolerantie: aw('dekkingTolerantie'), verliesNormWeken: aw('verliesNormWeken'), standaardTarief: aw('standaardTarief'), overstapDatum: aw('overstapDatum') },
     scope: aw('scope'), jaardoel: aw('jaardoel'), scopeVersies: scopeVersies(),
     doelVersies: aannameVersies('doelpadCurve').map(function (v) { return { id: v.id, naam: 'doelpadCurve', waarde: v.waarde }; }).concat(aannameVersies('jaardoel').map(function (v) { return { id: v.id, naam: 'jaardoel', waarde: v.waarde }; }))
@@ -7725,7 +7795,7 @@ function datacontracten(S) {
   // 8. weekdoel_voor_deze_week: per actieve OC een doel voor precies deze ISO-week (exacte vergelijking: fout uit de Mac-code)
   var d0 = parseDatum(vandaag), wk = isoWeekStr(d0), metDoel = {};
   S.doelen.forEach(function (d) { if (d.periode === 'week' && String(d.periodeSleutel || '') === wk && Number(d.doel) > 0) metDoel[String(d.eigenaar)] = true; });
-  S.consultancy.forEach(function (n) { if (!metDoel[n]) af('weekdoel_voor_deze_week', 'beheerder', 'doel', slug(n) + '-' + wk); });
+  S.consultancy.forEach(function (n) { if (!metDoel[n]) af('weekdoel_voor_deze_week', 'beheerder', 'doel', (uitMap(S.gebruikerIds || {}, n) || 'onbekend') + '-' + wk); });  // review P4: gebruikers-id, geen naam
   // 9. fasewissel_heeft_werkelijke_datum: tellende wissels ingevoerd in dit schooljaar
   tellend.forEach(function (w) {
     var inv = String(w.ingevoerdOp || '').slice(0, 10); if (!inSj(inv)) return;
@@ -7835,11 +7905,15 @@ function voorspelOpdrachten30(peildatum) {
   basis.model = 'verwachte-tekendatum';
   return basis;
 }
-// Elke rij waarvan de periode voorbij is en die nog niet gescoord is (gemist en geblokkeerd niet): werkelijk = deals (per kans één) met werkelijke datum in [van, tot]
+// v7.9 (review C7): een deal komt vaak dagen na de werkelijke datum in Athena (registratievertraging, M35). Scoren gebeurt daarom pas als na het einde
+// van de periode de marge voorbij is: de aanname registratieNorm in dagen, minstens VOORSPELLING_MARGE_DAGEN kalenderdagen.
+var VOORSPELLING_MARGE_DAGEN = 7;
+function scoringsMarge() { var a = aanname('registratieNorm'), n = a ? Number(a.waarde) : NaN; return Math.max(VOORSPELLING_MARGE_DAGEN, isFinite(n) && n > 0 ? Math.round(n) : 0); }
+// Elke rij waarvan de periode plus de marge voorbij is en die nog niet gescoord is (gemist en geblokkeerd niet): werkelijk = deals (per kans één) met werkelijke datum in [van, tot]
 function scoorVoorspellingen(vandaag) {
-  var rijen = [];
+  var rijen = [], marge = scoringsMarge();
   lees('Voorspellingen').forEach(function (r) {
-    if (r.gescoord || r.model === 'gemist' || r.model === 'geblokkeerd' || !r.tot || String(r.tot) >= vandaag) return;
+    if (r.gescoord || r.model === 'gemist' || r.model === 'geblokkeerd' || !r.tot || plusDagenVan(String(r.tot).slice(0, 10), marge) >= vandaag) return;
     var w = dealsTussen(String(r.van), String(r.tot)), v = Number(r.verwacht) || 0, interval = r.onder !== '' && r.boven !== '';
     rijen.push({ id: r.id, werkelijk: w, gescoord: nu(), fout: Math.round((w - v) * 10) / 10, binnenInterval: interval ? (w >= Number(r.onder) && w <= Number(r.boven) ? 'ja' : 'nee') : '' });
   });
@@ -7883,16 +7957,26 @@ function sturingTrigger() {
 }
 // v7.9 (punt 21): de laatste donderdag van de maand van d (datumcomponenten, 12:00 tegen de zomertijd)
 function laatsteDonderdag(d) { var x = parseDatum(d) || new Date(), l = new Date(x.getFullYear(), x.getMonth() + 1, 0, 12); while (l.getDay() !== 4) l = new Date(l.getFullYear(), l.getMonth(), l.getDate() - 1, 12); return datumStr(l); }
-// Op de laatste donderdag, of op de eerstvolgende run daarna in dezelfde maand als die donderdag mislukte (peildatum = de inhaaldag); één maandstand per maand
+// Op de laatste donderdag, of op de eerstvolgende run daarna als die donderdag mislukte (peildatum = de inhaaldag); één maandstand per maand.
+// v7.9 (review C5): ook over de maandgrens: viel de laatste donderdag op de laatste dag(en) van de maand en mislukte de run, dan haalt de eerste run
+// in de nieuwe maand de stand van de vorige maand in (sleutel = de vorige maand, label ingehaald). Alleen als de trigger in die maand al liep
+// (LAATSTE_STURING), zodat een nieuwe installatie geen stand voor een maand van vóór de installatie maakt.
 function maandstandAlsNodig(vandaag) {
-  if (vandaag < laatsteDonderdag(vandaag)) return { maand: vandaag.slice(0, 7), nogNiet: true };
-  return sturingBevriezen(vandaag, 'maand');
+  var d = parseDatum(vandaag), vorigeDag = datumStr(new Date(d.getFullYear(), d.getMonth(), 0, 12)), vorige = vorigeDag.slice(0, 7);
+  var vorigeRun = String(P.getProperty('LAATSTE_STURING') || '').slice(0, 7), ingehaald = null;
+  if (vorigeRun && vorigeRun >= vorige && vandaag > laatsteDonderdag(vorigeDag) && !maandstandBestaat(vorige)) ingehaald = sturingBevriezen(vandaag, 'maand', vorige);
+  var uit = vandaag < laatsteDonderdag(vandaag) ? { maand: vandaag.slice(0, 7), nogNiet: true } : sturingBevriezen(vandaag, 'maand');
+  if (ingehaald) uit.ingehaald = ingehaald;
+  return uit;
 }
+// De maand van een maandstand staat in het id (st-m-<yyyy-MM>-…), want een ingehaalde stand heeft een peildatum in de maand erna
+function standMaand(r) { var m = /^st-m-(\d{4}-\d{2})-/.exec(String(r.id || '')); return m ? m[1] : String(r.peildatum).slice(0, 7); }
+function maandstandBestaat(maand) { return lees('Standen').some(function (r) { return r.soort === 'maand' && standMaand(r) === maand; }); }
 // soort maand (de trigger, één per maand) of tussenstand (de knop, hoogstens één per dag; vervangt de maandstand nooit, R4).
 // Per cijfer en uitsplitsing een rij, met de definitie zoals die op de peildatum gold (N5); één schrijfVeel binnen metLock.
-function sturingBevriezen(peildatum, soort) {
-  var maand = String(peildatum).slice(0, 7), standen = lees('Standen');
-  if (soort === 'maand' && standen.some(function (r) { return r.soort === 'maand' && String(r.peildatum).slice(0, 7) === maand; })) return { peildatum: peildatum, maand: maand, soort: soort, al: true, rijen: 0 };
+function sturingBevriezen(peildatum, soort, maandSleutel) {
+  var maand = soort === 'maand' && maandSleutel ? String(maandSleutel) : String(peildatum).slice(0, 7), standen = lees('Standen');  // review C5: een ingehaalde maand
+  if (soort === 'maand' && standen.some(function (r) { return r.soort === 'maand' && standMaand(r) === maand; })) return { peildatum: peildatum, maand: maand, soort: soort, al: true, rijen: 0 };
   if (soort === 'tussenstand' && standen.some(function (r) { return r.soort === 'tussenstand' && String(r.peildatum) === peildatum; })) return { peildatum: peildatum, soort: soort, al: true, rijen: 0 };
   var S = sturingCijfers(peildatum), pre = 'st-' + (soort === 'maand' ? 'm-' + maand : 't-' + peildatum) + '-', t = nu(), rijen = [];
   S.blokken.forEach(function (b) {
@@ -7912,8 +7996,8 @@ function apiSturingBevriezen() { alleenBeheerder(); var r = sturingBevriezen(dat
 function standenLijst() {
   var gezien = {}, uit = [];
   lees('Standen').forEach(function (r) {
-    var p = String(r.peildatum).slice(0, 10), sl = r.soort === 'maand' ? p.slice(0, 7) : p; if (gezien[r.soort + '|' + sl]) return; gezien[r.soort + '|' + sl] = true;
-    var d = parseDatum(p), ld = laatsteDonderdag(p);
+    var p = String(r.peildatum).slice(0, 10), sl = r.soort === 'maand' ? standMaand(r) : p; if (gezien[r.soort + '|' + sl]) return; gezien[r.soort + '|' + sl] = true;
+    var d = r.soort === 'maand' ? parseDatum(sl + '-15') : parseDatum(p), ld = laatsteDonderdag(r.soort === 'maand' ? sl + '-15' : p);  // review C5: de maand uit het id
     uit.push({ sleutel: sl, soort: r.soort, peildatum: p, ingehaald: r.soort === 'maand' && p !== ld,
       label: r.soort === 'maand' ? 'Maandstand ' + MAANDEN[d.getMonth()] + ' ' + d.getFullYear() + ' (peildatum ' + p + ')' + (p !== ld ? ' (ingehaald)' : '') : 'Tussenstand ' + p });
   });
@@ -7922,6 +8006,7 @@ function standenLijst() {
 
 /* ----- v7.9 (punt 19): de weekweergave (M14, M15, M16, M17, M35) per OC, met het teamtotaal ----- */
 
+var WEEK_TOTAAL_MIN_ANDEREN = 3;  // review P5 (R8)
 var WEEK_CIJFERS = ['contactmomenten', 'afsprakenGehouden', 'afsprakenGepland', 'ap', 'ad', 'voorstellen', 'gewonnen', 'registratievertraging', 'weekdoel'];
 // rijen = [{ naam, leden: [namen] }]: elke regel telt de activiteit en de wissels van zijn leden (een OC zichzelf, de regel "beheerder" het management)
 function weekCijfers(B, rijen) {
@@ -8228,7 +8313,7 @@ function conversieSchooljaar(van, tot, kMap) {
 }
 // Een bevroren stand terug als blokken: de waarden en de definitie uit Standen (N5), niet uit de huidige code
 function standUit(sleutel) {
-  var rijen = lees('Standen').filter(function (r) { var p = String(r.peildatum).slice(0, 10); return r.soort === 'maand' ? /^\d{4}-\d{2}$/.test(sleutel) && p.slice(0, 7) === sleutel : p === sleutel; });
+  var rijen = lees('Standen').filter(function (r) { var p = String(r.peildatum).slice(0, 10); return r.soort === 'maand' ? /^\d{4}-\d{2}$/.test(sleutel) && standMaand(r) === sleutel : p === sleutel; });  // review C5
   if (!rijen.length) throw new Error('Deze stand bestaat niet.');
   var per = {}; rijen.forEach(function (r) { (per[String(r.metriek)] = per[String(r.metriek)] || []).push(r); });
   var peildatum = String(rijen[0].peildatum).slice(0, 10);
@@ -8261,13 +8346,17 @@ function sturingWeek(o) {
   var regels = mensen.map(function (n) { return { naam: n, leden: [n] }; });
   if (isBeheerder() && !eigenaar) regels.push({ naam: 'beheerder', leden: teamNamen('management') });  // M14: de beheerder heeft een eigen regel, niet in het teamtotaal
   var totaalRegel = { naam: '__team', leden: leden }, X = weekCijfers(B, regels.concat([totaalRegel]));
+  // v7.9 (review P5, R8): een medewerker ziet het teamtotaal alleen als het team naast hem minstens WEEK_TOTAAL_MIN_ANDEREN andere leden heeft; anders
+  // is teamtotaal min de eigen regel de som van één of twee collega's (per persoon alleen in het 1-op-1)
+  var anderen = leden.filter(function (n) { return n !== ikNaam(); }).length, totaalZichtbaar = isBeheerder() || isTeamlead() || anderen >= WEEK_TOTAAL_MIN_ANDEREN;
   var wk = isoWeekStr(parseDatum(B.van)), doelen = doelenVan('week', wk), blok = rolBlokkade(), geblokkeerd = {};
   if (blok) ['ap', 'ad', 'voorstellen'].forEach(function (m) { geblokkeerd[m] = blok; });  // B1: geblokkeerd, nooit 0; deals tellen wel
   var vorm = function (x) { var c = {}; Object.keys(x).forEach(function (k) { if (k !== 'vertraging') c[k] = uitMap(geblokkeerd, k) ? null : x[k]; }); return c; };
   var rollen = {}; mijlpalen().forEach(function (m) { if (m.rol) rollen[m.rol] = true; });
   return { weergave: 'week', van: B.van, tot: B.tot, eind: B.eind, label: B.label, stap: B.stap, lopend: B.lopend, week: wk,
     rijen: regels.map(function (r) { return { naam: r.naam, team: r.naam === 'beheerder' ? 'management' : 'consultancy', cijfers: vorm(X[r.naam]), vertraging: X[r.naam].vertraging, doelen: r.naam === 'beheerder' ? {} : doelen[r.naam] || {}, geblokkeerd: geblokkeerd }; }),
-    totaal: { cijfers: vorm(X.__team), vertraging: X.__team.vertraging, doelen: doelen['team:consultancy'] || {}, geblokkeerd: geblokkeerd },
+    totaal: totaalZichtbaar ? { cijfers: vorm(X.__team), vertraging: X.__team.vertraging, doelen: doelen['team:consultancy'] || {}, geblokkeerd: geblokkeerd } : null,
+    totaalUitleg: totaalZichtbaar ? '' : 'Het teamtotaal staat er niet: het team is te klein (minder dan ' + WEEK_TOTAAL_MIN_ANDEREN + ' collega\'s), dus het zou de cijfers van één of twee collega\'s laten zien.',
     defs: definitiesVan(WEEK_CIJFERS), rolOntbreekt: ['ap', 'ad', 'voorstel'].filter(function (r) { return !rollen[r]; }), rollenIngesteld: !blok, kiesbaar: kiesbaar, eigenaar: eigenaar };
 }
 function sturingMt(o) {
@@ -8305,6 +8394,10 @@ function sturingDatakwaliteit(o) {
     if (soort === 'kans') { k = kMap[id]; return k && mag('pipeline', 'zien', k) ? { soort: 'kans', id: id, naam: (k.naam || k.traject) + (k.school ? ' (' + k.school + ')' : ''), open: true } : { soort: 'kans', id: '', naam: 'kans van een collega', open: false }; }
     if (soort === 'project') { t = tMap[id]; return t && mag('projecten', 'zien', t) ? { soort: 'project', id: id, naam: t.traject + ' (' + t.school + ')', open: true } : { soort: 'project', id: '', naam: 'project van een collega', open: false }; }
     if (soort === 'school') { s = sMap[id]; return s && mag('relaties', 'zien', s) ? { soort: 'school', id: id, naam: s.naam, open: true } : { soort: 'school', id: '', naam: 'school van een collega', open: false }; }
+    if (soort === 'doel') {  // review P4: <gebruikers-id>-<week>; de naam alleen voor het management, opgezocht bij het tonen
+      var wkD = id.slice(-8), gid = id.slice(0, -9), g = isBeheerder() ? lees('Gebruikers').filter(function (x) { return String(x.id) === gid; })[0] : null;
+      return { soort: 'doel', id: '', naam: 'weekdoel ' + wkD + (g ? ' van ' + g.naam : ''), open: false };
+    }
     if (soort === 'factuur') { fMap = fMap || perId(lees('Facturen')); var f = fMap[id]; t = f ? tMap[String(f.trajectId)] : null; return f && t && mag('facturatie', 'zien', t) ? { soort: 'project', id: t.id, naam: (f.factuurnummer ? 'factuur ' + f.factuurnummer : 'termijn zonder factuurnummer') + ' (' + t.school + ')', open: true } : { soort: 'factuur', id: '', naam: f && !t ? 'termijn zonder project' : 'factuur van een collega', open: false }; }
     return { soort: soort, id: id, naam: id, open: false };
   };

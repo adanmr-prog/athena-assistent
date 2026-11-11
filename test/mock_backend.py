@@ -503,7 +503,7 @@ def basis():
             'projecten': [{'id': t['id'], 'naam': t['traject'] + ' ' + t['schooljaar'], 'schoolId': t['schoolId'], 'school': t['school'], 'kansId': t['kansId'], 'status': t['status'], 'am': t['am']} for t in TRAJECTEN if eigen_project(t)], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN],
             'kansenKort': [{'id': k['id'], 'naam': k['naam'], 'school': k['school'], 'schoolId': k['schoolId']} for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')],  # v4.5
             # v7.9: klantvoorstel (alleen ids), schooljaren, sturingVerplicht, rollen en de versie van de backend
-            'klantIn': {'2025-2026': ['s1', 's2'], '2026-2027': ['s1', 's2']}, 'schooljaren': ['2026-2027', '2027-2028'], 'sturingVerplicht': False, 'rollenIngesteld': True, 'backendVersie': BACKEND_VERSIE[0]}
+            'klantIn': {'2025-2026': ['s1', 's2'], '2026-2027': ['s1', 's2']}, 'schooljaren': ['2026-2027', '2027-2028'], 'rollenIngesteld': True, 'backendVersie': BACKEND_VERSIE[0]}
 def basis_versie():  # v7.9 (R13): een oudere backend (via _backendVersie) kent de velden van v7.9 niet
     b = basis()
     if [int(x) for x in BACKEND_VERSIE[0].split('.')] < [7, 9]:
@@ -732,7 +732,7 @@ def handle_crm(fn, args):
         o = dict(args[0]); a = {'id': 'e' + uuid.uuid4().hex[:5], 'type': 'afspraak', 'datum': o['start'].replace('T', ' '), 'door': 'Menno', 'schoolId': o.get('schoolId', ''), 'persoonId': o.get('persoonId', ''), 'kansId': o.get('kansId', ''), 'onderwerp': o['titel'], 'tekst': o.get('notitie', ''), 'duurMin': int(float(o.get('duurMin') or 60)), 'bron': 'app'}
         ACTIVITEITEN.append(a); return act_uit(a)
     if fn == 'apiPipeline' and not beheer(): geen_toegang()
-    if fn == 'apiPipeline': return {'mijlpalen': MIJLPALEN, 'pipelines': ['Scholen'], 'kansen': [kans_uit(k) for k in CRMKANSEN], 'verliesRedenen': INSTELLINGEN.get('verliesRedenen', VERLIES_REDENEN)}  # v7.9: de keuzelijst
+    if fn == 'apiPipeline': return {'mijlpalen': MIJLPALEN, 'pipelines': ['Scholen'], 'kansen': [kans_uit(k) for k in CRMKANSEN], 'verliesRedenen': INSTELLINGEN.get('verliesRedenen', VERLIES_REDENEN), 'sturingVerplicht': False}  # v7.9: de keuzelijst; review T4: sturingVerplicht hier, niet in apiCrm
     if fn == 'apiTaken': return {'taken': [taak_uit(t) for t in TAKEN], 'categorieen': basis()['categorieen'], 'gebruikers': GEBRUIKERS_NAMEN, 'tracks': TRACKS,
                                  'tags': sorted({x for t in TAKEN for x in tags_lijst(t.get('tags'))}), 'weergaven': WEERGAVEN.get(HUIDIG[0], []), 'herinneringen': HERINNERINGEN.get(HUIDIG[0], True)}  # v4.6
     if fn == 'apiTaakOpslaan':

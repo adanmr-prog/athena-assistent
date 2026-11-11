@@ -404,7 +404,38 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
   X.GEBRUIKER = null; X._LEES = {}; X.verwijderRijen('Datakwaliteit', function () { return true; }); X.verwijderRijen('Voorspellingen', function () { return true; }); X._LEES = {};
   var tT = Date.now(), uit = X.sturingTrigger(), msT = Date.now() - tT;
   eis(msT < 2000 && uit.datakwaliteit && uit.datakwaliteit.rijen > 0 && typeof uit.voorspelling === 'object', 'v7.9: sturingTrigger op praktijkschaal (datacontracten, voorspelling, maandstand) in ' + msT + ' ms (bovengrens 2 s): ' + JSON.stringify(uit).slice(0, 160));
-  // R9: vijf runs voor en na (alleen met R9_BASIS)
+  // review T6: het zwaarste pad op een vaste klok, met lege tabbladen Datakwaliteit, Voorspellingen en Standen: de laatste donderdag van deze maand
+  // (sturingCijfers via sturingBevriezen) en de maandag van deze week (voorspelDealsWeek); elk < 2 s
+  var n0 = new Date(), ldD = new Date(n0.getFullYear(), n0.getMonth() + 1, 0, 6, 45), maD = new Date(n0.getFullYear(), n0.getMonth(), n0.getDate(), 6, 45);
+  while (ldD.getDay() !== 4) ldD.setDate(ldD.getDate() - 1);
+  while (maD.getDay() !== 1) maD.setDate(maD.getDate() - 1);
+  [['de laatste donderdag', ldD], ['maandag', maD]].forEach(function (g) {
+    var Y = context({ klok: g[1].getTime() }); Y.demoGrootStart('');
+    Y.GEBRUIKER = null; Y._LEES = {}; ['Datakwaliteit', 'Voorspellingen', 'Standen'].forEach(function (t) { Y.verwijderRijen(t, function () { return true; }); }); Y._LEES = {};
+    var t1 = Date.now(), u = Y.sturingTrigger(), ms1 = Date.now() - t1, zwaar = g[0] === 'maandag' ? !!(u.voorspelling && u.voorspelling.voorspeld === 2) : !!(u.bevroren && u.bevroren.rijen > 0);
+    eis(ms1 < 2000 && zwaar, 'review T6: sturingTrigger op ' + g[0] + ' (' + Y.datumStr(new Y.Date()) + ', vaste klok) met ' + (g[0] === 'maandag' ? 'de voorspelling (voorspeld 2)' : 'de maandstand (bevroren rijen > 0)') + ' in ' + ms1 + ' ms (bovengrens 2 s): ' + JSON.stringify(u).slice(0, 160));
+  });
+  // review T4: Fasewissels wordt nooit gearchiveerd; met vijf keer zoveel wissels (vier eerdere jaren erbij) blijven apiKans en apiTeamRapport × vier rollen < 500 ms
+  var Z = context(); Z.demoGrootStart(''); Z.GEBRUIKER = null; Z._LEES = {};
+  var Wz = Z.lees('Fasewissels'), extraW = [];
+  [1, 2, 3, 4].forEach(function (j) {
+    Wz.forEach(function (w) {
+      var c = {}; Object.keys(w).forEach(function (k) { if (k !== '_rij') c[k] = w[k]; });
+      c.id = w.id + '-j' + j; if (c.werkelijkeDatum) c.werkelijkeDatum = Z.plusDagenVan(String(c.werkelijkeDatum).slice(0, 10), -365 * j);
+      c.ingevoerdOp = Z.plusDagenVan(String(c.ingevoerdOp).slice(0, 10), -365 * j) + String(c.ingevoerdOp).slice(10); extraW.push(c);
+    });
+  });
+  Z.schrijfVeel('Fasewissels', extraW); Z._LEES = {};
+  var kansMetW = Wz.length ? String(Wz[Wz.length - 1].kansId) : 'k1', traagZ = [], hoogZ = { ms: 0 };
+  ROLLEN.forEach(function (rc) {
+    [['apiKans', [kansMetW]], ['apiTeamRapport', ['jaar', '', '', 0]], ['apiTeamRapport', ['kwartaal', 'consultancy', '', 0]]].forEach(function (g) {
+      var t2 = Date.now(); Z.demoRun(g[0], JSON.stringify(g[1]), rc); var ms2 = Date.now() - t2;
+      if (ms2 > hoogZ.ms) hoogZ = { ms: ms2, wat: g[0] + ' als ' + rc };
+      if (ms2 >= 500) traagZ.push(g[0] + '(' + g[1][0] + ') als ' + rc + ' ' + ms2 + ' ms');
+    });
+  });
+  eis(!traagZ.length, 'review T4: met vijf keer zoveel Fasewissels (' + (Wz.length + extraW.length) + ' rijen) blijven apiKans en apiTeamRapport × vier rollen < 500 ms (traagste: ' + hoogZ.wat + ', ' + hoogZ.ms + ' ms)' + (traagZ.length ? ': ' + traagZ.join('; ') : ''));
+  // R9: vijf runs voor en na (alleen met R9_BASIS; de releasebasis is de merge-base met main, git merge-base main HEAD)
   var basis = process.env.R9_BASIS;
   if (!basis) { info('R9: R9_BASIS niet gezet; de vergelijking met een eerdere versie (vijf runs, mediaan, ≤ 10 %) is overgeslagen'); return; }
   var cp = require('child_process'), os = require('os'), map = fs.mkdtempSync(path.join(os.tmpdir(), 'r9-')), bron = {};
@@ -414,14 +445,17 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
     var A = maak(bron['demo/demo-backend.js'], bron['backend/Code.gs'], bron['demo/demo-groot.js']), N = maak(BRON_DEMO, BRON_CODE, BRON_GROOT), API = { apiHome: function () { return []; }, apiFinancien: function (Y) { return [Y.huidigSchooljaar()]; }, apiTeamRapport: function () { return ['kwartaal', '', '', 0]; } };
     var meet = function (Y, api) { var t1 = process.hrtime.bigint(); ROLLEN.forEach(function (rc) { Y.demoRun(api, JSON.stringify(API[api](Y)), rc); }); return Number(process.hrtime.bigint() - t1) / 1e6; };
     var med = function (l) { var s = l.slice().sort(function (a, b) { return a - b; }); return s[2]; }, slecht = [];
+    // v7.9 (review T4): tegen een basis van vóór v7.9 (zonder tabblad Fasewissels) is apiTeamRapport bewust duurder: AP, AD, VO en deals tellen uit Fasewissels
+    // (één tabblad meer, alleen voor consultancy). Gemeten en geaccepteerd in docs/prestatie-v7.9.md (+13 % tegen 4cf1dd7, mediaan van vijf runs); de grens is dan 20 %.
+    var voorV79 = !/\bFasewissels:\s*\[/.test(bron['backend/Code.gs']), GEACCEPTEERD = voorV79 ? { apiTeamRapport: 1.20 } : {};
     Object.keys(API).forEach(function (api) {
       meet(A, api); meet(N, api);  // opwarmen
       var a = [], n = []; for (var i = 0; i < 5; i++) { a.push(meet(A, api)); n.push(meet(N, api)); }
-      var mA = med(a), mN = med(n), ok = mN <= mA * 1.10 + 5;  // 5 ms absolute ruis bovenop de 10 %
-      info('R9 ' + api + ' × vier rollen: mediaan voor ' + Math.round(mA) + ' ms, na ' + Math.round(mN) + ' ms (' + (mA ? Math.round(100 * (mN - mA) / mA) : 0) + ' %)');
+      var grens = GEACCEPTEERD[api] || 1.10, mA = med(a), mN = med(n), ok = mN <= mA * grens + 5;  // 5 ms absolute ruis bovenop de 10 %
+      info('R9 ' + api + ' × vier rollen: mediaan voor ' + Math.round(mA) + ' ms, na ' + Math.round(mN) + ' ms (' + (mA ? Math.round(100 * (mN - mA) / mA) : 0) + ' %)' + (GEACCEPTEERD[api] ? ' — geaccepteerde grens ' + Math.round(100 * (grens - 1)) + ' % (Fasewissels, docs/prestatie-v7.9.md)' : ''));
       if (!ok) slecht.push(api);
     });
-    eis(!slecht.length, 'R9: apiHome, apiFinancien en apiTeamRapport zijn na pakket 2 niet meer dan 10 % trager dan ' + basis + ' (mediaan van vijf runs)' + (slecht.length ? ': ' + slecht.join(', ') : ''));
+    eis(!slecht.length, 'R9: apiHome, apiFinancien en apiTeamRapport zijn niet meer dan 10 % trager dan ' + basis + ' (mediaan van vijf runs' + (voorV79 ? '; apiTeamRapport tegen een basis van vóór v7.9: 20 %, zie docs/prestatie-v7.9.md' : '') + ')' + (slecht.length ? ': ' + slecht.join(', ') : ''));
   } finally { try { fs.rmSync(map, { recursive: true, force: true }); } catch (e) {} }
 })();
 

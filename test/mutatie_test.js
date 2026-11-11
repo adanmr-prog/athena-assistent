@@ -1,12 +1,13 @@
-// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: twaalf) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
+// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
 // onaangeraakt); per mutant draait `CODE_GS=<kopie> node test/node_rooktest.js`. Een mutant is "gedood" als de rooktest faalt
 // (exitcode ≠ 0, crash of timeout) en "OVERLEEFD" als hij ALLES GOED geeft: dan mist de rooktest een eis(...) voor die invariant.
-// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 11 van 12 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij.
+// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 14 van 15 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
+// v7.9 (review T3, T5): de noemerregel zonder waarde en zonder schooljaarcontrole, en het venster van de voorspelling één week opgeschoven.
 // Resultaat als json in test/shots/robuust/mutatie.json (staat in .gitignore).
 var fs = require('fs'), path = require('path'), cp = require('child_process');
 var R = path.join(__dirname, '..'), BRON = path.join(R, 'backend/Code.gs'), ROOKTEST = path.join(__dirname, 'node_rooktest.js');
 var UIT_MAP = path.join(R, 'test/shots/robuust'), UIT = path.join(UIT_MAP, 'mutatie.json');
-var TIMEOUT_MS = 120000, MIN_GEDOOD = 11;  // v7.9: twaalf mutanten, norm ≥ 11
+var TIMEOUT_MS = 120000, MIN_GEDOOD = 14;  // v7.9 (review): vijftien mutanten, norm ≥ 14
 
 // De kopieën staan buiten de repo: standaard in de scratchpad van de sessie (--map overschrijft), nooit naast het origineel.
 var argMap = process.argv.indexOf('--map');
@@ -65,7 +66,21 @@ var MUTANTEN = [
   { id: 'weekdoel_einde_nummer', gebied: 'doelen', invariant: 'doelenVan vergelijkt de periodeSleutel exact',
     zoek: "  if (sleutel) rijen.filter(function (d) { return String(d.periodeSleutel || '') === String(sleutel); }).forEach(zet);",
     vervang: "  if (sleutel) rijen.filter(function (d) { return String(d.periodeSleutel || '').slice(-1) === String(sleutel).slice(-1); }).forEach(zet);  // MUTANT",
-    voorstel: "eis(ctx.doelenVan('week', wk)['Lars Visser'].ap === 2, 'een week met hetzelfde laatste cijfer telt niet mee');" }
+    voorstel: "eis(ctx.doelenVan('week', wk)['Lars Visser'].ap === 2, 'een week met hetzelfde laatste cijfer telt niet mee');" },
+  // v7.9 (review T3): het jaardoel is pas bruikbaar met een eigen waarde (geen terugval op een los contracteerdoel) en alleen voor zijn schooljaar
+  { id: 'jaardoel_zonder_waarde', gebied: 'sturing (B3)', invariant: 'noemerUit blokkeert een jaardoel zonder eigen waarde, ook met een contracteerdoel',
+    zoek: "|| !(sc instanceof Array) || !(Number(j.waarde) > 0)) return leeg;",
+    vervang: "|| !(sc instanceof Array)) return leeg;  // MUTANT",
+    voorstel: "eis(/besluit jaardoel/.test(mtCijfers().M07.geblokkeerd), 'een jaardoel zonder waarde met noemer contracteerdoel blijft geblokkeerd');" },
+  { id: 'jaardoel_ander_schooljaar', gebied: 'sturing (B3)', invariant: 'noemerUit weigert een jaardoel voor een ander schooljaar',
+    zoek: "  if (j.schooljaar && sj && j.schooljaar !== sj) { basis.reden",
+    vervang: "  if (false && j.schooljaar && sj && j.schooljaar !== sj) { basis.reden",
+    voorstel: "eis(/het jaardoel is voor schooljaar/.test(mtCijfers().M07.geblokkeerd), 'een jaardoel voor vorig schooljaar telt niet');" },
+  // v7.9 (review T5): M13 rekent over de N hele ISO-weken vóór deze week, niet over de lopende week
+  { id: 'voorspelling_venster', gebied: 'voorspellingslog (M13)', invariant: 'voorspelDealsWeek telt de N hele weken vóór de week van de voorspelling',
+    zoek: "  for (var i = n; i >= 1; i--) { var b = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() - 7 * i, 12)",
+    vervang: "  for (var i = n - 1; i >= 0; i--) { var b = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() - 7 * i, 12)",
+    voorstel: "eis(ctx.voorspelDealsWeek(ma).verwacht === 1.4, 'M13: de lopende week telt niet mee in het venster');" }
 ];
 
 var fouten = 0, overleefd = 0, gedood = 0, t0 = Date.now();
@@ -132,7 +147,7 @@ resultaat.gedood = gedood; resultaat.overleefd = overleefd; resultaat.looptijdS 
 resultaat.geslaagd = gedood >= MIN_GEDOOD && resultaat.mutanten.every(function (r) { return r.toegepast; });
 fs.writeFileSync(UIT, JSON.stringify(resultaat, null, 2));
 console.log('     ' + gedood + ' van ' + MUTANTEN.length + ' gedood, ' + overleefd + ' overleefd; json: ' + path.relative(R, UIT) + '; looptijd ' + looptijdS + ' s');
-// Oordeel: ≥ 11 van 12 gedood (v7.9; was ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
+// Oordeel: ≥ 14 van 15 gedood (v7.9 na de review; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
 if (resultaat.geslaagd) console.log('ALLES GOED' + (overleefd ? ' (met ' + overleefd + ' overlevende mutant: zie de FOUT-regel hierboven)' : ''));
 else console.log('FOUTEN: ' + fouten);
 process.exit(resultaat.geslaagd ? 0 : 1);

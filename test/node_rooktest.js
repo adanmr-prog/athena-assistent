@@ -1729,10 +1729,13 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     var nw = roep(LARS, 'apiKansOpslaan', { naam: 'Rooktest direct in voorstel', schoolId: 's1', fase: 'voorstel', wissel: { bron: 'slepen', datum: plusDagen(-2) } });
     eis(nw.fasewissel && nw.fasewissel.van === '' && nw.fasewissel.label === 'direct' && wisselRij(nw.fasewissel.id).bron === 'aanmaken' && nw.fasewissel.werkelijkeDatum === plusDagen(-2) && wisselsVan(nw.kans.id).length === 1,
       'pad aanmaken: van leeg, label direct, bron aanmaken (ook als de app een andere bron stuurt)');
+    // review C1: een akkoorddatum vóór de vorige mijlpaal van deze kans (bulk, vandaag) wordt geweigerd; de kans blijft in onderhandeling
+    eis(/vóór de vorige mijlpaal/.test(faalt(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'gewonnen', _oud: { fase: 'onderhandeling' }, overdracht: od(31500, plusDagen(-3)), wissel: { bron: 'detail' } })) && ctx.vind('Kansen', 'k16').fase === 'onderhandeling',
+      'review C1: een akkoorddatum vóór de vorige mijlpaal van de kans wordt geweigerd ("De datum ligt vóór de vorige mijlpaal van deze kans.")');
     // winformulier: datum = akkoorddatum, waarde = getekende waarde, Kansen.gesloten = akkoorddatum
-    var won = roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'gewonnen', _oud: { fase: 'onderhandeling' }, overdracht: od(31500, plusDagen(-3)), wissel: { bron: 'detail' } });
+    var won = roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'gewonnen', _oud: { fase: 'onderhandeling' }, overdracht: od(31500, plusDagen(0)), wissel: { bron: 'detail' } });
     var wW = wisselRij(won.fasewissel.id);
-    eis(wW.bron === 'winformulier' && wW.werkelijkeDatum === plusDagen(-3) && Number(wW.waarde) === 31500 && ctx.vind('Kansen', 'k16').gesloten === plusDagen(-3) && Number(ctx.vind('Kansen', 'k16').waarde) === 31500 && wW.naarRol === 'deal',
+    eis(wW.bron === 'winformulier' && wW.werkelijkeDatum === plusDagen(0) && Number(wW.waarde) === 31500 && ctx.vind('Kansen', 'k16').gesloten === plusDagen(0) && Number(ctx.vind('Kansen', 'k16').waarde) === 31500 && wW.naarRol === 'deal',
       'pad winformulier: bron winformulier, werkelijke datum en Kansen.gesloten = akkoorddatum, waarde = getekende waarde');
     // verloren: reden uit de lijst op de wissel, datum uit het venster
     var lost = roep(LARS, 'apiKansOpslaan', { id: 'k10', fase: 'verloren', _oud: { fase: 'voorstel' }, verliesReden: 'Te duur', verliesToelichting: 'Begroting is dit jaar krap', wissel: { datum: plusDagen(-2) } });
@@ -1777,6 +1780,13 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     ctx.capsulePagina('kansen', 1);
     var cw = wisselsVan('cap-k9001');
     eis(cw.length === 1 && cw[0].id === 'cap-f9001-voorstel' && cw[0].bron === 'capsule' && cw[0].rolBron === 'volgorde' && cw[0].van === '' && cw[0].werkelijkeDatum === '', 'pad capsule: één wissel met id cap-f<capsuleId>-<naar>, rolBron volgorde, zonder datum (open kans)');
+    // review C10: een herrun waarin de kans naar Won gaat en daarna terug naar voorstel: elke fasewijziging een wissel (terug krijgt een volgnummer)
+    var capMijl = 502;
+    ctx.capsule = function (pad) { return { data: { opportunities: [{ id: 9001, name: 'Capsulekans', party: null, milestone: { id: capMijl }, value: { amount: 4000 }, owner: { name: 'Lars Visser' }, createdAt: plusDagen(-40) + 'T09:00:00Z' }] }, meer: false }; };
+    ctx._LEES = {}; ctx.capsulePagina('kansen', 1); capMijl = 501; ctx._LEES = {}; ctx.capsulePagina('kansen', 1); ctx._LEES = {}; ctx.capsulePagina('kansen', 1);
+    var cw2 = wisselsVan('cap-k9001').map(function (w) { return w.id + ':' + w.van + '>' + w.naar; }).sort();
+    eis(cw2.join() === 'cap-f9001-gewonnen:voorstel>gewonnen,cap-f9001-voorstel-2:gewonnen>voorstel,cap-f9001-voorstel:>voorstel' && ctx.vind('Kansen', 'cap-k9001').fase === 'voorstel',
+      'review C10: terug naar een fase die al een capsule-wissel had geeft een wissel met volgnummer (cap-f<id>-<fase>-2); een herrun zonder wijziging niets');
     ctx.capsule = echtCapsule;
     // tijdlijn via crmInrichten: een oude regel wordt één keer een wissel
     ctx.schrijf('Activiteiten', { id: 'act-rk-tl', type: 'fase', datum: plusDagen(-3) + ' 14:00', door: 'Yara El Amrani', schoolId: 's6', kansId: 'k12', onderwerp: 'Mijlpaal: lead → gesprek', bron: 'app', aangemaakt: plusDagen(-3) + ' 14:00' });
@@ -1785,6 +1795,23 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     eis(tl && tl.bron === 'tijdlijn' && tl.zekerheid === 'laag' && tl.werkelijkeDatum === plusDagen(-3) && tl.van === 'lead' && tl.naar === 'gesprek', 'pad tijdlijn (crmInrichten): een oude tijdlijnregel wordt één wissel met bron tijdlijn en zekerheid laag');
     var nTl = aantalWissels(); ctx.crmInrichten();
     eis(aantalWissels() === nTl && ctx.apiMigratieV79('status').tijdlijn.teOmzetten === 0, 'pad tijdlijn: een tweede run en de regels die kansOpslaan naast zijn wissel schrijft, geven geen dubbele wissel');
+    // review C2: de regel naast een wissel heeft bron wissel; ook met een gewijzigde datum of onderwerp wordt hij nooit een tweede wissel
+    eis(!!ctx._demoProps.V79_START, 'review C2: de eerste omzetting zet V79_START');
+    var c2 = roep('demo-yara', 'apiKansOpslaan', { id: 'k12', fase: 'gesprek', _oud: { fase: 'lead' }, wissel: { bron: 'detail' } });
+    var c2a = ctx.lees('Activiteiten').filter(function (a) { return a.kansId === 'k12' && a.onderwerp === 'Mijlpaal: lead → gesprek' && a.bron === 'wissel'; })[0];
+    eis(!!c2a && /liggen vast/.test(faalt('demo-yara', 'apiActiviteitOpslaan', { id: c2a.id, datum: plusDagen(-10) + ' 10:00' })) && /liggen vast/.test(faalt('demo-yara', 'apiActiviteitOpslaan', { id: c2a.id, onderwerp: 'Mijlpaal: lead → gewonnen' })),
+      'review C2: datum en onderwerp van een mijlpaalregel wijzigen wordt geweigerd (een andere datum gaat via de mijlpaal)');
+    var c2n = ctx.lees('Activiteiten').filter(function (a) { return a.kansId === 'k12' && a.type === 'notitie'; })[0] || roep('demo-yara', 'apiActiviteitToevoegen', { vorm: 'notitie', kansId: 'k12', tekst: 'Rooktest' });
+    eis(/bij de kans/.test(faalt('demo-yara', 'apiActiviteitOpslaan', { id: c2n.id, type: 'fase' })), 'review C2: een notitie krijgt niet het type fase');
+    ctx.schrijfVeel('Activiteiten', [{ id: c2a.id, datum: plusDagen(-10) + ' 10:00', onderwerp: 'Mijlpaal: lead → gewonnen' }]);  // buiten de api om, zoals een oude app of een hand in de Sheet
+    ctx.schrijf('Activiteiten', { id: 'act-rk-na', type: 'fase', datum: plusDagen(-8) + ' 10:00', door: 'Yara El Amrani', schoolId: 's6', kansId: 'k12', onderwerp: 'Mijlpaal: gesprek → voorstel', bron: 'app', aangemaakt: ctx.nu() });
+    var c2w = aantalWissels(), c2t = roep(SOPHIE, 'apiMigratieV79', 'tijdlijn', { toepassen: true }); ctx.crmInrichten();
+    eis(c2.fasewissel && aantalWissels() === c2w && c2t.geschreven === 0, 'review C2: regeldatum en onderwerp gewijzigd, daarna tijdlijn toepassen en crmInrichten: 0 nieuwe wissels (bron wissel en aangemaakt na V79_START)');
+    // review C3: een oude regel met een datum in de toekomst laat de stap niet mislukken; hij wordt overgeslagen en apart geteld
+    ctx.schrijf('Activiteiten', { id: 'act-rk-toek', type: 'fase', datum: plusDagen(3) + ' 10:00', door: 'Yara El Amrani', schoolId: 's6', kansId: 'k12', onderwerp: 'Mijlpaal: lead → gesprek', bron: 'app', aangemaakt: plusDagen(-30) + ' 10:00' });
+    var c3s = roep(SOPHIE, 'apiMigratieV79', 'status').tijdlijn, c3t = roep(SOPHIE, 'apiMigratieV79', 'tijdlijn', { toepassen: true }), c3i = ctx.crmInrichten();
+    eis(c3s.toekomst === 1 && c3s.teOmzetten === 0 && c3t.toekomst === 1 && c3t.geschreven === 0 && c3i.fasewissels === 0 && aantalWissels() === c2w, 'review C3: een tijdlijnregel in de toekomst wordt overgeslagen en apart geteld (status, tijdlijn en crmInrichten gooien niet)');
+    eis(wisselRij('tl-act-rk-tl').zekerheid === 'laag' && roep('demo-yara', 'apiFasewisselDatum', 'tl-act-rk-tl', plusDagen(-4)).fasewissel.zekerheid === 'hoog', 'review C9: een datum die iemand bewust invult maakt zekerheid laag minstens hoog');
     // pipelinewissel (R7): andere effectieve rol = één wissel met bron detail; een pipeline zonder die mijlpaal wordt geweigerd
     roep(SOPHIE, 'apiMijlpalenOpslaan', ctx.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol }; })
       .concat([{ pipeline: 'Particulier', mijlpaal: 'lead', kans: 10, dagenNorm: 7, rol: 'lead' }, { pipeline: 'Particulier', mijlpaal: 'gesprek', kans: 50, dagenNorm: 7, rol: 'voorstel' }]), GEWICHT_OK);  // pakket 2 (N6): nieuwe gewichten vragen een onderbouwing
@@ -1799,12 +1826,12 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     var her = roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'lead', _oud: { fase: 'gewonnen' }, wissel: { bron: 'detail' } }), nP = ctx.lees('Trajecten').filter(function (t) { return t.kansId === 'k16'; }).length, nV = aantalWissels();
     var und = roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'gewonnen', _oud: { fase: 'lead' }, wissel: { ongedaan: her.fasewissel.id } });
     var k16 = ctx.vind('Kansen', 'k16');
-    eis(k16.fase === 'gewonnen' && k16.gesloten === plusDagen(-3) && aantalWissels() === nV && !!wisselRij(her.fasewissel.id).ongedaan && ctx.lees('Trajecten').filter(function (t) { return t.kansId === 'k16'; }).length === nP && und.fasewissel.ongedaan === true && und.traject === null,
+    eis(k16.fase === 'gewonnen' && k16.gesloten === plusDagen(0) && aantalWissels() === nV && !!wisselRij(her.fasewissel.id).ongedaan && ctx.lees('Trajecten').filter(function (t) { return t.kansId === 'k16'; }).length === nP && und.fasewissel.ongedaan === true && und.traject === null,
       'B2: gewonnen → lead → ongedaan geeft fase gewonnen met de oorspronkelijke akkoorddatum, de vlag op de wissel, geen nieuw event, geen nieuw project en geen fout over het winformulier');
     eis(ctx.lees('Activiteiten').some(function (a) { return a.kansId === 'k16' && a.onderwerp === 'Mijlpaal teruggezet: lead → gewonnen'; }), 'B2: de terugzetting staat leesbaar op de tijdlijn (telt nergens)');
     eis(!ctx.tellendeWissels().some(function (w) { return w.id === her.fasewissel.id || w.id === 'fw-k9-ongedaan'; }) && !ctx.dealWissels().some(function (w) { return w.id === her.fasewissel.id; }), 'een ongedaan gemaakte wissel telt nergens (de teruggezette en fw-k9-ongedaan uit de seed)');
     var her2 = roep(LARS, 'apiKansOpslaan', { id: 'k10', fase: 'voorstel', _oud: { fase: 'verloren' }, wissel: {} });
-    eis(ctx.vind('Kansen', 'k10').verliesReden === '' && ctx.vind('Kansen', 'k10').gesloten === '', 'heropenen wist reden en gesloten');
+    eis(ctx.vind('Kansen', 'k10').verliesReden === '' && ctx.vind('Kansen', 'k10').gesloten === '' && ctx.vind('Kansen', 'k10').verliesToelichting === '', 'heropenen wist reden, toelichting (review C8) en gesloten');
     roep(LARS, 'apiKansOpslaan', { id: 'k10', fase: 'verloren', _oud: { fase: 'voorstel' }, wissel: { ongedaan: her2.fasewissel.id } });
     var k10 = ctx.vind('Kansen', 'k10');
     eis(k10.fase === 'verloren' && k10.verliesReden === 'te duur' && k10.gesloten === plusDagen(-2), 'B2: verloren → voorstel → ongedaan geeft fase verloren met de oude reden en gesloten (uit de laatste sluitende wissel)');
@@ -1817,10 +1844,23 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
       /vorige schooljaar/.test(faalt(NOOR, 'apiFasewisselDatum', 'fw-k8-0', ctx.ondergrensWerkelijkeDatum().slice(0, 4) + '-07-15')) && /ongedaan/.test(faalt('demo-yara', 'apiFasewisselDatum', 'fw-k9-ongedaan', plusDagen(-6))) &&
       /toegang/.test(faalt(LARS, 'apiFasewisselDatum', 'fw-k8-1', plusDagen(-21))) && wisselRij('fw-k8-1').werkelijkeDatum === plusDagen(-20), 'apiFasewisselDatum: toekomst, na het invoermoment, vóór het vorige schooljaar, een ongedane wissel en de kans van een ander worden geweigerd');
     var oudDag = ctx.ondergrensWerkelijkeDatum().slice(0, 4) + '-07-15';
-    ctx.schrijf('Fasewissels', { id: 'fw-rk-oud', kansId: 'k8', van: '', naar: 'lead', werkelijkeDatum: plusDagen(-30), ingevoerdOp: plusDagen(-1) + ' 10:00', eigenaar: 'Noor Hendriks', door: 'Noor Hendriks', zekerheid: 'vastgelegd', bron: 'detail' });
+    ctx.schrijf('Fasewissels', { id: 'fw-rk-oud', kansId: 'k8', van: '', naar: 'lead', werkelijkeDatum: plusDagen(-31), ingevoerdOp: plusDagen(-31) + ' 09:00', /* review C1: de eerste in de keten van k8 */ eigenaar: 'Noor Hendriks', door: 'Noor Hendriks', zekerheid: 'vastgelegd', bron: 'detail' });
     eis(roep(NOOR, 'apiFasewisselDatum', 'fw-rk-oud', oudDag, { oudBevestigd: true }).fasewissel.werkelijkeDatum === oudDag, 'apiFasewisselDatum: vóór het vorige schooljaar mag met oudBevestigd');
     var sl5 = ctx.laatsteSluitendeWissel('k5', 'gewonnen'), gz = roep(NOOR, 'apiFasewisselDatum', sl5.id, plusDagen(-9));
     eis(gz.fasewissel.werkelijkeDatum === plusDagen(-9) && ctx.vind('Kansen', 'k5').gesloten === plusDagen(-9), 'apiFasewisselDatum: Kansen.gesloten volgt de laatste sluitende wissel');
+    // review C1: gewonnen (akkoord -3), heropend (-2), verloren met -10: geweigerd; gesloten en de deal blijven kloppen met Kansen.fase (N8)
+    var c1w = roep(NOOR, 'apiKansOpslaan', { id: 'k6', fase: 'gewonnen', _oud: { fase: 'voorstel' }, overdracht: od(12000, plusDagen(-3)) });
+    var c1h = roep(NOOR, 'apiKansOpslaan', { id: 'k6', fase: 'voorstel', _oud: { fase: 'gewonnen' }, wissel: { datum: plusDagen(-2) } });
+    eis(/vóór de vorige mijlpaal/.test(faalt(NOOR, 'apiKansOpslaan', { id: 'k6', fase: 'verloren', _oud: { fase: 'voorstel' }, verliesReden: 'te duur', wissel: { datum: plusDagen(-10) } })) && ctx.vind('Kansen', 'k6').fase === 'voorstel',
+      'review C1: verloren met een datum vóór het heropenen wordt geweigerd; de kans blijft open');
+    var c1v = roep(NOOR, 'apiKansOpslaan', { id: 'k6', fase: 'verloren', _oud: { fase: 'voorstel' }, verliesReden: 'te duur', wissel: { datum: plusDagen(-1) } }), k6n = ctx.vind('Kansen', 'k6');
+    eis(k6n.gesloten === plusDagen(-1) && ctx.laatsteSluitendeWissel('k6', 'verloren').id === c1v.fasewissel.id && !ctx.dealWissels().some(function (w) { return w.kansId === 'k6'; }),
+      'review C1: na gewonnen, heropend en verloren staat gesloten op de verloren-wissel en telt de kans niet als deal');
+    eis(/vóór de vorige mijlpaal/.test(faalt(NOOR, 'apiFasewisselDatum', c1v.fasewissel.id, plusDagen(-10))) && /na de volgende mijlpaal/.test(faalt(NOOR, 'apiFasewisselDatum', c1w.fasewissel.id, plusDagen(-1))) &&
+      roep(NOOR, 'apiFasewisselDatum', c1h.fasewissel.id, plusDagen(-3)).fasewissel.werkelijkeDatum === plusDagen(-3), 'review C1: Andere datum weigert een datum vóór de vorige of na de volgende mijlpaal; daartussen mag');
+    ctx.fasewisselsSchrijven([ctx.faseWisselRij(ctx.vind('Kansen', 'k6'), 'voorstel', 'gewonnen', { bron: 'reconstructie', datum: plusDagen(0), zekerheid: 'midden', id: 'rk-c1-rec' })]);
+    eis(!ctx.dealWissels().some(function (w) { return w.kansId === 'k6'; }), 'review C1: een kans die nu verloren is telt nooit als deal, ook niet met een latere (gereconstrueerde) winwissel');
+    eis(ctx.werkelijkeDatumIn(plusDagen(-2), { nietVoor: plusDagen(-2), nietNa: plusDagen(-2) }) === plusDagen(-2), 'review C1: werkelijkeDatumIn kent nietVoor en nietNa (grenzen inclusief)');
     // R17: verwijderen
     var w1 = wisselsVan('k1').length;
     eis(/gewonnen kans met een project blijft staan/.test(faalt(LARS, 'apiVerwijder', 'kans', 'k1')) && !!ctx.vind('Kansen', 'k1') && wisselsVan('k1').length === w1 && wisselsVan('k1').every(function (w) { return !w.verwijderd; }), 'R17: een gewonnen kans met project verwijderen wordt geweigerd; de wissels tellen nog');
@@ -1842,9 +1882,9 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     eis(vo1 === vo0 && vo2 === vo0 + 1, 'voorstellen telt uit Fasewissels: een losse tijdlijnregel "Mijlpaal: gesprek → voorstel" verandert niets (' + vo0 + ' → ' + vo1 + '), terug telt niet en lead → voorstel telt één keer (' + vo2 + ')');
     // N8: gewonnen, heropend en opnieuw gewonnen telt één deal
     var her3 = roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'voorstel', _oud: { fase: 'gewonnen' } });
-    roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'gewonnen', _oud: { fase: 'voorstel' }, overdracht: od(32000, plusDagen(-1)) });
+    var wn2 = roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'gewonnen', _oud: { fase: 'voorstel' }, overdracht: od(32000, plusDagen(0)) });
     var tellWon = ctx.tellendeWissels().filter(function (w) { return w.kansId === 'k16' && w.naar === 'gewonnen'; }).length, deals = ctx.dealWissels().filter(function (w) { return w.kansId === 'k16'; });
-    eis(her3.fasewissel && tellWon === 2 && deals.length === 1 && deals[0].werkelijkeDatum === plusDagen(-1) && ctx.vind('Kansen', 'k16').gesloten === plusDagen(-1), 'N8: gewonnen, heropend en opnieuw gewonnen: twee tellende winwissels, één deal (de laatste sluitende wissel)');
+    eis(her3.fasewissel && tellWon === 2 && deals.length === 1 && deals[0].id === wn2.fasewissel.id && ctx.vind('Kansen', 'k16').gesloten === plusDagen(0), 'N8: gewonnen, heropend en opnieuw gewonnen: twee tellende winwissels, één deal (de laatste sluitende wissel)');
     eis(ctx.lees('Trajecten').filter(function (t) { return t.kansId === 'k16'; }).length === 1 && ctx.lees('Activiteiten').some(function (a) { return /Nieuwe getekende waarde bij opnieuw winnen/.test(a.onderwerp); }), 'opnieuw winnen: hetzelfde project; de nieuwe getekende waarde als regel in de tijdlijn');
     // archiveer laat Fasewissels staan
     var nArch = aantalWissels(); ctx.GEBRUIKER = null; ctx.archiveer();
@@ -2039,8 +2079,8 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     var k1 = roep(LARS, 'apiKansOpslaan', { naam: 'Kans A', schoolId: sA.id }), k2 = roep(LARS, 'apiKansOpslaan', { naam: 'Kans B', schoolId: sB.id }), k3 = roep(LARS, 'apiKansOpslaan', { naam: 'Kans C', schoolId: sB.id, klant: 'Bestaand' });
     eis(k1.kans.klant === 'bestaand' && k2.kans.klant === 'nieuw' && k3.kans.klant === 'bestaand' && /nieuw of bestaand/.test(faalt(LARS, 'apiKansOpslaan', { naam: 'Kans D', schoolId: sB.id, klant: 'misschien' })), 'een nieuwe kans krijgt het klantvoorstel; een meegegeven klant gaat voor; een andere waarde wordt geweigerd');
     var ci = roep(LARS, 'apiCrm');
-    eis(ci.klantIn[vorig].indexOf('s1') >= 0 && ci.klantIn[vorig].indexOf(sA.id) >= 0 && ci.klantIn[vorig].indexOf(sB.id) < 0 && ci.schooljaren[0] === sj && ci.schooljaren[1] === (j1 + 1) + '-' + (j1 + 2) && ci.sturingVerplicht === false && ci.backendVersie === '7.9' && ci.rollenIngesteld === true &&
-      ci.keuzes.verliesRedenen.indexOf('opgeschoond') >= 0 && ci.keuzes.productsoorten.indexOf('overig') >= 0 && ci.mijlpalen.every(function (m) { return 'rol' in m; }), 'apiCrm: klantIn (alleen ids), schooljaren, sturingVerplicht, rollenIngesteld, backendVersie en de keuzelijsten');
+    eis(ci.klantIn[vorig].indexOf('s1') >= 0 && ci.klantIn[vorig].indexOf(sA.id) >= 0 && ci.klantIn[vorig].indexOf(sB.id) < 0 && ci.schooljaren[0] === sj && ci.schooljaren[1] === (j1 + 1) + '-' + (j1 + 2) && ci.sturingVerplicht === undefined && roep(LARS, 'apiPipeline').sturingVerplicht === false && ci.backendVersie === '7.9' && ci.rollenIngesteld === true &&
+      ci.keuzes.verliesRedenen.indexOf('opgeschoond') >= 0 && ci.keuzes.productsoorten.indexOf('overig') >= 0 && ci.mijlpalen.every(function (m) { return 'rol' in m; }), 'apiCrm: klantIn (alleen ids), schooljaren, rollenIngesteld, backendVersie en de keuzelijsten; sturingVerplicht via apiPipeline (review T4)');
     // schooljaar: schrijfwijzen, ongeldig, voorstel uit de verwachte tekendatum
     var sk = roep(LARS, 'apiKansOpslaan', { naam: 'Kans SJ', schoolId: 's1', schooljaar: "'" + String(j1 + 1).slice(2) + '/' + String(j1 + 2).slice(2) });
     eis(sk.kans.schooljaar === (j1 + 1) + '-' + (j1 + 2) && /als 2027-2028/.test(faalt(LARS, 'apiKansOpslaan', { naam: 'x', schoolId: 's1', schooljaar: '2027-2029' })) &&
@@ -2127,6 +2167,16 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     eis(oudeDoelen >= 3 && nd.length === oudeDoelen && nd.every(function (x) { return x.id === ctx.doelId('Lars Visser-Proef', x.periode, x.metric, x.periodeSleutel); }) && ctx.lees('Fasewissels').filter(function (w) { return w.eigenaar === 'Lars Visser-Proef'; }).length === oudeW &&
       !ctx.lees('Fasewissels').some(function (w) { return w.eigenaar === 'Lars Visser' || w.door === 'Lars Visser'; }) && ctx.doelenVan('week', wk)['Lars Visser-Proef'].contactmomenten === 20, 'R5: hernoemen neemt de weekdoelen met hun eigen sleutel (' + nd.length + ') en de wissels (eigenaar en door) mee');
     roep(SOPHIE, 'apiGebruikerOpslaan', { id: 'g-lars', naam: 'Lars Visser' });
+    // review C6: een naam van 40 tekens en twee weken geven twee ids (de sleutel wordt nooit afgekapt); hernoemen naar die naam verliest niets
+    var lang = 'Jan-Willem van den Heuvel-Smitsen Bakker', wkA = '2026-W46', wkB = '2026-W47';
+    eis(lang.length === 40 && ctx.doelId(lang, 'week', 'contactmomenten', wkA) !== ctx.doelId(lang, 'week', 'contactmomenten', wkB) && /-2026-w47$/.test(ctx.doelId(lang, 'week', 'contactmomenten', wkB)) && ctx.doelId('Lars Visser', 'week', 'ap', '') === ctx.slug('Lars Visser-week-ap'),
+      'review C6: doelId met een lange naam houdt de periodesleutel heel (twee weken, twee ids); zonder sleutel het oude id');
+    roep(SOPHIE, 'apiWeekdoelenOpslaan', wkA, [{ eigenaar: 'Lars Visser', metric: 'contactmomenten', doel: 7 }]); roep(SOPHIE, 'apiWeekdoelenOpslaan', wkB, [{ eigenaar: 'Lars Visser', metric: 'contactmomenten', doel: 8 }]);
+    roep(SOPHIE, 'apiGebruikerOpslaan', { id: 'g-lars', naam: lang });
+    eis(ctx.doelenVan('week', wkA)[lang].contactmomenten === 7 && ctx.doelenVan('week', wkB)[lang].contactmomenten === 8, 'review C6: hernoemen naar een naam van 40 tekens houdt de weekdoelen van twee weken apart (geen dubbel id, geen verlies)');
+    eis(ctx.schrijfVeel('Doelen', [{ id: 'rk-dubbel', eigenaar: 'x', periode: 'week', metric: 'ap', doel: 1 }, { id: 'rk-dubbel', eigenaar: 'x', periode: 'week', metric: 'ap', doel: 2 }]).ingevoegd === 1 && Number(ctx.vind('Doelen', 'rk-dubbel').doel) === 2,
+      'review C6: schrijfVeel met twee keer hetzelfde nieuwe id schrijft één rij (de laatste wint) in plaats van te gooien');
+    roep(SOPHIE, 'apiGebruikerOpslaan', { id: 'g-lars', naam: 'Lars Visser' });
   } catch (e) { eis(false, 'v7.9 doelen met periode: onverwachte fout ' + e.message); } finally { standTerug(st); }
 })();
 
@@ -2137,6 +2187,8 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     var tekst = fs.readFileSync(path.join(R, 'test/voorbeelden/werkelijke_datums.csv'), 'utf8');
     eis(/management/i.test(faalt(LARS, 'apiFasewisselsImport', tekst, { toepassen: true })) && /leeg/.test(faalt(SOPHIE, 'apiFasewisselsImport', '  ')) && /verplicht/.test(faalt(SOPHIE, 'apiFasewisselsImport', 'naam;datum\nx;2025-01-01')),
       'apiFasewisselsImport: alleen management; een leeg bestand en verkeerde kolommen geven een Nederlandse fout');
+    var c4 = roep(SOPHIE, 'apiFasewisselsImport', 'kans;fase;werkelijke datum;zekerheid;soort bewijs\nkh2;gesprek;' + plusDagen(-2) + ';hoog;agenda\n');
+    eis(c4.aangevuld === 0 && c4.overgeslagen.datum === 1 && c4.nieuw === 0, 'review C4: een wissel zonder datum aanvullen met een datum na zijn invoermoment wordt overgeslagen (datum), niet geschreven');
     var nV = aantalWissels(), p = roep(SOPHIE, 'apiFasewisselsImport', tekst);
     eis(p.toegepast === false && aantalWissels() === nV && p.gelezen === 10 && p.nieuw === 4 && p.aangevuld === 1 && p.ongewijzigd === 1 && p.overgeslagen.onbekend === 1 && p.overgeslagen.onbekendeKans === 1 && p.overgeslagen.onbekendeFase === 1 && p.overgeslagen.datum === 1 && p.regels.onbekendeKans.join() === '7',
       'proefdraai op het voorbeeld: 10 gelezen, 4 nieuw, 1 aangevuld, 1 dubbel, en per reden één overgeslagen (onbekend, onbekende kans op regel 7, onbekende fase, datum in de toekomst); niets geschreven');
@@ -2155,6 +2207,11 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     var regels = ['kans;fase;werkelijke datum;zekerheid;soort bewijs']; ctx.lees('Kansen').forEach(function (k) { regels.push(k.id + ';lead;' + plusDagen(-200) + ';laag;notitie'); });
     var gm = telSchrijfVeel(function () { return roep(SOPHIE, 'apiFasewisselsImport', regels.join('\n'), { toepassen: true }); });
     eis(gm.n === 1 && gm.uit.nieuw + gm.uit.aangevuld + gm.uit.ongewijzigd === ctx.lees('Kansen').length, 'R2: een import met één regel per kans (' + (regels.length - 1) + ') schrijft met één schrijfVeel');
+    // review P3: van het bewijs alleen de soort uit de vaste lijst; een zin wordt 'overig' en telt mee in de uitkomst
+    var p3 = roep(SOPHIE, 'apiFasewisselsImport', 'kans;fase;werkelijke datum;zekerheid;soort bewijs\nk12;gesprek;' + plusDagen(-150) + ';laag;Akkoord kwam via een collega na de open dag\nk11;lead;' + plusDagen(-150) + ';laag;E-mail\n', { toepassen: true });
+    var w3 = wisselRij('rec-' + ctx.slug('k12-gesprek-' + plusDagen(-150))), w3b = wisselRij('rec-' + ctx.slug('k11-lead-' + plusDagen(-150)));
+    eis(p3.nieuw === 2 && p3.bewijsOverig === 1 && w3 && w3.bewijs === 'overig' && w3b && w3b.bewijs === 'mail' && ctx.bewijsSoort('teamagenda') === 'teamagenda' && ctx.bewijsSoort('') === '',
+      'review P3: een bewijs als zin wordt "overig" (geteld in bewijsOverig), "E-mail" wordt mail; nooit vrije tekst in Fasewissels.bewijs');
   } catch (e) { eis(false, 'v7.9 werkelijke datums: onverwachte fout ' + e.message); } finally { standTerug(st); }
 })();
 
@@ -2164,7 +2221,7 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
   try {
     eis(!ctx.sturingVerplicht() && !faalt(NOOR, 'apiKansOpslaan', { id: 'k8', fase: 'voorstel', _oud: { fase: 'gesprek' }, waarde: '' }), 'sturingVerplicht standaard uit: een wissel naar voorstel zonder waarde mag');
     ctx.schrijf('Aannames', { id: 'aa-sturingVerplicht-v1', naam: 'sturingVerplicht', versie: 1, waarde: 'true', eigenaar: 'beheerder', onderbouwing: 'Rooktest', besluitdatum: plusDagen(0), ingang: plusDagen(0), door: 'Sophie de Graaf', vastgelegd: ctx.nu() });
-    eis(ctx.sturingVerplicht() && ctx.aanname('sturingVerplicht').versie === 1 && roep(LARS, 'apiCrm').sturingVerplicht === true, 'met aanname sturingVerplicht (versie 1, waarde true) staat de instelling aan');
+    eis(ctx.sturingVerplicht() && ctx.aanname('sturingVerplicht').versie === 1 && roep(LARS, 'apiPipeline').sturingVerplicht === true && roep(LARS, 'apiCrm').sturingVerplicht === undefined, 'met aanname sturingVerplicht (versie 1, waarde true) staat de instelling aan; de app krijgt hem met apiPipeline, niet met apiCrm (review T4)');
     eis(/verplicht vanaf de voorstelfase/.test(faalt(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'voorstel', _oud: { fase: 'gesprek' }, verwachteSluiting: '' })) && ctx.vind('Kansen', 'k16').fase === 'gesprek', 'aan: een wissel naar voorstel zonder verwachte tekendatum wordt geweigerd');
     var ok = roep(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'voorstel', _oud: { fase: 'gesprek' }, waarde: 9600, verwachteSluiting: plusDagen(30) });
     eis(ok.kans.fase === 'voorstel' && /verplicht vanaf de voorstelfase/.test(faalt(LARS, 'apiKansOpslaan', { id: 'k16', waarde: '' })) && /verplicht vanaf de voorstelfase/.test(faalt(LARS, 'apiKansOpslaan', { id: 'k16', fase: 'onderhandeling', _oud: { fase: 'voorstel' }, verwachteSluiting: '' })),
@@ -2314,6 +2371,8 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     if (nep === wk) nep = wk.slice(0, 6) + '1' + wk.slice(-1);
     paar('weekdoel_voor_deze_week', metDoelen(wk), metDoelen(nep));
     eis(nep !== wk && nep.slice(-1) === wk.slice(-1) && contractenOp(metDoelen(nep)).weekdoel_voor_deze_week.afwijkingen.length === ctx.teamNamen('consultancy').length, 'regressie 2 (Mac-code): een weekdoel voor ' + nep + ' telt niet voor ' + wk + ' (exacte vergelijking)');
+    var wdAf = contractenOp(metDoelen(nep)).weekdoel_voor_deze_week.afwijkingen, gIds = ctx.lees('Gebruikers').map(function (g) { return String(g.id); });
+    eis(wdAf.every(function (a) { return a.soort === 'doel' && gIds.indexOf(a.id.slice(0, -9)) >= 0 && a.id.slice(-8) === wk && !/visser|hendriks|amrani/i.test(a.id); }), 'review P4: de verwijzing bij het weekdoel is <gebruikers-id>-<week>, geen naam');
     var schoneWissels = function (S) { S.wissels = S.wissels.filter(function (w) { var inv = String(w.ingevoerdOp).slice(0, 10); return !(inv >= sj.slice(0, 4) + '-08-01') || (w.werkelijkeDatum && w.werkelijkeDatum <= inv && (['import', 'capsule', 'reconstructie', 'tijdlijn'].indexOf(w.bron) < 0 || w.zekerheid)); }); };
     paar('fasewissel_heeft_werkelijke_datum', schoneWissels, function (S) { schoneWissels(S); S.wissels.push(cx({ id: 'rk-zd', kansId: 'k6', van: 'gesprek', naar: 'voorstel', werkelijkeDatum: '', ingevoerdOp: vandaag + ' 09:00', eigenaar: 'Noor Hendriks', bron: 'import', zekerheid: '' })); });
     var ld = contractenOp(function (S) { S.normen.bulkDrempel = 100; }).logdekking;
@@ -2404,26 +2463,36 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
   vers79(); var st = standBewaren();
   try {
     var ma = ctx.maandagVan(plusDagen(-14)), maS = ctx.datumStr(ma), dag = function (basis, n) { return ctx.plusDagenVan(basis, n); };  // een maandag twee weken terug: elke werkelijke datum ligt in het verleden
-    // een bekende reeks: twaalf hele weken vóór deze week met 0, 1, 2, 0, 3, 1, 0, 0, 2, 1, 4, 0 deals (oudste eerst); per kans één deal
-    var REEKS = [0, 1, 2, 0, 3, 1, 0, 0, 2, 1, 4, 0], kop = ctx.TABELLEN.Fasewissels, nr = 0;
+    // een bekende reeks: twaalf hele weken vóór deze week met 3, 1, 2, 0, 3, 1, 0, 0, 2, 1, 4, 0 deals (oudste eerst); per kans één deal.
+    // review T5: de oudste week is niet 0 en de week van ma heeft al een deal, zodat een venster dat één week opschuift een ander getal geeft.
+    // review C1: een deal telt alleen voor een kans die nu gewonnen is, dus elke verzonnen kans krijgt een rij in Kansen met die fase.
+    var REEKS = [3, 1, 2, 0, 3, 1, 0, 0, 2, 1, 4, 0], kop = ctx.TABELLEN.Fasewissels, nr = 0;
     ctx._demoBladen.Fasewissels.rijen.length = 1; ctx._demoBladen.Voorspellingen.rijen.length = 1; ctx._LEES = {};
-    var rij = function (o) { nr++; var k = { id: o.kansId, schoolId: 's1', eigenaar: 'Lars Visser', waarde: 1000, pipeline: 'Scholen', fase: o.naar }; return ctx.faseWisselRij(k, o.van || 'voorstel', o.naar, { bron: 'demo', datum: o.datum, ingevoerdOp: o.datum + ' 10:00', door: 'Lars Visser', id: 'rk-vs-' + nr }); };
-    var rijen = [];
-    REEKS.forEach(function (c, i) { var woensdag = dag(maS, -7 * (12 - i) + 2); for (var j = 0; j < c; j++) rijen.push(rij({ kansId: 'rk-vk-' + i + '-' + j, naar: 'gewonnen', datum: woensdag })); });
-    ctx.fasewisselsSchrijven(rijen); ctx._LEES = {};
+    var kansRij = function (id, fase) { return { id: id, naam: 'Voorspeltest ' + id, traject: 'Voorspeltest', school: 'Esdoorn Lyceum', schoolId: 's1', fase: fase, pipeline: 'Scholen', eigenaar: 'Lars Visser', waarde: 1000 }; };
+    var rij = function (o) { nr++; var k = { id: o.kansId, schoolId: 's1', eigenaar: 'Lars Visser', waarde: 1000, pipeline: 'Scholen', fase: o.naar }; return ctx.faseWisselRij(k, o.van || 'voorstel', o.naar, { bron: 'demo', datum: o.datum, ingevoerdOp: (o.ingevoerd || o.datum) + ' 10:00', door: 'Lars Visser', id: 'rk-vs-' + nr }); };
+    var rijen = [], kansen = [];
+    REEKS.forEach(function (c, i) { var woensdag = dag(maS, -7 * (12 - i) + 2); for (var j = 0; j < c; j++) { rijen.push(rij({ kansId: 'rk-vk-' + i + '-' + j, naar: 'gewonnen', datum: woensdag })); kansen.push(kansRij('rk-vk-' + i + '-' + j, 'gewonnen')); } });
+    rijen.push(rij({ kansId: 'rk-dw-0', naar: 'gewonnen', datum: maS }));  // al een deal in de week van ma vóór de voorspelling: telt niet mee in het venster
+    ['rk-dw-0', 'rk-dw-1', 'rk-her'].forEach(function (id) { kansen.push(kansRij(id, 'gewonnen')); }); kansen.push(kansRij('rk-vz', 'verloren'));
+    ctx.schrijfVeel('Kansen', kansen); ctx.fasewisselsSchrijven(rijen); ctx._LEES = {};
     var v = ctx.voorspelDealsWeek(ma);
-    eis(v.verwacht === 1.2 && v.onder === 0 && v.boven === 3 && v.model === 'gemiddelde-hele-weken' && v.id === 'vd-' + ctx.isoWeekStr(ma) && v.van === maS && v.tot === dag(maS, 6), 'M13: twaalf hele weken met nulweken → verwacht 1,2, p10 0, p90 3 (nearest rank); id per ISO-week, van maandag t/m zondag');
+    eis(v.verwacht === 1.4 && v.onder === 0 && v.boven === 3 && v.model === 'gemiddelde-hele-weken' && v.id === 'vd-' + ctx.isoWeekStr(ma) && v.van === maS && v.tot === dag(maS, 6), 'M13: de twaalf hele weken vóór deze week (nulweken tellen mee, de lopende week niet) → verwacht 1,4, p10 0, p90 3 (nearest rank); id per ISO-week, van maandag t/m zondag');
     var r1 = ctx.voorspellingenRun(maS), n1 = ctx.lees('Voorspellingen').length, r2 = ctx.voorspellingenRun(maS);
     eis(r1.voorspeld === 2 && r2.voorspeld === 0 && ctx.lees('Voorspellingen').length === n1, 'een tweede run op dezelfde maandag schrijft niets (idempotent op id)');
-    // deze week: twee deals, een verloren kans zonder reden (telt nooit) en een kans die gewonnen, heropend en opnieuw gewonnen wordt (telt één keer, N8)
-    var extra = [rij({ kansId: 'rk-dw-1', naar: 'gewonnen', datum: dag(maS, 1) }), rij({ kansId: 'rk-dw-2', naar: 'gewonnen', datum: dag(maS, 2) }), rij({ kansId: 'rk-vz', naar: 'verloren', datum: dag(maS, 2) }),
+    // deze week: de deal van maandag, een verloren kans zonder reden (telt nooit) en een kans die gewonnen, heropend en opnieuw gewonnen wordt (telt één keer, N8)
+    var extra = [rij({ kansId: 'rk-vz', naar: 'verloren', datum: dag(maS, 2) }),
       rij({ kansId: 'rk-her', naar: 'gewonnen', datum: dag(maS, 1) }), rij({ kansId: 'rk-her', van: 'gewonnen', naar: 'gesprek', datum: dag(maS, 2) }), rij({ kansId: 'rk-her', van: 'gesprek', naar: 'gewonnen', datum: dag(maS, 3) })];
     ctx.fasewisselsSchrijven(extra); ctx._LEES = {};
-    var volgendeMa = dag(maS, 7), r3 = ctx.voorspellingenRun(volgendeMa), vd = ctx.vind('Voorspellingen', 'vd-' + ctx.isoWeekStr(ma)), vo = ctx.vind('Voorspellingen', 'vo30-' + maS);
-    eis(r3.gescoord >= 1 && Number(vd.werkelijk) === 3 && vd.gescoord && Number(vd.fout) === 1.8 && vd.binnenInterval === 'ja', 'scoren na de week: werkelijk 3 (twee deals plus één keer de heropende kans; verloren zonder reden telt niet), fout 1,8, binnen het interval');
-    eis(!vo.gescoord, 'M19 (opdrachten in 30 dagen) wordt pas na 30 dagen gescoord');
-    ctx.voorspellingenRun(dag(maS, 31)); ctx._LEES = {};
-    eis(!!ctx.vind('Voorspellingen', 'vo30-' + maS).gescoord, 'M19 na 30 dagen gescoord');
+    // review C7: op de maandag erna is de registratiemarge (7 dagen) nog niet voorbij: nog niet gescoord
+    var volgendeMa = dag(maS, 7), r3 = ctx.voorspellingenRun(volgendeMa), vd = ctx.vind('Voorspellingen', 'vd-' + ctx.isoWeekStr(ma));
+    eis(r3.gescoord === 0 && !vd.gescoord && ctx.scoringsMarge() === 7, 'review C7: de maandag na de week is de marge (7 kalenderdagen) nog niet voorbij: niet gescoord');
+    // een deal uit die week die pas na de week wordt ingevoerd (registratievertraging) telt nog mee
+    ctx.fasewisselsSchrijven([rij({ kansId: 'rk-dw-1', naar: 'gewonnen', datum: dag(maS, 4), ingevoerd: dag(maS, 10) })]); ctx._LEES = {};
+    var r3b = ctx.voorspellingenRun(dag(maS, 14)); vd = ctx.vind('Voorspellingen', 'vd-' + ctx.isoWeekStr(ma)); var vo = ctx.vind('Voorspellingen', 'vo30-' + maS);
+    eis(r3b.gescoord >= 1 && Number(vd.werkelijk) === 3 && vd.gescoord && Number(vd.fout) === 1.6 && vd.binnenInterval === 'ja', 'scoren na de week en de marge: werkelijk 3 (de deal van maandag, een laat ingevoerde deal en één keer de heropende kans; verloren telt niet), fout 1,6, binnen het interval');
+    eis(!vo.gescoord, 'M19 (opdrachten in 30 dagen) wordt pas na 30 dagen plus de marge gescoord');
+    ctx.voorspellingenRun(dag(maS, 38)); ctx._LEES = {};
+    eis(!!ctx.vind('Voorspellingen', 'vo30-' + maS).gescoord, 'M19 na 30 dagen plus de marge gescoord');
     // R3: een run op dinsdag zonder maandagrij schrijft "gemist" (geen getal) en een gemiste rij wordt niet gescoord
     ctx._demoBladen.Voorspellingen.rijen.length = 1; ctx._LEES = {};
     var dinsdag = dag(maS, 1), r4 = ctx.voorspellingenRun(dinsdag), gemist = ctx.vind('Voorspellingen', 'vd-' + ctx.isoWeekStr(ma));
@@ -2443,7 +2512,8 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     eis(namen(wL) === 'Lars Visser' && namen(wY) === 'Lars Visser,Noor Hendriks,Yara El Amrani' && namen(wS) === 'Lars Visser,Noor Hendriks,Yara El Amrani,beheerder' && /toegang/.test(faalt(FEMKE, 'apiSturing', 'week', {})) && /toegang/.test(faalt('demo-sem', 'apiSturing', 'week', {})),
       'week: een OC ziet zichzelf, de teamlead zijn team, management iedereen plus de regel beheerder; AM en talent geen toegang');
     var somTeam = wS.rijen.filter(function (r) { return r.naam !== 'beheerder'; }).reduce(function (s, r) { return s + r.cijfers.contactmomenten; }, 0);
-    eis(wS.totaal.cijfers.contactmomenten === somTeam && wL.totaal.cijfers.contactmomenten === somTeam, 'week: het teamtotaal is de som van de OC\'s (de beheerder telt niet mee) en een OC ziet hetzelfde teamtotaal (R8)');
+    eis(wS.totaal.cijfers.contactmomenten === somTeam && wY.totaal.cijfers.contactmomenten === somTeam && !wS.totaalUitleg, 'week: het teamtotaal is de som van de OC\'s (de beheerder telt niet mee); management en de teamlead zien het');
+    eis(wL.totaal === null && /te klein/.test(wL.totaalUitleg) && ctx.WEEK_TOTAAL_MIN_ANDEREN === 3, 'review P5 (R8): een OC in een team met minder dan drie collega\'s ziet het teamtotaal niet (anders is totaal min eigen regel de som van één of twee collega\'s)');
     var w0 = wL.rijen[0].cijfers;
     roep(LARS, 'apiKansOpslaan', { naam: 'Direct in voorstel', schoolId: 's7', fase: 'voorstel', waarde: 2000, verwachteSluiting: plusDagen(20) });
     ctx.fasewisselsSchrijven([ctx.faseWisselRij(ctx.vind('Kansen', 'k16'), 'gesprek', 'voorstel', { bron: 'import', datum: '', zekerheid: '', id: 'rk-zd-w', ingevoerdOp: ctx.nu() })]);
@@ -2470,6 +2540,15 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     aannameZet('jaardoel', { noemer: 'contracteerdoel', contracteerdoel: { waarde: 400000, afleiding: 'Rooktest' } });
     var Ma = mtCijfers();
     eis(['M01', 'M05', 'M07', 'M11'].every(function (m) { return /besluit jaardoel/.test(Ma[m].geblokkeerd) && Ma[m].waarde === ''; }), 'B3: een ingevuld contracteerdoel zonder volledig jaardoel → M01, M05, M07 en M11 geblokkeerd, waarde leeg (geen terugval)');
+    // review T3: volledig op de eigen waarde na (noemer contracteerdoel met een contracteerdoel) blijft geblokkeerd: geen terugval op het losse contracteerdoel
+    aannameZet('jaardoel', { soort: 'netto-omzet', periode: 'boekjaar', scope: 'scope v1', noemer: 'contracteerdoel', contracteerdoel: { waarde: 400000, afleiding: 'Rooktest' } });
+    var Mz = mtCijfers();
+    eis(['M01', 'M05', 'M07', 'M11'].every(function (m) { return /besluit jaardoel/.test(Mz[m].geblokkeerd) && Mz[m].waarde === ''; }), 'review T3 (B3): een jaardoel dat volledig is op de waarde na (noemer contracteerdoel met contracteerdoel) → M01, M05, M07 en M11 geblokkeerd met waarde leeg');
+    // review T3: een volledig jaardoel voor het vorige schooljaar telt niet voor dit schooljaar
+    var sjVorig = (Number(sjNu().slice(0, 4)) - 1) + '-' + sjNu().slice(0, 4);
+    aannameZet('jaardoel', { soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000, schooljaar: sjVorig });
+    var Mv = mtCijfers();
+    eis(/het jaardoel is voor schooljaar/.test(Mv.M07.geblokkeerd) && Mv.M07.waarde === '', 'review T3 (B3): een volledig jaardoel voor het vorige schooljaar → M07 geblokkeerd ("het jaardoel is voor schooljaar …")');
     aannameZet('jaardoel', { soort: 'netto-omzet', periode: 'boekjaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 900000 });
     var Mb = mtCijfers();
     eis(Mb.M01.waarde === 900000 && /teller is contractwaarde per schooljaar/.test(Mb.M05.geblokkeerd) && /teller is contractwaarde per schooljaar/.test(Mb.M07.geblokkeerd) && Mb.M07.waarde === '', 'B3: een netto-omzetdoel per boekjaar met noemer jaardoel → M05 en M07 geblokkeerd (de teller is contractwaarde per schooljaar)');
@@ -2527,6 +2606,14 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var gem = ctx.maandstandAlsNodig('2026-11-27'), zat = ctx.maandstandAlsNodig('2026-11-28'), lijst = ctx.standenLijst();
     eis(!gem.al && gem.peildatum === '2026-11-27' && zat.al === true && lijst.some(function (x) { return x.soort === 'maand' && x.sleutel === '2026-11' && x.ingehaald && /ingehaald/.test(x.label); }) && lijst.some(function (x) { return x.soort === 'tussenstand' && x.sleutel === '2026-10-05'; }) && lijst.some(function (x) { return x.soort === 'maand' && x.sleutel === '2026-10' && !x.ingehaald; }),
       'R3: na een gemiste donderdag bevriest de vrijdag alsnog (peildatum vrijdag, label ingehaald), de zaterdag niet nog eens; de lijst toont maand- en tussenstanden met hun soort');
+    // review C5: de laatste donderdag van december 2026 is de 31e; mislukt die run, dan haalt de run van 1 januari de decemberstand in (niet als januaristand)
+    ctx._demoProps.LAATSTE_STURING = '2026-12-30 06:45';
+    var jan = ctx.maandstandAlsNodig('2027-01-01'), lijst2 = ctx.standenLijst(), dec = lijst2.filter(function (x) { return x.soort === 'maand' && x.sleutel === '2026-12'; })[0];
+    eis(jan.nogNiet && jan.ingehaald && !jan.ingehaald.al && jan.ingehaald.peildatum === '2027-01-01' && dec && dec.ingehaald && /december 2026/i.test(dec.label) && !lijst2.some(function (x) { return x.soort === 'maand' && x.sleutel === '2027-01'; }) &&
+      ctx.maandstandAlsNodig('2027-01-02').ingehaald === undefined && roep(SOPHIE, 'apiSturing', 'mt', { stand: '2026-12' }).peildatum === '2027-01-01',
+      'review C5: een gemiste laatste donderdag op 31 december wordt op 1 januari ingehaald als decemberstand (ingehaald, één keer), niet als januaristand');
+    delete ctx._demoProps.LAATSTE_STURING;
+    eis(ctx.maandstandAlsNodig('2027-02-03').ingehaald === undefined && !ctx.standenLijst().some(function (x) { return x.soort === 'maand' && x.sleutel === '2027-01'; }), 'review C5: zonder eerdere run (nieuwe installatie) geen ingehaalde stand voor de maand ervoor');
     // de bevroren waarden blijven, ook als er daarna een deal bij komt; de bevroren definitie blijft (N5)
     var vandaag = plusDagen(0), b = ctx.sturingBevriezen(vandaag, 'tussenstand'), live0 = mtCijfers(), vast0 = roep(SOPHIE, 'apiSturing', 'mt', { stand: vandaag });
     var waarden = function (r) { var u = {}; r.blokken.forEach(function (bl) { bl.cijfers.forEach(function (c) { u[c.id] = JSON.stringify([c.waarde, c.uitsplitsing.map(function (x) { return [x.label, x.waarde]; })]); }); }); return u; };
@@ -2593,6 +2680,27 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var S2 = require(path.join(R, 'server/schema.js'));
     eis(S2.NUMERIEK.Voorspellingen.indexOf('versie') >= 0 && S2.NUMERIEK.Aannames.indexOf('versie') >= 0 && S2.NUMERIEK.Standen.indexOf('waarde') >= 0 && S2.NUMERIEK.Cijferdefinities.indexOf('versie') >= 0, 'N4: versie en waarde zijn getalkolommen in Postgres (Voorspellingen, Aannames, Standen, Cijferdefinities)');
   } catch (e) { eis(false, 'v7.9 aannames en jaardoel: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9 (review T4): welke tabbladen een api op een druk pad leest. Een nieuw tabblad op zo'n pad is een bewuste keuze: pas de lijst hier aan,
+   met de reden en een meting (R9 in test/demo_groot_test.js). Sinds de review leest apiCrm Aannames niet meer (sturingVerplicht komt met apiPipeline). ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var VERWACHT = {
+      apiCrm: 'Gebruikers,Instellingen,Kansen,Meldingen,Mijlpalen,Personen,Scholen,Tracks,Trajecten',
+      apiOverzicht: 'Acties,Instellingen,Kansen,Mijlpalen,Scholen,Trajecten',
+      apiHome: 'Acties,Activiteiten,Doelen,Facturen,Instellingen,Kandidaten,Kansen,Mijlpalen,Personen,Scholen,Talenten,Trajecten,Vacatures',
+      apiTeamRapport: 'Activiteiten,Doelen,Facturen,Fasewissels,Gebruikers,Instellingen,Kandidaten,Kansen,Mijlpalen,Scholen,Trajecten,Vacatures'  // v7.9: Fasewissels en Mijlpalen (tellen uit de wissels)
+    }, ARGS = { apiTeamRapport: ['maand', 'consultancy', '', 0] };
+    Object.keys(VERWACHT).forEach(function (api) {
+      var echt = ctx.leesUitSheet, gelezen = {};
+      ctx.leesUitSheet = function (n, l) { gelezen[n] = 1; return echt(n, l); };
+      try { ctx._LEES = {}; roep.apply(null, [SOPHIE, api].concat(ARGS[api] || [])); } finally { ctx.leesUitSheet = echt; }
+      var l = Object.keys(gelezen).sort().join(',');
+      eis(l === VERWACHT[api], 'review T4: ' + api + ' leest precies de vaste tabbladen' + (l !== VERWACHT[api] ? ' (verwacht ' + VERWACHT[api] + ', nu ' + l + ')' : ''));
+    });
+  } catch (e) { eis(false, 'v7.9 leesteller: onverwachte fout ' + e.message); } finally { standTerug(st); }
 })();
 
 /* ---- bestaande schermen blijven werken ---- */

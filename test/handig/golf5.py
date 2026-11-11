@@ -92,6 +92,18 @@ with sync_playwright() as p:
         l = wissels('k8'); ok('kansdetail: de backend legt de werkelijke datum vast', l[-1]['naar'] == 'onderhandeling' and l[-1]['werkelijkeDatum'] == dag(-2), l[-1])
     stap('g5_kansdetail_datum', g5_kansdetail_datum)
 
+    def g5_datum_verouderd():  # review I2: een kansdetail die sinds gisteren openstaat: een onaangeroerd datumveld gaat als vandaag mee; visibilitychange ververst het veld
+        pg.evaluate("window.__echtNu = Date.now; Date.now = function () { return window.__echtNu.call(Date) - 86400000; }")
+        detail('kans:k11'); ok('verouderd: het veld is getekend met de dag van toen (gisteren)', pg.input_value('[data-kansfasedatum="k11"]') == dag(-1))
+        pg.evaluate("Date.now = window.__echtNu"); n0 = n_calls()
+        pg.select_option('[data-kansfase="k11"]', 'lead'); pg.wait_for_selector('#toast.aan [data-toastactie="1"]'); pg.wait_for_timeout(400)
+        w = calls('apiKansOpslaan', n0)[-1]['args'][0].get('wissel') or {}
+        ok('verouderd: een onaangeroerd veld gaat als vandaag mee, niet als de dag van het tekenen', w.get('datum') == dag(0), w)
+        pg.evaluate("Date.now = function () { return window.__echtNu.call(Date) - 86400000; }"); detail('kans:k6'); pg.evaluate("Date.now = window.__echtNu")
+        pg.evaluate("document.dispatchEvent(new Event('visibilitychange'))"); pg.wait_for_timeout(100)
+        ok('verouderd: weer in beeld (visibilitychange) krijgt het onaangeroerde veld vandaag als waarde en max', pg.input_value('[data-kansfasedatum="k6"]') == dag(0) and pg.get_attribute('[data-kansfasedatum="k6"]', 'max') == dag(0))
+    stap('g5_datum_verouderd', g5_datum_verouderd)
+
     def g5_fwdatum():  # punt 2: per wissel in de kansdetail een potlood (data-fwdatum) voor een andere datum
         detail('kans:k8'); pg.wait_for_selector('.fw-lijst [data-fwdatum]')
         pg.locator('.fw-lijst [data-fwdatum]').first.click(); venster_open('#vf-datum'); pg.fill('#vf-datum', dag(-3)); n0 = n_calls(); pg.click('#venster [data-cf-opslaan]'); toast('Datum van de mijlpaal')
@@ -105,6 +117,7 @@ with sync_playwright() as p:
         w = calls('apiKansOpslaan', n0)[-1]['args'][0].get('wissel') or {}; ok('slepen: bron slepen', w.get('bron') == 'slepen', w)
         pg.click('#toast.aan [data-toastactie="1"]'); venster_open('#vf-datum'); pg.fill('#vf-datum', dag(-1)); pg.click('#venster [data-cf-opslaan]'); toast('Datum van de mijlpaal')
         l = wissels('k16'); ok('slepen: Andere datum zet de werkelijke datum', l[-1]['naar'] == 'lead' and l[-1]['werkelijkeDatum'] == dag(-1), l[-1])
+        ok('slepen: na Opslaan staat de focus op de kaart (review I4), niet in de melding', pg.evaluate("document.activeElement && document.activeElement.getAttribute('data-sleep')") == 'kans:k16')
     stap('g5_slepen_anderedatum', g5_slepen_anderedatum)
 
     def g5_ongedaan():  # B2: Ongedaan maken = de vlag op de wissel, geen tweede gebeurtenis; ook na het heropenen van een gewonnen kans
@@ -118,6 +131,14 @@ with sync_playwright() as p:
         pg.click('#toast.aan [data-toastactie="0"]'); toast('Teruggezet naar gewonnen'); k = kans('k5')['kans']
         ok('heropenen ongedaan: weer gewonnen, gesloten = de oorspronkelijke datum, geen nieuw project', k['fase'] == 'gewonnen' and k['gesloten'] == gesl and pg.locator('#venster.aan').count() == 0, k)
     stap('g5_ongedaan', g5_ongedaan)
+
+    def g5_anderedatum_focus():  # review I4: Andere datum uit de melding en dan Escape: de focus terug op de kaart, niet op de vervaagde knop in de melding
+        pipeline(); muis('[data-sleep="kans:k16"]', '[data-sleepdoel="kans:gesprek"]'); pg.wait_for_selector('#toast.aan [data-toastactie="1"]')
+        pg.click('#toast.aan [data-toastactie="1"]'); venster_open('#vf-datum'); pg.keyboard.press('Escape'); venster_dicht(); pg.wait_for_timeout(200)
+        f = pg.evaluate("(function () { var a = document.activeElement; return { sleep: a && a.getAttribute('data-sleep'), inToast: !!(a && a.closest && a.closest('#toast')) }; })()")
+        ok('andere datum: na Escape staat de focus op de kaart, niet in de melding', f['sleep'] == 'kans:k16' and not f['inToast'], f)
+        if pg.locator('#toast.aan [data-toastactie="0"]').count(): pg.click('#toast.aan [data-toastactie="0"]'); pg.wait_for_timeout(1000)
+    stap('g5_anderedatum_focus', g5_anderedatum_focus)
 
     def g5_toets():  # punt 1: een pijltoets op een kaart geeft bron toets
         pipeline(); n0 = n_calls()
@@ -301,7 +322,9 @@ with sync_playwright() as p:
         pg.wait_for_selector('#mtStand option[value="%s"]' % dag(0), state='attached'); ok('mt: een tussenstand van vandaag in de keuze; hoogstens één per dag', pg.locator('[data-mtbevries]').count() == 0)
         pg.select_option('#mtStand', dag(0)); pg.wait_for_selector('.mt .hint:has-text("bevroren tussenstand")'); ok('mt: de tussenstand toont de bevroren definities', pg.locator('.mt .t-def').count() >= 10)
         pg.evaluate("window.print = function () { window.__geprint = (window.__geprint || 0) + 1; }"); pg.click('[data-mtprint]'); ok('mt: Afdrukken', (pg.evaluate("window.__geprint") or 0) >= 1)
-        pg.emulate_media(media='print'); ok('mt: print verbergt zijbalk en knoppen, toont de kop van het maanddocument', not pg.locator('#zijbalk').is_visible() and not pg.locator('[data-mtprint]').is_visible() and pg.locator('.mt-print-kop').is_visible()); pg.emulate_media(media='screen')
+        pg.emulate_media(media='print'); ok('mt: print verbergt zijbalk en knoppen, toont de kop van het maanddocument en de inforegel (live of bevroren, schooljaar, scope; review I5)', not pg.locator('#zijbalk').is_visible() and not pg.locator('[data-mtprint]').is_visible() and pg.locator('.mt-print-kop').is_visible() and pg.locator('.mt .mt-info').is_visible() and 'bevroren' in pg.inner_text('.mt .mt-info')); pg.emulate_media(media='screen')
+        n0 = n_calls(); pdf = pg.pdf(format='A4'); pg.wait_for_timeout(300)  # review I1: echt afdrukken (de breedte van het papier laat (min-width: 1024px) omklappen)
+        ok('mt: afdrukken (pdf) laat het MT-overzicht staan: geen terugval naar Teams en geen nieuwe aanroep', len(pdf) > 1000 and pg.locator('.mt .mt-blok').count() > 0 and pg.evaluate("document.body.classList.contains('desk')") and not calls('apiTeamRapport', n0) and not calls('apiSturing', n0), [x['fn'] for x in calls(None, n0)])
         pg.click('[data-mtlink]'); pg.wait_for_timeout(400)
         try: kl = pg.evaluate("navigator.clipboard.readText()")
         except Exception: kl = ''
@@ -312,6 +335,9 @@ with sync_playwright() as p:
     def g5_datakwaliteit_sophie():  # punt 11: management ziet iedereen en kan opnieuw rekenen; de melding rapport:datakwaliteit opent het blok
         pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok'); ok('datakwaliteit (Sophie): Nu opnieuw rekenen', pg.locator('[data-dqvers]').count() == 1)
         pg.click('[data-dqvers]'); toast('opnieuw gerekend'); pg.wait_for_timeout(300)
+        n1 = n_calls(); pg.click('.periode-nav [data-rstap="-1"]'); pg.wait_for_selector('.periode-nav [data-rstap="nu"]'); pg.wait_for_timeout(600)
+        ok('datakwaliteit: bladeren haalt het blok van vandaag niet opnieuw op (review T7)', not [x for x in calls('apiSturing', n1) if x['args'] and x['args'][0] == 'datakwaliteit'] and len(calls('apiTeamRapport', n1)) >= 1 and pg.locator('#dqBlok').count() == 1)
+        pg.click('.periode-nav [data-rstap="nu"]'); pg.wait_for_selector('.periode-nav [data-rstap="nu"]', state='detached'); pg.wait_for_selector('#dqBlok')
         ok('datakwaliteit (Sophie): meer eigenaren, regels met doorklik (tabindex 0, role link)', pg.locator('.dq-eigenaar').count() >= 2 and pg.locator('.dq-regel[data-crm-open][tabindex="0"][role="link"]').count() >= 1, pg.locator('.dq-eigenaar').count())
         pg.evaluate("routeHash('rapport:datakwaliteit')"); pg.wait_for_selector('#dqBlok'); pg.wait_for_timeout(400); ok('datakwaliteit: rapport:datakwaliteit opent het blok', pg.evaluate("document.activeElement && document.activeElement.id") == 'dqBlok')
     stap('g5_datakwaliteit_sophie', g5_datakwaliteit_sophie)
@@ -326,11 +352,12 @@ with sync_playwright() as p:
     stap('g5_defs', g5_defs)
 
     def g5_assistent():  # punt 2: de actiekaart wijzig_kans toont de datum van de mijlpaal; uitvoeren legt een wissel met bron assistent vast
-        pg.evaluate("""(function () { S.chat.push({ rol: 'bot', tekst: 'Voorstel', acties: [{ id: 'g5', soort: 'wijzig_kans', titel: 'Kans bijwerken', invoer: { kansId: 'k8', fase: 'gesprek' } }] }); saveChat(); })()""")
+        pg.evaluate("""(function () { S.chat.push({ rol: 'bot', tekst: 'Voorstel', acties: [{ id: 'g5', soort: 'wijzig_kans', titel: 'Kans bijwerken', invoer: { kansId: 'k6', fase: 'gesprek' } }] }); saveChat(); })()""")
         desk('brein', '#breinBerichten .actiekaart'); pg.wait_for_selector('.actiekaart:has-text("Datum mijlpaal")')
+        ok('assistent: de getoonde standaarddatum komt niet in het voorstel zelf (aa_chat, review I2)', pg.evaluate("(function () { var a = S.chat[S.chat.length - 1].acties[0]; return a.invoer.werkelijkeDatum === undefined; })()"))
         pg.locator('.actiekaart:has-text("Datum mijlpaal") [data-ak="aanpassen"]').click(); pg.wait_for_selector('.actiekaart.bewerken [data-akveld="werkelijkeDatum"][type="date"]')
         pg.fill('.actiekaart.bewerken [data-akveld="werkelijkeDatum"]', dag(-1)); pg.click('.actiekaart.bewerken [data-ak="uitvoeren"]'); pg.wait_for_selector('.actiekaart.uitgevoerd', timeout=8000)
-        l = wissels('k8'); ok('assistent: een wissel met bron assistent en de gekozen datum', l[-1]['bron'] == 'assistent' and l[-1]['werkelijkeDatum'] == dag(-1), l[-1])
+        l = wissels('k6'); ok('assistent: een wissel met bron assistent en de gekozen datum (k6: geen wissel vandaag, review C1)', l[-1]['bron'] == 'assistent' and l[-1]['werkelijkeDatum'] == dag(-1), l[-1])
     stap('g5_assistent', g5_assistent)
     c.close()
 
@@ -359,11 +386,35 @@ with sync_playwright() as p:
         pg.click('#toast.aan [data-toastactie="0"]'); pg.wait_for_timeout(800)
         pg.click('nav button[data-view="relaties"]'); pg.wait_for_timeout(300); pg.click('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('#crmBalk [data-rweergave="week"]')
         pg.click('#crmBalk [data-rweergave="week"]'); pg.wait_for_selector('#crmInhoud .week-kaart')
-        ok('telefoon: Week als kaarten zonder horizontale scroll; geen MT op de telefoon', pg.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth") and pg.locator('[data-rweergave="mt"]').count() == 0)
+        ok('telefoon: Week als kaarten zonder horizontale scroll (main is de scrollcontainer, review I8); geen MT op de telefoon', pg.evaluate("document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth") and pg.locator('[data-rweergave="mt"]').count() == 0)
+        ok('telefoon: Lars (team van drie) ziet geen teamtotaal maar de uitleg "te klein team" (review P5)', pg.locator('#crmInhoud .week-kaart.team').count() == 0 and pg.locator('#crmInhoud .week-teamuitleg').count() == 1)
+        hs = pg.evaluate("[].map.call(document.querySelectorAll('#crmInhoud .legenda-defs summary'), function (x) { return x.getBoundingClientRect().height; })")
+        ok('telefoon: de uitklapregel Definities is minstens 44 px hoog (review I8)', hs and all(x >= 44 for x in hs), hs)
         h = pg.evaluate("[].map.call(document.querySelectorAll('#crmBalk [data-rweergave], #crmBalk [data-defs]'), function (b) { return b.getBoundingClientRect().height; })")
         ok('telefoon: de chips Week en Definities zijn minstens 36 px hoog', h and all(x >= 36 for x in h), h)
         pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#crmInhoud .tabel, #crmInhoud .tegel')
+        pg.wait_for_selector('#dqBlok', timeout=8000); hd = pg.evaluate("[].map.call(document.querySelectorAll('#crmInhoud .dq-eigenaar summary, #crmInhoud .legenda-defs summary'), function (x) { return x.getBoundingClientRect().height; })")
+        ok('telefoon: de uitklapregels in Datakwaliteit (per eigenaar, Alle contracten) zijn minstens 44 px hoog (review I8)', hd and all(x >= 44 for x in hd), hd)
     stap('g5_telefoon', g5_telefoon)
+    c.close()
+
+    # ===== 4. iPad in landschap (1180×820, touch, review I3): body.desk met (hover: none) heeft tikdoelen als op de telefoon =====
+    c = b.new_context(viewport={'width': 1180, 'height': 820}, is_mobile=True, has_touch=True)
+    pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('ipad: ' + str(e))); pg.on('dialog', dialoog)
+    pg.goto(U + 'sophie'); pg.wait_for_selector('#zijbalk'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG)
+    def g5_ipad():
+        ok('ipad: desktopweergave met (hover: none)', pg.evaluate("document.body.classList.contains('desk') && matchMedia('(hover: none)').matches"))
+        detail('kans:k9'); m = pg.evaluate("[].map.call(document.querySelectorAll('.fasewissel-rij input[type=date], .fasewissel-rij select'), function (x) { return x.getBoundingClientRect().height; })")
+        ok('ipad: datumveld en keuzelijst van de wissel minstens 44 px', len(m) == 2 and all(x >= 44 for x in m), m)
+        pg.select_option('[data-kansfase="k9"]', 'gesprek'); pg.wait_for_selector('#toast.aan [data-toastactie="1"]'); pg.wait_for_timeout(300)
+        t = pg.evaluate("[].map.call(document.querySelectorAll('#toast [data-toastactie]'), function (x) { return x.getBoundingClientRect().height; })")
+        ok('ipad: Ongedaan maken en Andere datum in de melding minstens 44 px', len(t) == 2 and all(x >= 44 for x in t), t)
+        pg.click('#toast.aan [data-toastactie="0"]'); pg.wait_for_timeout(800)
+        desk('rapporten', '#crmBalk [data-rweergave="mt"]'); pg.click('#crmBalk [data-rweergave="mt"]'); pg.wait_for_selector('.mt .mt-blok')
+        k = pg.evaluate("[].map.call(document.querySelectorAll('.mt-kop .knop, .mt-kop select'), function (x) { return x.getBoundingClientRect().height; })")
+        ch = pg.evaluate("[].map.call(document.querySelectorAll('#crmBalk [data-rweergave], #crmBalk [data-defs]'), function (x) { return x.getBoundingClientRect().height; })")
+        ok('ipad: MT-kop (Afdrukken, Tussenstand, Link, Stand) minstens 44 px; chips Teams, Week, MT en Definities minstens 36 px', k and all(x >= 44 for x in k) and ch and all(x >= 36 for x in ch), [k, ch])
+    stap('g5_ipad', g5_ipad)
     c.close()
     b.close()
 

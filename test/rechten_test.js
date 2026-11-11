@@ -398,9 +398,12 @@ log(!!toon.ok, 'portaal: het eigen profiel blijft via het portaal gewoon bereikb
   }
   var namen = function (r) { return r.rijen.map(function (x) { return x.naam; }).sort().join(','); };
   var w1 = roepRuw(LARS, 'apiSturing', ['week', { eigenaar: 'Noor Hendriks' }]); aantalAanroepen++;
-  noteer('een OC vraagt de week van een andere OC: alleen zichzelf en het teamtotaal', LARS, 'apiSturing', w1, w1.ok && namen(w1.result) === 'Lars Visser' && !!w1.result.totaal && w1.result.eigenaar === '', 'alleen de eigen regel');
+  // review P5 (R8): in een team van drie is teamtotaal min de eigen regel de som van twee collega's; een medewerker krijgt dan geen teamtotaal (null, "te klein team")
+  noteer('een OC vraagt de week van een andere OC: alleen zichzelf, en in een team van drie geen teamtotaal', LARS, 'apiSturing', w1, w1.ok && namen(w1.result) === 'Lars Visser' && w1.result.totaal === null && /te klein/.test(w1.result.totaalUitleg) && w1.result.eigenaar === '', 'alleen de eigen regel');
   var w2 = roepRuw(YARA, 'apiSturing', ['week', {}]); aantalAanroepen++;
-  noteer('de teamlead consultancy ziet zijn team en niet de regel beheerder', YARA, 'apiSturing', w2, w2.ok && namen(w2.result) === 'Lars Visser,Noor Hendriks,Yara El Amrani', 'het team');
+  noteer('de teamlead consultancy ziet zijn team, het teamtotaal en niet de regel beheerder', YARA, 'apiSturing', w2, w2.ok && namen(w2.result) === 'Lars Visser,Noor Hendriks,Yara El Amrani' && !!w2.result.totaal, 'het team');
+  var w3 = roepRuw(SOPHIE, 'apiSturing', ['week', {}]); aantalAanroepen++;
+  noteer('het management ziet het teamtotaal ook in een klein team', SOPHIE, 'apiSturing', w3, w3.ok && !!w3.result.totaal && !w3.result.totaalUitleg, 'alles');
   [[FEMKE, 'een AM'], [BAS, 'de teamlead AM'], [SEM, 'talent'], [IRIS, 'de teamlead talent']].forEach(function (x) {
     ['week', 'mt'].forEach(function (w) { var r = roepRuw(x[0], 'apiSturing', [w, {}]); aantalAanroepen++; noteer(x[1] + ' vraagt de ' + w + 'weergave', x[0], 'apiSturing', r, !r.ok && TOEGANG.test(r.fout)); });
   });

@@ -631,6 +631,7 @@ with sync_playwright() as p:
     page.click('#instellingenKnop'); page.wait_for_selector('#statusInfo .k-rij'); page.wait_for_timeout(200)
     page.click('#statusInfo [data-herinneringen="0"]'); page.wait_for_selector('#statusInfo [data-herinneringen="1"]:has-text("Uit")')  # v4.6: herinneringsmail uitzetten
     page.click('#statusInfo [data-herinneringen="1"]'); page.wait_for_selector('#statusInfo [data-herinneringen="0"]:has-text("Aan")')
+    st_rij = page.locator('#statusInfo .k-rij:has-text("Sturing (dagelijks 06:45)")'); assert st_rij.count() == 1 and 'ja' in st_rij.inner_text() and 'laatst ' in st_rij.inner_text(), 'v7.9 (review T8): het statuspaneel toont de dagelijkse sturing met de laatste run'
     # v7.6: Beheer → Metingen (alleen management): tabel per api met aantal, p50, p95 en fout %, de traagste bovenaan; JS-fouten; Vernieuwen haalt opnieuw op
     page.wait_for_selector('#metingenInhoud table.metingen tbody tr'); assert page.locator('#metingenInhoud tbody tr').first.inner_text().startswith('apiCrm'), 'traagste api (p95) bovenaan'
     assert '1900 ms' in page.inner_text('#metingenInhoud tbody tr:first-child') and 'JS-fouten' in page.inner_text('#metingenInhoud'), 'p95 en de JS-foutregel in de metingen'
