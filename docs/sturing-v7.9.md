@@ -1,0 +1,640 @@
+# Sturing v7.9: Athena als enige plek voor commerciële en financiële sturing (deel A)
+
+Concept ter aftekening, 11 november 2026. Deel A van de opdracht "Athena wordt de enige plek voor commerciële en financiële sturing". Dit document bevat alleen structuur en geslaagd/gezakt: geen namen van personen of scholen, geen bedragen, geen aantallen of percentages uit de data. De minuten handwerk zijn schattingen.
+
+## 0. Inleiding
+
+**Doel.** Athena wordt de enige plek waar het MT commercieel en financieel stuurt. Elk los rapport, spreadsheet en systeem dat daar nu voor nodig is, moet aantoonbaar overbodig worden. Deel A legt drie dingen vast:
+
+- wat er nu bestaat (§1, het uitfaseerregister);
+- welke besluiten het MT neemt en welk cijfer bij welk besluit hoort (§2, de besluitenboom);
+- waar elk cijfer vandaan moet komen en of Athena dat nu vastlegt (§3, de herkomstmatrix).
+
+Deel B bouwt alleen wat uit §3 volgt, en alleen met verzonnen gegevens.
+
+**Wat al gedaan is en niet opnieuw.** Deze notitie bouwt voort op de sessie "Weekly commercial MT rapport" op de Mac van de beheerder: de defectenlijst D1–D15 met §7 en §8, metrics.yaml, contracten.py, snapshot_events.py en forecast.py. Waar een bevinding daar al staat, verwijst deze notitie naar het D-nummer. Die bestanden staan niet in deze repo.
+
+**Rollen.**
+
+| Rol | Wie |
+|---|---|
+| MT | De financieel directeur (FD), een MT-lid en de beheerder. |
+| Beheerder | Beheert Athena en maakt de rapporten. In de rapporten en het gesprek heet hij manager of commercieel leider. |
+| OC | Onderwijsconsultant. |
+| AM | Accountmanager, met een teamlead AM. |
+| Talentteam | Het team dat projecten bezet. |
+| Boekhouder | Doet de administratie in Exact. |
+
+**Hoe er gelezen is.** Alles is gelezen via het transcript van de sessie op de Mac van de beheerder. Daarin staan de uitvoer van commando's, bestandslijsten, het draaiboek, de diffs tussen de backups, de mailwisseling en de Cowork-sessie. De ruwe bestanden op de Mac zijn niet rechtstreeks geopend: de Capsule-export, de Exact- en XPS-exports, Monday, de maandrapporten zelf en de invulbestanden. Ze zijn alleen gelezen voor zover hun inhoud in het transcript stond. Van Athena is de code op de werkbranch gelezen (backend/Code.gs, index.html, demo en tests), zonder iets te wijzigen.
+
+### Geopende bronnen
+
+| Bron | Geopend | Hoe |
+|---|---|---|
+| Transcript van de Mac-sessie (index en alle delen) | ja | op tekenbereik gelezen |
+| Bestandslijsten van de thuismap, Downloads, rapportages, scripts, data en de lokale repo | ja | uitvoer van ls in het transcript |
+| Draaiboek README rapportages (huidige versie) | ja | volledig, zoals het in het transcript staat |
+| Draaiboek: keten van .bak-versies | deels | via de diffs tussen opeenvolgende versies, ook in volgorde van wijzigingstijd (de backupnamen lopen niet gelijk met de wijzigingstijd); niet elke versie volledig |
+| Weekrapport: laatste xlsx | deels | alle tabbladen (Activiteit, Pipeline, Agenda, Trend, Lijsten, Controles); kolomkoppen deels afgekapt |
+| Weekrapport: oudere -vN-versies en pdf's | nee | alleen de bestandslijst |
+| Maandrapport voor het MT: alle -vN-versies (pdf en xlsx) | nee | alleen de bestandslijst, het draaiboek en het Cowork-gesprek |
+| Invulbestand van het maandrapport (tabblad Instellingen, rekenmodel) | nee | alleen via draaiboek en gesprek |
+| Correctiebestand (correcties.csv, huidige versie) | ja | volledig; alleen de structuur overgenomen. De backups zijn niet geopend |
+| werkelijke_datums.csv | deels | de kop, voorbeeldregels en de verdeling naar zekerheid en soort bewijs |
+| weekdoelen.csv | ja | bevat alleen de kopregel |
+| Momentopnames van kansen en de datapull op de Mac | deels | de bestandslijst en de uitvoer van snapshot_events.py |
+| Capsule: kansenexport | deels | via samenvattingen in het transcript (sleutels, fasen, vulgraad, fasedatum, gesloten, verliesreden) |
+| Capsule: entries | deels | soorten en sleutels |
+| Capsule: activiteit, taken, partijen, gebruikers, mijlpalen, verliesredenen | nee | alleen de bestandslijst |
+| Rapportscripts week_rapport.py en maand_pdf.py | deels | grep-regels en een deel van de docstring |
+| Overige rapportscripts (maand_vul, maand_levering, prognose_lees, scholen_basis_lees, akkoord_momenten, akkoord_trend) | nee | alleen naam en grootte; de werking komt uit het draaiboek |
+| metrics.yaml (basis en het blok 'toegezegd'), contracten.py met de uitvoer, snapshot_events.py, forecast.py met de biasfix | ja | volledig zoals geschreven in het transcript; getallen niet overgenomen |
+| Defectenlijst §1–§6 (D1–D10), §7 (D11–D15) en §8 | ja | volledig |
+| Cowork-sessie "weekly commercial MT rapport" | deels | de sharepagina was afgekapt; de transcriptdelen zijn volledig gelezen; een klein stuk tussen pagina en eerste deel ontbreekt (feedback op de pipelinedefinities, afgeleid uit het antwoord) |
+| Mailwisseling over de rapportage (rapportagemail, reactie FD, dashboardvoorstel, antwoord beheerder) | ja | de platte tekst van alle berichten |
+| Bijlagen bij de mail: week- en maandrapport-pdf, het dashboardvoorstel van de FD (xlsx), gefactureerd per maand per boekjaar (xlsx van de boekhouder) | nee | alleen bestandsnamen; de inhoud van het dashboardvoorstel alleen uit mail en gesprek |
+| Doelpadcurve (akkoord_momenten.csv, akkoord_trend.json) | nee | alleen de bestandslijst en de methode uit het draaiboek |
+| Scholensheet "samenwerkingen" en de verlengingsbasis | nee | alleen de bestandslijst en het draaiboek |
+| Prognose- en urensheet (seizoensmodel) | nee | alleen het draaiboek |
+| Facturatie-overzicht per traject (xlsx) en het facturatieportaal | nee | alleen het draaiboek en het gesprek |
+| Monday-borden (Verlenging, Facturatie, AM-borden) | nee | alleen het draaiboek, de grep en het gesprek |
+| XPS (diensten, projecten) | nee | alleen het gesprek |
+| Exact (grootboek, verkoopboek) | nee | alleen het gesprek en D11–D13 |
+| Google Agenda en de agenda-uitsnede (json) | nee | alleen het bestaan, via de uitvoer van contracten.py |
+| ICP-model met de DUO-vestigingen | deels | structuur, backtest, kolommen en een koppelpoging |
+| Teamapp-export (chat van het OC-team) | nee | alleen de bestandslijst |
+| Weekstart-aanvalsplannen en bellijsten | nee | alleen de bestandsnamen |
+| Bankexports, vaste-lastenoverzicht, financieel dashboard (html) | nee | alleen de bestandsnamen |
+| Prijzenlijst en samenwerkingsvoorstellen in Drive | nee | alleen genoemd in het gesprek |
+| Oud MT-rapportagesysteem van finance | nee | alleen genoemd als reden voor de nieuwe aanpak |
+| Verslag van het MT-gesprek na de eerste rapportage | nee | er is geen verslag |
+| Athena: backend/Code.gs, index.html, demo, test, server | ja | alleen gelezen (TABELLEN, apiKansOpslaan, projectUitKans, METRIEKEN, crmSync, Financiën, Doelen, triggers) |
+
+## 1. Uitfaseerregister
+
+Een artefact mag pas uit als Athena aan het exitcriterium voldoet. In de laatste kolom staat wat er na deze ronde (deel B gebouwd en groen) kan gebeuren:
+
+- **ja**: het artefact kan uit;
+- **nee**: het blijft, met de reden;
+- **na besluit**: het kan uit zodra de beheerder het genoemde besluit uit §5 neemt.
+
+De codes B1–B14 verwijzen naar §2, de codes M01–M36 naar §3. De minuten zijn geschat per keer.
+
+| Nr | Artefact | Soort | Lezer | Besluit | Cijfers | Bron | Handwerk per keer (min) | Frequentie | Exitcriterium | Na deze ronde uit? |
+|---|---|---|---|---|---|---|---|---|---|---|
+| U1 | Weekrapport commercie (pdf van één pagina plus xlsx, een reeks -vN-versies binnen enkele dagen) | rapport | beheerder; de OC's in de weekstart; de eerste uitgave ook naar het MT | B4, B5, B14 | M14, M15, M16, M17, M34, M35; geschrapt: activiteit per Capsule-type (grijze typen), trend over zes weken, dealwaarde per week | Capsule-pull, momentopname van maandag, agenda-uitsnede, weekdoelen.csv, correcties.csv, werkelijke_datums.csv; week_rapport.py | pull starten en versheid controleren 5; agenda ophalen en filteren 10; invoer klaarzetten 5; script draaien en controle lezen 10; inhaalwerk en "direct fase 6" uitzoeken en datums aanvullen 20–30; bericht aan de beheerder 10; herwerk na een definitiewijziging 30. Samen ongeveer 60–100 | wekelijks, vrijdagmiddag (ma t/m vr) | Rapporten in Athena heeft een weekweergave met M14–M17 en M35 per OC en voor het team, geteld op werkelijke datum uit de fasewissel, met de definitie uit het register naast elk getal. Het vergelijkingsharnas legt Athena twee weken op rij naast het weekrapport en slaagt binnen de tolerantie, of verklaart elk verschil. Daarna wordt er geen pdf meer gemaakt | na besluit (de OC's leggen kansen en activiteiten alleen nog in Athena vast, §5 besluit 1) |
+| U2 | Maandrapport commercie voor het MT (pdf van meerdere pagina's plus invulbestand, een reeks -vN-versies) | rapport | MT (FD, MT-lid), beheerder; AM's voor facturatie en verlengingen | B2, B7, B8, B9, B10 | M04–M09, M18, M19, M23, M24, M25–M28; geschrapt: omzetprognose, MT-punten, uitsplitsing per medewerker, regio en type werk, top scholen | Capsule, Monday-borden, facturatie-overzicht (U13), prognosesheet (U12), verlengingsbasis (U11), doelpadcurve (U10), correcties, werkelijke datums; maand_vul, maand_levering, maand_pdf | peildatum en export controleren 3; Monday uitlezen 20; facturatie-overzicht maken 60; urensheet bijwerken en lezen 30; verlengingsbasis 10; scripts draaien 15; pagina's nalezen 15; twijfelgevallen en correcties 45; bericht 15; herwerk na definitiewijzigingen tot 120. Samen ongeveer 210–330 | maandelijks, laatste donderdag (start schooljaar t/m peildatum) | Athena heeft een MT-overzicht in Rapporten met M04–M09, M18, M19, M23, M24 en M25–M28, en elk cijfer heeft een afgetekende definitie. Er is een afdrukbaar maanddocument met peildatum en definitieversie. Het harnas slaagt één maand naast de laatste pdf, Exact en XPS. De FD bevestigt dat de pdf niet meer nodig is | nee: de noemer van het jaardoel is open (§5 besluit 2) en marge is extern geblokkeerd (§6). De blokken die over kunnen, kunnen al wel apart worden afgetekend |
+| U3 | Rekenmodel en tabblad Instellingen van het invulbestand | spreadsheet | beheerder; het MT op pagina 1 van het maandrapport | B1, B3 | M01, M02, M03, M11; ook de fasegewichten | waarden die de beheerder zet; omzet vorig jaar uit Exact; overgenomen via het vorige invulbestand | aanname wijzigen en rapport opnieuw maken 15 | ad hoc; daarna maandelijks overgenomen | Elke aanname staat in Athena als instelling met versie, eigenaar, onderbouwing en besluitdatum. Het rekenmodel en het doelpad lezen hem daar. Geen aanname zonder eigenaar (D10) | ja, zodra het register gevuld is |
+| U4 | Draaiboek (README rapportages met een keten van .bak-versies) | document | de rapportsessie; de beheerder | geen eigen besluit; legt de definities vast | alle week- en maandcijfers | handmatig bijgehouden, met een backup bij elke wijziging | bijwerken na een besluit 15 | bij elke definitiewijziging; in de eerste week bijna dagelijks | Het register van cijfers in Athena (definitie, versie, eigenaar) is de enige definitiebron. Het werkwijzedeel vervalt samen met de scripts (U17) | ja voor de definities; het werkwijzedeel gaat samen met U17 |
+| U5 | Correctiebestand (correcties.csv) | document | de rapportscripts; de beheerder | B14 (beslissen per twijfelgeval) | M04, M24, M27 en de geschrapte uitsplitsingen | antwoorden van de beheerder; bewijs uit voorstellen, portaal, Monday en Capsule | per twijfelgeval bewijs zoeken 10 en een regel toevoegen 3; per maandrun ongeveer 45 | bij elke maandrun en tussentijds | Elke correctiesoort heeft een veld of gebeurtenis in Athena, zie de tabel hieronder. Het datakwaliteitsoverzicht toont een volle maand geen open correctie van die soort | na besluit (besluit 1; de soort "niet gecontracteerd" na besluit 7) |
+| U6 | Werkelijke datums (werkelijke_datums.csv) | document | week- en maandscripts, forecast.py | B4, B2, B14 | M16, M08, M35 | gereconstrueerd uit Capsule-historie, portaal, teamagenda en teamapp; de beheerder vult aan | eenmalige backfill ongeveer 240; per inhaalkans 5; wekelijks ongeveer 30 | eenmalig opgezet, daarna wekelijks | Het bestand is eenmalig geïmporteerd als fasewissels met zekerheid en bron. Nieuwe wissels worden in Athena vastgelegd met werkelijke datum, ingevoerd op en door. Het contract registratievertraging is groen | na besluit (besluit 1); de import zelf kan na deze ronde |
+| U7 | Weekdoelen (weekdoelen.csv) | document | weekrapport | B4 | M17 | bedoeld: de beheerder na de weekstart | invullen 10 (gebeurt niet) | bedoeld wekelijks; nooit gevuld (D5) | Het weekdoel per OC per ISO-week staat in Athena (Doelen met een concrete week) naast de realisatie | ja |
+| U8 | Momentopnames van kansen en de geplande datapull op de Mac (met .bak's) | export | week_rapport.py, snapshot_events.py | geen eigen besluit; nodig om fasewissels af te leiden (B4) | M16 | geplande pull van Capsule op de Mac | controleren of de Mac aan stond en de momentopname er is 5 | wekelijks; bedoeld dagelijks | Elke fasewissel is in Athena een gebeurtenis (D1), dus momentopnames zijn overbodig | na besluit (besluit 1) |
+| U9 | Agenda-uitsnede (json per datum) | export | week_rapport.py | B14 (logdekking), B4 | M34, M15 | Google Agenda via de connector: teamagenda en de agenda's van de OC's, alleen afspraken met een extern schooldomein | ophalen, filteren en wegschrijven 10 | wekelijks | Schoolafspraken worden in Athena gepland of gelogd. Logdekking is een cijfer in Athena, of vervalt als de afspraak alleen nog in Athena wordt gepland | na besluit (toegang tot de teamagenda, §5 besluit 10) |
+| U10 | Doelpadcurve (akkoord_momenten.csv, akkoord_trend.json, met .bak) | script | maandrapport (tabbladen Doelpad en Akkoord_trend) | B2 | M05 | tekstzoektocht naar akkoorden in de Capsule-historie, gekoppeld aan de scholensheet en gewogen met contractwaarde | contactexport downloaden 15; scripts draaien en curve controleren 20 | jaarlijks na 31 juli; in de eerste week twee keer herbouwd | De huidige curve staat eenmalig met versie in het register. Vanaf het volgende schooljaar wordt hij uit de fasewissels naar gewonnen op akkoorddatum berekend | ja, zodra de curve met versie is vastgelegd |
+| U11 | Verlengingsbasis: de scholensheet "samenwerkingen" (Google Sheet), de basis-csv en de xlsx-kopieën in de lokale repo | spreadsheet | maand_vul (verlengingen), akkoordtrend, ICP | B8; ook nieuw of bestaand voor B2 | M24; nieuw of bestaand in M04 en M05 | handmatige lijst per school per schooljaar met levering en contractwaarde | tekstexport en script 15; lijst bijwerken 30 | ad hoc; jaarlijks | De projecten van vorige schooljaren staan eenmalig in Athena (Trajecten, met BRIN en vestiging op de school). De verlengingsstand en "nieuw of bestaand" komen uit Athena | nee: er is eerst een eenmalige import met echte gegevens nodig, die de beheerder lokaal doet |
+| U12 | Prognose- en urensheet (seizoensmodel, Google Sheet) met tekstexport | spreadsheet | maandrapport (urenvergelijking) | B2 | M09; geschrapt: omzetprognose | XPS-roosterexport, met de hand in de sheet gezet | export plakken 20; tekstexport en script 10 | maandelijks | De uren per maand komen uit de XPS-urenimport in Athena. Een basislijn van vorige schooljaren (alleen totalen per maand) staat eenmalig met versie in Athena | nee: de basislijn van vorige jaren moet nog eenmalig lokaal worden ingevoerd; uren per school over vorige jaren ontbreken (§6) |
+| U13 | Facturatie-overzicht per traject (xlsx uit XPS-diensten en de factuurexport) | spreadsheet | maandrapport (facturatie en de bijlage levering) | B9 | M25, M26, M27 | XPS-diensten en de portaal- of factuurexport, samengevoegd in een aparte sessie | samenvoegen 60; klaarzetten 5 | maandelijks | Financiën in Athena dekt het: geleverd uit de XPS-urenimport, gefactureerd en betaald uit de Exact-import, termijnen per project. Elk lopend project heeft een XPS-projectkoppeling en een echt tarief. Het harnas tegen Exact en XPS slaagt binnen de tolerantie | ja, als het harnas op de echte stand slaagt |
+| U14 | Monday: de borden Verlenging en Facturatie (met subitems), de AM-borden en hun json-exports | systeem | AM's (dagelijks werk); maand_vul en maand_levering | B8, B9 | M24, M26, M27 | door de AM's met de hand bijgehouden: verlengstatus, factuurregels "Gedaan", trajectstatus | AM's houden status en factuurregels bij, ongeveer 30 per week per AM; het rapport leest de borden en controleert sommen 20 | doorlopend; maandelijks gelezen | Verlengingsstatus, termijnen en factuurafspraak staan per project in Athena (Projecten, Facturatie). De AM's werken alleen nog daar en Monday is alleen-lezen tot hij uit kan | na besluit (§5 besluit 11) |
+| U15 | Capsule (CRM) met de API-pulls, de handmatige zip-exports en het eigen dashboard | systeem | OC's en de beheerder (dagelijks); alle rapportscripts | B5; bron voor B2, B4 en B14 | M14, M16, M18, M19, M20, M21 en via de rapporten bijna alles | invoer door de OC's; pulls via launchd op de Mac | kansen, fasen en activiteiten invoeren, vaak achteraf in bulk; zip-export 10; opschonen 30 | dagelijks | Relaties in Athena is de enige plek voor kansen en activiteiten, met fasewissel als gebeurtenis, waarde, sluitdatum, BRIN en verliesreden. De datacontracten zijn groen, de laatste stand is gemigreerd en Capsule is opgezegd | na besluit (besluit 1) |
+| U16 | ICP-model met de DUO-vestigingenlijst (xlsx en json) | spreadsheet | beheerder (prospectlijsten en belbatches) | B6 | M22; geschrapt: de in-sample backtest | DUO-vestigingen plus signalen | eenmalig gebouwd ongeveer 120; steekproef controleren 30 | eenmalig; geen ververscyclus | De school in Athena heeft BRIN en vestiging. Het deciel wordt buiten de steekproef getoetst in de voorspellingslog op getekende deals. Zonder lift wordt het geschrapt | na besluit (§5 besluit 9) |
+| U17 | Rapportscripts en geplande taken op de Mac (week_rapport, maand_vul, maand_levering, maand_pdf, prognose_lees, scholen_basis_lees, akkoord_momenten, akkoord_trend, met .bak-keten) | script | de rapportsessie; de beheerder (pushmelding) | geen eigen besluit | alle week- en maandcijfers | lokale repo van de beheerder; Capsule-API, Monday-connector, browser voor XPS en portaal | script aanpassen na een definitiewijziging 30; Mac aan en ingelogd houden en een mislukte run uitzoeken 10 | bij elke definitiewijziging; datapull op werkdagen; weektaak vrijdag; maandtaak donderdag | Elk rapport is een scherm of een gegenereerd document in Athena (U1, U2). De scripts zijn gearchiveerd | na besluit (gaat samen met U1 en U2) |
+| U18 | Registers van de vorige sessie: metrics.yaml, contracten.py, snapshot_events.py, forecast.py, forecastlog.jsonl, de defectenlijst | script | beheerder | B14 (contracten), B3 (voorspelling) | M13, M35, M36 | Capsule-pull, momentopnames, werkelijke datums | handmatig draaien en lezen 5–10 | ad hoc; niet in de geplande runs | Het register van cijfers, het rooktestblok met de dagelijkse controle en het overzicht per eigenaar, en de voorspellingslog in Athena vervangen deze bestanden. Fouten in de Mac-code gaan niet mee (§3b) | ja |
+| U19 | Dashboardvoorstel van de FD (xlsx met een overzichtspagina en invoertabbladen) | spreadsheet | MT, FD | B2, B3, B5, B9, B10, B11, B12 | omzet en marge tegen target, realisatie tegen vorig jaar, productiviteit per uur, funnel en zekerheid, nog te factureren, debiteuren, contractenblad | invoertabbladen die meerdere rollen met de hand vullen; cijfers van de boekhouder | voorgesteld: per rol wekelijks overtikken, samen ongeveer 45–60; targets invoeren 30 | voorgesteld wekelijks, besproken maandelijks; nog niet in gebruik | Elk overgenomen cijfer staat in het MT-overzicht in Athena met een afgetekende definitie, of is expliciet geschrapt (§2). De invoertabbladen zijn afgewezen omdat ze een tweede waarheid geven. Het contractenblad vervalt zodra het winformulier de getekende waarde en de akkoorddatum vraagt. De FD bevestigt dat de xlsx niet nodig is | na besluit (§5 besluit 2; marge blijft geblokkeerd) |
+| U20 | Exact-overzicht "gefactureerd per maand per boekjaar" (xlsx van de boekhouder) | export | FD | geschrapt als target-basis (D13) | gefactureerd per maand | Exact | export maken en mailen 20 | ad hoc | Gefactureerd per maand staat in Financiën uit de Exact-import. Een target op het factuurpatroon komt er niet | na besluit (§5 besluit 2: boekjaar of schooljaar) |
+| U21 | Kosten- en omzetoverzicht per maand (werkgeverskosten en reiskosten van ingezette studenten; netto-omzet per maand), gevraagd aan de boekhouder | export (nog niet geleverd) | FD, beheerder | B12, B2 | M30, M31, M32, M10, M02 | boekhouding, alleen maandtotalen | samenstellen ongeveer 45 (boekhouder) | eenmalig als nulmeting, daarna maandelijks | Dit wordt geen los bestand maar invoer in Athena: een maandregel van financiën (alleen totalen, nooit loon of tarief per persoon) waaruit Athena de marge berekent | nee: extern geblokkeerd (§6) |
+| U22 | Invuldocument getekende deals voor de OC's (toegezegd, bestaat nog niet; ook grondslag voor de bonus) | document | beheerder, OC's, FD | B2, B9 | getekende waarde en akkoorddatum per deal | de OC per deal | per deal 5; maandelijkse controle 20 | per gewonnen deal | Het document wordt niet gebouwd. Het winformulier in Athena vraagt verplicht de getekende waarde en de akkoorddatum, en de lijst voor de bonus komt uit Athena | ja (wordt niet gebouwd) |
+| U23 | Rapportagemail aan de FD met bijlagen, en de antwoordronden | document | FD, MT-lid | geen eigen besluit; draagt U1 en U2 over | geen eigen cijfers | Gmail; concepten door de assistent | mail opstellen en bijlagen toevoegen 30; antwoordronden ongeveer 60 (eenmalig) | maandelijks | De mail bevat een link naar het MT-overzicht of het maanddocument in Athena, in plaats van pdf-bijlagen | na besluit (gaat samen met U2; de FD heeft toegang tot Athena nodig, §5 besluit 12) |
+| U24 | Teamapp-export (chat van het OC-team) als bewijsbron | export | de rapportsessie, bij het reconstrueren van datums | geen; bewijs voor B14 | M35 | handmatige chatexport | exporteren en doorzoeken 15 | ad hoc | Een AP en een akkoord worden op het moment zelf in Athena vastgelegd, met werkelijke datum. De chat blijft als communicatiemiddel, maar is geen rapportbron meer | na besluit (besluit 1) |
+| U25 | Weekstart-aanvalsplannen en bellijsten | document | beheerder en OC's (weekstart) | B4, B6 | M17, M22 | weekstart_plan.py, lijsten_bouw.py (Capsule en ICP) | genereren en bespreken 30 | wekelijks, maandag | De weekstart gebruikt Athena: het weekdoel per OC in Doelen, de opvolging uit de pipeline en de taken | na besluit (besluiten 1 en 9) |
+| U26 | Losse financiële exports (bankafschriften, vaste-lastenoverzicht, een financieel dashboard in html) | export | beheerder, FD | B12 (kandidaatbron voor kosten per maand) | M30 | bank en een eigen overzicht | downloaden en samenvatten 20 | maandelijks | De kosten per maand komen als maandtotaal van financiën in Athena (U21). Daarna zijn deze exports geen rapportbron meer | nee: extern geblokkeerd (§6) |
+| U27 | Prijzenlijst en samenwerkingsvoorstellen in Drive, gebruikt als terugval voor prijs en contractbedrag | document | de rapportsessie | B9 | M25, M27 | Drive | voorstel per traject opzoeken 10 | ad hoc | Elk project heeft een echt tarief en een getekende contractwaarde in Athena (winformulier). De voorstellen blijven als document in Drive, maar zijn geen bron meer voor rapportcijfers | ja, voor nieuwe projecten na deze ronde; lopende projecten na het contract "tarief echt" |
+| U28 | Oud MT-rapportagesysteem van finance | systeem | MT (vroeger) | MT-sturing | niet beschreven | handmatige invoer | handmatig vullen, ongeveer 60; werd vaak overgeslagen | onbekend | Al buiten gebruik. Het is alleen de reden voor deze aanpak | ja (al uit) |
+| U29 | Facturatieportaal (facturen) en de aangekondigde overstap naar WeFact | systeem | boekhouder, AM's | B9, B10 | M26, M28 | portaal en Exact | geen rapporthandwerk naast U13 | doorlopend | Dit is geen rapport maar het facturatiesysteem; het blijft. Athena leest de facturen via de Exact-import, en na de overstap via de export van het nieuwe pakket | nee (blijft bron; buiten scope) |
+| U30 | Exact en XPS als systemen | systeem | boekhouder, talentteam | B9, B10, B2 | M25, M26, M28, M09 | boekhouding en urenregistratie | Exact-facturatie-export 15 per maand; XPS-urenexport naar de Drive-map 10 per week | maandelijks / wekelijks | Ze blijven bron. Alleen de losse exports verdwijnen: er komt een vaste import in Athena (de Exact-import maandelijks, urenImport wekelijks) | nee (blijven bron) |
+
+**Correctiesoorten.** Bij U5 hoort per correctiesoort een veld of gebeurtenis in Athena:
+
+| Correctiesoort | Wordt in Athena |
+|---|---|
+| capsule/fase | gebeurtenis Fasewissel met werkelijke datum |
+| capsule/waarde | getekende waarde in het winformulier |
+| capsule/naam, twijfel over het schooljaar | Kansen.schooljaar |
+| capsule/type | productsoort (keuzelijst) |
+| twijfel Capsule tegen Monday | één contractwaarde per project |
+| niet_gecontracteerd | besluit 7: wat telt als gewonnen |
+| levering | Trajecten.soortFacturatie, vooraf of achteraf |
+| verlenging | Trajecten.verlenging, met de AM als eigenaar |
+| traject/waarde | elk lopend project heeft een contractwaarde |
+| traject/school | Scholen.brin en Scholen.vestiging |
+| traject/soort | Kansen.klant, nieuw of bestaand |
+| traject/regio | volgt uit BRIN; als uitsplitsing geschrapt |
+
+**Na deze ronde uit.** Als deel B gebouwd en groen is, kunnen meteen uit:
+
+- U3 (aannames in het register);
+- U4 (het definitiedeel);
+- U7 (weekdoelen);
+- U10 (de curve met versie);
+- U13 (als het harnas slaagt);
+- U18 (de registers van de vorige sessie);
+- U22 (wordt niet gebouwd);
+- U27 (voor nieuwe projecten);
+- U28 (was al uit).
+
+De rest hangt aan de overstap van de OC's en AM's naar Athena (§5 besluiten 1 en 11), aan de noemer van het jaardoel (besluit 2), of aan externe aanlevering (§6).
+
+**Handwerk.** Een ruwe schatting van het rapportagewerk zelf, zonder het bijhouden van Capsule en Monday: twaalf tot vijftien uur per maand.
+
+## 2. Besluitenboom
+
+Vanaf het jaardoel zijn er veertien besluiten. Elk cijfer hangt aan precies één besluit; de definitie staat in §3 en §4.
+
+```
+Jaardoel
+├── B1  Jaardoel en verdeling vastleggen ................ MT (FD met beheerder), jaarlijks
+│       M01 jaardoel · M02 omzet vorig jaar · M03 aanname retentie (doel bestaand en doel nieuw)
+├── B2  Koers op het jaardoel: waar gaat extra inzet heen
+│       (nieuwe scholen of verlengingen) .................. MT, maandelijks
+│       M04 gecontracteerd · M05 doelpad · M06 gewogen pipeline · M07 dekking
+│       M08 gewonnen in periode · M09 gewerkte uren tegenover vorige jaren
+│       M10 netto-omzet tegen jaardoel (alleen bij een omzetdoel)
+│   ├── B3  Capaciteit en aanpak van het commerciële team
+│   │       (aantal OC's, activiteitsnorm, aanpak nieuwe scholen) ... MT, per kwartaal
+│   │       M11 benodigde activiteit (rekenmodel) · M12 gerealiseerde conversie
+│   │       M13 voorspelling deals volgende week
+│   ├── B4  Weekstart: inzet en weekdoel per OC ........... beheerder met de OC's, wekelijks
+│   │       M14 contactmomenten · M15 schoolafspraken gehouden en gepland
+│   │       M16 fasewissels AP, AD, VO en deal · M17 weekdoel
+│   ├── B5  Pipeline-opvolging: welke kansen opvolgen, sluiten of verloren
+│   │       verklaren ...................................... beheerder met de OC, wekelijks
+│   │       M18 kansen per fase (funnel) · M19 verwachte opdrachten (30 dagen)
+│   │       M20 stilstand · M21 verloren met reden
+│   ├── B6  Prospectie: welke scholen benaderen ........... beheerder met de OC's, periodiek
+│   │       M22 ICP-deciel
+│   └── B7  Ondersteuning van het OC-team
+│           (MT op teamniveau, per persoon in het 1-op-1) ... MT, maandelijks
+│           M23 OC-activiteit per maand
+├── B8  Verlengingen: per bestaande klant zonder afspraak voor het
+│       nieuwe schooljaar: wie pakt het op, of opgeven ...... beheerder met de AM's, maandelijks
+│       M24 verlengingsstand
+├── B9  Factureren: welke projecten nu factureren, welke lopen achter ... AM met boekhouder, maandelijks
+│       M25 geleverd · M26 gefactureerd · M27 nog te factureren
+├── B10 Innen: wie gaat achter openstaande facturen aan ... boekhouder en FD, maandelijks
+│       M28 openstaand naar ouderdom
+├── B11 Realisatie per project: welk project haalt de contractwaarde
+│       niet en wat doet de AM eraan ....................... teamlead AM (MT op teamniveau), maandelijks
+│       M29 realisatiegraad per project
+├── B12 Marge en prijs: margedoel na de nulmeting, ondergrens per
+│       project, prijs per voorstel ........................ MT en FD; jaarlijks, maandelijks, per voorstel
+│       M30 brutomarge · M31 projecten onder de ondergrens · M32 offertemarge
+├── B13 Investering in team inhoud tegenover wat het oplevert ... MT, per kwartaal
+│       M33 omzetdeel team inhoud
+└── B14 Datakwaliteit bij de bron: invoerafspraken handhaven,
+        per eigenaar ........................................ beheerder, wekelijks
+        M34 logdekking · M35 registratievertraging · M36 datakwaliteit per eigenaar
+```
+
+**Toelichting bij de boom.**
+
+**Het margedoel.** Dit is geen eigen cijfer. Het is de doelwaarde die het MT na de nulmeting op M30 zet.
+
+**Target per maand.** Valt onder het doelpad (M05).
+
+- Bij een contracteerdoel is het doelpad de akkoordcurve.
+- Bij een omzetdoel is het doelpad het jaardoel, verdeeld over de maanden op uren of netto-omzet.
+- Een verdeling op het factuurpatroon komt er nooit.
+
+**Bestaand en nieuw.** De verdeling is geen eigen cijfer. Het is een uitsplitsing van M04 en M05, en het filter "nieuw" in M12 (de win-rate nieuwe scholen).
+
+**Per OC of per team.** In het MT gaat het om het team (B7). Per persoon kijkt de beheerder ernaar in de weekstart (B4) en de teamlead in het 1-op-1. Het besluit of het maandrapport per OC rapporteert, ligt bij de beheerder (§5 besluit 8).
+
+**Geen cijfers per uur.** Er zijn geen productiviteitscijfers per uur: die voor OC, AM en talentteam zijn afgewezen, zie de lijst hieronder.
+
+### Geschrapt
+
+Deze cijfers hangen aan geen besluit dat het MT neemt, of zijn in het gesprek of de mail weerlegd. Ze komen niet in het register en niet in een scherm.
+
+| Cijfer | Waarom geschrapt |
+|---|---|
+| Activiteit per Capsule-type, inclusief de grijze typen (ontvangen mail, notitie, afgeronde taak) | Er hangt geen besluit aan. Wat wel telt, zit in M14. |
+| Trend van de activiteit over zes weken | Er hangt geen besluit aan. Grote schommelingen vangt geen controle op (D9). Het verloop per periode in Rapporten blijft als weergave van M14, niet als eigen cijfer. |
+| Dealwaarde per week | Dubbel met M08. De waarde telt op maandniveau; per week alleen het aantal deals (M16). |
+| "Inhaal niet meegeteld" en "direct fase 6" | Geen cijfer, maar een signaal van datakwaliteit. Gaat op in M35 en in het contract "geen kans direct in een eindfase zonder werkelijke datum". |
+| Nieuwe kansen per week of periode, en "Nieuw" (nieuwe kans in fase 2 of hoger) | Door de beheerder geschrapt: het is misleidend door bulkinvoer en er hangt geen besluit aan. De bestaande teammetriek nieuweKansen blijft bestaan voor teamdoelen, maar hoort niet bij de MT-sturing. |
+| Omzetprognose uit het seizoensmodel | Door de beheerder geschrapt. Hij overschat het jaar en mag niet suggereren dat het jaardoel makkelijk is. De vergelijking met vorig jaar gaat op uren (M09). |
+| MT-punten (concepttekst voor het MT) | Door de beheerder geschrapt. Het is geen cijfer. |
+| Gefactureerd per maand tegen een target op het factuurpatroon | Afgewezen in het antwoord aan de FD (D13). Door vooruitfacturatie is het vooral timing. Gefactureerd blijft alleen voor facturatie en cash (M26). |
+| Gewogen pipeline met de eigen fasepercentages van de FD | Afgewezen. De fasegewichten van de mijlpalen blijven (M06). |
+| Uitsplitsing van gecontracteerd en pipeline per medewerker, met "Rest organisatie" | Hoort niet in het MT: per persoon kijkt alleen het 1-op-1. De lijst voor de OC-bonus is een weergave van M08 per eigenaar en geen MT-cijfer. |
+| Uitsplitsing per regio en per type werk | Er hangt geen besluit aan. Zolang D6 en D7 open zijn, is het bovendien een steekproef met onbekende scheefheid. Regio volgt later uit BRIN; type werk komt alleen als productsoort terug voor de marge per product (M30). |
+| Top scholen, klantconcentratie, diensten per klant | Er is geen MT-besluit (klantrisico of cross-sell) vastgesteld. Terug te halen uit bestaande velden zodra het MT er een besluit aan hangt. |
+| Groei naar type (nieuwe klant, nieuwe dienst, uitbreiding, verlenging) | Teruggebracht tot nieuw of bestaand (M04, M05, M12). Een fijnere indeling hangt aan geen besluit. |
+| Leads (fase 1) als apart cijfer | Gaat op in M18 als aparte regel. |
+| Top kansen in de voorstelfase, "zekere opdrachten", "opdrachten met hoge kans" | Gaan op in M19. Daar geldt een vaste regel in plaats van een geschatte zekerheid. |
+| Opvolging "stil" en "te laat", "kansen zonder update" | Gaan op in M20. |
+| Vooruitgefactureerd, orderportefeuille, "waarschijnlijk nog te factureren" | Gaan op in M27, één definitie. |
+| Realisatie tegen target en vorig jaar (overzichtspagina) | Geen cijfer maar de indeling van het MT-overzicht. Het overzicht toont M04, M09 en M10 naast elkaar. |
+| ICP-backtest (AUC en lift, in de steekproef) | Vervangen door de toets buiten de steekproef in de voorspellingslog (M13, M22). |
+| Activiteit tegenover vorig jaar | Afgewezen: de registratie van vorig jaar is onvolledig, dit jaar is de nulmeting. |
+| OC-productiviteit per gewerkt uur of per fte | Afgewezen door de beheerder. Fulltimers hebben randtaken, en nieuwe OC's, toeval in dealgrootte en regioverschillen vertekenen. In de plaats komt M23 op teamniveau. |
+| AM-omzet per gewerkt uur | Afgewezen: de omzet hangt af van de toegewezen scholen, niet van inzet. Vervangen door M29. |
+| Talentteam: gewerkte uren per geplaatste student | Niet beantwoord in de mail. Valt buiten de commerciële en financiële sturing: talentcijfers horen in Bezetting en het talentrapport. De beheerder bevestigt dit aan de FD (§5 besluit 13). |
+| Operations: opdrachten uitzetten (vulgraad, doorlooptijd) | Uit het commerciële rapport gehaald; Bezetting in Athena dekt het. |
+| Controles van het rapport (fasebalans, uitsplitsingen sluiten, bron en definitie per blok, label "fictief") | Geen cijfers. Ze worden controles in het harnas en contracten in §3b. |
+| Trajecten zonder bedrag | Geen eigen cijfer, maar het datacontract "elk lopend project heeft een contractwaarde" (M36). |
+
+## 3. Herkomstmatrix
+
+Per overgebleven cijfer staan hier:
+
+- één definitie (kort; de volledige tekst staat in §4);
+- de eigenaar;
+- de velden die nodig zijn;
+- de gebeurtenis waarop ze vastgelegd moeten worden;
+- wat Athena nu doet;
+- de uitkomst.
+
+Er zijn vier uitkomsten: aanwezig in Athena, invoergat, extern geblokkeerd en besluit beheerder. Bij een besluit beheerder staat het besluit in §5.
+
+**Wat Athena nu doet bij een fasewissel**, gelezen in backend/Code.gs:
+
+- **Het fase-event.** apiKansOpslaan logt een fasewissel als Activiteiten-regel met type 'fase'. De wissel staat als tekst in het onderwerp ("Mijlpaal: a → b"), de datum is de invoertijd (nu()) en door is de gebruiker. Er zijn geen velden van, naar of werkelijke datum, en een werkelijke datum kun je nergens invullen.
+- **Kansen.gesloten.** Wordt bij gewonnen en verloren op de invoerdag gezet.
+- **Paden zonder event.** Het hernoemen van een mijlpaal, apiImporteer, de Capsule-migratie en vulVoorbeelddata wijzigen de fase zonder event.
+- **Ongedaan maken.** Schrijft een tweede event.
+- **Archief.** Activiteiten gaan na 365 dagen naar het archief, dus een meerjarige curve kan er niet op rusten.
+- **Voorstellen.** De metriek 'voorstellen' telt met een reguliere expressie op de tekst.
+- **Scholen.** Hebben geen BRIN of vestigingscode, geen regio en type als vrije tekst.
+- **Kansen.** Hebben geen veld voor nieuwe of bestaande klant en geen schooljaar.
+- **Waarde en sluitdatum.** Waarde en verwachteSluiting zijn nergens verplicht en worden bij een fasewissel niet gevraagd.
+- **Het winformulier.** Vraagt aantal, startdatum, rol, rooster en AM, maar geen waarde of tekendatum.
+- **projectUitKans.** Zet omzet gelijk aan de kanswaarde, laat contractwaarde leeg en neemt als schooljaar huidigSchooljaar(), niet het schooljaar van de startdatum.
+- **Agenda en mail.** crmSync leest alleen de mail en de standaardagenda van het account waaronder de backend draait (Session.getEffectiveUser, getDefaultCalendar), niet de teamagenda of de agenda's van de OC's.
+- **Doelen.** Kennen alleen een periodesoort (week, maand, schooljaar) en geen concrete periode. Een weekdoel geldt dus voor elke week, en de historie verdwijnt bij overschrijven.
+- **METRIEKEN.** Heeft label, team en soort, maar geen definitie, versie of eigenaar.
+
+| ID | Cijfer | Besluit | Definitie (kort) | Eigenaar | Benodigde velden | Gebeurtenis van vastleggen | Athena nu | Uitkomst |
+|---|---|---|---|---|---|---|---|---|
+| M01 | Jaardoel | B1 | Eén getal met vastgelegde soort (netto-omzet of contractwaarde), periode (boekjaar of schooljaar), scope (scholen) en basis (M02) | FD | doelwaarde, soort, periode, scope, versie, besluitdatum | jaarlijks besluit van het MT | Doelen met eigenaar 'bedrijf', periode 'schooljaar' en metric 'omzet' (bedrijfCijfers: som van Trajecten.omzet van het huidige schooljaar). Er is geen concrete periode en geen definitie of eigenaar | **besluit beheerder** (§5 besluit 2); daarna invoergat: Doelen met een concrete periode en het register |
+| M02 | Omzet vorig jaar | B1 | Netto-omzet scholen van het vorige boekjaar volgens het grootboek, inclusief vrijval, zonder particulieren en overige omzet | FD | jaartotaal, grootboekbron, periode, versie | jaarafsluiting (boekhouder) | Ontbreekt. apiExactImport leest alleen facturen, geen grootboek | **extern geblokkeerd**: het jaartotaal komt van de boekhouder. Welke van de concurrerende definities geldt, is §5 besluit 2 (D11) |
+| M03 | Aanname retentie | B1 | Deel van de omzet vorig jaar dat naar verwachting terugkomt; doel bestaand = M02 × retentie; doel nieuw = M01 − doel bestaand | beheerder | waarde, onderbouwing, versie, besluitdatum | besluit van de beheerder | Ontbreekt; er is geen instelling voor aannames | **invoergat**: de aanname als instelling met versie, eigenaar en onderbouwing in het register. De waarde zelf is §5 besluit 3 |
+| M04 | Gecontracteerd (stand) | B2 | Som van de getekende contractwaarde van de gewonnen kansen waarvan de opdracht in het schooljaar valt, op de peildatum; gesplitst naar nieuw en bestaand; projecten zonder getekende waarde apart | beheerder | Kansen.fase = gewonnen; getekende waarde; akkoorddatum; schooljaar van de opdracht; klant nieuw of bestaand; Trajecten.kansId | fasewissel naar gewonnen (winformulier) | Kansen.waarde is een schatting; Trajecten.contractwaarde is leeg bij een project uit een kans; projectUitKans zet het schooljaar op huidigSchooljaar(); er is geen veld nieuw of bestaand | **invoergat**: getekende waarde en akkoorddatum in het winformulier, schooljaar uit de startdatum, Kansen.klant |
+| M05 | Doelpad (bestaand, nieuw, totaal) | B2 | Doel per groep × het deel van de jaarwaarde dat in eerdere schooljaren op dezelfde dag al gewonnen was; bij een omzetdoel het doel verdeeld op uren of netto-omzet, nooit op het factuurpatroon | beheerder | fasewissels naar gewonnen met akkoorddatum en contractwaarde over meerdere jaren; klant nieuw of bestaand; historische curve met versie | fasewissel naar gewonnen; jaarlijks herberekenen na 31 juli | Ontbreekt. Akkoorden staan alleen als vrije tekst, en de fase-regels gaan na een jaar naar het archief | **invoergat**: de gebeurtenis Fasewissel (niet gearchiveerd) en de curve met versie in het register. De noemer volgt §5 besluit 2 |
+| M06 | Gewogen pipeline | B2 | Som over de open kansen van het schooljaar in de gewogen fasen van waarde × fasegewicht; de leadfase en gewonnen tellen niet; kansen zonder waarde tellen als nul en staan als aantal ernaast | beheerder | Kansen.waarde, fase, schooljaar; Mijlpalen.kans (gewicht, met versie) | overgang naar de voorstelfase (waarde gevraagd) | kansUit: gewogen = waarde × kans/100; apiHome, apiPipeline, apiRapport. Vandaag en het schooldetail tonen een ongewogen "pijplijn" onder bijna dezelfde naam. De waarde wordt niet gevraagd | **invoergat**: waarde vragen bij de overgang naar de voorstelfase; één naam per definitie |
+| M07 | Dekking en nog te vinden | B2 | (M04 + M06) ÷ M01; nog te vinden = M01 − M04 − M06; alleen als teller en noemer dezelfde soort en periode hebben | beheerder | M01, M04, M06 | afgeleid | Ontbreekt | **besluit beheerder** (§5 besluit 2: de noemer); daarna afgeleid |
+| M08 | Gewonnen in periode | B2 | Aantal en getekende waarde van de kansen waarvan de fasewissel naar gewonnen een werkelijke datum in de periode heeft, per eigenaar op dat moment; zonder werkelijke datum apart | beheerder | Fasewissel (naar = gewonnen, werkelijke datum, eigenaar); getekende waarde | fasewissel naar gewonnen | METRIEKEN gewonnen en gewonnenWaarde tellen op Kansen.gesloten, dat is de invoerdag, en met de huidige waarde | **invoergat**: de gebeurtenis Fasewissel met werkelijke datum en de getekende waarde |
+| M09 | Gewerkte uren tegenover vorige jaren | B2 | Gewerkte uren per kalendermaand (alleen gewerkte diensten) naast dezelfde maanden van vorige schooljaren; bestaand en nieuw voor zover de school bekend is | beheerder | TalentUren (week, uren, trajectId), ook het archief; een basislijn van vorige jaren als totaal per maand | wekelijkse urenimport | TalentUren uit urenImport; na 26 weken naar TalentUren_archief; Financiën geleverd per maand. Vorige schooljaren staan niet in Athena | **extern geblokkeerd**: de basislijn van vorige jaren (alleen totalen) moet eenmalig lokaal worden ingevoerd; uren per school over vorige jaren bestaan niet |
+| M10 | Netto-omzet tegen jaardoel | B2 | Netto-omzet scholen per maand volgens het grootboek, inclusief vrijval, cumulatief in het boekjaar tegen M05; alleen als M01 een omzetdoel is | FD | omzet per maand, boekjaar | maandafsluiting (boekhouder) | Ontbreekt; Athena kent alleen facturen | **extern geblokkeerd** (boekhouder); of het cijfer nodig is, volgt uit §5 besluit 2 |
+| M11 | Benodigde activiteit (rekenmodel) | B3 | Deals = doel nieuw ÷ aanname dealwaarde; voorstellen = deals ÷ aanname conversie voorstel naar deal; AP's = voorstellen ÷ aanname conversie AP naar voorstel; per week en per OC | beheerder | de aannames met versie; aantal OC's; werkweken | besluit van de beheerder; de gemeten conversie (M12) ernaast | Ontbreekt | **invoergat**: de aannames als instellingen in het register. De waarden zelf zijn §5 besluit 3 |
+| M12 | Gerealiseerde conversie (met de win-rate nieuwe scholen) | B3 | Per cohort: gewonnen ÷ (gewonnen + verloren), en per stap AP naar voorstel en voorstel naar gewonnen uit de fasewissels; "opgeschoond" telt niet; de win-rate nieuwe scholen is dezelfde maat voor klant = nieuw vanaf de afgesproken maand | beheerder | Fasewissel; Kansen.verliesReden uit een keuzelijst; Kansen.klant; Mijlpalen.rol | fasewissel en sluiten (gewonnen of verloren) | METRIEK conversie = gewonnen ÷ gesloten op Kansen.gesloten, inclusief de opschoning. verliesReden is vrije tekst. 'voorstellen' wordt met een reguliere expressie geteld. Er is geen conversie per stap (D4) | **invoergat**: de gebeurtenis Fasewissel, een verliesreden met de waarde "opgeschoond", Kansen.klant en Mijlpalen.rol |
+| M13 | Voorspelling deals volgende week | B3 | Verwacht aantal wissels naar gewonnen in de komende ISO-week = het gemiddelde over aaneengesloten hele weken op akkoorddatum (nulweken tellen mee), met een interval; vastgelegd vóór de week en daarna gescoord | beheerder | Fasewissel (naar gewonnen, werkelijke datum); de voorspelling met model en versie | wekelijks voorspellen (maandag) en scoren | Prognoses bevat alleen de financiële prognose per project; er is geen voorspellingslog | **invoergat**: voorspellingslog (tabblad en wekelijkse trigger) |
+| M14 | Contactmomenten | B4 | Activiteiten met een contactvorm (call, mail verstuurd, WhatsApp, de afspraak- en evaluatievormen) per maker, op de datum van de activiteit, ma t/m vr; de beheerder in een eigen regel | beheerder | Activiteiten: type, vorm, datum, door; Gebruikers: team, rol | elke activiteit, door de maker gelogd | Activiteiten met vorm (v7.1); de METRIEKEN gesprekken, afspraken en mails per persoon en team; Gebruikers.team scheidt de beheerder van de OC's (D8) | **aanwezig in Athena**; telt pas als de OC's in Athena loggen (§5 besluit 1) |
+| M15 | Schoolafspraken gehouden en gepland | B4 | Afspraak-activiteiten bij een school: gehouden = datum in de week; gepland = datum in de volgende werkweek; afgemeld apart | beheerder | Activiteiten (vorm afspraak, datum, schoolId) | plannen en houden van de afspraak | Activiteiten met een datum in het verleden en de toekomst. crmSync haalt alleen de agenda van het backend-account op | **aanwezig in Athena** voor afspraken die in Athena staan. De agenda's van de OC's: §5 besluit 10 |
+| M16 | Fasewissels AP, AD, VO, deal | B4 | Fasewissels per eigenaar op werkelijke datum: naar de mijlpaal met rol AP gepland, AP gehouden, voorstel verstuurd, of naar gewonnen; een sprong telt voor de fase waar hij eindigt; aanmaken in een latere fase krijgt het label "direct" | beheerder | Fasewissel (van, naar, werkelijke datum, ingevoerd op, door, eigenaar); Mijlpalen.rol | de fasewissel zelf | Er staat alleen een tekstregel "Mijlpaal: a → b" met de invoertijd. Mijlpalen hebben geen vaste rol, dus AP, AD en VO zijn alleen op naam te herkennen | **invoergat**: de gebeurtenis Fasewissel en Mijlpalen.rol |
+| M17 | Weekdoel | B4 | Per OC per ISO-week een doel voor contactmomenten, AP, AD, VO en deals, naast de realisatie (M14, M16) | beheerder | Doelen: eigenaar, concrete week, metric, doel | de weekstart (maandag) | Doelen kent alleen de periodesoort 'week', zonder concrete week, en de historie verdwijnt bij overschrijven. Er zijn geen metrieken AP, AD of VO | **invoergat**: Doelen met een concrete periode en metrieken per fasewissel |
+| M18 | Kansen per fase (funnel) | B5 | Op de peildatum: per mijlpaal het aantal en de waarde van de open kansen, plus het aantal zonder waarde; de leadfase apart | beheerder | Kansen: fase, waarde, schooljaar | elke fasewissel | apiPipeline (per kolom aantal, waarde en kans%) en apiRapport (trechter) | **aanwezig in Athena** |
+| M19 | Verwachte opdrachten (30 dagen) | B5 | Open kansen in de voorstelfase met een verwachte tekendatum binnen 30 dagen na de peildatum, met waarde; een verlopen datum apart, telt niet | beheerder | Kansen.verwachteSluiting (betekenis: verwachte tekendatum); fase met rol voorstel | overgang naar de voorstelfase | Kansen.verwachteSluiting bestaat, maar is niet verplicht en heeft geen vaste betekenis. Na Capsule soms gelijk aan het contracteinde. apiRapport heeft een forecast per maand | **invoergat**: de verwachte tekendatum vragen bij de overgang naar de voorstelfase (D15); een verlopen datum signaleren |
+| M20 | Stilstand | B5 | Per open kans: dagen sinds het laatste contact tegen de norm van de mijlpaal; boven de norm is de kans stil | beheerder | Kansen.laatsteContact; Mijlpalen.dagenNorm | elke activiteit | kansUit stil; "stille kansen" in Rapporten en op Home | **aanwezig in Athena** |
+| M21 | Verloren met reden | B5 | Kansen met een fasewissel naar verloren met werkelijke datum in de periode, per reden uit een vaste lijst; "opgeschoond" is een eigen reden | beheerder | Fasewissel (naar verloren, werkelijke datum); verliesReden uit Instellingen | fasewissel naar verloren | verliesReden is vrije tekst (via window.prompt); gesloten is de invoerdag | **invoergat**: een venster voor verloren met datum en een reden uit een keuzelijst |
+| M22 | ICP-deciel | B6 | Deciel van de modelkans per vestiging (BRIN en vestiging), zonder relatiekenmerken, getoetst buiten de steekproef op getekende deals | beheerder | Scholen.brin en vestiging; het deciel met versie; voorspellingslog | jaarlijks of bij een nieuwe DUO-lijst | Ontbreekt; Scholen heeft geen BRIN | **besluit beheerder** (§5 besluit 9). Als het blijft: BRIN (invoergat) en scoring in de voorspellingslog |
+| M23 | OC-activiteit per maand | B7 | Per maand voor het OC-team: afspraken ingepland (aangemaakt in de maand), afspraken gedaan (datum in de maand), voorstellen (VO) en deals; in het MT op teamniveau | beheerder | Activiteiten (vorm afspraak, datum, aangemaakt); Fasewissel | plannen en houden van de afspraak; fasewissel | De gegevens staan in Activiteiten en Kansen, en apiTeamRapport rekent per persoon en team. 'Ingepland' is niet gedefinieerd. Bij een afspraak uit de agendasync is 'aangemaakt' het moment van synchroniseren | **besluit beheerder** (§5 besluit 8: wat 'ingepland' is, en team of per OC) |
+| M24 | Verlengingsstand | B8 | Van de scholen met een project in het vorige schooljaar: per school de status voor het nieuwe schooljaar (verlengd, voorstel verstuurd, nog bespreken, stopt, geen kans) met eigenaar en contractwaarde van vorig jaar; aandeel contractwaarde verlengd | teamlead AM | Scholen.brin en vestiging; Trajecten: schooljaar, verlenging, am, contractwaarde; de projecten van het vorige schooljaar | statuswissel van de verlenging door de AM | Trajecten.verlenging per project; METRIEK verlengd en verlengingspercentage. De koppeling met de school loopt via schoolId met een terugval op de naam. Vorige schooljaren staan alleen in Athena als ze geïmporteerd zijn | **invoergat**: BRIN en vestiging op Scholen, plus een eenmalige import van de projecten van het vorige schooljaar |
+| M25 | Geleverd | B9 | Gewerkte uren per project per maand × het projecttarief; nooit loon of tarief per persoon | teamlead AM | TalentUren; Trajecten.tarief en xpsProject | wekelijkse urenimport | Financiën: geleverd = TalentUren.uren × Trajecten.tarief per maand | **aanwezig in Athena**; contract "tarief echt" (§3b) |
+| M26 | Gefactureerd | B9 | Termijnen met een verzenddatum in de maand, creditnota's verrekend; geen omzet en geen stuurgetal | boekhouder | Facturen: verzonden, bedrag, factuurnummer | factuur verzonden (Exact-import of statuswissel) | Financiën: gefactureerd per maand; de Exact-import zet verzonden en betaald | **aanwezig in Athena**; de Exact-import gaat met de hand, maandelijks |
+| M27 | Nog te factureren | B9 | Per project de getekende contractwaarde − gefactureerd (negatief = meerwerk), in sommen op nul geklemd; met de status uit de factuurafspraak (achter als geleverd − gefactureerd boven de tolerantie ligt bij achteraf) | teamlead AM | Trajecten.contractwaarde (getekend) en soortFacturatie; Facturen; geleverd | winformulier (contractwaarde); factuur verzonden | Financiën: nogTeFactureren = (contractwaarde of omzet) − gefactureerd. Op Home is "nog te factureren" de som van termijnen met status 'nog te doen': een andere definitie onder dezelfde naam | **invoergat**: de getekende contractwaarde bij gewonnen, en één definitie (Home volgt Financiën) |
+| M28 | Openstaand naar ouderdom | B10 | Gefactureerd − ontvangen per factuur, in de klassen 0–30, 31–60 en meer dan 60 dagen | boekhouder | Facturen: verzonden, betaald, bedrag | betaling ontvangen (Exact-import) | Financiën: ontvangen, openstaand, ouderdom en gemiddelde betaaltijd | **aanwezig in Athena** |
+| M29 | Realisatiegraad per project | B11 | Geleverd t/m de laatste hele maand ÷ de prognose uit het contract t/m dezelfde maand, per project, tegen een drempel; minder afname door de school apart | teamlead AM | Financiën: geleverd, prognose; Trajecten.contractwaarde | maandelijks | Te berekenen uit Financiën, maar niet getoond | **besluit beheerder** (§5 besluit 6: teller, drempel en het onderscheid met minder afname door de school) |
+| M30 | Brutomarge | B12 | (netto-omzet of geleverd) − kosten per maand (werkgeverskosten en reiskosten van ingezette studenten, als maandtotaal van financiën), toegerekend aan school, product en AM naar gewerkte uren | FD | kosten per maand; omzet of geleverd; productsoort; gewerkte uren | maandafsluiting (financiën) | Ontbreekt; nergens kosten | **extern geblokkeerd** (§6) |
+| M31 | Projecten onder de ondergrens | B12 | Projecten met een brutomarge onder de ondergrens, als signaal met een reden (een instap bij een nieuwe school mag) | FD | M30 per project; ondergrens; reden | maandafsluiting | Ontbreekt | **extern geblokkeerd** (volgt M30) |
+| M32 | Offertemarge | B12 | (offertewaarde − geplande uren × kostprijs per uur) ÷ offertewaarde, met kostprijs per uur = maandkosten ÷ gewerkte uren (totalen van financiën) | beheerder | Kansen.waarde; geplande uren; kostprijs per uur (totaal) | overgang naar de voorstelfase | Ontbreekt; Kansen heeft alleen een waarde | **extern geblokkeerd** (kostprijs per uur volgt uit M30) |
+| M33 | Omzetdeel team inhoud | B13 | Omzet van de projecten van team inhoud tegenover hun kosten als overhead | FD | uren van team inhoud per project en maand; productsoort | maandelijks | Ontbreekt; de uren van team inhoud staan niet in XPS | **extern geblokkeerd** (geen urenbron) |
+| M34 | Logdekking | B14 | Schoolafspraken in de teamagenda en de agenda's van de OC's (deelnemer met een schooldomein, niet afgeslagen) waarvoor binnen twee dagen een afspraak van dezelfde OC bij dezelfde school in Athena staat ÷ al zulke agenda-afspraken | beheerder | agenda-afspraken van de OC's; Activiteiten | wekelijks meten | crmSync leest alleen de standaardagenda van het backend-account | **besluit beheerder** (§5 besluit 10: mag Athena de teamagenda lezen, of vervalt de maat) |
+| M35 | Registratievertraging | B14 | Per fasewissel: ingevoerd op − werkelijke datum, in kalenderdagen; per eigenaar per maand de mediaan en het deel boven de norm | beheerder | Fasewissel (ingevoerd op, werkelijke datum, eigenaar) | de fasewissel zelf | Ontbreekt; alleen de invoertijd wordt vastgelegd (D2) | **invoergat**: de gebeurtenis Fasewissel |
+| M36 | Datakwaliteit per eigenaar | B14 | Per datacontract (§3b) geslaagd of gezakt, met de kansen en projecten die het raken, per eigenaar | beheerder | alle velden uit §3b; Gebruikers | dagelijkse controle | Ontbreekt; geen contracten en geen trigger | **invoergat**: datacontracten, een dagelijkse trigger en een overzicht per eigenaar |
+
+**Samenvatting van de uitkomsten.**
+
+- **Aanwezig in Athena:** M14, M15, M18, M20, M25, M26 en M28.
+- **Invoergat:** M03, M04, M05, M06, M08, M11, M12, M13, M16, M17, M19, M21, M24, M27, M35 en M36.
+- **Extern geblokkeerd:** M02, M09, M10, M30, M31, M32 en M33.
+- **Besluit beheerder:** M01, M07, M22, M23, M29 en M34.
+
+### 3a. Hetzelfde woord, een andere definitie in Athena
+
+Voor één definitie per cijfer moet ook Athena zelf eenduidig worden:
+
+| Woord | Waar | Definitie daar |
+|---|---|---|
+| "Omzet" | bedrijfsmetriek omzet, Vandaag, Projecten | som van Trajecten.omzet |
+| "Contract" | Financiën | contractwaarde, anders omzet |
+| "Nog te factureren" | Home | termijnen met status 'nog te doen' |
+| "Nog te factureren" | Financiën | contract − gefactureerd |
+| "Pijplijn" | Vandaag en het schooldetail | ongewogen |
+| "Pijplijn" | Home | gewogen |
+| "Actieve projecten" | Vandaag | status bezig of actief |
+| "Lopende projecten" | Home en Rapporten | projectLopend: niet afgelopen, afgerond of gestopt |
+| "Scholen" | Vandaag | unieke namen |
+| "Scholen" | bedrijfsmetriek | unieke schoolId's |
+| "Voorstellen" | METRIEKEN | reguliere expressie op de tekst van de fase-regel |
+
+Alleen de woorden die in §3 een cijfer zijn, worden gelijkgetrokken: "omzet", "nog te factureren", "pijplijn" en "voorstellen". De rest valt buiten de MT-sturing en blijft, met een eigen definitie in het register.
+
+### 3b. Datacontracten
+
+De contracten uit contracten.py en §8 zijn gedraaid op de echte stand in de vorige sessie; hieronder alleen geslaagd of gezakt. Daarnaast staat hoe ze in Athena terugkomen.
+
+| Contract (Mac) | Stand | In Athena |
+|---|---|---|
+| kansen_bestand_aanwezig | geslaagd | vervalt: Athena is de bron |
+| kansen_export_is_van_vandaag | geslaagd | vervalt |
+| waarde_gevuld_fase_3 | gezakt | vervalt; waarde pas vanaf voorstel (§5 besluit 4) |
+| waarde_gevuld_fase_4 | gezakt | vervalt; idem |
+| waarde_gevuld_fase_5 | gezakt | **waarde_vanaf_voorstel**: elke open kans in een mijlpaal met rol voorstel of later heeft een waarde > 0 (eigenaar: de eigenaar van de kans) |
+| dekking_niet_afhankelijk_van_lege_waarden | gezakt | **dekking_robuust**: het verschil tussen "leeg = nul" en "leeg = mediaan van de getekende waarden" blijft onder de tolerantie uit het register (eigenaar: beheerder) |
+| geen_bulkinvoer_in_fasedatums | gezakt | **geen_bulk_op_werkelijke_datum**: geen dag met meer fasewissels op werkelijke datum dan de drempel. Inhaalwerk is toegestaan zolang de werkelijke datum klopt; dat meet M35 |
+| elke_open_kans_heeft_actieve_eigenaar | geslaagd | **actieve_eigenaar**: de eigenaar staat in Gebruikers als actief |
+| geen_dubbele_open_kansen | gezakt | **geen_dubbele_open_kansen**: de combinatie school (BRIN en vestiging, anders schoolId) + schooljaar + productsoort komt hoogstens één keer voor onder de open kansen |
+| verliesdiscipline_in_huidig_seizoen | gezakt | **verliesdiscipline**: in het lopende seizoen is er minstens één kans op verloren gezet, plus: geen open kans langer zonder beweging dan de norm. *Fout in de Mac-code: gewonnen telde mee als gesloten* |
+| weekdoelen_ingevuld_voor_deze_week | gezakt | **weekdoel_voor_deze_week**: per OC een doel voor de exacte ISO-week. *Fout in de Mac-code: de vergelijking op het einde van het weeknummer laat andere weken meetellen* |
+| dagelijkse_snapshot_per_werkdag | gezakt | vervalt: de fasewissel is een gebeurtenis |
+| werkelijke_datums_actueel_en_volledig | gezakt | **fasewissel_heeft_werkelijke_datum**: elke wissel heeft een werkelijke datum die niet na het invoermoment ligt; geïmporteerde wissels hebben een zekerheid |
+| agenda_uitsnede_aanwezig | geslaagd | **logdekking** ≥ norm, alleen na §5 besluit 10. *Fout in de Mac-code: de norm stond in de code maar werd nergens getoetst* |
+| regio_toerekenbaar_voor_werkbare_pipeline | gezakt | **school_heeft_brin**: elke school met een kans in een gewogen fase of met een gewonnen kans heeft BRIN en vestiging |
+| §8: noemerbewaking | niet gedraaid | **noemerbewaking**: geen cijfer in het register met een andere soort of periode dan het jaardoel wordt ertegen gezet |
+| §8: geen doelpad op facturatie | niet gedraaid | **geen_target_op_facturatie**: het doelpad heeft geen bron 'gefactureerd' |
+| §8 en Cowork: fase 6 = getekende waarde | gezakt | **gewonnen_is_getekend**: elke gewonnen kans heeft een getekende waarde en een akkoorddatum |
+| Cowork: sluitdatum in de voorstelfase | gezakt | **sluitdatum_vanaf_voorstel**: elke open kans vanaf voorstel heeft een verwachte tekendatum die niet verlopen is |
+| Cowork: lopend traject heeft deal | gezakt | **lopend_project_heeft_contract**: elk lopend project heeft een contractwaarde, en vanaf de overstap een kansId |
+| Cowork: type werk en schooljaar als veld | gezakt | **kans_heeft_schooljaar_en_klant**: elke open kans heeft een schooljaar en nieuw of bestaand |
+| Cowork: fasewissel op werkelijke datum, geen directe fase 6 zonder datum | gezakt | zie fasewissel_heeft_werkelijke_datum; aanmaken in een eindfase vraagt een werkelijke datum |
+| Cowork: afspraak gelogd | gezakt | zie logdekking |
+| Cowork: Gedaan heeft factuur; factuurregel uniek en gekoppeld | gezakt | **termijn_verzonden_heeft_factuurnummer**: een termijn op verzonden of betaald heeft een uniek factuurnummer en hangt aan een project (eigenaar: boekhouder) |
+| Cowork: uurprijs echt | gezakt | **tarief_echt**: elk lopend project met uren heeft een tarief > 0 dat niet de standaardwaarde is, en een XPS-projectkoppeling (eigenaar: AM) |
+| Cowork: verlengingsstatus compleet | gezakt | **verlenging_bekend**: elk project van het vorige schooljaar heeft een verlengingsstatus (eigenaar: AM) |
+| Cowork: fasebalans, uitsplitsingen sluiten, bron en definitie per blok, label fictief, geen persoonsgegevens | geslaagd | Dit zijn controles van het rapport. Ze gaan naar het harnas: elk getal in het MT-overzicht heeft een definitie uit het register, en de uitsplitsingen sommeren tot het totaal |
+
+**Fouten in de Mac-code die niet mee mogen naar Athena:**
+
+- snapshot_events.py maakt geen event van een kans die sluit zonder fasewissel, en telt een sprong naar fase 6 niet als deal. In Athena is elke wissel naar gewonnen een deal.
+- forecast.py rekent een gesloten kans zonder verliesreden als gewonnen. In Athena bepaalt de fase het, niet het ontbreken van een reden.
+- metrics.yaml heeft per cijfer geen eigenaar en geen versie.
+
+## 4. Definities ter aftekening
+
+Per cijfer de definitie, de eigenaar in het MT en de vraag die die eigenaar moet beantwoorden. Een definitie is "concept" tot de eigenaar haar aftekent; daarna krijgt ze versie 1 in het register. Elke wijziging is een nieuwe versie met een datum.
+
+| ID | Cijfer | Definitie (concept) | Eigenaar | Vraag aan de eigenaar |
+|---|---|---|---|---|
+| M01 | Jaardoel | Het jaardoel is één getal met vier vastgelegde eigenschappen: soort (netto-omzet of contractwaarde), periode (boekjaar sep–aug of schooljaar aug–jul), scope (alleen scholen) en basis (M02). Voorstel van de beheerder: netto-omzet scholen per boekjaar volgens Exact. Cijfers met een andere soort of periode worden er niet tegen gezet zonder vastgelegde omrekening. | FD | Akkoord met netto-omzet scholen per boekjaar als jaardoel? Zo ja: meten we het contracteren per schooljaar tegen een afgeleid contracteerdoel, of zonder doel? |
+| M02 | Omzet vorig jaar | Netto-omzet scholen van het vorige boekjaar volgens het grootboek in Exact, inclusief vrijval van vooruitontvangen bedragen, zonder particulieren, webshop en overige omzet. | FD | Is dit de basis waarvan het jaardoel is afgeleid, en welke grootboekrekeningen horen erbij? |
+| M03 | Aanname retentie | Het deel van de omzet vorig jaar dat naar verwachting bij dezelfde scholen terugkomt. Doel bestaand = omzet vorig jaar × retentie; doel nieuw = jaardoel − doel bestaand. Eén waarde per schooljaar, met onderbouwing en besluitdatum. | beheerder | Welke waarde en onderbouwing gelden dit schooljaar, en toetsen we hem aan het eind van het schooljaar aan de verlengingsstand (M24)? |
+| M04 | Gecontracteerd | Op de peildatum: de som van de getekende contractwaarde van alle gewonnen kansen waarvan de opdracht in het schooljaar valt, ongeacht de akkoorddatum, gesplitst naar nieuwe en bestaande klant. Geen schattingen. Een gewonnen kans zonder getekende waarde telt als aparte regel, niet als bedrag. | beheerder | Telt een mondeling akkoord met lopende levering als gewonnen (§5 besluit 7), en is "bestaand" een school met een project in het vorige schooljaar? |
+| M05 | Doelpad | Per datum: doel bestaand of nieuw × het deel van de jaarwaarde dat in eerdere schooljaren op dezelfde dag al gewonnen was (de curve uit de wissels naar gewonnen op akkoorddatum, gewogen met contractwaarde). De curve wordt na 31 juli opnieuw berekend en met versie vastgelegd. Bij een omzetdoel: het doel verdeeld over de maanden naar gewerkte uren of netto-omzet van vorig jaar, nooit naar het factuurpatroon. | beheerder | Geldt dit schooljaar de gereconstrueerde curve (met versie), en vanaf welk schooljaar gaat hij over op de curve uit Athena? |
+| M06 | Gewogen pipeline | De som over open kansen van het schooljaar in de gewogen fasen van waarde × fasegewicht van de mijlpaal. De leadfase en gewonnen tellen niet. Kansen zonder waarde tellen als nul en staan er als aantal naast. | beheerder | Welke fasegewichten gelden (met versie), en blijft "leeg = nul, apart getoond" de regel? |
+| M07 | Dekking en nog te vinden | Dekking = (gecontracteerd + gewogen pipeline) ÷ jaardoel. Nog te vinden = jaardoel − gecontracteerd − gewogen pipeline. Alleen te berekenen als teller en noemer dezelfde soort en periode hebben. | beheerder | Bij een omzetdoel per boekjaar: hoe rekenen we contractwaarde per schooljaar om naar het boekjaar, of vervalt dekking dan? |
+| M08 | Gewonnen in periode | Het aantal en de getekende waarde van de kansen waarvan de wissel naar gewonnen een werkelijke datum (akkoorddatum) in de periode heeft, per eigenaar van de kans op dat moment. Achteraf ingevoerd met een eerdere akkoorddatum telt in de periode van de akkoorddatum; zonder werkelijke datum staat apart. | beheerder | Is de periode start schooljaar t/m peildatum (cumulatief), met daarnaast de maand? |
+| M09 | Gewerkte uren tegenover vorige jaren | De som van gewerkte uren (XPS-diensten met een gewerkte status) per kalendermaand t/m de laatste hele maand, naast dezelfde maanden van de vorige schooljaren. Gesplitst naar bestaand en nieuw voor zover de school bekend is. | beheerder | Is een basislijn met alleen totalen per maand voor vorige jaren genoeg, nu uren per school daar ontbreken? |
+| M10 | Netto-omzet tegen jaardoel | Netto-omzet scholen per maand volgens het grootboek, inclusief vrijval, cumulatief in het boekjaar tegen het doelpad. Alleen als het jaardoel een omzetdoel is. | FD | Kan de boekhouder dit na elke maandafsluiting leveren, en in welke vorm? |
+| M11 | Benodigde activiteit (rekenmodel) | Deals = doel nieuw ÷ aanname dealwaarde; voorstellen = deals ÷ aanname conversie voorstel naar deal; AP's = voorstellen ÷ aanname conversie AP naar voorstel; per week ÷ werkweken; per OC ÷ aantal OC's (de beheerder telt niet mee). Elke aanname heeft een versie, eigenaar en onderbouwing; zodra M12 meetbaar is, staat de gemeten waarde ernaast. | beheerder | Welke aannames gelden, en wanneer vervangt de gemeten conversie de aanname? |
+| M12 | Gerealiseerde conversie | Per cohort (de maand waarin de kans de fase bereikte): gewonnen ÷ (gewonnen + verloren), en per stap AP naar voorstel en voorstel naar gewonnen uit de fasewissels. Verloren met de reden "opgeschoond" telt niet. De win-rate nieuwe scholen is dezelfde maat voor kansen met klant = nieuw, gesloten vanaf de afgesproken startmaand. | beheerder | Rekenen we per cohort of op sluitdatum, en vanaf welke maand telt de win-rate nieuwe scholen? |
+| M13 | Voorspelling deals volgende week | Het verwachte aantal wissels naar gewonnen in de komende ISO-week = het gemiddelde over een aaneengesloten reeks hele weken op akkoorddatum (weken zonder akkoord tellen als nul), met een interval van het 10e tot het 90e percentiel. Vastgelegd vóór de week en daarna gescoord (fout, binnen het interval). | beheerder | Over hoeveel weken middelen we, en wanneer leggen we de gemeten basisratio naast het rekenmodel? |
+| M14 | Contactmomenten | Het aantal activiteiten met een contactvorm (call, mail verstuurd, WhatsApp, de afspraak- en evaluatievormen) per maker, op de datum van de activiteit, maandag t/m vrijdag. Ontvangen mails, notities en taken tellen niet. De beheerder heeft een eigen regel, niet in het OC-team. | beheerder | Welke vormen in Athena tellen als contactmoment, en telt een gesynchroniseerde mail mee? |
+| M15 | Schoolafspraken gehouden en gepland | Afspraak-activiteiten bij een school. Gehouden = datum in de week, niet afgemeld. Gepland = datum in de volgende werkweek. Afgemeld door de school staat apart. | beheerder | Hoe legt de OC vast dat een school een afspraak afzegt? |
+| M16 | Fasewissels AP, AD, VO en deal | Het aantal fasewissels per eigenaar op werkelijke datum. AP = naar de mijlpaal met rol "AP gepland", AD = "AP gehouden", VO = "voorstel verstuurd", deal = naar gewonnen. Een sprong telt voor de fase waar hij eindigt. Een kans die in een latere fase wordt aangemaakt, telt voor die fase met het label "direct". | beheerder | Telt een sprong (bijvoorbeeld van AP gehouden naar gewonnen) ook als VO, of alleen als deal? |
+| M17 | Weekdoel | Per OC per ISO-week een doel voor contactmomenten, AP, AD, VO en deals, vastgesteld in de weekstart. De realisatie is M14 en M16 in dezelfde week. | beheerder | Welke soorten krijgen een doel, of schrappen we de as (D5), en wie vult hem op maandag in? |
+| M18 | Kansen per fase (funnel) | Op de peildatum: per mijlpaal het aantal en de waarde van de open kansen, plus het aantal zonder waarde. De leadfase staat apart; gewonnen is M04. | beheerder | Alleen kansen voor het lopende schooljaar, of ook voor het volgende als aparte kolom? |
+| M19 | Verwachte opdrachten (30 dagen) | Open kansen in de voorstelfase met een verwachte tekendatum binnen 30 dagen na de peildatum, met hun waarde. Een verwachte tekendatum in het verleden staat als "verlopen" apart en telt niet. | beheerder | Is de verwachte sluiting voortaan de verwachte tekendatum (en nooit het contracteinde), en wat moet de OC doen met een verlopen datum? |
+| M20 | Stilstand | Per open kans: het aantal dagen sinds het laatste contact tegen de norm van de mijlpaal; boven de norm is de kans stil. | beheerder | Meten we vanaf het laatste contact of vanaf de laatste fasewissel, en welke norm geldt per mijlpaal? |
+| M21 | Verloren met reden | Kansen met een wissel naar verloren met een werkelijke datum in de periode, per reden uit een vaste lijst. "Opgeschoond" is een eigen reden en telt niet in de conversie. | beheerder | Welke redenen komen op de lijst, en na hoeveel weken zonder beweging moet een kans gesloten worden? |
+| M22 | ICP-deciel | Het deciel van de modelkans per vestiging (BRIN en vestiging), alleen met kenmerken van de school zelf, getoetst buiten de steekproef op getekende deals in de voorspellingslog. | beheerder | Houden en toetsen, of schrappen? |
+| M23 | OC-activiteit per maand | Per maand voor het OC-team: afspraken ingepland (afspraak-activiteiten aangemaakt in de maand), afspraken gedaan (datum in de maand), voorstellen (VO) en deals. In het MT op teamniveau; per persoon alleen in het 1-op-1. | beheerder | Is "ingepland" de aanmaakdatum van de afspraak in Athena, en gaat het maandrapport per OC of alleen per team naar het MT? |
+| M24 | Verlengingsstand | Van de scholen (BRIN en vestiging) met een project in het vorige schooljaar: per school de status voor het nieuwe schooljaar (verlengd, voorstel verstuurd, nog bespreken, stopt, geen kans), de eigenaar die het oppakt en de contractwaarde van vorig jaar; plus het aandeel van die contractwaarde dat verlengd is. | teamlead AM | Houden we de status per school of per project bij, en wie is eigenaar als de AM van vorig jaar niet meer bij de school hoort? |
+| M25 | Geleverd | De gewerkte uren per project per maand × het projecttarief (Trajecten.tarief). Nooit loon of tarief per persoon. | teamlead AM | Is het tarief bij elk lopend project het contracttarief, en niet een standaardwaarde? |
+| M26 | Gefactureerd | De som van termijnen met een verzenddatum in de maand, met creditnota's verrekend. Dit is geen omzet en geen stuurgetal; het is er alleen voor facturatie en cash. | boekhouder | Welke bron telt tot de overstap van het facturatiepakket (Exact of het portaal), en wie doet de maandelijkse import? |
+| M27 | Nog te factureren | Per project: de getekende contractwaarde − gefactureerd (negatief = meerwerk), in de sommen per school en totaal op nul geklemd. De status volgt de factuurafspraak (vooraf, achteraf, termijnen): "achter" als bij achteraf geleverd − gefactureerd boven de tolerantie ligt. | teamlead AM | Welke tolerantie geldt voor "achter met factureren", en is de factuurafspraak per project volledig ingevuld? |
+| M28 | Openstaand naar ouderdom | Gefactureerd − ontvangen per factuur, in de klassen 0–30, 31–60 en meer dan 60 dagen na verzending. | boekhouder | Rekenen we ouderdom vanaf de verzenddatum of vanaf de vervaldatum (betaaltermijn)? |
+| M29 | Realisatiegraad per project | Geleverd t/m de laatste hele maand ÷ de prognose uit het contract t/m dezelfde maand, per project, tegen een drempel. Minder afname door de school staat apart en telt niet als prestatie van de AM. | teamlead AM | Welke drempel geldt, en hoe legt de AM vast dat de school minder afneemt? |
+| M30 | Brutomarge | (Netto-omzet of geleverd) − kosten per maand, waarbij de kosten de werkgeverskosten en reiskosten van de ingezette studenten zijn, als maandtotaal van financiën. Toegerekend aan school, product en AM naar gewerkte uren. Nooit loon of tarief per persoon. | FD | Levert financiën de maandtotalen, is toerekening naar gewerkte uren akkoord, en is de teller netto-omzet of geleverd? |
+| M31 | Projecten onder de ondergrens | Projecten met een brutomarge onder de ondergrens, als signaal met een reden, geen harde grens. Een instap bij een nieuwe school mag bewust lager. | FD | Leggen we de ondergrens pas vast na de nulmeting over het boekjaar? |
+| M32 | Offertemarge | (Offertewaarde − geplande uren × kostprijs per uur) ÷ offertewaarde. De kostprijs per uur = maandkosten ÷ gewerkte uren, als totalen van financiën. | beheerder | Wordt dit een veld in de voorstelfase zodra er een kostprijs per uur is, of blijft het buiten Athena in het voorstel? |
+| M33 | Omzetdeel team inhoud | De omzet van de projecten van team inhoud tegenover hun kosten als overhead. | FD | Waar komen de uren van team inhoud vandaan, of laten we dit cijfer vallen? |
+| M34 | Logdekking | Schoolafspraken in de teamagenda en de agenda's van de OC's (deelnemer met een schooldomein, niet afgeslagen) waarvoor binnen twee dagen een afspraak van dezelfde OC bij dezelfde school in Athena staat, gedeeld door al zulke agenda-afspraken. | beheerder | Mag Athena de teamagenda lezen (alleen afspraken met een schooldomein), of vervalt de maat zodra afspraken in Athena gepland worden? |
+| M35 | Registratievertraging | Per fasewissel: ingevoerd op − werkelijke datum, in kalenderdagen. Per eigenaar per maand de mediaan en het deel boven de norm. | beheerder | Welke norm in dagen geldt? |
+| M36 | Datakwaliteit per eigenaar | Per datacontract (§3b) geslaagd of gezakt, met de kansen en projecten die het raken, per eigenaar (OC, AM, boekhouder). | beheerder | Welke contracten blokkeren het MT-overzicht (cijfer niet tonen), en welke zijn alleen een signaal? |
+
+## 5. Besluiten die alleen de beheerder kan nemen
+
+**1. Overstap van de OC's naar Athena.** De OC's leggen kansen, fasewissels en activiteiten vanaf een vaste datum alleen nog in Athena (Relaties) vast. Capsule wordt alleen-lezen en daarna opgezegd. Kies de datum, en kies of de open kansen op die dag nog één keer worden gemigreerd.
+
+- *Als dit niet gebeurt:* de gebeurtenis Fasewissel in Athena blijft leeg. De momentopnames, werkelijke_datums.csv, het correctiebestand en het weekrapport blijven nodig. Het harnas kan voor de pipelinecijfers niets vergelijken.
+
+**2. Wat het jaardoel is (met de FD).**
+
+- De soort: netto-omzet of contractwaarde.
+- De periode: boekjaar of schooljaar.
+- De scope: alleen scholen.
+- Welke "omzet vorig jaar" de basis is.
+- Voor elke facturatiemaat geldt: de teller is geleverd of netto-omzet, nooit gefactureerd.
+
+*Als dit niet gebeurt:* dekking en doelpad blijven zonder vaste noemer en het contract noemerbewaking blijft rood. Het maandrapport zet twee noemers tegen één getal, en het dashboardvoorstel van de FD kan niet uit.
+
+**3. De aannames vaststellen.** Het gaat om de retentie (de verdeling bestaand en nieuw), de dealwaarde, de conversies, het aantal OC's, de werkweken en de fasegewichten, elk met eigenaar en onderbouwing. Leg ook een moment vast waarop het rekenmodel naast de gemeten basisratio van de voorspelling wordt gelegd.
+
+- *Als dit niet gebeurt:* doel bestaand en doel nieuw en het rekenmodel blijven aannames zonder eigenaar die tussendoor kunnen verschuiven (D10).
+
+**4. Wanneer de waarde gevraagd wordt.** Het voorstel: een geschatte waarde verplicht bij de overgang naar de voorstelfase, de getekende waarde verplicht bij gewonnen, en niets in de vroegere fasen. Dit komt in de plaats van het invuldocument voor de OC's. Lege waarden tellen als nul en staan apart.
+
+- *Als dit niet gebeurt:* de gewogen pipeline blijft een ondergrens, het contract dekking_robuust blijft gezakt, en het invuldocument wordt alsnog gebouwd als tweede waarheid naast Athena.
+
+**5. De betekenis van de verwachte sluiting.** De verwachte sluiting is de verwachte tekendatum, nooit het contracteinde. Hij is verplicht vanaf de voorstelfase. Leg ook vast wat er met een verlopen datum gebeurt.
+
+- *Als dit niet gebeurt:* "verwachte opdrachten (30 dagen)" en de voorspelling op de pipeline blijven leeg (D15).
+
+**6. De realisatiegraad per project.** De teller is geleverd (Exact kent geen projectniveau). Leg de drempel vast, en hoe minder afname door de school apart wordt vastgelegd.
+
+- *Als dit niet gebeurt:* de AM-maat die aan de FD is toegezegd blijft open, en per project is niet te zien of de contractwaarde gehaald wordt.
+
+**7. Telt een mondeling akkoord als gewonnen?** Het gaat om een mondeling akkoord met lopende levering, waarbij alleen de handtekening ontbreekt.
+
+- *Als dit niet gebeurt:* de correctiesoort "niet gecontracteerd" blijft, en "gecontracteerd" verschilt per lezer.
+
+**8. OC-prestatie in het MT.** Leg vast of het maandrapport alleen het OC-team toont of ook per OC. Dit lost de tegenstrijdigheid op tussen de mail ("alleen teamniveau") en de toezegging ("OC-cijfers per maand"). Leg ook vast wat "afspraak ingepland" op maandniveau is.
+
+- *Als dit niet gebeurt:* de toezegging aan de FD voor het maandrapport van eind november is niet na te komen, en de tegenstrijdigheid blijft in het antwoord aan de FD staan.
+
+**9. Het ICP-model.** Houden en buiten de steekproef toetsen in de voorspellingslog, of schrappen.
+
+- *Als dit niet gebeurt:* de prospectie draait op een score met lekkage en zonder toets, en BRIN wordt alleen voor de verlengingen gebruikt.
+
+**10. Toegang tot de agenda.** Mag Athena de teamagenda (en eventueel de agenda's van de OC's) lezen? Dan gaat het alleen om afspraken met een deelnemer van een schooldomein, en alleen het bestaan van de afspraak. Of vervalt logdekking zodra afspraken in Athena worden gepland?
+
+- *Als dit niet gebeurt:* de agenda-uitsnede op de Mac blijft nodig, of logdekking verdwijnt zonder vervanging.
+
+**11. Overstap van de AM's naar Athena.** Verlengingsstatus, termijnen en factuurafspraak worden vanaf een vaste datum alleen nog in Athena (Projecten, Facturatie) bijgehouden. Monday wordt alleen-lezen en daarna opgezegd.
+
+- *Als dit niet gebeurt:* twee waarheden voor verlengingen en facturatie, het Monday-handwerk in elk maandrapport blijft, en de correctiesoort "twijfel Capsule tegen Monday" blijft.
+
+**12. Toegang voor de FD en de vorm van het maandrapport.** Krijgen de FD en het MT-lid een Athena-account (team management, recht Financiën zien)? Leg ook vast of het maandrapport een scherm is, een afdrukbaar document dat op de laatste donderdag wordt bevroren, of allebei.
+
+- *Als dit niet gebeurt:* het maandrapport blijft een pdf-bijlage per mail. Rapporten en Financiën in Athena blijven dan een tweede plek in plaats van de enige.
+
+**13. Antwoord aan de FD over de geschrapte en open cijfers.** Bevestig aan de FD wat geschrapt is (§2):
+
+- gefactureerd tegen target;
+- productiviteit per uur;
+- uren per geplaatste student van het talentteam.
+
+Bevestig ook wat geblokkeerd is (marge, team inhoud) en dat de invoertabbladen niet komen.
+
+- *Als dit niet gebeurt:* het dashboardvoorstel blijft open staan en de FD blijft wachten op cijfers die niet komen.
+
+**14. Eenmalige imports met echte gegevens, lokaal.** Het gaat om vier imports, buiten de repo:
+
+- werkelijke_datums.csv naar de fasewissels, met zekerheid;
+- de projecten van vorige schooljaren uit de scholensheet;
+- BRIN en vestiging voor de bestaande scholen, uit de DUO-lijst;
+- de urenbasislijn van vorige jaren.
+
+Leg vast dat ze lokaal gebeuren en wie ze doet.
+
+- *Als dit niet gebeurt:* het doelpad, de verlengingsstand, nieuw of bestaand en de urenvergelijking hebben in Athena geen historie. De scholensheet en de prognosesheet blijven dan nodig.
+
+## 6. Geblokkeerd
+
+Wat extern of door ontbrekende gegevens vastzit. De rest van deel B gaat gewoon door.
+
+| Wat | Waardoor |
+|---|---|
+| Brutomarge, projecten onder de ondergrens, offertemarge, margedoel (M30–M32) | Er zijn geen kosten per maand van financiën. Kosten mogen alleen als maandtotaal komen: werkgeverskosten en reiskosten van de ingezette studenten. Een kostprijs per uur alleen als maandtotaal ÷ gewerkte uren. Nooit loon of tarief per persoon uit XPS. Het margedoel volgt pas na een nulmeting over het boekjaar. |
+| Omzet vorig jaar en netto-omzet per maand (M02, M10) | Dit zijn grootboekcijfers (inclusief vrijval) van de boekhouder. De Exact-import van Athena leest alleen facturen. Gevraagd, nog niet geleverd. |
+| Gewerkte uren tegenover vorige jaren (M09) | De urenimport bewaart alleen recente weken (met archief). Van vorige schooljaren zijn er alleen totalen per maand in de prognosesheet en geen uren per school. De basislijn moet eenmalig lokaal worden ingevoerd. |
+| Omzetdeel team inhoud (M33) | De uren van team inhoud worden nergens geregistreerd; XPS bevat alleen ingezette studenten. |
+| Fasehistorie van vóór de overstap | Capsule bewaart geen fasehistorie (D1), en de fasedatums zijn deels invoermomenten (D2). Van vóór de eerste momentopname is alleen de handmatige reconstructie met zekerheid beschikbaar; van vóór de opschoning niets. Het doelpad rust daarom tot een vol schooljaar in Athena op de gereconstrueerde curve. |
+| Het vergelijkingsharnas op de echte stand | Het kan alleen lokaal draaien, met de echte exports (het laatste week- en maandrapport, de Exact-facturatie-export, de XPS-dienstenexport) en de echte Athena-stand. In deze omgeving zijn die er niet. In de repo komen alleen het harnas, de verzonnen voorbeelden en de uitkomst geslaagd of gezakt. Voor de pipelinecijfers heeft het pas zin na de overstap (§5 besluit 1). |
+| Facturatiepakket | De overstap van het facturatieportaal naar WeFact is aangekondigd, maar heeft geen datum. Tot die tijd volgt Athena de Exact-import. De factuurlijst in XPS is afgeschermd voor het account van de beheerder. |
+| Monday als bron | Lezen via de connector vereist toestemming van een Monday-beheerder. Dat is niet nodig als de AM's overstappen (§5 besluit 11). |
+| Bronnen die niet geopend zijn | De maandrapporten (pdf en xlsx), het dashboardvoorstel van de FD, Monday, XPS, Exact, het portaal, de Google Sheets, de agenda-json en de teamapp-export. De exitcriteria voor die artefacten rusten op het draaiboek, het gesprek en de mail. Het harnas moet ze op de echte stand bevestigen. |
+| Risico in de lokale repo op de Mac | In de werkkopie van deze repo op de Mac staan kopieën van de scholensheet als xlsx in de root, en .gitignore weert geen xlsx of csv buiten test/voorbeelden. Eén "git add ." kan echte gegevens committen. Deel B voegt een regel toe die echte exports weert. |
+
+## 7. Deel B: wat er gebouwd is
+
+Gebouwd in release v7.9, alleen met verzonnen gegevens: bouwpunten 1 t/m 24 uit de bouwlijst, in vier pakketten (backend-kern, backend-sturing, app, harnas en documentatie). Bouwpunt 25 (kosten per maand) en 26 (realisatiegraad) zijn niet gebouwd (§7.5). Versies: `VERSIE = '7.9'` in `backend/Code.gs`, `APP_VERSIE = '7.9'` in `index.html`, `CACHE = 'athena-assistent-v7.9'` in `sw.js`. Deze paragraaf bevat, net als deel A, geen namen, bedragen of aantallen uit de data.
+
+### 7.1 Per bouwpunt
+
+| Nr | Bouwpunt | Wat er gebouwd is | Waar |
+|---|---|---|---|
+| 1 | Fasewissel als gebeurtenis | Tabblad `Fasewissels` (`id, kansId, schoolId, van, naar, werkelijkeDatum, ingevoerdOp, door, eigenaar, zekerheid, bron, ongedaan, vanRol, naarRol, waarde, reden, bewijs, rolBron, verwijderd`), nooit gearchiveerd. Eén schrijfpunt: `faseWisselRij` bepaalt en controleert elke wisselrij (bron, datum, zekerheid, rol), `fasewisselsSchrijven` en `wisselsBijwerken` schrijven met één `schrijfVeel` per pad. Elk pad dat een fase verandert legt een wissel vast: kansdetail, slepen, pijltoetsen, bulk, aanmaken (label "direct"), winformulier, verloren, assistent, hernoemen, `apiImporteer`, Capsule, oude tijdlijnregels, reconstructie, voorbeelddata en een pipelinewissel die de rol verandert. Ongedaan maken zet de vlag `ongedaan` (geen tweede gebeurtenis); `Kansen.gesloten` volgt de laatste geldige sluitende wissel; een kans met een tellende winst of een project kan niet weg, anders krijgen zijn wissels `verwijderd`. Tellingen lezen alleen `Fasewissels` en de rol, nooit de naam van een mijlpaal of de tekst van de tijdlijn. | `Code.gs` sectie 6 (`kansOpslaan`, `faseWisselRij`), app: `sleepZet`, `sleepMelding`, kansdetail |
+| 2 | Werkelijke datum bij de wissel | `werkelijkeDatumIn`: niet na vandaag, niet na het invoermoment, kalenderdagen; vóór het vorige schooljaar alleen bevestigd. `apiFasewisselDatum` voor een latere correctie. In de app: het datumveld vóór de mijlpaalkeuze in de kansdetail (`data-kansfasedatum`), de melding na slepen met "Ongedaan maken" en "Andere datum" (`data-toastactie`), een potlood per wissel (`data-fwdatum`), de akkoorddatum in het winformulier en de datum in het verlorenvenster; `wisselDatumOk` controleert vóór de aanroep. | `Code.gs`, `index.html` |
+| 3 | Rol per mijlpaal | `Mijlpalen.rol` (`lead`, `ap`, `ad`, `voorstel` of leeg; een mijlpaal zonder rol erft die van de eerdere mijlpaal met een rol). De rol staat als momentopname op de wissel, met `rolBron` (`mijlpaal`, `leeg`, `volgorde`). Zolang geen mijlpaal een rol heeft, tonen AP, AD, VO, conversie, funnel en de contracten op de rol "geblokkeerd: rollen niet ingesteld", nooit 0. Beheer → Mijlpalen heeft de kolom Rol en na een gewijzigde rol de knop "Rollen opnieuw toepassen". | `mijlpaalRollen`, `rollenStatus`, `rolBlokkade`; Beheer → Mijlpalen |
+| 4 | Winformulier | Getekende contractwaarde (> 0) en akkoorddatum (standaard vandaag) verplicht; de akkoorddatum is de werkelijke datum van de deal en `Kansen.gesloten`; de getekende waarde wordt `Kansen.waarde` en `Trajecten.contractwaarde`; het project krijgt het schooljaar van de startdatum. | `overdrachtIn`, `projectUitKans`, `winVenster` |
+| 5 | Waarde en tekendatum vanaf voorstel | Bij de overgang naar de voorstelrol vraagt een klein venster de waarde en de verwachte tekendatum, vóór de aanroep; Overslaan mag. Met de instelling `sturingVerplicht` (standaard uit) weigert de backend de wissel zonder die velden en slaat bulk zulke kansen over met één samenvatting. | `voorstelVenster`, `kansOpslaan` stap 6 |
+| 6 | BRIN en vestiging | `Scholen.brin` (twee cijfers en twee tekens) en `Scholen.vestiging` (twee cijfers), uniek per combinatie, als stabiele sleutel (`schoolSleutel`); de chip "Zonder BRIN" in Scholen. De demo heeft verzonnen codes. | `apiSchoolOpslaan`, `schoolVelden`, `data-crmbrin` |
+| 7 | Nieuw of bestaand | `Kansen.klant`: voorgesteld uit een project of gewonnen kans van dezelfde school in het vorige schooljaar, bevestigd bij opslaan; het project neemt het over. | `klantVoorstel`, `kansVelden` |
+| 8 | Register van cijfers | `METRIEKEN` is het register: per cijfer M-code, definitie (bij een M-code de tekst uit §4), eigenaar, besluit, tolerantie en blokkade. Tabblad `Cijferdefinities` met de versies; de code is versie 0 (concept); alleen het management tekent af. Geschrapte cijfers (§2) staan er niet in. De app haalt het register één keer per sessie (`apiCijfers({ kort: true })`, na de eerste geslaagde aanroep) en toont de definitie naast elk getal met de schakelaar "Definities" (`data-defs`). Beheer → Register van cijfers. | `registerVan`, `apiCijfers`, `apiCijferOpslaan`, `apiCijferAftekenen` |
+| 9 | Datacontracten | De contracten uit §3b als pure functie `datacontracten(standVoorContracten(dag))`: geen gebruiker, geen rechten; stand geslaagd, gezakt, niet getoetst of geblokkeerd, met de afwijkingen per eigenaar. Een norm zonder vastgestelde waarde geeft "niet getoetst", nooit geslaagd; `logdekking` is altijd geblokkeerd. De vijf fouten uit de vorige scripts staan als regressietest in de rooktest. | `Code.gs` sectie 15; rooktestblok "v7.9: datacontracten" |
+| 10 | Dagelijkse controle | `sturingTrigger` (elke dag rond 06:45): de contracten naar tabblad `Datakwaliteit` (per dag × contract × eigenaar, idempotent) en per eigenaar met een gezakt contract hoogstens één melding per dag (`door: 'Athena'`, ook aan de beheerder zelf); rijen ouder dan 90 dagen gaan in `archiveer()` weg. | `datakwaliteitDag`, `sturingTrigger`, cron in `vercel.json` |
+| 11 | Datakwaliteit per eigenaar | Rapporten → Teams heeft het blok Datakwaliteit (stand van de laatste controle; medewerker zichzelf, teamlead zijn team, management iedereen); een verwijzing naar iets van een collega zonder naam en zonder doorklik; het management kan opnieuw rekenen (`data-dqvers`). | `apiSturing('datakwaliteit')` |
+| 12 | Vergelijkingsharnas | `test/vergelijk_sturing.js`, alleen lokaal (§7.7). | `test/vergelijk_sturing.js`, `test/vergelijk_sturing_test.js` |
+| 13 | Aannames en jaardoel | Tabblad `Aannames`: elke versie een eigen rij met waarde (JSON), eigenaar, onderbouwing, besluitdatum en ingang; nooit overschreven. Het jaardoel heeft soort, periode, scope, noemer en waarde. Alleen het management wijzigt. Beheer → Jaardoel en aannames. | `AANNAMES`, `aanname()`, `apiAannames`, `apiAannameOpslaan` |
+| 14 | Doelen met een periode | `Doelen.periodeSleutel` (week, maand, kwartaal, halfjaar, jaar, schooljaar); een concreet doel gaat voor het standaarddoel; de metrieken `contactmomenten`, `afsprakenGehouden`, `ap`, `ad`, `voorstellen`, `gewonnen`, `gewonnenWaarde` en `conversie` uit de wissels en de activiteiten. Weekdoelen voor het OC-team in één venster (`data-weekdoelen`). | `apiDoelOpslaan`, `apiWeekdoelenOpslaan`, `teamCijfers` |
+| 15 | Verlorenvenster | Datum, reden uit de keuzelijst `verliesRedenen` (met de vaste reden "opgeschoond", die niet in de conversie telt) en een toelichting; de oude prompt is weg. | `verlorenVenster`, keuzelijst `verliesRedenen` |
+| 16 | Schooljaar van de opdracht | `Kansen.schooljaar`, voorgesteld uit de verwachte tekendatum (anders het huidige schooljaar) en zichtbaar in het formulier; bij winst het schooljaar van de startdatum. | `schooljaarVoorstel`, `kansVelden` |
+| 17 | Eén definitie per naam | "Nog te factureren" via één helper (`nogTeFacturerenVan`, in centen; Home in euro's); "contractwaarde" (was omzet, met alias) gelijk aan Financiën; de gewogen pijplijn op het fasegewicht van de mijlpaal (lead telt niet); "open waarde" is ongewogen; voorstellen uit de wissels. | `Code.gs`, labels in `index.html` |
+| 18 | Voorspellingslog | Tabblad `Voorspellingen`: op maandag de deals van de komende week (gemiddelde van hele weken met het 10e en 90e percentiel) en de verwachte opdrachten in 30 dagen; scoren na afloop; een gemiste maandag wordt `gemist`, nooit een voorspelling achteraf. | `voorspellingenRun`, `scoorVoorspellingen` |
+| 19 | Weekweergave | Rapporten → Week: per OC en voor het team M14 tot en met M17 en M35, op werkelijke datum, met "direct" en "zonder datum" apart en de definitielegenda; op de telefoon een kaart per OC. | `apiSturing('week')`, `weekCijfers` |
+| 20 | MT-overzicht | Rapporten → MT (desktop, alleen management): de blokken koers, aanpak, pipeline, OC-team, verlengingen, facturatie, realisatie, marge en datakwaliteit; elk cijfer met zijn definitie en versie; zonder volledig jaardoel "geblokkeerd: besluit jaardoel", nooit een schatting. | `apiSturing('mt')`, `sturingCijfers`, `jaardoelNoemer` |
+| 21 | Maanddocument | De trigger bevriest op de laatste donderdag van de maand (of de eerstvolgende run als die mislukte) een maandstand in tabblad `Standen`, met de definitie zoals die toen gold; de knop "Tussenstand vastleggen" maakt een tussenstand die de maandstand nooit vervangt; afdrukken via de printweergave en een link (`#rapport:mt:<maand>`) in plaats van een pdf-bijlage. | `sturingBevriezen`, `apiSturingBevriezen`, `data-mtprint`, `data-mtlink` |
+| 22 | Werkelijke datums importeren | Beheer → Werkelijke datums importeren: een csv met kans, fase, werkelijke datum, zekerheid en soort bewijs; proefdraaien, dan toepassen; idempotent; een wissel zonder datum wordt aangevuld, anders een wissel met bron `reconstructie`. Verzonnen voorbeeld: `test/voorbeelden/werkelijke_datums.csv`. | `apiFasewisselsImport` |
+| 23 | Productsoort | Keuzelijst `productsoorten` op Kansen en Trajecten; hernoemen gaat in beide tabbladen mee. | `KEUZELIJSTEN`, `kansVelden`, `trajectVelden` |
+| 24 | Urenbasislijn | Aanname `urenBasislijn` (totalen per maand van vorige schooljaren); M09 leest ook `TalentUren_archief`, maar alleen vanaf het begin van het gevraagde schooljaar. Financiën "geleverd" is ongewijzigd (keuze K1). | `urenPerMaand`, `sturingCijfers` |
+
+### 7.2 Openstaande besluiten als instelling
+
+Geen besluit uit §5 is in code vastgelegd. Elk staat als aanname in het tabblad `Aannames` (versie, eigenaar, onderbouwing, besluitdatum, ingang; alleen het management wijzigt), met een veilige standaard:
+
+| Besluit | Instelling | Standaard | Gevolg zolang de standaard geldt |
+|---|---|---|---|
+| 1 Overstap OC's | `overstapDatum` | leeg | het kansId-deel van `lopend_project_heeft_contract` is niet getoetst |
+| 2 Jaardoel | `jaardoel` (soort, periode, scope, noemer, waarde, schooljaar; bij de noemer "contracteerdoel" ook het afgeleide contracteerdoel) en `scope` (schooltypes buiten het jaardoel) | leeg | M01, M05, M07 en M11 tonen "geblokkeerd: besluit jaardoel (§5 besluit 2)", nooit een geschat getal; `noemerbewaking` staat op geblokkeerd en geeft geen melding |
+| 3 Aannames | `retentie`, `dealwaarde`, `conversieApVoorstel`, `conversieVoorstelDeal`, `werkweken`, `aantalOcs`, `doelpadCurve`; `fasegewichten` krijgt bij elke echte wijziging in Beheer → Mijlpalen een versie met onderbouwing en besluitdatum | leeg | M03, M05 en M11 geblokkeerd met "besluit aannames (§5 besluit 3)" |
+| 4 en 5 Waarde en tekendatum | `sturingVerplicht` | uit | het venster vraagt, overslaan mag; de contracten `waarde_vanaf_voorstel` en `sluitdatum_vanaf_voorstel` signaleren |
+| 4 Winformulier | geen instelling | getekende contractwaarde (> 0) en akkoorddatum verplicht | volgt uit de bouwlijst en past bij besluit 4 |
+| 8 Per OC in het MT | geen instelling | het MT-overzicht toont het team; per OC alleen in de weekweergave voor management en consultancy volgens `RECHTEN.sturingWeek` | M23 "ingepland" = de aanmaakdatum van de afspraak, in het register als concept tot besluit 8 |
+| §6 Omzet vorig jaar | `omzetVorigJaar` (het jaartotaal van de boekhouder) | leeg | M02 geblokkeerd (extern) |
+| Normen (§4) | `registratieNorm`, `bulkDrempel`, `achterTolerantie`, `dekkingTolerantie`, `verliesNormWeken`, `standaardTarief` | leeg | "niet getoetst: norm niet vastgesteld" |
+| Voorspelling | `voorspellingWeken` | 12 weken, zichtbaar als concept | — |
+
+### 7.3 Uitrol: eerst de app, dan Code.gs
+
+`Code.gs` (Apps Script) en `index.html` (GitHub Pages en Vercel) gaan los live, en de service worker toont bij het eerste bezoek nog de oude app. Daarom:
+
+1. **Eerst de app.** Zet `index.html` en `sw.js` live (GitHub Pages; op Vercel de deploy). De nieuwe app werkt met de oude backend: de oude backend laat de nieuwe velden vallen, en de app verbergt de schermen die een v7.9-api nodig hebben (Rapporten → Week en MT, het register, de aannames, de overstap en de import van werkelijke datums) zolang `apiCrm` geen `backendVersie` van 7.9 of hoger geeft.
+2. **Dan Code.gs.** Plak `backend/Code.gs` in het Apps Script-project en implementeer het als nieuwe versie (de `/exec`-URL blijft gelijk). Draai één keer `setup()` onder het account van de eigenaar: dat maakt de nieuwe tabbladen en kolommen, installeert `sturingTrigger` en zet via `crmInrichten()` de oude tijdlijnregels één keer om in wissels (idempotent; stap 2 van de overstap toont daarna niets meer om te zetten). Op Vercel staat de cron al in `vercel.json` en maakt `zorgSchema` de nieuwe tabellen aan.
+3. **Een oude app in de cache.** Elke aanroep van de app stuurt haar versie mee in de body (`v`, geen header). Een app van vóór 7.9 krijgt bij gewonnen zonder getekende waarde, bij verloren met een reden buiten de lijst en bij een gewijzigd fasegewicht zonder onderbouwing de melding "Herlaad de app: er is een nieuwe versie." in plaats van een onbegrijpelijke fout; `apiMijlpalenOpslaan` behoudt een bestaande rol als een oude app het veld niet meestuurt. De balk "Nieuwe versie beschikbaar" (`#updateBalk`) blijft de weg naar herladen.
+
+### 7.4 Overstap na de livegang
+
+Na de livegang draait de beheerder één keer Beheer → Overstap naar v7.9 (`apiMigratieV79`), in deze volgorde; elke stap eerst proefdraaien (alleen tellingen), dan toepassen:
+
+1. **Rollen bevestigen** (`rollen`): een Sheet met eigen `Mijlpalen`-rijen (na de Capsule-migratie of na opslaan in Beheer) heeft nog geen rollen; de stap stelt ze op volgorde voor, de beheerder bevestigt of corrigeert.
+2. **Oude tijdlijnregels omzetten** (`tijdlijn`): elke regel "Mijlpaal: a → b" en "Kans aangemaakt" wordt één keer een wissel met bron `tijdlijn` en zekerheid laag (`setup()` en `apiCrmInrichten` doen dit ook; een tweede keer schrijft niets).
+3. **Rollen opnieuw toepassen** (`wissels`): de rol van wissels met `rolBron` leeg of volgorde en van de bronnen import, Capsule, tijdlijn en reconstructie opnieuw zetten; een wissel uit de app met `rolBron = mijlpaal` blijft zoals hij is.
+4. **Open kansen aanvullen** (`kansen`): schooljaar en nieuw of bestaand, alleen waar ze leeg zijn.
+5. **Oude verliesredenen koppelen** (`redenen`): elke vrije reden aan een reden uit de lijst; tot dan staan M12 en M21 op "niet getoetst: verliesredenen niet gekoppeld".
+
+Tot elke stap gedaan is, toont Athena "geblokkeerd" of "niet getoetst" waar het anders een verkeerd getal zou tonen. Daarna, los van de overstap: de eenmalige imports met echte gegevens lokaal (§5 besluit 14), waaronder de werkelijke datums via Beheer → Werkelijke datums importeren.
+
+### 7.5 Wat niet gebouwd is
+
+- **Bouwpunt 25, kosten per maand:** wacht op de toezegging van financiën (§6). Marge (M30–M33) staat als "geblokkeerd: kosten per maand van financiën ontbreken (§6)"; M33 als "geen urenbron voor team inhoud (§6)". Marge komt nooit uit loon of tarief per persoon.
+- **Bouwpunt 26, realisatiegraad per project:** wacht op §5 besluit 6. M29 staat als "geblokkeerd: besluit realisatiegraad (§5 besluit 6)".
+- **Besluit 7, mondeling akkoord als gewonnen:** niet gebouwd; gewonnen blijft het winformulier met getekende waarde en akkoorddatum.
+- **Besluit 10, toegang tot de agenda:** niet gebouwd; het contract `logdekking` en M34 staan op geblokkeerd, nooit op geslaagd.
+- **Besluit 12, toegang voor de FD:** geen code nodig; na het besluit krijgt de FD een gewone gebruiker in team `management`.
+- **ICP-deciel (M22, besluit 9):** geblokkeerd; BRIN en vestiging zijn er wel.
+- **"Afgemeld door de school" bij M15:** een vraag aan de eigenaar (§4); de weekweergave toont gehouden en gepland.
+
+### 7.6 Wat na deze release uit kan
+
+Als deze release live en groen is, kunnen meteen uit (§1): U3 (aannames in het register), U4 voor het definitiedeel, U7 (weekdoelen), U10 (de curve met versie, als aanname `doelpadCurve`), U13 zodra het harnas op de echte stand slaagt, U18 (de registers van de vorige sessie), U22 (wordt niet gebouwd), U27 (voor nieuwe projecten) en U28 (was al uit). De rest hangt aan de overstap van de OC's en AM's (§5 besluiten 1 en 11), aan de noemer van het jaardoel (besluit 2) of aan externe aanlevering (§6).
+
+### 7.7 Het vergelijkingsharnas (lokaal)
+
+```
+node test/vergelijk_sturing.js --export <export-jjjj-mm-dd.json> --referentie <referentie.csv> \
+     [--exact <facturatie-export.csv>] [--xps <dienstenexport.csv>] [--peildatum jjjj-mm-dd] [--code <pad naar Code.gs>]
+```
+
+- **Invoer, alles buiten de repo.** De export komt van `node server/migratie.js --bron <exec-url> --code <koppelcode> --bewaar <map buiten de repo>/export-<datum>.json` (alleen met de koppelcode van het management); de referentie is een csv met `metriek` (M-code of registersleutel), `periode` (`jjjj-mm-dd` stand, `jjjj-mm` stand op de laatste dag van de maand, `jjjj-Www` week van het OC-team, `jjjj-jjjj` schooljaar), `waarde` en optioneel `uitsplitsing` (`nieuw`, `bestaand`, `onbekend`, `zonder`), te maken uit het laatste week- of maandrapport. Het formaat staat verzonnen in `test/voorbeelden/sturing_referentie.csv`. Het harnas weigert elk invoerpad binnen de repo, ook via een symbolische koppeling ("Zet echte bestanden buiten de repo."); `.gitignore` weert csv, xlsx, pdf en de andere exportsoorten buiten `test/voorbeelden` en `export*.json`.
+- **Werking.** Het laadt `demo/demo-backend.js` en `backend/Code.gs` in een vm, met de export in plaats van de seed, en rekent per regel met dezelfde functies als `apiSturing` (`sturingCijfers` voor een stand, `weekCijfers` voor een week) en de tolerantie uit het register. Een verschil wordt in deze volgorde verklaard: **definitie** (de referentie klopt met een oude definitie: M08 op `Kansen.gesloten` en de geschatte waarde, M04 met `Kansen.waarde`, M06 ongewogen of met het percentage per kans, M27 als termijnen "nog te doen", M12 en M21 op `Kansen.gesloten`, M16 VO en deals op de tijdlijn of `Kansen.gesloten`), **invoer** (een datacontract dat het cijfer raakt is gezakt, of de overstapstap tijdlijn of redenen is niet gedaan), **bron** (met `--exact`: de facturen in de export tegen de verzonden termijnen in dezelfde periode, voor M26, M27 en M28; met `--xps`: de gewerkte uren per maand en project via `urenUitRijen` tegen `TalentUren` en het archief, voor M09 en M25), anders **onverklaard**. Een cijfer dat in Athena geblokkeerd is, geeft `geblokkeerd` en telt niet als onverklaard.
+- **Uitvoer.** Per referentieregel één regel `<metriek> <periode>[/<uitsplitsing>] <uitkomst>` met uitkomst `geslaagd`, `geblokkeerd` of `gezakt (definitie|invoer|bron|onverklaard)`. Nooit waarden, namen of tellingen. Een invoerfout (op stderr) noemt alleen het bestand, het regelnummer en de kolomnaam, bijvoorbeeld `referentie, regel 14, kolom waarde: geen getal`. Exitcode 1 bij een onverklaarde regel of een invoerfout, anders 0.
+- **Wanneer.** U1 kan uit als het harnas twee weken op rij naast het weekrapport slaagt of elk verschil verklaart; U13 als het op de echte stand tegen Exact en XPS slaagt. Voor de pipelinecijfers heeft het pas zin na de overstap van de OC's (§5 besluit 1). Rapporteer alleen de uitkomstregels en verwijder daarna elke werkkopie met echte rijen.
+- **Test.** `node test/vergelijk_sturing_test.js` draait het harnas op een export van de verzonnen demoseed in een tijdelijke map (kloppende en gewijzigde Exact- en XPS-exports, elke categorie, exitcodes, patroon, privacy, pad binnen de repo) en ruimt die map op.
+
+### 7.8 Datamodel, rechten en triggers
+
+- **Nieuwe tabbladen:** `Fasewissels` (nooit gearchiveerd), `Cijferdefinities`, `Datakwaliteit` (90 dagen), `Voorspellingen`, `Standen`, `Aannames`. **Nieuwe kolommen (achteraan):** `Scholen.brin`, `Scholen.vestiging`; `Trajecten.klant`, `Trajecten.productsoort`; `Kansen.klant`, `Kansen.schooljaar`, `Kansen.productsoort`, `Kansen.verliesToelichting`; `Mijlpalen.rol`; `Doelen.periodeSleutel`. **Keuzelijsten:** `verliesRedenen` (met de vaste reden "opgeschoond") en `productsoorten`. Schema op Vercel: `supabase/migrations/0001_init.sql` opnieuw gegenereerd, getalkolommen in `NUMERIEK`.
+- **Rechten (`RECHTEN`):** `cijfers` (lezen iedereen, wijzigen management), `aannames` (alleen management), `sturingWeek` (OC zichzelf plus het teamtotaal, teamlead zijn team, management alles; R8: het teamtotaal ziet elke OC), `sturingMt` (alleen management), `datakwaliteit` (medewerker zichzelf, teamlead zijn team, management iedereen). Fasewissels vallen onder `pipeline`. `apiMigratieV79`, `apiFasewisselsImport` en `apiSturingBevriezen` zijn alleen voor het management.
+- **Trigger:** `sturingTrigger` (elke dag rond 06:45; Vercel-cron `/api/cron/sturingTrigger`): datacontracten, op maandag de voorspelling (en het scoren), op de laatste donderdag de maandstand; elke stap met tijdbewaking, een gemiste stap haalt de volgende run in. `apiStatus` toont `sturingTrigger` en `laatsteSturing`.
+- **Api's:** nieuw `apiFasewisselDatum`, `apiMigratieV79`, `apiFasewisselsImport`, `apiWeekdoelenOpslaan`, `apiCijfers`, `apiCijferOpslaan`, `apiCijferAftekenen`, `apiAannames`, `apiAannameOpslaan`, `apiSturing`, `apiSturingBevriezen`; het contract staat in `backend/README.md` (sectie Sturing) en in de skill `athena-backend-api`.
+- **Verwerkingsregister:** de nieuwe tabbladen staan in `docs/teams-en-processen.md` §9.
+
+### 7.9 Tests
+
+Rooktestblokken "v7.9: …" in `test/node_rooktest.js` (fasewissels, mijlpaalrol, overstap, win en verloren, kansvelden en scholen, doelen met periode, werkelijke datums, register, één definitie per naam, datacontracten met de regressies, datakwaliteit en meldingen, voorspellingen, sturingsweergaven, stand bevriezen, aannames en jaardoel); `test/fuzz.js` en `test/rechten_test.js` (sectie 6) met de nieuwe api's; twee mutanten erbij in `test/mutatie_test.js`; `test/demo_groot_test.js` op praktijkschaal (en `BRIN_LIJST=<pad buiten de repo>` voor de verzonnen BRIN-codes tegen de lijst van DUO); `test/handig/golf5.py` (demo op poort 8799) voor elke nieuwe handeling; `test/test_app.py` met onder meer "v7.9 oude backend"; `node test/vergelijk_sturing_test.js` voor het harnas.
+
+### 7.10 Open punten en keuzes
+
+De besluiten uit §5 blijven van de beheerder (§7.2). Keuzes die in deze release zo gebouwd zijn en die de beheerder kan bevestigen of terugdraaien:
+
+- **K1 Geleverd uit het archief in Financiën:** alleen M09 leest `TalentUren_archief`; Financiën en M25 niet (anders verdwijnt geleverd niet meer na 26 weken, maar leest Financiën bij elk bezoek een groeiend tabblad).
+- **K2 Teammetriek `afspraken`:** ongewijzigd; M15 gehouden heeft de eigen sleutel `afsprakenGehouden`. Gelijktrekken verandert de betekenis van bestaande teamdoelen.
+- **K3 Schooljaar van een nieuwe kans:** het voorstel komt uit de verwachte tekendatum (er is geen veld "verwachte start"); de invoerder bevestigt het.
+- **K4 Kans verwijderen:** geweigerd bij een tellende winst of een project; anders de vlag `verwijderd` op de wissels.
+- **K5 Pipelinewissel:** een wissel met bron detail als de effectieve rol verandert; een mijlpaal die in de andere pipeline niet bestaat wordt geweigerd.
+- **K6 Bulk met `sturingVerplicht`:** kansen zonder waarde of tekendatum worden overgeslagen met één samenvatting.
+- **K7 Eén deal per kans voor M08 en M13:** de laatste geldige sluitende wissel per kans; M16 "deals per week" telt elke tellende winst.
+- **Verder:** het percentage per kans telt niet meer in de gewogen pijplijn; de rol is een momentopname op de wissel; conversie per cohort ook in het teamrapport; `dekking_robuust` op de gewogen pijplijn; de verlengingsstatus "geen kans" staat niet in de standaardlijst (Beheer → Keuzelijsten); de standaardmijlpalen hebben geen rol AP gehouden.
+- **Extern:** het harnas op de echte stand draait alleen lokaal; M02, de basislijn van M09, M10 en M30–M33 wachten op aanlevering (§6).
