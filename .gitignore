@@ -7,3 +7,14 @@ node_modules/
 server/.pglite/
 # v6.1.1: de export van server/migratie.js (--bewaar) bevat alle gegevens uit de Sheet, ook de talentprofielen; nooit in de repo
 export*.json
+# v7.9: echte exports en rapporten (Exact, XPS, Capsule, maandrapporten, invulbestanden) nooit in de repo; verzonnen voorbeelden staan in test/voorbeelden
+*.csv
+*.tsv
+*.xlsx
+*.xlsm
+*.xls
+*.ods
+*.numbers
+*.pdf
+*.zip
+!test/voorbeelden/*.csv
