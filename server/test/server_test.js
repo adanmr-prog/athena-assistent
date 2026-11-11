@@ -57,7 +57,7 @@ var SOPHIE = 'demo-sophie', FEMKE = 'demo-femke', IRIS = 'demo-iris';
   // v7.9 (R13): de versie van de app reist mee in de body (v); een app van vóór v7.9 krijgt bij gewonnen zonder getekende waarde "Herlaad de app"
   var win = { fn: 'apiKansOpslaan', args: [{ id: 'k10', fase: 'gewonnen', _oud: { fase: 'voorstel' } }], secret: 'demo-lars' };
   var v78 = await post(Object.assign({ v: '7.8' }, win)), v0 = await post(win), v79 = await post(Object.assign({ v: '7.9' }, win));
-  eis(v78.ok === false && v78.fout === 'Herlaad de app: er is een nieuwe versie.' && v0.fout === v78.fout && v79.ok === false && /winformulier/.test(v79.fout) && brug.sql("select fase from kansen where id = 'k10'").rows[0].fase === 'voorstel',
+  eis(v78.ok === false && v78.fout === 'Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.' && v0.fout === v78.fout && v79.ok === false && /winformulier/.test(v79.fout) && brug.sql("select fase from kansen where id = 'k10'").rows[0].fase === 'voorstel',
     'v7.9: POST /api met v 7.8 (of zonder v) op een gewonnen kans zonder contractwaarde geeft "Herlaad de app"; met v 7.9 de gewone melding; de kans blijft open');
   var sl = await post({ fn: 'apiKansOpslaan', args: [{ id: 'k16', fase: 'voorstel', _oud: { fase: 'gesprek' }, wissel: { bron: 'slepen' } }], secret: 'demo-lars', v: '7.9' });
   var fwRij = sl.ok ? brug.sql('select * from fasewissels where id = $1', [sl.result.fasewissel.id]).rows[0] : null;

@@ -2060,10 +2060,10 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     var e1c = (function () { try { ctx.apiKansOpslaan({ id: 'k6', fase: 'verloren', _oud: { fase: 'voorstel' }, verliesReden: 'Te ver weg' }); return ''; } catch (e) { return e.message; } })();
     ctx.KLANT_VERSIE = null;
     var e2 = (function () { try { ctx.apiKansOpslaan({ id: 'k6', fase: 'gewonnen', _oud: { fase: 'voorstel' } }); return ''; } catch (e) { return e.message; } })();
-    eis(e1 === 'Herlaad de app: er is een nieuwe versie.' && e1b === e1 && e1c === e1 && /winformulier/.test(e2) && ctx.vind('Kansen', 'k6').fase === 'voorstel', 'R13: met KLANT_VERSIE 7.8 geeft gewonnen zonder (volledig) winformulier en verloren met een vrije reden "Herlaad de app"; zonder versiewacht (null) de gewone melding');
+    eis(e1 === 'Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.' && e1b === e1 && e1c === e1 && /winformulier/.test(e2) && ctx.vind('Kansen', 'k6').fase === 'voorstel', 'R13: met KLANT_VERSIE 7.8 geeft gewonnen zonder (volledig) winformulier en verloren met een vrije reden "Herlaad de app"; zonder versiewacht (null) de gewone melding');
     var dp = function (body) { var u = JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } })); ctx.KLANT_VERSIE = null; return u; };
     var z1 = dp({ fn: 'apiKansOpslaan', args: [{ id: 'k6', fase: 'gewonnen', _oud: { fase: 'voorstel' } }], secret: 'demo-noor' }), z2 = dp({ fn: 'apiKansOpslaan', args: [{ id: 'k6', fase: 'gewonnen', _oud: { fase: 'voorstel' } }], secret: 'demo-noor', v: '7.9' });
-    eis(z1.ok === false && z1.fout === 'Herlaad de app: er is een nieuwe versie.' && z2.ok === false && /winformulier/.test(z2.fout), 'R13 via doPost: zonder v (een app van vóór v7.9) "Herlaad de app", met v 7.9 de gewone melding');
+    eis(z1.ok === false && z1.fout === 'Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.' && z2.ok === false && /winformulier/.test(z2.fout), 'R13 via doPost: zonder v (een app van vóór v7.9) "Herlaad de app", met v 7.9 de gewone melding');
   } catch (e) { eis(false, 'v7.9 win en verloren: onverwachte fout ' + e.message); } finally { standTerug(st); }
 })();
 

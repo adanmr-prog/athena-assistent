@@ -224,7 +224,8 @@ function versieKleiner(a, b) {
   return false;
 }
 // v7.9 (R13): waar het contract van een schrijf-api veranderde, krijgt een oudere app de opdracht om te herladen in plaats van een melding over een veld dat ze niet heeft
-function eisNieuweApp() { if (KLANT_VERSIE !== null && versieKleiner(KLANT_VERSIE, '7.9')) throw new Error('Herlaad de app: er is een nieuwe versie.'); }
+// v7.9 (iOS-review, tweede ronde): met de handeling erbij (een app van vóór 7.9 heeft alleen deze toast); het voorvoegsel "Herlaad de app" blijft, de app herkent de melding daarop
+function eisNieuweApp() { if (KLANT_VERSIE !== null && versieKleiner(KLANT_VERSIE, '7.9')) throw new Error('Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.'); }
 
 function doPost(e) {
   var uit;

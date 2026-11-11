@@ -876,11 +876,19 @@ with sync_playwright() as p:
     assert p8.locator('[data-rweergave]').count() == 0 and p8.locator('[data-beheer="cijfers"], [data-beheer="aannames"], [data-beheer="v79"], [data-beheer="werkelijkedatums"]').count() == 0 and p8.locator('#dqBlok').count() == 0, 'oude backend: geen Week, MT, datakwaliteit of v7.9-beheer'
     assert p8.locator('#toast.aan:has-text("Niet gelukt")').count() == 0, 'oude backend: geen foutmelding'
     # v7.9 (iOS-review): antwoordt de backend "Herlaad de app" (eisNieuweApp), dan de balk #updateBalk met Herladen en Later en een update-check van de
-    # worker, want in standalone heeft de toast geen herlaadknop; nooit vanzelf herladen
-    assert mock_post({'fn': '_faal', 'args': ['apiHome', 1, 'Herlaad de app: er is een nieuwe versie.']}).get('ok'), 'de mock kent _faal met een eigen melding'
-    p8.evaluate("() => { window.__blijft = 1; window.__swUpdate = 0; var sw = navigator.serviceWorker, g = sw.getRegistration.bind(sw); sw.getRegistration = function () { window.__swUpdate++; return g(); }; }")
-    p8.evaluate("() => run('apiHome').catch(function () {})"); p8.wait_for_selector('#updateBalk:not([hidden])', timeout=5000); p8.wait_for_timeout(300)
-    assert p8.locator('#toast.aan:has-text("Herlaad de app")').count() == 1 and p8.locator('#updateBalk [data-update="herladen"]').is_visible() and p8.evaluate("window.__swUpdate") >= 1 and p8.evaluate("window.__blijft") == 1, 'Herlaad de app: de balk Nieuwe versie met Herladen, een update-check en geen automatisch herladen'
+    # worker, want in standalone heeft de toast geen herlaadknop; nooit vanzelf herladen. v7.9 (iOS-review, tweede ronde): de balk komt pas ná de
+    # update-check (anders gaf Herladen de oude index.html uit de cache); hier vertraagt de test r.update() met 800 ms. Op de mock staat geen nieuwe
+    # worker, dus na de check meteen de balk (met een nieuwe worker toont controllerchange hem; dat zit niet in deze suite)
+    assert mock_post({'fn': '_faal', 'args': ['apiHome', 1, 'Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.']}).get('ok'), 'de mock kent _faal met een eigen melding'
+    assert p8.evaluate("() => navigator.serviceWorker.ready.then(function (r) { return !!r.active; })"), 'Herlaad de app: de worker is actief (er is een registratie om te updaten)'
+    p8.evaluate("""() => { window.__blijft = 1; window.__swUpdate = 0; window.__updateKlaar = 0; window.__balkOp = 0; var sw = navigator.serviceWorker, g = sw.getRegistration.bind(sw);
+      sw.getRegistration = function () { return g().then(function (r) { if (r && !r.__gevolgd) { r.__gevolgd = 1; var u = r.update.bind(r);
+        r.update = function () { window.__swUpdate++; return new Promise(function (ok) { setTimeout(ok, 800); }).then(function () { return u(); }).then(function (x) { window.__updateKlaar = performance.now(); return x; }); }; } return r; }); };
+      var balk = document.getElementById('updateBalk'); new MutationObserver(function () { if (!balk.hidden && !window.__balkOp) window.__balkOp = performance.now(); }).observe(balk, { attributes: true }); }""")
+    p8.evaluate("() => run('apiHome').catch(function () {})"); p8.wait_for_selector('#toast.aan:has-text("Sluit de app en open hem opnieuw")', timeout=5000); p8.wait_for_timeout(300)
+    assert p8.locator('#updateBalk:not([hidden])').count() == 0 and p8.evaluate("window.__swUpdate") == 1 and not p8.evaluate("window.__updateKlaar"), 'Herlaad de app: tijdens de update-check nog geen balk'
+    p8.wait_for_selector('#updateBalk:not([hidden])', timeout=5000); p8.wait_for_timeout(300)
+    assert p8.locator('#updateBalk [data-update="herladen"]').is_visible() and p8.evaluate("window.__swUpdate") == 1 and p8.evaluate("window.__updateKlaar > 0 && window.__balkOp >= window.__updateKlaar") and p8.evaluate("window.__blijft") == 1, 'Herlaad de app: de balk Nieuwe versie met Herladen pas na de update-check, en geen automatisch herladen'
     p8.click('#updateBalk [data-update="later"]'); assert p8.locator('#updateBalk:not([hidden])').count() == 0 and p8.evaluate("window.__blijft") == 1, 'Herlaad de app: Later verbergt de balk'
     c8.close(); mock_post({'fn': '_reset'})
     b.close()

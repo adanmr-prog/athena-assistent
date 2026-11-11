@@ -3,7 +3,10 @@ var CACHE = 'athena-assistent-v7.9';  // bump bij elke release (zie /release)
 // v7.3 (iOS-review R2): de app luistert op controllerchange en toont dan de vaste balk #updateBalk (Herladen / Later); deze worker neemt met
 // skipWaiting + clients.claim meteen over en herlaadt nooit zelf, zodat een open venster of composer niet verloren gaat.
 // v7.9: de app registreert deze worker bij een eerste bezoek pas na de eerste geslaagde aanroep (of na 5 s, ook op het koppelscherm) en probeert een
-// mislukte registratie opnieuw zodra de app weer in beeld komt; antwoordt de backend "Herlaad de app", dan toont ze #updateBalk en vraagt ze een update.
+// mislukte registratie opnieuw zodra de app weer in beeld komt; antwoordt de backend "Herlaad de app", dan vraagt ze een update en toont ze #updateBalk.
+// v7.9 (iOS-review, tweede ronde): mislukt install hieronder (addAll van './' op haperend 4G), dan haalt de browser de registratie weg; de app ziet dat
+// bij visibilitychange (getRegistration() zonder registratie) en registreert opnieuw. Na "Herlaad de app" komt #updateBalk pas na de update-check: vindt
+// die deze worker als nieuwe versie, dan via controllerchange zodra hij actief is, zodat Herladen de nieuwe index.html uit zijn cache krijgt.
 // v7.6: './index.html' staat niet meer apart in SHELL: dat was hetzelfde bestand (609 kB) twee keer downloaden bij elke installatie; install zet de
 // response van './' ook onder die sleutel, zodat uitCache() en een navigatie naar /index.html hem blijven vinden.
 var SHELL = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];  // './' moet vooraan blijven: install haalt hem apart op (zie hieronder)

@@ -336,20 +336,43 @@ with sync_playwright() as p:
         pg.select_option('#mtStand', dag(0)); pg.wait_for_selector('.mt .hint:has-text("bevroren tussenstand")'); ok('mt: de tussenstand toont de bevroren definities', pg.locator('.mt .t-def').count() >= 10)
         pg.evaluate("window.print = function () { window.__geprint = (window.__geprint || 0) + 1; }"); pg.click('[data-mtprint]'); ok('mt: Afdrukken', (pg.evaluate("window.__geprint") or 0) >= 1)
         titels = pg.eval_on_selector_all('.mt .mt-blok h3', 'function (l) { return l.map(function (x) { return x.textContent; }); }')
+        # review I1: echt afdrukken met de schermopmaak. De breedte van het papier laat (min-width: 1024px) omklappen terwijl matchMedia('print') niets
+        # meldt (zoals in omgevingen die print niet in matchMedia melden); dan houdt alleen de vlag AFDRUKKEN (beforeprint) deskWissel tegen.
+        pg.emulate_media(media='screen'); n0 = n_calls(); pdf = pg.pdf(format='A4'); pg.wait_for_timeout(300)
+        ok('mt: afdrukken (pdf, schermopmaak) laat het MT-overzicht staan: geen terugval naar Teams, body.desk en MT blijven, geen nieuwe apiTeamRapport, apiSturing of apiCrm (review I1)', len(pdf) > 1000 and pg.locator('.mt .mt-blok').count() > 0 and pg.locator('#crmBalk [data-rweergave="mt"][aria-pressed="true"], #crmBalk [data-rweergave="mt"].aan').count() > 0 and pg.evaluate("document.body.classList.contains('desk')") and not calls('apiTeamRapport', n0) and not calls('apiSturing', n0) and not calls('apiCrm', n0), [x['fn'] for x in calls(None, n0)])
+        # v7.9 (iOS-review): de print-opmaak. De echte bewaker van de print-fix is de computed style van html en body hieronder (display block, overflow
+        # visible, geen vaste hoogte): zonder de regel in @media print zijn ze flex, hidden en 100 %. De pdf-controle erna (meer dan één pagina, het laatste
+        # MT-blok in de tekst) is alleen een rooktest: Chromium drukt ook zonder de fix alles af, alleen iOS WebKit niet.
         pg.emulate_media(media='print'); ok('mt: print verbergt zijbalk en knoppen, toont de kop van het maanddocument en de inforegel (live of bevroren, schooljaar, scope; review I5)', not pg.locator('#zijbalk').is_visible() and not pg.locator('[data-mtprint]').is_visible() and pg.locator('.mt-print-kop').is_visible() and pg.locator('.mt .mt-info').is_visible() and 'bevroren' in pg.inner_text('.mt .mt-info'))
-        ok('mt: print zet html en body los (geen vaste hoogte, flex of overflow: hidden; iOS-review)', pg.evaluate("[document.documentElement, document.body].every(function (x) { var c = getComputedStyle(x); return c.overflow === 'visible' && c.display === 'block' && c.height !== window.innerHeight + 'px'; })"))
-        n0 = n_calls(); pdf = pg.pdf(format='A4'); pg.wait_for_timeout(300)  # review I1: echt afdrukken (de breedte van het papier laat (min-width: 1024px) omklappen); v7.9 (iOS-review): met de print-opmaak, niet die van het scherm
+        cs = pg.evaluate("[document.documentElement, document.body].map(function (x) { var c = getComputedStyle(x); return [c.display, c.overflow, c.height, x.style.height]; }).concat([[window.innerHeight + 'px']])")
+        ok('mt: print zet html en body los: display block, overflow visible, geen vaste hoogte (de bewaker van de print-fix; iOS-review)', all(x[0] == 'block' and x[1] == 'visible' and x[2] != cs[-1][0] and not x[3] for x in cs[:2]), cs)
+        n0 = n_calls(); pdf = pg.pdf(format='A4'); pg.wait_for_timeout(300)
         pg.emulate_media(media='screen')
         tekst = pdf_tekst(pdf); laatste = zonder_wit(titels[-1] if titels else '')[:16]
-        ok('mt: de pdf heeft meer dan één pagina en het laatste MT-blok staat erin (iOS-review: niet alleen het eerste deel)', pdf_paginas(pdf) > 1 and bool(laatste) and (tekst is None or laatste in zonder_wit(tekst)), 'pagina\'s %d, laatste blok %r, tekst %s' % (pdf_paginas(pdf), laatste, 'onbekend' if tekst is None else len(tekst)))
-        if tekst is None: print('     (geen pdftotext of pypdf: alleen de pagina\'s geteld)')
-        ok('mt: afdrukken (pdf) laat het MT-overzicht staan: geen terugval naar Teams en geen nieuwe aanroep', len(pdf) > 1000 and pg.locator('.mt .mt-blok').count() > 0 and pg.evaluate("document.body.classList.contains('desk')") and not calls('apiTeamRapport', n0) and not calls('apiSturing', n0), [x['fn'] for x in calls(None, n0)])
+        ok('mt: de tekst van de pdf is te lezen (pdftotext of pypdf)', tekst is not None, 'geen pdftotext en geen pypdf')
+        ok('mt: rooktest: de pdf (print-opmaak) heeft meer dan één pagina en het laatste MT-blok staat erin', pdf_paginas(pdf) > 1 and bool(laatste) and tekst is not None and laatste in zonder_wit(tekst), 'pagina\'s %d, laatste blok %r, tekst %s' % (pdf_paginas(pdf), laatste, 'onbekend' if tekst is None else len(tekst)))
+        ok('mt: ook met de print-opmaak geen terugval en geen aanroep', pg.locator('.mt .mt-blok').count() > 0 and pg.evaluate("document.body.classList.contains('desk')") and not calls('apiTeamRapport', n0) and not calls('apiSturing', n0) and not calls('apiCrm', n0), [x['fn'] for x in calls(None, n0)])
         pg.click('[data-mtlink]'); pg.wait_for_timeout(400)
         try: kl = pg.evaluate("navigator.clipboard.readText()")
         except Exception: kl = ''
         ok('mt: Link kopiëren zet #rapport:mt:<stand> op het klembord', kl.endswith('#rapport:mt:' + dag(0)), kl)
         pg.select_option('#mtStand', ''); pg.wait_for_selector('.mt .hint:has-text("live")')
     stap('g5_rapport_mt', g5_rapport_mt)
+
+    def g5_afdrukvlag():  # v7.9 (iOS-review, tweede ronde): beforeprint zonder afterprint (een geannuleerd printvenster op iOS); daarna moet deskWissel weer werken
+        def breed(w): pg.set_viewport_size({'width': w, 'height': 900}); pg.wait_for_timeout(400)
+        def is_desk(): return pg.evaluate("document.body.classList.contains('desk')")
+        pg.evaluate("window.dispatchEvent(new Event('beforeprint'))"); ok('afdrukvlag: beforeprint zet AFDRUKKEN', pg.evaluate("AFDRUKKEN === true"))
+        n0 = n_calls(); breed(900); d = is_desk(); breed(1440)
+        ok('afdrukvlag: zolang de vlag staat, wisselt een smallere breedte niet naar de telefoon en volgt er geen aanroep (review I1)', d and is_desk() and not calls(None, n0), [d, [x['fn'] for x in calls(None, n0)]])
+        pg.emulate_media(media='print'); pg.wait_for_timeout(100); pg.emulate_media(media='screen'); pg.wait_for_timeout(200)
+        ok('afdrukvlag: zonder afterprint zet het einde van print in matchMedia de vlag terug', pg.evaluate("AFDRUKKEN === false"))
+        breed(900); ok('afdrukvlag: daarna werkt deskWissel weer (telefoonweergave op 900 px)', not is_desk())
+        breed(1440); pg.wait_for_selector('#zijbalk', state='visible'); ok('afdrukvlag: en terug naar de desktopweergave', is_desk())
+        pg.evaluate("window.dispatchEvent(new Event('beforeprint'))"); pg.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        ok('afdrukvlag: visibilitychange (weer in beeld) zet de vlag ook terug, los van de service worker', pg.evaluate("AFDRUKKEN === false"))
+        desk('rapporten', '#crmBalk [data-rweergave="teams"]')
+    stap('g5_afdrukvlag', g5_afdrukvlag)
 
     def g5_datakwaliteit_sophie():  # punt 11: management ziet iedereen en kan opnieuw rekenen; de melding rapport:datakwaliteit opent het blok
         pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok'); ok('datakwaliteit (Sophie): Nu opnieuw rekenen', pg.locator('[data-dqvers]').count() == 1)
