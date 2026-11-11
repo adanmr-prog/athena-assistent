@@ -54,6 +54,14 @@ var SOPHIE = 'demo-sophie', FEMKE = 'demo-femke', IRIS = 'demo-iris';
   eis(taken.taken.some(function (t) { return t.id === taak.id && t.tekst === 'Postgres-taak 2'; }), 'de taak komt terug in apiTaken');
   await roep(FEMKE, 'apiVerwijder', 'taak', taak.id);
   eis(brug.sql('select count(*)::int as n from acties where id = $1', [taak.id]).rows[0].n === 0, 'verwijderen haalt de rij uit Postgres');
+  // v7.9 (R13): de versie van de app reist mee in de body (v); een app van vóór v7.9 krijgt bij gewonnen zonder getekende waarde "Herlaad de app"
+  var win = { fn: 'apiKansOpslaan', args: [{ id: 'k10', fase: 'gewonnen', _oud: { fase: 'voorstel' } }], secret: 'demo-lars' };
+  var v78 = await post(Object.assign({ v: '7.8' }, win)), v0 = await post(win), v79 = await post(Object.assign({ v: '7.9' }, win));
+  eis(v78.ok === false && v78.fout === 'Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.' && v0.fout === v78.fout && v79.ok === false && /winformulier/.test(v79.fout) && brug.sql("select fase from kansen where id = 'k10'").rows[0].fase === 'voorstel',
+    'v7.9: POST /api met v 7.8 (of zonder v) op een gewonnen kans zonder contractwaarde geeft "Herlaad de app"; met v 7.9 de gewone melding; de kans blijft open');
+  var sl = await post({ fn: 'apiKansOpslaan', args: [{ id: 'k16', fase: 'voorstel', _oud: { fase: 'gesprek' }, wissel: { bron: 'slepen' } }], secret: 'demo-lars', v: '7.9' });
+  var fwRij = sl.ok ? brug.sql('select * from fasewissels where id = $1', [sl.result.fasewissel.id]).rows[0] : null;
+  eis(fwRij && fwRij.kans_id === 'k16' && fwRij.bron === 'slepen' && fwRij.naar === 'voorstel' && fwRij.naar_rol === 'voorstel' && typeof fwRij.waarde === 'string' && Number(fwRij.waarde) === 9600, 'v7.9: een fasewissel staat na het verzoek in Postgres (tabel fasewissels, waarde numeric)');
   var klaar = await roep(SOPHIE, 'apiActieKlaar', 'tk1');
   eis(klaar.status === 'af' && brug.sql("select status from acties where id = 'tk1'").rows[0].status === 'af', 'afvinken wordt opgeslagen');
   var zet = await roep(SOPHIE, 'apiKeuzelijstOpslaan', 'taakCategorieen', [{ waarde: 'bellen' }, { waarde: 'mailen' }, { waarde: 'nieuw' }]);
@@ -113,6 +121,15 @@ var SOPHIE = 'demo-sophie', FEMKE = 'demo-femke', IRIS = 'demo-iris';
   eis(c4.status === 200 && r4.ok && r4.resultaat && 'vog' in r4.resultaat && 'aanmeldingen' in r4.resultaat, 'de dagelijkse talentrun draait als cron');
   var c5 = await handler.verwerk({ methode: 'GET', pad: '/api/cron/nachtelijkeReviewTrigger', headers: { authorization: 'Bearer cron-geheim' } });
   eis(c5.status === 200 && JSON.parse(c5.body).ok && brug.sql('select count(*)::int as n from reviews').rows[0].n >= 1, 'de nachtelijke review draait als cron en schrijft een review (zonder ANTHROPIC_API_KEY geen samenvatting)');
+  // v7.9 (pakket 2): c6 — de dagelijkse sturingTrigger als cron (datacontracten, voorspelling, maandstand); elke dagelijkse of wekelijkse trigger staat in vercel.json
+  var c6 = await handler.verwerk({ methode: 'GET', pad: '/api/cron/sturingTrigger', headers: { authorization: 'Bearer cron-geheim' } }), r6 = JSON.parse(c6.body);
+  eis(c6.status === 200 && r6.ok && r6.resultaat && 'datakwaliteit' in r6.resultaat && 'voorspelling' in r6.resultaat && 'bevroren' in r6.resultaat && brug.sql('select count(*)::int as n from datakwaliteit').rows[0].n >= 1, 'c6: sturingTrigger draait als cron en schrijft de datacontracten van vandaag');
+  var VJ = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'vercel.json'), 'utf8')), crons = (VJ.crons || []).map(function (c) { return c.path; });
+  eis(['indexeerTrigger', 'nachtelijkeReviewTrigger', 'archiveerTrigger', 'talentDagelijksTrigger', 'talentUrenTrigger', 'financienTrigger', 'sturingTrigger'].every(function (n) { return crons.indexOf('/api/cron/' + n) >= 0; }) && crons.length === 7,
+    'vercel.json: precies zeven crons, waaronder sturingTrigger');
+  var mt = await roep(SOPHIE, 'apiSturing', 'mt', {}), wk = await roep(SOPHIE, 'apiSturing', 'week', {});
+  eis(mt.blokken.length === 9 && mt.blokken[0].cijfers[0].m === 'M01' && mt.blokken[0].cijfers[0].geblokkeerd && mt.blokken[0].cijfers[0].waarde === '' && wk.rijen.length >= 1 && /toegang/.test(await faalt(FEMKE, 'apiSturing', 'mt', {})),
+    'apiSturing via POST /api: het MT-overzicht (M01 geblokkeerd zonder jaardoel) en de weekweergave; een AM krijgt het MT-overzicht niet');
   eis(brug.sql("select count(*)::int as n from pg_locks where locktype = 'advisory'").rows[0].n === 0, 'na elk verzoek is de lock vrij');
   var S = code.start({}), lock = S.diensten.LockService.getScriptLock();
   eis(lock.tryLock(100) === true && lock.hasLock() && brug.sql("select count(*)::int as n from pg_locks where locktype = 'advisory'").rows[0].n === 1, 'metLock neemt een advisory lock in Postgres');

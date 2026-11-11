@@ -224,6 +224,7 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
     apiVoorstellen: function () { var v = rijenVan('Vacatures').filter(function (x) { return /^gv/.test(x.id) && x.status === 'open'; })[0]; return [v.id, [rijenVan('Talenten').filter(function (x) { return /^gtl/.test(x.id) && x.status === 'actief'; })[5].id], 'Proef']; },
     apiTalentRapport: function () { return ['kwartaal', 0]; }, apiTalentExport: function () { return [rijenVan('Talenten').filter(function (x) { return /^gtl/.test(x.id); })[6].id]; },
     apiTalentAnonimiseer: function () { return [rijenVan('Talenten').filter(function (x) { return /^gtl/.test(x.id) && x.status === 'slapend'; })[0].id]; },
+    apiSturing: function (n, team) { return [team === 'consultancy' ? 'week' : team === 'management' ? 'mt' : 'datakwaliteit', {}]; },  // v7.9 (pakket 2); alle weergaven × rollen staan in deel 12
     apiFinancien: function () { return [X.huidigSchooljaar()]; }, apiExactImport: function () { var f = rijenVan('Facturen').filter(function (x) { return /^gf/.test(x.id) && x.factuurnummer; })[0]; return ['Factuurnummer;Factuurdatum;Bedrag;Betaaldatum\n' + f.factuurnummer + ';' + f.verzonden + ';' + String(f.bedrag).replace('.', ',') + ';', {}]; }
   };
   var ROLLEN = ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem'].map(function (c) { var p = X.DEMO_MENSEN.filter(function (x) { return x.code === c; })[0]; return { code: c, naam: p.naam, team: p.team }; });
@@ -332,6 +333,130 @@ var INTERN = /TypeError|ReferenceError|RangeError|SyntaxError|Cannot read|Cannot
   eis(tel(fac, function (f) { return fnr[String(f.factuurnummer)]; }) === 0, 'privacy: geen verzonnen factuurnummer (' + fac.length + ') is een echt factuurnummer');
   var c = Math.round(P.GROOT_PARTICULIER_TARIEF * 100), veelvoud = tel(Lp.bedrag_alle || [], function (b) { return Number(b) > 0 && Number(b) % c === 0; });
   eis(veelvoud === 0, 'privacy: het verzonnen particuliere uurtarief is geen deler van een echt factuurbedrag (' + veelvoud + ')');
+})();
+
+/* ---- 11. v7.9 (pakket 1): fasewissels in beide seeds en de schrijfpaden op praktijkschaal (R2: één schrijfVeel per pad, gemeten bovengrens) ---- */
+(function () {
+  function controle(X, naam) {
+    var kansen = X.lees('Kansen'), wissels = X.lees('Fasewissels'), per = {}, lijst = X.keuzelijst('verliesRedenen');
+    wissels.forEach(function (w) { (per[w.kansId] = per[w.kansId] || []).push(w); });
+    var zonder = kansen.filter(function (k) { return !per[k.id]; }).length;
+    var gesloten = kansen.filter(function (k) { return k.fase === 'gewonnen' || k.fase === 'verloren'; }), slecht = gesloten.filter(function (k) { var l = X.laatsteSluitendeWissel(k.id, k.fase); return !l || !l.werkelijkeDatum || l.werkelijkeDatum !== k.gesloten; }).length;
+    var redenen = kansen.filter(function (k) { return k.fase === 'verloren' && lijst.indexOf(String(k.verliesReden)) < 0; }).length + wissels.filter(function (w) { return w.naar === 'verloren' && lijst.indexOf(String(w.reden)) < 0; }).length;
+    eis(kansen.length > 0 && zonder === 0, naam + ': elke kans heeft minstens één wissel (' + kansen.length + ' kansen, ' + wissels.length + ' wissels)');
+    eis(gesloten.length > 0 && slecht === 0, naam + ': elke gewonnen en verloren kans heeft een sluitende wissel met datum = Kansen.gesloten (' + gesloten.length + ')');
+    eis(redenen === 0, naam + ': alleen verliesredenen uit de keuzelijst (kans en wissel)');
+    eis(X.apiMigratieV79 && (function () { X.GEBRUIKER = null; var st = X.apiMigratieV79('status'); return st.tijdlijn.teOmzetten === 0 && st.redenen.gekoppeld && st.rollen.ingesteld; })(), naam + ': de overstap staat op nul (geen tijdlijnregel zonder wissel, redenen gekoppeld, rollen ingesteld)');
+  }
+  var Z = context({ klok: KLOK }); Z.demoStart(''); controle(Z, 'standaardseed');
+  var Gr = context({ klok: KLOK }); Gr.demoGrootStart(''); controle(Gr, 'profiel groot');
+  var Gr2 = context({ klok: KLOK }); Gr2.demoGrootStart('');
+  eis(hash(JSON.stringify(Gr.lees('Fasewissels'))) === hash(JSON.stringify(Gr2.lees('Fasewissels'))) && Gr.lees('Fasewissels').length > 300, 'de wissels van het grote profiel zijn deterministisch (' + Gr.lees('Fasewissels').length + ')');
+  function telVeel(X, fn) { var echt = X.schrijfVeel, n = 0; X.schrijfVeel = function (naam, l) { if (naam === 'Fasewissels') n++; return echt(naam, l); }; var t0 = Date.now(); try { var uit = fn(); return { n: n, ms: Date.now() - t0, uit: uit }; } finally { X.schrijfVeel = echt; } }
+  function roepX(X, fn) { var args = Array.prototype.slice.call(arguments, 2), d = JSON.parse(X.demoRun(fn, JSON.stringify(args), 'demo-sophie')); if (!d.ok) throw new Error(d.fout); return d.result; }
+  // hernoemen: alle mijlpalen tegelijk, zodat elke open kans verhuist
+  var H = context({ klok: KLOK }); H.demoGrootStart('');
+  var open = H.lees('Kansen').filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; }).length;
+  var hn = telVeel(H, function () { return roepX(H, 'apiMijlpalenOpslaan', H.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal + ' v2', kans: m.kans, dagenNorm: m.dagenNorm, oud: { pipeline: m.pipeline, mijlpaal: m.mijlpaal } }; })); });
+  var hern = H.lees('Fasewissels').filter(function (w) { return w.bron === 'hernoemd'; }).length;
+  eis(hn.n === 1 && hern === open && hn.ms < 2000, 'hernoemen op praktijkschaal: ' + open + ' open kansen, één schrijfVeel op Fasewissels, ' + hn.ms + ' ms (bovengrens 2 s)');
+  // de tijdlijnomzetting op een Sheet zonder wissels (zoals vóór v7.9)
+  var T = context({ klok: KLOK }); T.demoGrootStart(''); T.verwijderRijen('Fasewissels', function () { return true; });
+  var nFase = T.lees('Activiteiten').filter(function (a) { return a.type === 'fase'; }).length, acts = T.lees('Activiteiten').length;
+  var tl = telVeel(T, function () { return roepX(T, 'apiMigratieV79', 'tijdlijn', { toepassen: true }); });
+  eis(tl.n === 1 && tl.uit.geschreven > 0 && tl.uit.geschreven + tl.uit.zonderKans + tl.uit.alOmgezet === nFase && tl.ms < 2000, 'tijdlijnomzetting op praktijkschaal (' + acts + ' activiteiten, ' + nFase + ' faseregels): ' + tl.uit.geschreven + ' wissels in één schrijfVeel, ' + tl.ms + ' ms (bovengrens 2 s)');
+  // de eenmalige import met één regel per kans
+  var I = context({ klok: KLOK }); I.demoGrootStart('');
+  var regels = ['kans;fase;werkelijke datum;zekerheid;soort bewijs']; I.lees('Kansen').forEach(function (k) { regels.push(k.id + ';lead;' + I.datumStr(I.plusDagen(-900)) + ';laag;notitie'); });  // ouder dan elke kans van het profiel
+  var im = telVeel(I, function () { return roepX(I, 'apiFasewisselsImport', regels.join('\n'), { toepassen: true }); });
+  eis(im.n === 1 && im.uit.nieuw === regels.length - 1 && im.ms < 2000, 'import van werkelijke datums op praktijkschaal (' + (regels.length - 1) + ' regels): één schrijfVeel, ' + im.ms + ' ms (bovengrens 2 s)' + (im.uit.nieuw === regels.length - 1 ? '' : ': ' + JSON.stringify(im.uit)));
+  // N10 (optioneel): de verzonnen BRIN-codes tegen de lijst van DUO (buiten de repo); alleen het aantal overeenkomsten (norm 0)
+  var pad = process.env.BRIN_LIJST;
+  if (!pad) { info('BRIN: BRIN_LIJST niet gezet; de vergelijking met de lijst van DUO is overgeslagen'); return; }
+  var tekst; try { tekst = fs.readFileSync(pad, 'utf8'); } catch (e) { eis(false, 'BRIN: de lijst in BRIN_LIJST is niet leesbaar'); return; }
+  var echt = {}; (tekst.toUpperCase().match(/\b\d{2}[A-Z0-9]{2}\b/g) || []).forEach(function (b) { echt[b] = 1; });
+  var demo = Z.lees('Scholen').concat(Gr.lees('Scholen')).map(function (x) { return String(x.brin || '').toUpperCase(); }).filter(Boolean), raak = demo.filter(function (b) { return echt[b]; }).length;
+  eis(raak === 0, 'BRIN: geen verzonnen BRIN-code komt in de lijst van DUO voor (' + raak + ' van ' + demo.length + ')');
+})();
+
+/* ---- 12. v7.9 (pakket 2): de sturing op praktijkschaal. apiSturing (week, mt, datakwaliteit) en de schermen die het register níet mogen lezen (R9) × vier rollen
+   < 500 ms; sturingTrigger < 2 s; met de verzonnen aannames van het profiel rekent het MT-overzicht M05 en M07. R9_BASIS=<git-ref> meet daarnaast vijf runs van
+   apiHome, apiFinancien en apiTeamRapport met de bestanden van die versie tegen de huidige (afwisselend, op dezelfde machine): mediaan ≤ 10 % hoger. ---- */
+(function () {
+  var X = context(); X.demoGrootStart('');
+  var ROLLEN = ['demo-sophie', 'demo-lars', 'demo-femke', 'demo-sem'], traag = [], intern = [], hoogste = { ms: 0 };
+  var GEVALLEN = [['apiSturing', ['week', {}]], ['apiSturing', ['mt', {}]], ['apiSturing', ['datakwaliteit', {}]], ['apiSturing', ['datakwaliteit', { vers: true }]], ['apiHome', []], ['apiFinancien', [X.huidigSchooljaar()]], ['apiTeamRapport', ['kwartaal', '', '', 0]],
+    ['apiCijfers', [{ kort: true }]], ['apiAannames', []]];
+  ROLLEN.forEach(function (c) {
+    GEVALLEN.forEach(function (g) {
+      var t0 = Date.now(), d0 = JSON.parse(X.demoRun(g[0], JSON.stringify(g[1]), c)), ms = Date.now() - t0, naam = g[0] + (g[0] === 'apiSturing' ? '(' + g[1][0] + (g[1][1].vers ? ', vers' : '') + ')' : '');
+      if (ms > hoogste.ms) hoogste = { ms: ms, wat: naam + ' als ' + c };
+      if (ms >= 500) traag.push(naam + ' als ' + c + ' ' + ms + ' ms');
+      if (!d0.ok && INTERN.test(String(d0.fout))) intern.push(naam + ' als ' + c + ': ' + String(d0.fout).slice(0, 100));
+    });
+  });
+  eis(!traag.length && !intern.length, 'v7.9: apiSturing (week, mt, datakwaliteit en vers), apiHome, apiFinancien, apiTeamRapport, apiCijfers en apiAannames × vier rollen < 500 ms zonder interne fout (traagste: ' + hoogste.wat + ', ' + hoogste.ms + ' ms)' + (traag.concat(intern).length ? ': ' + traag.concat(intern).join(', ') : ''));
+  var mt = JSON.parse(X.demoRun('apiSturing', JSON.stringify(['mt', {}]), 'demo-sophie')).result, c = {};
+  mt.blokken.forEach(function (b) { b.cijfers.forEach(function (x) { c[x.m] = x; }); });
+  eis(typeof c.M05.waarde === 'number' && !c.M05.geblokkeerd && typeof c.M07.waarde === 'number' && !c.M07.geblokkeerd && c.M07.extra.noemerLabel === 'jaardoel' && /particulier/.test(c.M04.extra.scope),
+    'v7.9: met de verzonnen aannames van het profiel rekent het MT-overzicht M05 (doelpad ' + c.M05.waarde + ') en M07 (dekking ' + c.M07.waarde + ' %), binnen de scope zonder particulier');
+  // sturingTrigger op praktijkschaal: de datacontracten van vandaag opnieuw, de voorspelling van deze week opnieuw
+  X.GEBRUIKER = null; X._LEES = {}; X.verwijderRijen('Datakwaliteit', function () { return true; }); X.verwijderRijen('Voorspellingen', function () { return true; }); X._LEES = {};
+  var tT = Date.now(), uit = X.sturingTrigger(), msT = Date.now() - tT;
+  eis(msT < 2000 && uit.datakwaliteit && uit.datakwaliteit.rijen > 0 && typeof uit.voorspelling === 'object', 'v7.9: sturingTrigger op praktijkschaal (datacontracten, voorspelling, maandstand) in ' + msT + ' ms (bovengrens 2 s): ' + JSON.stringify(uit).slice(0, 160));
+  // review T6: het zwaarste pad op een vaste klok, met lege tabbladen Datakwaliteit, Voorspellingen en Standen: de laatste donderdag van deze maand
+  // (sturingCijfers via sturingBevriezen) en de maandag van deze week (voorspelDealsWeek); elk < 2 s
+  var n0 = new Date(), ldD = new Date(n0.getFullYear(), n0.getMonth() + 1, 0, 6, 45), maD = new Date(n0.getFullYear(), n0.getMonth(), n0.getDate(), 6, 45);
+  while (ldD.getDay() !== 4) ldD.setDate(ldD.getDate() - 1);
+  while (maD.getDay() !== 1) maD.setDate(maD.getDate() - 1);
+  [['de laatste donderdag', ldD], ['maandag', maD]].forEach(function (g) {
+    var Y = context({ klok: g[1].getTime() }); Y.demoGrootStart('');
+    Y.GEBRUIKER = null; Y._LEES = {}; ['Datakwaliteit', 'Voorspellingen', 'Standen'].forEach(function (t) { Y.verwijderRijen(t, function () { return true; }); }); Y._LEES = {};
+    var t1 = Date.now(), u = Y.sturingTrigger(), ms1 = Date.now() - t1, zwaar = g[0] === 'maandag' ? !!(u.voorspelling && u.voorspelling.voorspeld === 2) : !!(u.bevroren && u.bevroren.rijen > 0);
+    eis(ms1 < 2000 && zwaar, 'review T6: sturingTrigger op ' + g[0] + ' (' + Y.datumStr(new Y.Date()) + ', vaste klok) met ' + (g[0] === 'maandag' ? 'de voorspelling (voorspeld 2)' : 'de maandstand (bevroren rijen > 0)') + ' in ' + ms1 + ' ms (bovengrens 2 s): ' + JSON.stringify(u).slice(0, 160));
+  });
+  // review T4: Fasewissels wordt nooit gearchiveerd; met vijf keer zoveel wissels (vier eerdere jaren erbij) blijven apiKans en apiTeamRapport × vier rollen < 500 ms
+  var Z = context(); Z.demoGrootStart(''); Z.GEBRUIKER = null; Z._LEES = {};
+  var Wz = Z.lees('Fasewissels'), extraW = [];
+  [1, 2, 3, 4].forEach(function (j) {
+    Wz.forEach(function (w) {
+      var c = {}; Object.keys(w).forEach(function (k) { if (k !== '_rij') c[k] = w[k]; });
+      c.id = w.id + '-j' + j; if (c.werkelijkeDatum) c.werkelijkeDatum = Z.plusDagenVan(String(c.werkelijkeDatum).slice(0, 10), -365 * j);
+      c.ingevoerdOp = Z.plusDagenVan(String(c.ingevoerdOp).slice(0, 10), -365 * j) + String(c.ingevoerdOp).slice(10); extraW.push(c);
+    });
+  });
+  Z.schrijfVeel('Fasewissels', extraW); Z._LEES = {};
+  var kansMetW = Wz.length ? String(Wz[Wz.length - 1].kansId) : 'k1', traagZ = [], hoogZ = { ms: 0 };
+  ROLLEN.forEach(function (rc) {
+    [['apiKans', [kansMetW]], ['apiTeamRapport', ['jaar', '', '', 0]], ['apiTeamRapport', ['kwartaal', 'consultancy', '', 0]]].forEach(function (g) {
+      var t2 = Date.now(); Z.demoRun(g[0], JSON.stringify(g[1]), rc); var ms2 = Date.now() - t2;
+      if (ms2 > hoogZ.ms) hoogZ = { ms: ms2, wat: g[0] + ' als ' + rc };
+      if (ms2 >= 500) traagZ.push(g[0] + '(' + g[1][0] + ') als ' + rc + ' ' + ms2 + ' ms');
+    });
+  });
+  eis(!traagZ.length, 'review T4: met vijf keer zoveel Fasewissels (' + (Wz.length + extraW.length) + ' rijen) blijven apiKans en apiTeamRapport × vier rollen < 500 ms (traagste: ' + hoogZ.wat + ', ' + hoogZ.ms + ' ms)' + (traagZ.length ? ': ' + traagZ.join('; ') : ''));
+  // R9: vijf runs voor en na (alleen met R9_BASIS; de releasebasis is de merge-base met main, git merge-base origin/main HEAD)
+  var basis = process.env.R9_BASIS;
+  if (!basis) { info('R9: R9_BASIS niet gezet; de vergelijking met een eerdere versie (vijf runs, mediaan, ≤ 10 %) is overgeslagen'); return; }
+  var cp = require('child_process'), os = require('os'), map = fs.mkdtempSync(path.join(os.tmpdir(), 'r9-')), bron = {};
+  try {
+    ['backend/Code.gs', 'demo/demo-backend.js', 'demo/demo-groot.js'].forEach(function (f) { bron[f] = cp.execFileSync('git', ['show', basis + ':' + f], { cwd: R, maxBuffer: 64 * 1024 * 1024 }).toString(); });
+    var maak = function (demo, code, groot) { var ctx = { console: console }; ctx.globalThis = ctx; vm.createContext(ctx); vm.runInContext(demo + '\n;\n' + code + '\n;\n' + groot, ctx, { filename: 'demo.js' }); ctx.demoGrootStart(''); return ctx; };
+    var A = maak(bron['demo/demo-backend.js'], bron['backend/Code.gs'], bron['demo/demo-groot.js']), N = maak(BRON_DEMO, BRON_CODE, BRON_GROOT), API = { apiHome: function () { return []; }, apiFinancien: function (Y) { return [Y.huidigSchooljaar()]; }, apiTeamRapport: function () { return ['kwartaal', '', '', 0]; } };
+    var meet = function (Y, api) { var t1 = process.hrtime.bigint(); ROLLEN.forEach(function (rc) { Y.demoRun(api, JSON.stringify(API[api](Y)), rc); }); return Number(process.hrtime.bigint() - t1) / 1e6; };
+    var med = function (l) { var s = l.slice().sort(function (a, b) { return a - b; }); return s[2]; }, slecht = [];
+    // v7.9 (review T4): tegen een basis van vóór v7.9 (zonder tabblad Fasewissels) is apiTeamRapport bewust duurder: AP, AD, VO en deals tellen uit Fasewissels
+    // (één tabblad meer, alleen voor consultancy). Gemeten en geaccepteerd in docs/prestatie-v7.9.md (+13 % tegen 4cf1dd7, mediaan van vijf runs); de grens is dan 20 %.
+    var voorV79 = !/\bFasewissels:\s*\[/.test(bron['backend/Code.gs']), GEACCEPTEERD = voorV79 ? { apiTeamRapport: 1.20 } : {};
+    Object.keys(API).forEach(function (api) {
+      meet(A, api); meet(N, api);  // opwarmen
+      var a = [], n = []; for (var i = 0; i < 5; i++) { a.push(meet(A, api)); n.push(meet(N, api)); }
+      var grens = GEACCEPTEERD[api] || 1.10, mA = med(a), mN = med(n), ok = mN <= mA * grens + 5;  // 5 ms absolute ruis bovenop de 10 %
+      info('R9 ' + api + ' × vier rollen: mediaan voor ' + Math.round(mA) + ' ms, na ' + Math.round(mN) + ' ms (' + (mA ? Math.round(100 * (mN - mA) / mA) : 0) + ' %)' + (GEACCEPTEERD[api] ? ' — geaccepteerde grens ' + Math.round(100 * (grens - 1)) + ' % (Fasewissels, docs/prestatie-v7.9.md)' : ''));
+      if (!ok) slecht.push(api);
+    });
+    eis(!slecht.length, 'R9: apiHome, apiFinancien en apiTeamRapport zijn niet meer dan 10 % trager dan ' + basis + ' (mediaan van vijf runs' + (voorV79 ? '; apiTeamRapport tegen een basis van vóór v7.9: 20 %, zie docs/prestatie-v7.9.md' : '') + ')' + (slecht.length ? ': ' + slecht.join(', ') : ''));
+  } finally { try { fs.rmSync(map, { recursive: true, force: true }); } catch (e) {} }
 })();
 
 console.log('looptijd ' + Math.round((Date.now() - T0) / 100) / 10 + ' s');

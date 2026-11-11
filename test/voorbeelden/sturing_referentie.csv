@@ -1,0 +1,20 @@
+# Verzonnen voorbeeld van een referentie voor test/vergelijk_sturing.js (v7.9). Alleen het formaat: elke waarde is verzonnen, er staat geen echt cijfer in.
+# Een echte referentie (uit het laatste week- of maandrapport) staat buiten de repo en gaat als pad mee: --referentie <pad buiten de repo>.
+# metriek: een M-code (M04) of een sleutel uit het register (gecontracteerd, contactmomenten); een M-code met meer sleutels (M15, M16) vraagt de sleutel.
+# periode: jjjj-mm-dd (stand op die dag), jjjj-mm (stand op de laatste dag van de maand), jjjj-Www (ISO-week, het OC-team) of jjjj-jjjj (schooljaar).
+# waarde: een getal, met komma of punt als decimaalteken; procenten als getal (80 = 80 %).
+# uitsplitsing (optioneel): nieuw, bestaand of onbekend (M04, M06, M08, M09), of zonder (M04, M06, M08, M18, M19).
+metriek;periode;waarde;uitsplitsing
+M04;2026-10;100000;
+M04;2026-10;40000;nieuw
+gecontracteerd;2026-10;2;zonder
+M06;2026-10-29;25000;
+M08;2026-10;90000;
+M12;2026-2027;50;
+M14;2026-W44;30;
+voorstellen;2026-W44;2;
+afsprakenGehouden;2026-W44;6;
+M18;2026-2027;8;
+M24;2026-10;60;
+M26;2026-10;20000;
+M28;2026-10-29;5000;

@@ -26,6 +26,17 @@ ROLLEN = {
     'femke': ['home', 'contacten', 'taken', 'projecten', 'facturatie', 'financien', 'rapporten', 'doelen'],
     'sem': ['home', 'taken', 'projecten', 'bezetting', 'talent', 'rapporten', 'doelen'],
 }
+# v7.9: de weergaven Week en MT in Rapporten en de schermen met de definities aan (Home, Financiën, Rapporten); op de telefoon ook Rapporten → Week
+EXTRA = {'sophie': ['rapporten-week', 'rapporten-mt', 'home-defs', 'financien-defs', 'rapporten-defs'], 'lars': ['rapporten-week']}
+def extra(page, rol, breedte, s, shots):
+    scherm, wat = s.split('-')
+    page.evaluate('deskNaar(%r)' % scherm); wacht(page)
+    if wat == 'defs': page.evaluate('zetDefs(true)')
+    else: page.click('#crmBalk [data-rweergave="%s"]' % wat); page.wait_for_selector('.week-tabel, .mt .mt-blok', timeout=15000)
+    m = meet(page, rol, breedte, s, shots)
+    if wat == 'defs': page.evaluate('zetDefs(false)')
+    else: page.click('#crmBalk [data-rweergave="teams"]'); wacht(page, 300)
+    return m
 TELEFOON = [('vandaag', None), ('relaties', 'scholen'), ('relaties', 'personen'), ('relaties', 'pipeline'), ('relaties', 'taken'), ('relaties', 'rapport'),
             ('brein', None), ('review', None), ('huisstijl', None), ('trajecten', None)]
 
@@ -124,6 +135,7 @@ with sync_playwright() as p:
             if not telefoon:
                 for s in schermen:
                     page.evaluate('deskNaar(%r)' % s); resultaat.append(meet(page, rol, breedte, s, shots))
+                for s in EXTRA.get(rol, []): resultaat.append(extra(page, rol, breedte, s, shots))  # v7.9
             else:
                 for view, sub in TELEFOON:
                     knop = page.locator('nav button[data-view="%s"]' % view)
@@ -134,6 +146,10 @@ with sync_playwright() as p:
                         if not c.count() or not c.first.is_visible(): continue
                         c.first.click()
                     resultaat.append(meet(page, rol, breedte, view + (':' + sub if sub else ''), shots))
+                    if sub == 'rapport' and page.locator('#crmBalk [data-rweergave="week"]').count():  # v7.9: Rapporten → Week op de telefoon
+                        page.click('#crmBalk [data-rweergave="week"]'); page.wait_for_selector('#crmInhoud .week-kaart', timeout=15000)
+                        resultaat.append(meet(page, rol, breedte, 'relaties:rapport-week', shots))
+                        page.click('#crmBalk [data-rweergave="teams"]'); wacht(page, 300)
             details(page, rol, breedte, telefoon, shots, resultaat)
             ctx.close()
     server.shutdown()

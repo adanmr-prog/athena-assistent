@@ -13,7 +13,7 @@
  * Dit bestand wordt in de demo na demo-backend.js en Code.gs geëvalueerd (demo/demo.js) en draait los in test/demo_groot_test.js. */
 
 var DEMO_GROOT = { seed: 7404, basis: null, telling: null, dag: '' };
-var GROOT_OPSLAG_VERSIE = 1;  // v7.4 (iOS-review): omhoog als de vorm van de bewaarde stand of de opbouw van de basis verandert
+var GROOT_OPSLAG_VERSIE = 2;  // v7.4 (iOS-review): omhoog als de vorm van de bewaarde stand of de opbouw van de basis verandert; v7.9: Fasewissels en nieuwe kolommen
 
 // v7.4: mulberry32, dezelfde PRNG als test/fuzz.js; elke start levert dezelfde reeks
 function _grootRng(seed) {
@@ -52,7 +52,7 @@ var GROOT_WOORDEN = {
     'nt2-certificaat', 'student economie, 1e jaar', 'student bouwkunde, 2e jaar', 'havo', 'vwo', 'gepensioneerd docent'],
   vakken: ['nederlands', 'engels', 'wiskunde', 'rekenen', 'duits', 'frans', 'natuurkunde', 'scheikunde', 'biologie', 'economie', 'geschiedenis', 'aardrijkskunde'],
   niveau: ['1 vmbo', '2 vmbo', '3 havo', '4 havo', '5 havo', '4 vwo', '5 vwo', '6 vwo', 'groep 7', 'groep 8'],
-  verlies: ['Te duur', 'Eigen oplossing gevonden', 'Geen budget', 'Andere aanbieder', 'Geen capaciteit bij de school', 'Uitgesteld naar volgend schooljaar']
+  verlies: ['te duur', 'eigen oplossing', 'geen budget', 'andere aanbieder', 'geen reactie', 'opgeschoond']  // v7.9: de keuzelijst verliesRedenen (zes waarden, zodat de reeks gelijk blijft)
 };
 // [product, gewicht dit jaar, gewicht vorig jaar, uren per dienst, mediaan en p90 ondersteuners, kans per week aan het werk, diensten per week (mediaan), uurtarief (verzonnen), functie, dagdeel, vacaturetitel]
 var GROOT_PRODUCTEN = [
@@ -68,6 +68,12 @@ var GROOT_PRODUCTEN = [
   ['Overig', 3, 3, [4, 6], 1.5, 3, 0.6, 2, 42, 'onderwijsondersteuner', 'ochtend', 'Ondersteuner']  // zonder productlabel in de bron: datakwaliteit, met een signaal
 ];
 var GROOT_PARTICULIER_TARIEF = 34.75;  // verzonnen lesbedrag per uur; particuliere facturen zijn een veelvoud ervan (v7.4: privacycontrole, geen echt factuurbedrag is er een veelvoud van)
+
+// v7.9: een verzonnen BRIN-code per schoolnummer (98 + twee letters; de standaardseed gebruikt 99Zx); zonder toeval, zodat de rest van de reeks gelijk blijft
+var GROOT_BRIN_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+function grootBrin(n) { var L = GROOT_BRIN_LETTERS; return '98' + L.charAt(Math.floor(n / L.length) % L.length) + L.charAt(n % L.length); }
+// v7.9: de productsoort (keuzelijst productsoorten) bij een productnaam
+function grootProductsoort(naam) { var n = String(naam).toLowerCase(); return /nt2/.test(n) ? 'nt2-ondersteuning' : /huiswerk/.test(n) ? 'huiswerkbegeleiding' : /examen/.test(n) ? 'examentraining' : /studentdocent/.test(n) ? 'studentdocent' : /surveillance/.test(n) ? 'surveillance' : /onderwijsondersteuning/.test(n) ? 'onderwijsondersteuning' : 'overig'; }
 
 /* ----- De generator ----- */
 function demoGrootVul() {
@@ -138,7 +144,8 @@ function demoGrootVul() {
       bestuur: 'Onderwijsstichting ' + naam.split(' ').filter(function (w) { return W.kern.indexOf(w) >= 0; })[0], email: 'info@' + dom, website: 'www.' + dom, telefoon: '0' + tussen(10, 79) + '-' + tussen(2000000, 7999999),
       adres: kies(['Schoolweg', 'Lindelaan', 'Kerkstraat', 'Stationsweg', 'Parkweg', 'Dorpsstraat', 'Molenweg', 'Julianalaan']) + ' ' + tussen(1, 140) + ', ' + pl[0], tags: type.toLowerCase(),
       aangemaakt: dt(-tussen(eigenaarDagen || 420, (eigenaarDagen || 420) + 600), '09:00'), laatsteContact: '', lat: Math.round((pl[1] + (R() - 0.5) * 0.03) * 10000) / 10000, lon: Math.round((pl[2] + (R() - 0.5) * 0.05) * 10000) / 10000,
-      betaaltermijn: Math.max(7, Math.min(95, Math.round(lognorm(30, 60)))), _projecten: 0 };
+      betaaltermijn: Math.max(7, Math.min(95, Math.round(lognorm(30, 60)))), _projecten: 0,
+      brin: nS % 9 === 4 ? '' : grootBrin(nS), vestiging: nS % 9 === 4 ? '' : '00' };  // v7.9: verzonnen BRIN-codes (98xx, zonder toeval: de reeks blijft gelijk); één op de negen zonder
     scholen.push(s); return s;
   }
   function nieuweParticulier() {
@@ -587,13 +594,22 @@ function demoGrootVul() {
   }
   var contactVormen = [['gesprek', 'call', 35], ['mail', 'mail', 30], ['gesprek', 'whatsapp', 8], ['afspraak', 'afspraak-online', 12], ['afspraak', 'afspraak-fysiek', 15]];
   var schoolVan = {}; scholen.forEach(function (s) { schoolVan[s.id] = s; });
+  var grootWissels = [];  // v7.9
   kansen.forEach(function (k0) {
     var s = schoolVan[k0.schoolId], a0 = offVan(k0.aangemaakt), eind = offVan(k0.gesloten || k0.laatsteContact);
     var n = k0.fase === 'gewonnen' ? tussen(2, 5) : k0.fase === 'verloren' ? tussen(1, 3) : tussen(1, 5);
     for (var q = 0; q < n; q++) { var vm0 = gewogen(contactVormen, 2), dd = a0 + Math.round((eind - a0) * (q + 1) / (n + 1)); act(vm0[0], dd, k0.eigenaar, s, { kansId: k0.id, persoonId: k0.persoonId, vorm: vm0[1] }, kies(['Belafspraak', 'Opvolging per mail', 'Hulpvraag besproken', 'Offerte toegelicht', 'Gesprek op school'])); }
-    if (k0.fase === 'gewonnen' || k0.fase === 'verloren') act('fase', eind, k0.eigenaar, s, { kansId: k0.id }, 'Mijlpaal: onderhandeling → ' + k0.fase);
-    else if (k0.fase !== 'lead') act('fase', Math.min(-1, eind - tussen(1, 10)), k0.eigenaar, s, { kansId: k0.id }, 'Mijlpaal: ' + (k0.fase === 'gesprek' ? 'lead → gesprek' : k0.fase === 'voorstel' ? 'gesprek → voorstel' : 'voorstel → onderhandeling'));
+    var fd = a0;
+    if (k0.fase === 'gewonnen' || k0.fase === 'verloren') { fd = eind; act('fase', eind, k0.eigenaar, s, { kansId: k0.id }, 'Mijlpaal: onderhandeling → ' + k0.fase); }
+    else if (k0.fase !== 'lead') { fd = Math.min(-1, eind - tussen(1, 10)); act('fase', fd, k0.eigenaar, s, { kansId: k0.id }, 'Mijlpaal: ' + (k0.fase === 'gesprek' ? 'lead → gesprek' : k0.fase === 'voorstel' ? 'gesprek → voorstel' : 'voorstel → onderhandeling')); }
     if (k0.fase === 'gewonnen') k0.laatsteContact = d(eind);
+    // v7.9: de kans als reeks fasewissels (zonder toeval: de dagen liggen gelijk verdeeld tussen aanmaken en de laatste wissel, die met de tijdlijnregel samenvalt)
+    var pad = ['lead', 'gesprek', 'voorstel', 'onderhandeling'].slice(0, { lead: 1, gesprek: 2, voorstel: 3 }[k0.fase] || 4).concat(k0.fase === 'gewonnen' || k0.fase === 'verloren' ? [k0.fase] : []);
+    var vanaf = Math.min(a0, fd), kNum = Number(String(k0.id).slice(2)) || 0;
+    pad.forEach(function (f, q) {
+      var dg = pad.length === 1 ? vanaf : Math.round(vanaf + (fd - vanaf) * q / (pad.length - 1)), later = kNum % 9 === 0 && q === pad.length - 1 ? Math.min(2, -dg) : 0;  // één op de negen later ingevoerd (registratievertraging)
+      grootWissels.push({ k: k0, van: q ? pad[q - 1] : '', naar: f, dag: dg, id: 'gfw-' + k0.id + '-' + q, ingevoerd: dt(dg + later, '10:' + p2(10 + q)) });
+    });
   });
   projecten.forEach(function (t) {
     if (t._part || !t.am) return;
@@ -657,7 +673,16 @@ function demoGrootVul() {
   schrijfVeel('Scholen', scholen.map(schoon));
   personen.forEach(function (p) { var s = scholen.filter(function (x) { return x.id === p.schoolId; })[0]; p.laatsteContact = s ? s.laatsteContact : ''; });
   schrijfVeel('Personen', personen);
+  // v7.9: klant (nieuw of bestaand: een project in het schooljaar ervoor), het schooljaar van de opdracht en de productsoort, zonder toeval
+  var projectIn = {}; projecten.forEach(function (t) { projectIn[t.schoolId + '|' + t.schooljaar] = true; });
+  var klantVan = function (schoolId, sj0) { var jj = Number(String(sj0).slice(0, 4)); return projectIn[schoolId + '|' + (jj - 1) + '-' + jj] ? 'bestaand' : 'nieuw'; };
+  projecten.forEach(function (t) { t.klant = klantVan(t.schoolId, t.schooljaar); t.productsoort = grootProductsoort(t.traject); });
+  kansen.forEach(function (k0) {
+    var t0 = projecten.filter(function (t) { return t._kans === k0; })[0];
+    k0.schooljaar = t0 ? t0.schooljaar : schooljaarVan(k0.gesloten || k0.verwachteSluiting || d(0)); k0.klant = klantVan(k0.schoolId, k0.schooljaar); k0.productsoort = grootProductsoort(k0.naam);
+  });
   schrijfVeel('Kansen', kansen);
+  fasewisselsSchrijven(grootWissels.map(function (x) { return faseWisselRij(x.k, x.van, x.naar, { bron: 'demo', datum: d(x.dag), ingevoerdOp: x.ingevoerd, door: x.k.eigenaar, id: x.id }); }));  // v7.9: via het schrijfpunt
   schrijfVeel('Trajecten', projecten.map(schoon));
   schrijfVeel('Vacatures', vacatures);
   schrijfVeel('Kandidaten', kandidaten);
@@ -686,6 +711,24 @@ function demoGrootVul() {
     uniek(Object.keys(F.per.prognose).concat(Object.keys(F.per.prognoseKas))).sort().forEach(function (m) { if (m > nuM || m < eerstM) return; prog.push({ id: 'pg-' + t.id + '-' + m, gemaakt: m, trajectId: t.id, maand: m, prognose: F.per.prognose[m] || 0, kas: Math.round((F.per.prognoseKas[m] || 0) * (0.85 + 0.3 * R())) }); });
   });
   schrijfVeel('Prognoses', prog);
+
+  /* ----- v7.9 (pakket 2): verzonnen aannames als rijen in Aannames, zodat het MT-overzicht op deze schaal volledig rekent (scope, jaardoel, aannames, curve, basislijn) ----- */
+  var aRij = function (naam, waarde, eig, onderbouwing) { return { id: 'aa-' + naam + '-v1', naam: naam, versie: 1, waarde: JSON.stringify(waarde), eigenaar: eig, onderbouwing: onderbouwing + ' (verzonnen, demo)', besluitdatum: d(-60), ingang: d(-60), door: M.sophie, vastgelegd: dt(-60, '16:00') }; };
+  var nieuwe = huidig.filter(function (t) { return t.klant === 'nieuw' && t.contractwaarde > 0; }), dealW = nieuwe.length ? rond(nieuwe.reduce(function (a, t) { return a + t.contractwaarde; }, 0) / nieuwe.length, 500) : 10000;
+  var curve = [], L = function (x) { return 1 / (1 + Math.exp(-(x - 130) / 45)); };
+  for (var cd = 0; cd <= 364; cd += 14) curve.push([cd, Math.round(10000 * (L(cd) - L(0)) / (L(364) - L(0))) / 10000]);
+  curve.push([365, 1]);
+  var urenNu = urenPerMaand(sj, d(0)).filter(function (x) { return x.uren > 0; }), basis = urenNu.length ? urenNu.reduce(function (a, x) { return a + x.uren; }, 0) / urenNu.length : 1200;
+  var vorm = [0.15, 0.85, 1, 0.8, 1, 0.75, 1, 0.85, 1, 0.9, 0.8, 0.2], basislijn = {};
+  [1, 2].forEach(function (terug) { var vsj = (j1 - terug) + '-' + (j1 - terug + 1), ms = schooljaarMaanden(vsj), m = {}; ms.forEach(function (x, i) { m[x] = Math.round(basis * vorm[i] * (1 - 0.06 * terug)); }); basislijn[vsj] = m; });
+  schrijfVeel('Aannames', [aRij('scope', ['particulier'], 'FD', 'Particulieren vallen buiten het jaardoel'),
+    { id: 'aa-jaardoel-v1', naam: 'jaardoel', versie: 1, waarde: JSON.stringify({ soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: rond(omzetNu * 1.6, 50000), schooljaar: sj }), eigenaar: 'FD',
+      onderbouwing: 'Contractwaarde per schooljaar, groei ten opzichte van nu (verzonnen, demo)', besluitdatum: d(-59), ingang: d(-59), door: M.sophie, vastgelegd: dt(-59, '16:00') },
+    aRij('retentie', 0.8, 'beheerder', 'Verlengingen van vorig jaar'), aRij('dealwaarde', dealW, 'beheerder', 'Gemiddelde getekende waarde van een nieuwe school'),
+    aRij('conversieApVoorstel', 0.5, 'beheerder', 'Schatting uit de weekstart'), aRij('conversieVoorstelDeal', 0.4, 'beheerder', 'Schatting uit de weekstart'),
+    aRij('werkweken', 36, 'beheerder', 'Schoolweken zonder vakanties'), aRij('aantalOcs', 3, 'beheerder', 'Drie OC\'s'),
+    aRij('doelpadCurve', { totaal: curve, bron: 'reconstructie' }, 'beheerder', 'S-curve uit eerdere schooljaren'), aRij('urenBasislijn', basislijn, 'beheerder', 'Maandtotalen van de boekhouding')]);
+  demoSturingVul();  // de voorspellingslog en de datacontracten op deze schaal (zie demo/demo-backend.js)
 
   /* ----- XPS: de dienstenexport per dienst (laatste twee weken) in de map XPS-export, zonder salariskolommen ----- */
   var kop = ['Datum', 'Datum: Van', 'Datum: Tot', 'Gewerkte tijd', 'Uitgevoerd door', 'Omschrijving', 'Status', 'Project', 'Projectleider', 'Accountnummer', 'E-mail', 'Projectnummer'];

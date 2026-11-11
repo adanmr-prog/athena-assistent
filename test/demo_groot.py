@@ -17,7 +17,7 @@ OUT = os.path.join(ROOT, 'test', 'shots', 'demo_groot'); os.makedirs(OUT, exist_
 POORT = 8796
 arg = sys.argv[1:]
 FONTS = arg[arg.index('--fonts') + 1] if '--fonts' in arg else os.environ.get('NUNITO_DIR', '')
-SLEUTEL = 'athena_demo_groot_v7.4'
+SLEUTEL = 'athena_demo_groot_v7.9'  # v7.9: zelfde sleutel als demo/demo.js
 
 class Stil(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -110,7 +110,7 @@ with sync_playwright() as p:
         pg.evaluate("run('apiTaakOpslaan', { id: %r, tekst: 'Bewaard in de groot-demo', _oud: { tekst: %r } })" % (taak['id'], taak['tekst'])); pg.wait_for_timeout(900)
         lengte = pg.evaluate("(sessionStorage.getItem(%r) || '').length" % SLEUTEL)
         ok('sophie: sessionStorage bewaart alleen de wijzigingen (%d tekens)' % lengte, 0 < lengte < 100000)
-        ok('sophie: de gewone demosleutel blijft leeg', pg.evaluate("sessionStorage.getItem('athena_demo_data_v4.3')") is None)
+        ok('sophie: de gewone demosleutel blijft leeg', pg.evaluate("sessionStorage.getItem('athena_demo_data_v7.9')") is None)
         pg.goto(url('sophie'))  # zelfde tab, zonder #scherm: de demo bouwt de basis opnieuw op en legt de bewaarde wijzigingen erover
         terug = pg.evaluate("run('apiTaak', %r).then(function (t) { return t.tekst; })" % taak['id']) if wacht(pg, '#homeInhoud .hkaart') else None
         ok('sophie: na herladen staat de wijziging er nog (%s)' % terug, terug == 'Bewaard in de groot-demo')

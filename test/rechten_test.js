@@ -165,7 +165,16 @@ var PROEVEN = [
     { label: 'nieuw', rij: null, args: [{ voornaam: 'Rechten', achternaam: 'Test', toestemmingDatum: vandaag() }] }] },
   { onderdeel: 'beoordelingen', actie: 'wijzigen', api: 'apiBeoordelingOpslaan', schrijft: true, rijen: [rijB('tl1', 'c1'), rijB('tl4', 'c4'), rijB('tl13', 'c13'), rijB('tl19', 'c16'), rijB('tl24', 'c15')] },
   { onderdeel: 'beoordelingen', actie: 'wijzigen', api: 'apiBeoordelingOpslaan', schrijft: true, uitzondering: 'beoordelingGever', rijen: ['b1', 'b3'].map(function (id) { var b = S.Beoordelingen[id]; return { label: id + ' (door ' + b.door + ', talent ' + b.talentId + ' in ' + b.trajectId + '/am ' + T(b.trajectId).am + ')', rij: b, args: [{ id: id, tekst: b.tekst }] }; }) },
-  { onderdeel: 'financien', actie: 'zien', api: 'apiFinancien', lijst: function (res, rij) { return res.scholen.some(function (s) { return s.projecten.some(function (p) { return p.id === rij.id; }); }); }, rijen: ['t1', 't2', 't4', 't6', 't9', 't12', 't10'].map(rijT) }
+  { onderdeel: 'financien', actie: 'zien', api: 'apiFinancien', lijst: function (res, rij) { return res.scholen.some(function (s) { return s.projecten.some(function (p) { return p.id === rij.id; }); }); }, rijen: ['t1', 't2', 't4', 't6', 't9', 't12', 't10'].map(rijT) },
+  // v7.9 (pakket 2): het register, de aannames en de sturingsweergaven (de rijen per persoon volgen sectie 6)
+  { onderdeel: 'cijfers', actie: 'zien', api: 'apiCijfers', rijen: [{ label: 'kort register', rij: null, args: [{ kort: true }] }] },
+  { onderdeel: 'cijfers', actie: 'wijzigen', api: 'apiCijferOpslaan', schrijft: true, rijen: [{ label: 'nieuwe versie contactmomenten', rij: null, args: [{ metriek: 'contactmomenten', definitie: 'Rechtentest', eigenaar: 'beheerder' }] }] },
+  { onderdeel: 'aannames', actie: 'zien', api: 'apiAannames', rijen: [{ label: 'jaardoel en aannames', rij: null, args: [] }] },
+  { onderdeel: 'aannames', actie: 'wijzigen', api: 'apiAannameOpslaan', schrijft: true, rijen: [{ label: 'retentie', rij: null, args: ['retentie', { waarde: 0.8, onderbouwing: 'Rechtentest', besluitdatum: vandaag() }] }] },
+  { onderdeel: 'sturingWeek', actie: 'zien', api: 'apiSturing', rijen: [{ label: 'weekweergave', rij: null, args: ['week', {}] }] },
+  { onderdeel: 'sturingMt', actie: 'zien', api: 'apiSturing', rijen: [{ label: 'MT-overzicht', rij: null, args: ['mt', {}] }] },
+  { onderdeel: 'sturingMt', actie: 'wijzigen', api: 'apiSturingBevriezen', schrijft: true, rijen: [{ label: 'tussenstand vastleggen', rij: null, args: [] }] },
+  { onderdeel: 'datakwaliteit', actie: 'zien', api: 'apiSturing', rijen: [{ label: 'datakwaliteit', rij: null, args: ['datakwaliteit', {}] }] }
 ];
 // controle: elke rij uit de seed bestaat
 PROEVEN.forEach(function (p) { p.rijen.forEach(function (r) { if (r.rij === undefined || (r.rij !== null && typeof r.rij !== 'object')) { log(false, 'seed mist een rij voor ' + p.api + ' ' + r.label); } }); });
@@ -342,6 +351,86 @@ log(!!toon.ok, 'portaal: het eigen profiel blijft via het portaal gewoon bereikb
   var zK = zoek.ok ? zoek.result.kansen.filter(function (x) { return x.id === k.id; }) : [];
   noteer('zoek_crm (assistent) als talent: de kans staat erin met beperkt true en waarde 0', SEM, 'breinZoekCrm', zoek, zoek.ok && zK.length === 1 && zK[0].beperkt === true && zK[0].waarde === 0 && zK[0].fase === k.fase);
   herstel();
+})();
+
+/* ---- 6. v7.9 (pakket 1): fasewissels, de overstap, de eenmalige import en de weekdoelen ---- */
+(function () {
+  function noteer(naam, wie, fn, res, ok, verwacht) {
+    AANVALLEN.push({ naam: 'v7.9: ' + naam, wie: wie, fn: fn, verwacht: verwacht || 'geweigerd, Sheet onaangeroerd', toegestaan: res.ok, melding: res.ok ? '' : String(res.fout || ''), ok: ok });
+    log(ok, 'aanval  ' + pad('v7.9: ' + naam, 78) + (res.ok ? 'toegestaan' : 'geweigerd: ' + res.fout)); if (!ok) schendingen++;
+  }
+  var wNoor = lees('Fasewissels').filter(function (w) { return w.eigenaar === 'Noor Hendriks' && w.werkelijkeDatum >= ctx.ondergrensWerkelijkeDatum() && !w.ongedaan; })[0];
+  // een wissel van een ander: een collega-medewerker en een ander team worden geweigerd, de teamlead van het team mag
+  [[LARS, 'een collega-OC (Lars)'], [FEMKE, 'een accountmanager (Femke, pipeline geen)'], [SEM, 'talent (Sem)']].forEach(function (x) {
+    var r = roepRuw(x[0], 'apiFasewisselDatum', [wNoor.id, wNoor.werkelijkeDatum]); aantalAanroepen++;
+    noteer('apiFasewisselDatum op een wissel van Noor door ' + x[1], x[0], 'apiFasewisselDatum', r, !r.ok && TOEGANG.test(r.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+  });
+  var rY = roepRuw(YARA, 'apiFasewisselDatum', [wNoor.id, wNoor.werkelijkeDatum]); aantalAanroepen++;
+  noteer('apiFasewisselDatum door de teamlead consultancy (Yara) op een wissel van haar team', YARA, 'apiFasewisselDatum', rY, rY.ok === true, 'toegestaan (team)'); herstel(); aantalHerstel++;
+  // de overstap en de eenmalige import: alleen management (ook een teamlead niet), ook met toepassen
+  var csv = fs.readFileSync(path.join(R, 'test/voorbeelden/werkelijke_datums.csv'), 'utf8');
+  [[YARA, 'teamlead consultancy'], [BAS, 'teamlead accountmanagement'], [IRIS, 'teamlead talent'], [LARS, 'medewerker']].forEach(function (x) {
+    var r1 = roepRuw(x[0], 'apiFasewisselsImport', [csv, { toepassen: true }]); aantalAanroepen++;
+    noteer('apiFasewisselsImport (toepassen) door een ' + x[1], x[0], 'apiFasewisselsImport', r1, !r1.ok && netteWeigering(r1.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+    ['status', 'rollen', 'tijdlijn', 'wissels', 'kansen', 'redenen'].forEach(function (stap) {
+      var r2 = roepRuw(x[0], 'apiMigratieV79', [stap, { toepassen: true, rollen: { 'scholen-lead': 'lead' }, koppeling: {} }]); aantalAanroepen++;
+      noteer('apiMigratieV79 ' + stap + ' (toepassen) door een ' + x[1], x[0], 'apiMigratieV79', r2, !r2.ok && netteWeigering(r2.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+    });
+  });
+  // R1: een interne bron als derde argument wordt genegeerd; de wissel krijgt een app-bron
+  var k = lees('Kansen').filter(function (x) { return x.eigenaar === 'Lars Visser' && x.fase === 'gesprek'; })[0];
+  var r3 = roepRuw(LARS, 'apiKansOpslaan', [{ id: k.id, fase: 'voorstel', _oud: { fase: 'gesprek' }, wissel: { bron: 'import' } }, false, { bron: 'import', datum: '2020-01-01' }]); aantalAanroepen++;
+  var w3 = r3.ok ? lees('Fasewissels').filter(function (w) { return w.id === r3.result.fasewissel.id; })[0] : null;
+  noteer('R1: apiKansOpslaan(obj, false, { bron: import }) door een medewerker', LARS, 'apiKansOpslaan', r3, !!w3 && ctx.FASE_BRONNEN_APP.indexOf(w3.bron) >= 0 && w3.werkelijkeDatum === vandaag(), 'toegestaan met een app-bron (detail) en vandaag als datum'); herstel(); aantalHerstel++;
+  // weekdoelen: een medewerker, een teamlead buiten zijn team en een teamlead van een ander team worden geweigerd
+  var wk = ctx.isoWeekStr(ctx.plusDagen(0));
+  [[LARS, 'Lars Visser', 'een medewerker voor zichzelf'], [YARA, 'Femke de Wit', 'de teamlead consultancy voor een accountmanager'], [BAS, 'Lars Visser', 'de teamlead accountmanagement voor een OC']].forEach(function (x) {
+    var r = roepRuw(x[0], 'apiWeekdoelenOpslaan', [wk, [{ eigenaar: x[1], metric: 'ap', doel: 5 }]]); aantalAanroepen++;
+    noteer('apiWeekdoelenOpslaan door ' + x[2], x[0], 'apiWeekdoelenOpslaan', r, !r.ok && /teamlead/.test(r.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+  });
+})();
+
+/* ---- 6b. v7.9 (pakket 2): de sturingsweergaven (R16) ---- */
+(function () {
+  function noteer(naam, wie, fn, res, ok, verwacht) {
+    AANVALLEN.push({ naam: 'v7.9: ' + naam, wie: wie, fn: fn, verwacht: verwacht || 'geweigerd', toegestaan: res.ok, melding: res.ok ? '' : String(res.fout || ''), ok: ok });
+    log(ok, 'aanval  ' + pad('v7.9: ' + naam, 78) + (res.ok ? 'toegestaan' : 'geweigerd: ' + res.fout)); if (!ok) schendingen++;
+  }
+  var namen = function (r) { return r.rijen.map(function (x) { return x.naam; }).sort().join(','); };
+  var w1 = roepRuw(LARS, 'apiSturing', ['week', { eigenaar: 'Noor Hendriks' }]); aantalAanroepen++;
+  // review P5 (R8): in een team van drie is teamtotaal min de eigen regel de som van twee collega's; een medewerker krijgt dan geen teamtotaal (null, "te klein team")
+  noteer('een OC vraagt de week van een andere OC: alleen zichzelf, en in een team van drie geen teamtotaal', LARS, 'apiSturing', w1, w1.ok && namen(w1.result) === 'Lars Visser' && w1.result.totaal === null && /te klein/.test(w1.result.totaalUitleg) && w1.result.eigenaar === '', 'alleen de eigen regel');
+  var w2 = roepRuw(YARA, 'apiSturing', ['week', {}]); aantalAanroepen++;
+  noteer('de teamlead consultancy ziet zijn team, het teamtotaal en niet de regel beheerder', YARA, 'apiSturing', w2, w2.ok && namen(w2.result) === 'Lars Visser,Noor Hendriks,Yara El Amrani' && !!w2.result.totaal, 'het team');
+  var w3 = roepRuw(SOPHIE, 'apiSturing', ['week', {}]); aantalAanroepen++;
+  noteer('het management ziet het teamtotaal ook in een klein team', SOPHIE, 'apiSturing', w3, w3.ok && !!w3.result.totaal && !w3.result.totaalUitleg, 'alles');
+  [[FEMKE, 'een AM'], [BAS, 'de teamlead AM'], [SEM, 'talent'], [IRIS, 'de teamlead talent']].forEach(function (x) {
+    ['week', 'mt'].forEach(function (w) { var r = roepRuw(x[0], 'apiSturing', [w, {}]); aantalAanroepen++; noteer(x[1] + ' vraagt de ' + w + 'weergave', x[0], 'apiSturing', r, !r.ok && TOEGANG.test(r.fout)); });
+  });
+  [[LARS, 'een OC'], [YARA, 'de teamlead consultancy']].forEach(function (x) { var r = roepRuw(x[0], 'apiSturing', ['mt', {}]); aantalAanroepen++; noteer(x[1] + ' vraagt het MT-overzicht', x[0], 'apiSturing', r, !r.ok && TOEGANG.test(r.fout)); });
+  // een dubbele open kans van een OC met die van een collega; de controle van vandaag opnieuw
+  ctx.GEBRUIKER = null; ctx._LEES = {};
+  ctx.schrijf('Kansen', { id: 'rt-d1', naam: 'Dubbel Lars', school: 'Esdoorn Lyceum', schoolId: 's1', fase: 'gesprek', pipeline: 'Scholen', eigenaar: 'Lars Visser', waarde: 1000, schooljaar: ctx.huidigSchooljaar(), klant: 'nieuw', productsoort: 'surveillance' });
+  ctx.schrijf('Kansen', { id: 'rt-d2', naam: 'Dubbel Noor', school: 'Esdoorn Lyceum', schoolId: 's1', fase: 'gesprek', pipeline: 'Scholen', eigenaar: 'Noor Hendriks', waarde: 1000, schooljaar: ctx.huidigSchooljaar(), klant: 'nieuw', productsoort: 'surveillance' });
+  ctx.verwijderRijen('Datakwaliteit', function () { return true; }); ctx._LEES = {}; ctx.datakwaliteitDag(vandaag(), { stil: true }); ctx._LEES = {};
+  var dF = roepRuw(FEMKE, 'apiSturing', ['datakwaliteit', {}]); aantalAanroepen++;
+  var alleenF = dF.ok && dF.result.perEigenaar.every(function (x) { return x.eigenaar === 'Femke de Wit'; }) && dF.result.contracten.reduce(function (s, c) { return s + c.aantal; }, 0) === dF.result.perEigenaar.reduce(function (s, x) { return s + x.aantal; }, 0);
+  noteer('een AM vraagt datakwaliteit: alleen zijn eigen afwijkingen, en contracten[].aantal telt alleen die', FEMKE, 'apiSturing', dF, alleenF, 'alleen eigen afwijkingen');
+  var dL = roepRuw(LARS, 'apiSturing', ['datakwaliteit', {}]); aantalAanroepen++;
+  var dub = dL.ok && dL.result.perEigenaar.length ? dL.result.perEigenaar[0].gezakt.filter(function (g) { return g.contract === 'geen_dubbele_open_kansen'; })[0] : null;
+  var coll = dub ? dub.verwijzingen.filter(function (v) { return v.id === ''; }) : [];
+  noteer('een OC met een dubbele open kans ziet "kans van een collega" zonder naam en zonder doorklik', LARS, 'apiSturing', dL, !!dub && coll.length >= 1 && coll.every(function (v) { return v.naam === 'kans van een collega' && v.open === false; }) && JSON.stringify(dL.result).indexOf('Dubbel Noor') < 0, 'eigen kans met naam, die van de collega zonder');
+  herstel(); aantalHerstel++;
+  var vV = roepRuw(LARS, 'apiSturing', ['datakwaliteit', { vers: true }]); aantalAanroepen++;
+  noteer('een medewerker vraagt de datakwaliteit vers (live rekenen)', LARS, 'apiSturing', vV, !vV.ok && TOEGANG.test(vV.fout));
+  [[YARA, 'de teamlead consultancy'], [BAS, 'de teamlead AM']].forEach(function (x) {
+    var r1 = roepRuw(x[0], 'apiCijferAftekenen', ['contactmomenten', 1]); aantalAanroepen++;
+    noteer('apiCijferAftekenen door ' + x[1], x[0], 'apiCijferAftekenen', r1, !r1.ok && TOEGANG.test(r1.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+    var r2 = roepRuw(x[0], 'apiAannameOpslaan', ['jaardoel', { waarde: { soort: 'contractwaarde' }, onderbouwing: 'x', besluitdatum: vandaag() }]); aantalAanroepen++;
+    noteer('apiAannameOpslaan door ' + x[1], x[0], 'apiAannameOpslaan', r2, !r2.ok && TOEGANG.test(r2.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+    var r3 = roepRuw(x[0], 'apiSturingBevriezen', []); aantalAanroepen++;
+    noteer('apiSturingBevriezen door ' + x[1], x[0], 'apiSturingBevriezen', r3, !r3.ok && netteWeigering(r3.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
+  });
 })();
 
 /* ---- json en slot ---- */

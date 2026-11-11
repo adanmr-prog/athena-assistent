@@ -62,8 +62,9 @@ function tellingen() { var t = {}; Object.keys(ctx._demoBladen).forEach(function
 function plusDagen(n) { return ctx.datumStr(ctx.plusDagen(n)); }
 
 /* ---------- rechten: welke onderdelen mag deze rol niet wijzigen, en welke tabbladen horen daarbij ---------- */
-var ONDERDEEL_TABS = { relaties: ['Scholen', 'Personen'], pipeline: ['Kansen'], projecten: ['Trajecten'], facturatie: ['Facturen'], vacatures: ['Vacatures'], kandidaten: ['Kandidaten'],
-  talenten: ['Talenten', 'TalentDocumenten', 'TalentSchool', 'TalentUren'], beoordelingen: ['Beoordelingen'], financien: ['Prognoses'] };
+var ONDERDEEL_TABS = { relaties: ['Scholen', 'Personen'], pipeline: ['Kansen', 'Fasewissels'],  // v7.9: de wissels horen bij de kans projecten: ['Trajecten'], facturatie: ['Facturen'], vacatures: ['Vacatures'], kandidaten: ['Kandidaten'],
+  talenten: ['Talenten', 'TalentDocumenten', 'TalentSchool', 'TalentUren'], beoordelingen: ['Beoordelingen'], financien: ['Prognoses'],
+  cijfers: ['Cijferdefinities'], aannames: ['Aannames'], sturingMt: ['Standen', 'Voorspellingen'], datakwaliteit: ['Datakwaliteit'] };  // v7.9 (pakket 2): het register, de aannames, de standen en de datakwaliteit
 function geenOnderdelen(rol) {
   if (rol.team === 'management') return [];
   if (rol.team === 'extern') return Object.keys(ONDERDEEL_TABS);
@@ -102,11 +103,12 @@ function vreemdId(tab, rol, rnd) { var r = vreemdeRij(tab, rol, rnd); return r ?
 // welk soort waarde hoort bij deze parameternaam (voor type-verwisselingen en de generieke basis)
 var ID_TAB = { trajectId: 'Trajecten', talentId: 'Talenten', vacatureId: 'Vacatures', kansId: 'Kansen', schoolId: 'Scholen', persoonId: 'Personen', kandidaatId: 'Kandidaten', trackRunId: 'Acties' };
 var ID_TAB_API = { apiProject: 'Trajecten', apiSchool: 'Scholen',  // v7.3: apiTraject is weg (K2) apiSchoolSamenvatting: 'Scholen', apiPersoon: 'Personen', apiKans: 'Kansen', apiTaak: 'Acties', apiActieKlaar: 'Acties',
-  apiTaakHeropen: 'Acties', apiTalent: 'Talenten', apiTalentPortaalLink: 'Talenten', apiTalentExport: 'Talenten', apiTalentAnonimiseer: 'Talenten', apiTalentDocumentLink: 'TalentDocumenten', apiDocumentOpslaan: 'Documenten' };
+  apiTaakHeropen: 'Acties', apiFasewisselDatum: 'Fasewissels', apiTalent: 'Talenten', apiTalentPortaalLink: 'Talenten', apiTalentExport: 'Talenten', apiTalentAnonimiseer: 'Talenten', apiTalentDocumentLink: 'TalentDocumenten', apiDocumentOpslaan: 'Documenten' };
 var OBJ_TAB = { apiTrajectOpslaan: 'Trajecten', apiGebruikerOpslaan: 'Gebruikers', apiSchoolOpslaan: 'Scholen', apiPersoonOpslaan: 'Personen', apiActiviteitOpslaan: 'Activiteiten', apiKansOpslaan: 'Kansen', apiTaakOpslaan: 'Acties',
   apiDoelOpslaan: 'Doelen', apiContentOpslaan: 'Content', apiVacatureOpslaan: 'Vacatures', apiKandidaatOpslaan: 'Kandidaten', apiFactuurOpslaan: 'Facturen', apiTalentOpslaan: 'Talenten', apiTalentDocumentOpslaan: 'TalentDocumenten',
   apiTalentSchoolOpslaan: 'TalentSchool', apiBeoordelingOpslaan: 'Beoordelingen' };
 function soortParam(naam, api) {
+  if (/^(weergave|sleutel|naam|stap)$/.test(naam) && /^api(Sturing|Weekdoelen|Aanname|Migratie)/.test(api)) return 'tekst';  // v7.9: weergave, sleutel, naam en stap zijn tekst
   if (/^(obj|actie|extra|opties|filter|raster|bestand|koppeling)$/.test(naam)) return 'object';
   if (/^(lijst|rijen|talentIds|uitzonderingen|gesprek)$/.test(naam)) return 'lijst';
   if (/^(aan|mailen|maakTraject|nieuweCodeMaken|alleenBevestigen)$/.test(naam)) return 'bool';
@@ -137,7 +139,25 @@ var BASIS = {
   apiVerwijder: function (rol) { return ['taak', eigenId('Acties', rol), {}]; },
   apiActiviteitToevoegen: function (rol) { return [{ vorm: 'call', schoolId: eigenId('Scholen', rol), onderwerp: 'Fuzz-gesprek', tekst: 'x' }]; },
   apiKans: function (rol) { return [eigenId('Kansen', rol)]; },
-  apiKansOpslaan: function (rol) { var k = eigenRij('Kansen', rol); return [{ id: k.id, volgendeActie: 'Fuzz nabellen', _oud: { volgendeActie: k.volgendeActie } }, false]; },
+  apiKansOpslaan: function (rol, i) {  // v7.9: om en om ook een fasewissel met wissel.datum en een "ongedaan maken" zonder faseverandering (moet een Nederlandse fout geven, B2)
+    var k = eigenRij('Kansen', rol), v = (i || 0) % 3;
+    if (v === 1) return [{ id: k.id, fase: k.fase === 'gesprek' ? 'voorstel' : 'gesprek', _oud: { fase: k.fase }, wissel: { bron: 'slepen', datum: plusDagen(-1) } }, false];
+    if (v === 2) return [{ id: k.id, volgendeActie: 'Fuzz nabellen', wissel: { ongedaan: 'bestaat-niet' } }, false];
+    return [{ id: k.id, volgendeActie: 'Fuzz nabellen', _oud: { volgendeActie: k.volgendeActie } }, false];
+  },
+  // v7.9: fasewissels, de overstap, de eenmalige import en de weekdoelen
+  apiFasewisselDatum: function (rol) { var grens = ctx.ondergrensWerkelijkeDatum(), w = (SEEDRIJEN.Fasewissels || []).filter(function (x) { return x.eigenaar === rol.naam && x.werkelijkeDatum >= grens && !x.ongedaan; })[0] || (SEEDRIJEN.Fasewissels || [])[0]; return [w.id, w.werkelijkeDatum || plusDagen(-1), {}]; },
+  apiFasewisselsImport: function () { return [fs.readFileSync(path.join(R, 'test/voorbeelden/werkelijke_datums.csv'), 'utf8'), {}]; },
+  apiMigratieV79: function () { return ['status', {}]; },
+  apiWeekdoelenOpslaan: function (rol) { var oc = rol.team === 'consultancy' ? rol.naam : 'Lars Visser'; return [ctx.isoWeekStr(new CtxDate()), [{ eigenaar: oc, metric: 'ap', doel: 2 }]]; },
+  // v7.9 (pakket 2): het register, de aannames en de sturingsweergaven (om en om ook constructor als naam, N1; de mutaties op weergave en stap raken de andere weergaven en onzin)
+  apiCijfers: function (rol, i) { return [i % 2 ? {} : { kort: true }]; },
+  apiCijferOpslaan: function (rol, i) { return [{ metriek: i % 3 === 1 ? 'constructor' : 'contactmomenten', definitie: 'Fuzz', eigenaar: 'beheerder', ingang: plusDagen(0) }]; },
+  apiCijferAftekenen: function () { return ['contactmomenten', 1]; },
+  apiAannames: function () { return []; },
+  apiAannameOpslaan: function (rol, i) { return [i % 3 === 1 ? 'constructor' : 'retentie', { waarde: 0.5, onderbouwing: 'Fuzz', besluitdatum: plusDagen(0), ingang: plusDagen(0) }]; },
+  apiSturing: function (rol, i) { return [['week', 'mt', 'datakwaliteit'][i % 3], i % 4 === 3 ? { vers: true, stap: -1 } : {}]; },
+  apiSturingBevriezen: function () { return []; },
   apiTaakOpslaan: function (rol) { var t = eigenRij('Acties', rol); return [{ id: t.id, prio: 'laag', _oud: { prio: t.prio } }]; },
   apiTaak: function (rol) { return [eigenId('Acties', rol)]; },
   apiTaakWeergavenOpslaan: function () { return [[{ naam: 'Fuzz', filter: { tag: 'rooster', weergave: 'komende', mijn: true } }]]; },
@@ -203,7 +223,7 @@ function generiek(api, params, rol) {
     return 'test';
   });
 }
-function basisArgs(api, params, rol) { return BASIS[api] ? BASIS[api](rol) : generiek(api, params, rol); }
+function basisArgs(api, params, rol, i) { return BASIS[api] ? BASIS[api](rol, i) : generiek(api, params, rol); }  // v7.9: i = de aanroep in het blok (varianten)
 
 /* ---------- mutaties ---------- */
 function objectParams(params, args) { var o = []; params.forEach(function (p, i) { if (isObj(args[i])) o.push(i); }); return o; }
@@ -288,7 +308,7 @@ function blok(api, params, rol) {
   var st = { api: api, rol: rol.code, n: 0, ok: 0, net: 0, intern: 0, lek: 0, verdacht: 0, basisOk: null, ms: 0 }, tB = Date.now();
   for (var i = 0; i < n; i++) {
     herstel();
-    var basis = basisArgs(api, params, rol), args, strategie;
+    var basis = basisArgs(api, params, rol, i), args, strategie;
     if (i === 0) { args = basis; strategie = 'basis'; }
     else if (!params.length) { args = [[atoom(rnd)], [{ onbekend: 1 }], [[1, 2]]][i - 1]; strategie = 'extra-argument'; }
     else { var mu = muteer(api, params, rol, basis, rnd); args = mu.args; strategie = mu.strategie; }
