@@ -38,8 +38,9 @@ RENDER_BUDGET = [  # (naam, klik-selector, voorwaarde dat het scherm gevuld is, 
     ('Bezetting alle vacatures', '[data-bopen="0"]', '[data-bopen="0"].aan', 1000),  # v7.8: alle kaarten met al hun kandidaatrijen (±740 statuspillen; vóór v7.8 selects: 1,4 s, nu ±0,7 s → budget 1,5× de nameting, zodat een terugval naar de selects rood wordt)
     ('Financiën', '[data-naarfinancien]', '#finInhoud table.fin tbody, #finInhoud .leeg', 1050),
 ]
-# v7.9: de render van het MT-overzicht op praktijkschaal (desktop, zonder CPU-rem; de cijfers rekent de demo-backend in dezelfde pagina): ±2× de nameting van v7.9
-RENDER_DESKTOP = [('Rapporten MT', '[data-rweergave="mt"]', '.mt .mt-blok', 2500)]
+# v7.9: de render van het MT-overzicht op praktijkschaal (desktop, zonder CPU-rem; de cijfers rekent de demo-backend in dezelfde pagina). Nameting v7.9:
+# mediaan 60–90 ms over vijf runs; budget ±3× die nameting, zodat een terugval (bijvoorbeeld de cijfers per regel opnieuw rekenen) rood wordt
+RENDER_DESKTOP = [('Rapporten MT', '[data-rweergave="mt"]', '.mt .mt-blok', 250)]
 STAPPEN_TELEFOON = [('Relaties', 'nav button[data-view="relaties"]'), ('Taken', '#crmTabs [data-crmtab="taken"]'), ('Rapporten', '#crmTabs [data-crmtab="rapport"]'), ('Rapporten Week', '[data-rweergave="week"]'),  # v7.9: Week = één aanroep apiSturing
                     ('Projecten', 'nav button[data-view="trajecten"]'), ('Bezetting', '[data-pweergave="bezetting"]'), ('Vandaag', 'nav button[data-view="vandaag"]')]
 STAPPEN_DESKTOP = [('Taken', '.zb-item[data-desk="taken"]'), ('Rapporten', '.zb-item[data-desk="rapporten"]'), ('Rapporten Week', '[data-rweergave="week"]'), ('Rapporten MT', '[data-rweergave="mt"]'),  # v7.9: Week en MT elk één aanroep (diepte 1)
