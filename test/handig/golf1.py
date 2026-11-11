@@ -18,8 +18,8 @@ def muis(pg, sel, doel, dy=60):
     a=pg.locator(sel).first.bounding_box(); b=pg.locator(doel).first.bounding_box()
     pg.mouse.move(a['x']+12,a['y']+10); pg.mouse.down(); pg.mouse.move(a['x']+30,a['y']+25,steps=4)
     pg.mouse.move(b['x']+b['width']/2,b['y']+min(dy,b['height']/2),steps=12); pg.wait_for_timeout(100); pg.mouse.up(); pg.wait_for_timeout(1200)
-def toastklik(pg, naam):
-    try: pg.click('#toast.aan [data-toastactie]', timeout=4000); pg.wait_for_timeout(1200); return True
+def toastklik(pg, naam, knop='[data-toastactie]'):  # v7.9: knop = welke knop in de melding (bij een kans [data-toastactie="0"] = Ongedaan maken)
+    try: pg.click('#toast.aan ' + knop, timeout=4000); pg.wait_for_timeout(1200); return True
     except Exception: ok(naam+' (geen toast-knop; toast=%r)' % pg.inner_text('#toast')[:80], False); return False
 DATUM=os.environ.get('GOLF1_DATUM','')  # v7.3: gefakete dag (10:00 lokale tijd), leeg = de systeemdatum
 KLOK="""(function(){var echt=Date,echtNow=Date.now,offset=new echt(%d,%d,%d,10,0).getTime()-echtNow();
@@ -36,8 +36,8 @@ with sync_playwright() as p:
     # 1 + 6: ongedaan maken en toetsenbord op de pipeline (Lars)
     c,pg=nieuw(b,'lars'); pg.click('.zb-item[data-desk="pipeline"]'); pg.wait_for_selector('.bord .kaartje.sleepbaar')
     sel='[data-sleep="kans:k16"]'; van=kol(pg,sel); muis(pg, sel, '[data-sleepdoel="kans:lead"]')
-    ok('1 slepen kans', kol(pg,sel)=='kans:lead'); ok('1 toast heeft Ongedaan maken', pg.locator('#toast.aan [data-toastactie]').count()==1)
-    toastklik(pg,'1 ongedaan'); ok('1 ongedaan zet terug', kol(pg,sel)==van)
+    ok('1 slepen kans', kol(pg,sel)=='kans:lead'); ok('1 toast heeft Ongedaan maken en Andere datum (v7.9)', pg.locator('#toast.aan [data-toastactie]').count()==2 and 'Ongedaan' in pg.inner_text('#toast.aan [data-toastactie="0"]'))
+    toastklik(pg,'1 ongedaan','[data-toastactie="0"]'); ok('1 ongedaan zet terug', kol(pg,sel)==van)  # v7.9 (N3): index 0 = Ongedaan maken, 1 = Andere datum
     pg.locator(sel).focus(); pg.keyboard.press('ArrowLeft'); pg.wait_for_timeout(1200); ok('6 ← verplaatst kans een kolom', kol(pg,sel)=='kans:lead'); ok('6 focus blijft op kaart', pg.evaluate("document.activeElement.getAttribute('data-sleep')")=='kans:k16')
     pg.keyboard.press('ArrowRight'); pg.wait_for_timeout(1200); ok('6 → terug', kol(pg,sel)==van)
     pg.keyboard.press('Enter'); pg.wait_for_selector('.d-naam h2'); ok('6 Enter opent kans', True)

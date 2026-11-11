@@ -38,9 +38,12 @@ RENDER_BUDGET = [  # (naam, klik-selector, voorwaarde dat het scherm gevuld is, 
     ('Bezetting alle vacatures', '[data-bopen="0"]', '[data-bopen="0"].aan', 1000),  # v7.8: alle kaarten met al hun kandidaatrijen (±740 statuspillen; vóór v7.8 selects: 1,4 s, nu ±0,7 s → budget 1,5× de nameting, zodat een terugval naar de selects rood wordt)
     ('Financiën', '[data-naarfinancien]', '#finInhoud table.fin tbody, #finInhoud .leeg', 1050),
 ]
-STAPPEN_TELEFOON = [('Relaties', 'nav button[data-view="relaties"]'), ('Taken', '#crmTabs [data-crmtab="taken"]'), ('Rapporten', '#crmTabs [data-crmtab="rapport"]'),
+# v7.9: de render van het MT-overzicht op praktijkschaal (desktop, zonder CPU-rem; de cijfers rekent de demo-backend in dezelfde pagina): ±2× de nameting van v7.9
+RENDER_DESKTOP = [('Rapporten MT', '[data-rweergave="mt"]', '.mt .mt-blok', 2500)]
+STAPPEN_TELEFOON = [('Relaties', 'nav button[data-view="relaties"]'), ('Taken', '#crmTabs [data-crmtab="taken"]'), ('Rapporten', '#crmTabs [data-crmtab="rapport"]'), ('Rapporten Week', '[data-rweergave="week"]'),  # v7.9: Week = één aanroep apiSturing
                     ('Projecten', 'nav button[data-view="trajecten"]'), ('Bezetting', '[data-pweergave="bezetting"]'), ('Vandaag', 'nav button[data-view="vandaag"]')]
-STAPPEN_DESKTOP = [('Taken', '.zb-item[data-desk="taken"]'), ('Rapporten', '.zb-item[data-desk="rapporten"]'), ('Bezetting', '.zb-item[data-desk="bezetting"]'),
+STAPPEN_DESKTOP = [('Taken', '.zb-item[data-desk="taken"]'), ('Rapporten', '.zb-item[data-desk="rapporten"]'), ('Rapporten Week', '[data-rweergave="week"]'), ('Rapporten MT', '[data-rweergave="mt"]'),  # v7.9: Week en MT elk één aanroep (diepte 1)
+                   ('Bezetting', '.zb-item[data-desk="bezetting"]'),
                    ('Projecten', '.zb-item[data-desk="projecten"]'), ('Contacten', '.zb-item[data-desk="contacten"]'), ('Home', '.zb-item[data-desk="home"]')]
 
 # In de pagina: elke POST /api met fn, start en einde (performance.now), het moment dat Vandaag/Home gevuld is, en JS-fouten.
@@ -153,7 +156,17 @@ def deel2_demo(b, base, runs, uit):
             t1 = pg.evaluate("new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(function () { r(performance.now()); }); }); })")
             uit['render'].setdefault(naam, []).append(t1 - t0)
         uit['fouten'].extend(fouten_van(pg, console)); uit['load'].append(belasting()); ctx.close()
-        print('  deel 2 demo run %d/%d: %s, load %s' % (i + 1, runs, ', '.join('%s %d' % (n, uit['render'][n][-1]) for n, _, _, _ in RENDER_BUDGET), uit['load'][-1]), flush=True)
+        # v7.9: het MT-overzicht (alleen desktop) op praktijkschaal
+        console = []; ctx, pg = context_maken(b, base, False, console, demo=True)
+        pg.goto(url); pg.wait_for_selector('#homeInhoud .hkaart', timeout=120000); pg.wait_for_timeout(1500)
+        pg.click('.zb-item[data-desk="rapporten"]'); pg.wait_for_selector('#crmInhoud .tabel', timeout=60000); pg.wait_for_timeout(800)
+        for naam, sel, cond, _ in RENDER_DESKTOP:
+            t0 = pg.evaluate("(function (s) { var e = document.querySelector(s); if (!e) throw new Error('geen ' + s); var t = performance.now(); e.click(); return t; })(%s)" % json.dumps(sel))
+            pg.wait_for_function("(s) => !!document.querySelector(s)", arg=cond, timeout=60000)
+            t1 = pg.evaluate("new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(function () { r(performance.now()); }); }); })")
+            uit['render'].setdefault(naam, []).append(t1 - t0)
+        uit['fouten'].extend(fouten_van(pg, console)); ctx.close()
+        print('  deel 2 demo run %d/%d: %s, load %s' % (i + 1, runs, ', '.join('%s %d' % (n, uit['render'][n][-1]) for n, _, _, _ in RENDER_BUDGET + RENDER_DESKTOP), uit['load'][-1]), flush=True)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -190,9 +203,9 @@ def main():
             if d > grens: slecht.append('%s %d (%s)' % (naam, d, ', '.join(lijst[-1]['aanroepen'])))
             print('        %-24s diepte %d (budget %d), %d api-aanroepen: %s' % (naam, d, grens, n, ', '.join(lijst[-1]['aanroepen']) or '—'))
         oordeel(not slecht, '%-56s %s' % (BUDGET['diepte'][2], 'te diep: ' + '; '.join(slecht) if slecht else 'alle schermen binnen het budget'))
-    for naam, _, _, grens in RENDER_BUDGET:
+    for naam, _, _, grens in RENDER_BUDGET + RENDER_DESKTOP:
         if naam in uit['render']:
-            m = mediaan(uit['render'][naam]); oordeel(m <= grens * (1 + a.marge / 100), '%-56s mediaan %5d ms  p95 %5d  budget %d (+%d %%)' % ('demo groot, telefoon: ' + naam, m, p95(uit['render'][naam]), grens, a.marge))
+            m = mediaan(uit['render'][naam]); oordeel(m <= grens * (1 + a.marge / 100), '%-56s mediaan %5d ms  p95 %5d  budget %d (+%d %%)' % (('demo groot, desktop: ' if (naam, ) in [(x[0], ) for x in RENDER_DESKTOP] else 'demo groot, telefoon: ') + naam, m, p95(uit['render'][naam]), grens, a.marge))
     oordeel(not uit['fouten'], '%-56s %d%s' % (BUDGET['fouten'][2], len(uit['fouten']), (': ' + '; '.join(uit['fouten'][:3])) if uit['fouten'] else ''))
     if a.json:
         with open(a.json, 'w') as f: json.dump(uit, f, ensure_ascii=False, indent=1)

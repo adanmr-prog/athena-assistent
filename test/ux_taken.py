@@ -70,6 +70,7 @@ def t_kans_gewonnen(m):
     else: m.tik('.zb-item[data-desk="pipeline"]')
     m.tik('[data-crm-open^="kans:"]')
     m.kies('[data-kansfase]', 'gewonnen')
+    m.typ('#vf-contractwaarde', '12000')  # v7.9 (punt 4): de getekende contractwaarde is verplicht (de akkoorddatum staat al op vandaag)
     m.typ('#vf-aantal', '2'); m.typ('#vf-startdatum', '2026-11-02')
     m.tik('#venster [data-cf-opslaan]')
     m.wacht('.t-item:has-text("gewonnen")')

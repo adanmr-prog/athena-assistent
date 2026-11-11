@@ -50,6 +50,9 @@ def log_api(r):
         except Exception: pass
 def api_vanaf(n, *fns): return [x for x in API_LOG[n:] if x.get('fn') in fns]
 def eerste_arg(x): return x['args'][0] if isinstance(x.get('args'), list) and x['args'] and isinstance(x['args'][0], dict) else {}
+import datetime as _dt
+def dag(n): return (_dt.date.today() + _dt.timedelta(days=n)).isoformat()  # v7.9: datums relatief aan vandaag (zoals de mock)
+DIALOGEN = []  # v7.9: elk dialoogtype op de hoofdpagina; verloren gaat niet meer via window.prompt
 
 def sleep_naar(pg, kaart, kolom):  # v6.7: kaart met de muis naar een andere kolom slepen
     a = pg.locator(kaart).bounding_box(); b = pg.locator(kolom).bounding_box()
@@ -291,6 +294,9 @@ with sync_playwright() as p:
     page.fill('#apiInput', 'http://127.0.0.1:8765/api'); page.fill('#codeInput', 'test123'); page.click('#codeOpslaan')
     page.wait_for_selector('#kpis .tegel'); page.wait_for_timeout(500)
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
+    # v7.9 "v7.9 labels" (punt 17): één definitie per naam — contractwaarde (niet omzet) en open waarde (niet "in de pijplijn"); runKern stuurt v mee
+    assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
+    assert all(x.get('v') == '7.9' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
     assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
     # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is
@@ -421,7 +427,7 @@ with sync_playwright() as p:
     page.wait_for_selector('.d-naam h2:has-text("Surveillance")'); page.click('[data-crm-terug]'); page.wait_for_selector('#view-trajecten.actief')
     page.screenshot(path=OUT + '/08_trajecten_nieuw.png', full_page=True)
     # v2.0: Relaties (CRM)
-    page.on('dialog', lambda dl: dl.accept('Te duur') if dl.type == 'prompt' else dl.accept())
+    page.on('dialog', lambda dl: (DIALOGEN.append(dl.type), dl.accept()))  # v7.9: de prompt bij verloren vervalt (verlorenvenster); alleen confirm blijft
     page.click('nav button[data-view="relaties"]'); page.wait_for_selector('#crmInhoud [data-crm-open="school:s1"]'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/11_relaties_scholen.png', full_page=True)
     page.fill('#crmZoek', 'lyceum'); page.wait_for_timeout(150); assert page.locator('#crmInhoud [data-crm-open^="school:"]').count() == 1, 'zoeken op school'
@@ -459,12 +465,27 @@ with sync_playwright() as p:
     page.wait_for_timeout(300); page.click('[data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Intussen gewijzigd")'); page.wait_for_timeout(600)
     assert 'Vlaardingen' in page.inner_text('.d-sub'), 'scherm ververst met de wijziging van de collega'
     page.click('[data-composer="bewerk"]'); page.fill('#cf-bestuur', 'Stichting Nieuw'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.d-sub:has-text("Stichting Nieuw")')
+    # v7.9 (punt 6) "v7.9 BRIN in het schoolvenster": een ongeldige BRIN geeft een Nederlandse melding; kleine letters worden hoofdletters, de vestiging 00
+    page.click('[data-composer="bewerk"]'); page.fill('#cf-brin', '9z'); page.click('[data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("BRIN-nummer is twee cijfers")')
+    page.fill('#cf-brin', '99zq'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.d-links:has-text("99ZQ-00")')
     page.click('[data-archief]'); page.wait_for_selector('#archiefTijdlijn .t-item')
     page.go_back(); page.wait_for_selector('#crmLijstScherm [data-crmtab]'); page.wait_for_timeout(150)
     page.click('[data-crmtab="pipeline"]'); page.wait_for_selector('.kolom'); page.wait_for_timeout(200)
     page.screenshot(path=OUT + '/13_pipeline.png', full_page=True)
+    assert [page.inner_text('#crmInhoud .tegels.drie .tegel:nth-child(%d) .t-label' % i) for i in (1, 2, 3)] == ['Open kansen', 'Open waarde', 'Gewogen pijplijn'], 'v7.9 (punt 17): pipelinebord met open en gewogen'
     page.click('.kaartje[data-crm-open="kans:k1"]'); page.wait_for_selector('[data-kansfase]'); page.wait_for_timeout(150)
+    # v7.9 (punt 2) "v7.9 werkelijke datum in de kansdetail": het datumveld staat vóór de keuzelijst (die slaat meteen op); de wissel krijgt die datum en bron detail
+    assert page.evaluate("(function () { var d = document.querySelector('[data-kansfasedatum=\"k1\"]'), s = document.querySelector('[data-kansfase=\"k1\"]'); return !!(d && s && (d.compareDocumentPosition(s) & 4)); })()"), 'het datumveld staat vóór de keuzelijst'
+    assert page.get_attribute('[data-kansfasedatum="k1"]', 'max') == dag(0) and page.input_value('[data-kansfasedatum="k1"]') == dag(0), 'datumveld: standaard vandaag, max vandaag'
+    n0 = len(API_LOG); page.fill('[data-kansfasedatum="k1"]', dag(1)); page.select_option('[data-kansfase]', 'onderhandeling'); page.wait_for_selector('#toast.aan:has-text("in de toekomst")'); page.wait_for_timeout(200)
+    assert not api_vanaf(n0, 'apiKansOpslaan') and page.input_value('[data-kansfase]') == 'voorstel', 'een datum in de toekomst: melding zonder aanroep, de keuze terug'
+    page.fill('[data-kansfasedatum="k1"]', dag(-1)); n0 = len(API_LOG)
     page.select_option('[data-kansfase]', 'onderhandeling'); page.wait_for_selector('.t-item:has-text("voorstel → onderhandeling")'); page.wait_for_timeout(150)
+    w = eerste_arg(api_vanaf(n0, 'apiKansOpslaan')[0]).get('wissel') or {}; assert w.get('datum') == dag(-1) and w.get('bron') == 'detail', 'de wissel krijgt de datum uit het veld en bron detail: %s' % w
+    page.wait_for_selector('#toast.aan [data-toastactie="1"]'); assert page.locator('#toast.aan [data-toastactie]').count() == 2 and 'Andere datum' in page.inner_text('#toast [data-toastactie="1"]'), 'de melding heeft Ongedaan maken en Andere datum'
+    page.click('#toast.aan [data-toastactie="1"]'); page.wait_for_selector('#venster.aan #vf-datum'); page.fill('#vf-datum', dag(-2)); n0 = len(API_LOG); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Datum van de mijlpaal")')
+    a = api_vanaf(n0, 'apiFasewisselDatum'); assert a and a[0]['args'][1] == dag(-2), 'Andere datum roept apiFasewisselDatum aan met de nieuwe datum: %s' % a
+    page.wait_for_selector('.fw-lijst [data-fwdatum]'); assert page.locator('.fw-lijst .fw-regel').count() >= 3, 'de kansdetail toont de mijlpalen als gebeurtenissen'
     page.click('[data-composer="track"]'); page.click('[data-cf-opslaan]'); page.wait_for_timeout(500)
     page.screenshot(path=OUT + '/14_kans_detail.png', full_page=True)
     page.click('[data-crm-terug]'); page.wait_for_selector('.kolom'); page.wait_for_timeout(100)
@@ -537,12 +558,31 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/16b_rapport_alle_teams.png', full_page=True)
     page.click('#crmBalk [data-rteam="consultancy"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Forecast")')
     page.click('[data-crmpreset="maand"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Verloop per maand")')
+    # v7.9 "v7.9 Rapporten: weergaven" (punt 19, 8): Teams en Week op de telefoon (MT alleen op desktop); de schakelaar Definities zonder herladen
+    assert page.locator('#crmBalk [data-rweergave]').count() == 2 and page.get_attribute('#crmBalk [data-rweergave="teams"]', 'aria-pressed') == 'true' and page.locator('#crmBalk [role="group"] [data-rweergave="week"]').count() == 1, 'weergaven Teams en Week (role=group, aria-pressed)'
+    assert page.locator('#crmInhoud .kop:has-text("Open waarde per mijlpaal")').count() == 1, 'v7.9 (punt 17): open waarde per mijlpaal'
+    n0 = len(API_LOG); page.click('#crmBalk [data-defs]'); page.wait_for_selector('body.defs-aan .doel-rij .t-def:has-text("contractwaarde")'); assert not api_vanaf(n0, 'apiCijfers', 'apiTeamRapport'), 'Definities aan zonder nieuwe aanroep (het register kwam één keer per sessie)'
+    assert len(api_vanaf(0, 'apiCijfers')) == 1 and api_vanaf(0, 'apiCijfers')[0]['args'][0].get('kort') is True, 'het register één keer per sessie, kort'
+    # "v7.9 datakwaliteit in Rapporten" (punt 11): per eigenaar, met een doorklik (tabindex 0, role link); management kan opnieuw rekenen
+    page.wait_for_selector('#dqBlok'); assert page.locator('.dq-eigenaar').count() >= 1 and page.locator('.dq-regel[data-crm-open][tabindex="0"][role="link"]').count() >= 1, 'datakwaliteit per eigenaar met doorklik'
+    page.locator('.dq-eigenaar summary').first.click(); page.click('[data-dqvers]'); page.wait_for_selector('#toast.aan:has-text("opnieuw gerekend")')
+    assert eerste_arg({'args': api_vanaf(0, 'apiSturing')[-1]['args'][1:]}).get('vers') is True, 'Nu opnieuw rekenen vraagt vers'
+    page.click('#crmBalk [data-rweergave="week"]'); page.wait_for_selector('#crmInhoud .week-kaart'); assert page.locator('#crmInhoud .week-kaart').count() >= 2 and page.locator('#crmInhoud .week-kaart.team').count() == 1, 'Week: per OC een kaart en het teamtotaal'
+    assert page.locator('#crmInhoud .week-kaart .t-def:has-text("contactvorm")').count() >= 1 and page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), 'Week: definities zichtbaar, geen horizontale scroll op 390 px'
+    page.click('.periode-nav [data-rstap="-1"]'); page.wait_for_selector('.periode-nav [data-rstap="nu"]'); assert api_vanaf(0, 'apiSturing')[-1]['args'][1].get('stap') == -1, 'Week: bladeren naar de vorige week'
+    page.click('.periode-nav [data-rstap="nu"]'); page.wait_for_selector('.periode-nav [data-rstap="nu"]', state='detached')
+    page.screenshot(path=OUT + '/16d_rapport_week.png', full_page=True)
+    page.click('#crmBalk [data-defs]'); page.wait_for_selector('body:not(.defs-aan)'); page.click('#crmBalk [data-rweergave="teams"]'); page.wait_for_selector('#crmInhoud .kop:has-text("Forecast")')
     page.click('[data-beheer="gebruikers"]'); page.wait_for_selector('#cf-naam'); page.fill('#cf-naam', 'Sanne'); page.fill('#cf-email', 'sanne@voorbeeld.nl'); page.select_option('#cf-team', 'consultancy'); page.select_option('#cf-rol', 'teamlead'); page.click('[data-cf-opslaan]'); page.wait_for_selector('.codevak'); page.wait_for_timeout(150)
     page.screenshot(path=OUT + '/17_beheer_gebruikers.png', full_page=True)
     page.click('[data-gbewerk="g1"]'); page.wait_for_selector('#venster.aan #vf-naam'); page.fill('#vf-naam', 'Mees de Jong'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#crmBeheer:has-text("Mees de Jong")')  # v3.7
     page.click('[data-beheer="keuzelijsten"]'); page.wait_for_selector('#le-schoolStatussen .le-rij'); page.locator('#le-schoolStatussen .le-rij input').first.fill('nieuw'); page.fill('#cf-schooljaar', '2027-2028'); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Keuzelijsten opgeslagen")')
     page.click('[data-beheer="mijlpalen"]'); page.wait_for_selector('#leMijlpalen .le-rij'); page.click('[data-le-erbij="leMijlpalen"]'); inp = page.locator('#leMijlpalen .le-rij').last.locator('input')
-    inp.nth(0).fill('Scholen'); inp.nth(1).fill('contract'); inp.nth(2).fill('90'); inp.nth(3).fill('5'); page.screenshot(path=OUT + '/17b_beheer_mijlpalen.png', full_page=True); page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Mijlpalen opgeslagen")')
+    inp.nth(0).fill('Scholen'); inp.nth(1).fill('contract'); inp.nth(2).fill('90'); inp.nth(3).fill('5'); page.screenshot(path=OUT + '/17b_beheer_mijlpalen.png', full_page=True)
+    assert page.locator('#leMijlpalen [data-le="rol"]').count() >= 5 and page.locator('#crmBeheer datalist#dl-rollen option').count() == 4, 'v7.9 (punt 3): een kolom Rol met de keuzes lead, ap, ad, voorstel'
+    page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#venster.aan #vf-onderbouwing')  # v7.9 (N6): een nieuw gewicht vraagt eerst onderbouwing en besluitdatum
+    page.fill('#vf-onderbouwing', 'Testgewicht voor de mijlpaal contract'); n0 = len(API_LOG); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Mijlpalen opgeslagen")')
+    a = api_vanaf(n0, 'apiMijlpalenOpslaan'); assert a and a[0]['args'][1].get('onderbouwing') and a[0]['args'][1].get('besluitdatum') == dag(0) and all('rol' in m for m in a[0]['args'][0]), 'mijlpalen met rol, onderbouwing en besluitdatum: %s' % a[0]['args'][1]
     page.click('[data-beheer="tags"]'); page.wait_for_selector('#crmBeheer [data-hernoem]')
     page.click('[data-beheer="talentrun"]'); page.wait_for_selector('#toast.aan:has-text("Talentrun klaar")')  # v5.0
     # v7.7: Talenten importeren uit XPS (management via de Beheer-kaart: de uitkomst in een venster)
@@ -562,8 +602,13 @@ with sync_playwright() as p:
     page.click('#venster [data-cf-annuleer]'); page.wait_for_timeout(400); assert page.locator('.t-item:has-text("→ gewonnen")').count() == 0, 'annuleren wint de kans niet'
     page.wait_for_selector('[data-kansfase]'); page.select_option('[data-kansfase]', 'gewonnen'); page.wait_for_selector('#venster.aan #vf-aantal')
     page.click('#venster [data-cf-opslaan]'); page.wait_for_timeout(200); assert page.locator('#venster.aan #vf-aantal').count() == 1, 'zonder aantal en startdatum blijft het formulier open'
+    # v7.9 (punt 4) "v7.9 winformulier met getekende waarde": eerst zonder getekende waarde (melding, venster blijft open), dan met; de akkoorddatum staat op vandaag
+    assert page.input_value('#vf-akkoorddatum') == dag(0) and page.get_attribute('#vf-akkoorddatum', 'max') == dag(0), 'akkoorddatum: standaard vandaag, max vandaag'
     page.fill('#vf-aantal', '2'); page.fill('#vf-startdatum', '2026-11-16'); page.fill('#vf-rooster', 'di en do 9-13 uur'); page.click('#venster [data-cf-opslaan]')
+    page.wait_for_selector('#toast.aan:has-text("getekende contractwaarde")'); assert page.locator('#venster.aan #vf-contractwaarde').count() == 1, 'zonder getekende waarde blijft het winformulier open'
+    page.fill('#vf-contractwaarde', '8250'); n0 = len(API_LOG); page.click('#venster [data-cf-opslaan]')
     page.wait_for_selector('.t-item:has-text("→ gewonnen")'); page.wait_for_timeout(150)
+    od = eerste_arg(api_vanaf(n0, 'apiKansOpslaan')[0]).get('overdracht') or {}; assert od.get('contractwaarde') == 8250 and od.get('akkoorddatum') == dag(0), 'het winformulier stuurt de getekende waarde en de akkoorddatum: %s' % od
     page.wait_for_selector('.d-links [data-crm-open^="project:"]'); page.click('.d-links [data-crm-open^="project:"]'); page.wait_for_selector('.t-item:has-text("Overdracht")')  # v3.8: gewonnen = project met overdracht
     page.click('[data-dtab="taskforce"]'); page.wait_for_selector('#dTab .hint:has-text("winformulier")'); assert 'di en do 9-13 uur' in page.inner_text('#dTab'), 'taskforce vooringevuld uit het winformulier'
     page.click('[data-tfplannen]'); page.wait_for_selector('#venster.aan #vf-start'); page.fill('#vf-start', '2026-10-28T10:00'); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#dTab .hint:has-text("Gepland")')
@@ -575,6 +620,14 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/18_kans_gewonnen.png', full_page=True)
     page.click('nav button[data-view="vandaag"]'); page.wait_for_selector('#kansenLijst [data-crm-open]'); page.click('#kansenLijst [data-crm-open="kans:k2"]'); page.wait_for_selector('[data-kansfase]'); page.wait_for_timeout(150)
     assert page.locator('#view-relaties.actief').count() == 1, 'kans vanuit Vandaag opent in Relaties'
+    # v7.9 (punt 15) "v7.9 verlorenvenster": geen window.prompt meer, maar een venster met datum, een reden uit de keuzelijst (verplicht) en een toelichting
+    page.select_option('[data-kansfase]', 'verloren'); page.wait_for_selector('#venster.aan #vf-verliesReden')
+    assert 'opgeschoond' in page.inner_text('#vf-verliesReden') and page.input_value('#vf-datum') == dag(0), 'redenen uit de keuzelijst (met opgeschoond), datum standaard vandaag'
+    page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Kies een reden")'); page.select_option('#vf-verliesReden', 'te duur'); page.fill('#vf-verliesToelichting', 'Budget naar volgend jaar'); n0 = len(API_LOG)
+    page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("verloren")'); page.wait_for_selector('#toast.aan [data-toastactie="1"]')
+    o = eerste_arg(api_vanaf(n0, 'apiKansOpslaan')[0]); assert o.get('verliesReden') == 'te duur' and o.get('verliesToelichting') == 'Budget naar volgend jaar' and (o.get('wissel') or {}).get('datum') == dag(0), 'verloren: reden, toelichting en datum: %s' % o
+    assert 'prompt' not in DIALOGEN, 'geen window.prompt bij verloren'
+    page.click('#toast.aan [data-toastactie="0"]'); page.wait_for_selector('#toast.aan:has-text("Teruggezet naar gesprek")'); page.wait_for_function("() => (document.querySelector('[data-kansfase]') || {}).value === 'gesprek'")  # B2: Ongedaan maken zet de vlag
     page.click('#instellingenKnop'); page.wait_for_selector('#statusInfo .k-rij'); page.wait_for_timeout(200)
     page.click('#statusInfo [data-herinneringen="0"]'); page.wait_for_selector('#statusInfo [data-herinneringen="1"]:has-text("Uit")')  # v4.6: herinneringsmail uitzetten
     page.click('#statusInfo [data-herinneringen="1"]'); page.wait_for_selector('#statusInfo [data-herinneringen="0"]:has-text("Aan")')
@@ -628,6 +681,17 @@ with sync_playwright() as p:
     page.locator('[data-sleep="%s"]' % kid).focus(); page.keyboard.press('ArrowRight' if page.eval_on_selector_all('[data-sleepdoel^="kans:"]', "l => l.map(e => e.getAttribute('data-sleepdoel'))").index(van) == 0 else 'ArrowLeft'); page.wait_for_timeout(500)
     assert page.locator('[data-sleepdoel="%s"] [data-sleep="%s"]' % (van, kid)).count() == 0, 'v6.8: kaart met de pijltjestoetsen verplaatsen'
     page.screenshot(path=OUT + '/25_desk_pipeline.png')
+    # v7.9 (punt 5, R14) "v7.9 voorstelvenster na slepen": k3 (zonder tekendatum) naar voorstel: het venster opent vóór de aanroep met de kaart voorlopig in de
+    # nieuwe kolom; Annuleren zet hem terug zonder aanroep; Overslaan doet één aanroep met alleen de fase en bron slepen; de focus staat daarna op de kaart
+    page.wait_for_timeout(600); n0 = len(API_LOG)
+    sleep_naar(page, '[data-sleep="kans:k3"]', '[data-sleepdoel="kans:voorstel"]'); page.wait_for_selector('#venster.aan #vf-verwachteSluiting')
+    assert page.locator('[data-sleepdoel="kans:voorstel"] [data-sleep="kans:k3"]').count() == 1 and page.locator('#venster #vf-waarde').count() == 0 and not api_vanaf(n0, 'apiKansOpslaan'), 'voorstelvenster vóór de aanroep, alleen het lege veld, kaart voorlopig verplaatst'
+    page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden'); page.wait_for_timeout(300)
+    assert page.locator('[data-sleepdoel="kans:voorstel"] [data-sleep="kans:k3"]').count() == 0 and not api_vanaf(n0, 'apiKansOpslaan'), 'Annuleren: kaart terug, geen aanroep'
+    sleep_naar(page, '[data-sleep="kans:k3"]', '[data-sleepdoel="kans:voorstel"]'); page.wait_for_selector('#venster.aan [data-voorstelovers]'); page.click('#venster [data-voorstelovers]')
+    page.wait_for_selector('#toast.aan:has-text("→ voorstel")'); page.wait_for_timeout(300); a = api_vanaf(n0, 'apiKansOpslaan')
+    assert len(a) == 1 and eerste_arg(a[0]).get('wissel', {}).get('bron') == 'slepen' and 'verwachteSluiting' not in eerste_arg(a[0]), 'Overslaan: één aanroep met fase en bron slepen: %s' % a
+    assert page.evaluate("document.activeElement && document.activeElement.getAttribute('data-sleep')") == 'kans:k3', 'na het venster de focus op de kaart in het nieuwe bord'
     page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]'); page.wait_for_timeout(150)  # v4.0: bord per accountmanager
     page.select_option('.ftabel [data-pveld="verlenging"][data-pid="t2"]', 'verlengd'); page.wait_for_selector('.ftabel select.pill.p-verlengd[data-pid="t2"]')
     assert page.locator('.ftabel a.p-link[href^="https://docs.google.com"]').count() >= 1, 'link naar samenwerkingsvoorstel'
@@ -677,6 +741,16 @@ with sync_playwright() as p:
     page.click('[data-finkas="1"]'); page.wait_for_selector('[data-finkas="1"].aan')
     page.screenshot(path=OUT + '/29b_desk_financien.png')
     page.click('.zb-item[data-desk="rapporten"]'); page.wait_for_selector('.tabel'); page.wait_for_timeout(150)
+    # v7.9 (punt 20, 21): het MT-overzicht (alleen desktop) met de definitie bij elk cijfer, geblokkeerd zonder jaardoel, een tussenstand, de maandstand, afdrukken en de link
+    page.click('#crmBalk [data-rweergave="mt"]'); page.wait_for_selector('.mt .mt-blok'); assert page.locator('.mt .mt-regel .t-def').count() == page.locator('.mt .mt-regel').count(), 'MT: elk cijfer met zijn definitie'
+    assert page.locator('.mt .mt-regel:has(.mt-m:text-is("M01")) .mt-geblokkeerd:has-text("besluit jaardoel")').count() == 1 and page.locator('.mt .mt-regel:has(.mt-m:text-is("M01")) .mt-waarde').count() == 0 and page.locator('.mt .tag.geblokkeerd').count() >= 1, 'MT: zonder jaardoel geblokkeerd, nooit een geschat getal'
+    page.click('[data-mtbevries]'); page.wait_for_selector('#toast.aan:has-text("Tussenstand")'); page.wait_for_selector('#mtStand option[value="%s"]' % dag(0), state='attached'); assert page.locator('[data-mtbevries]').count() == 0, 'MT: hoogstens één tussenstand per dag'
+    page.select_option('#mtStand', '2026-10'); page.wait_for_selector('.mt .hint:has-text("bevroren maandstand")')
+    page.evaluate("window.print = function () { window.__geprint = (window.__geprint || 0) + 1; }"); page.click('[data-mtprint]'); assert (page.evaluate("window.__geprint") or 0) >= 1, 'MT: Afdrukken'
+    page.emulate_media(media='print'); assert not page.locator('#zijbalk').is_visible() and page.locator('.mt-print-kop').is_visible(), 'print: zonder zijbalk, met de kop van het maanddocument'; page.emulate_media(media='screen')
+    page.click('[data-mtlink]'); page.wait_for_timeout(300)
+    page.screenshot(path=OUT + '/30_desk_mt.png', full_page=True)
+    page.select_option('#mtStand', ''); page.wait_for_selector('.mt .hint:has-text("live")'); page.click('#crmBalk [data-rweergave="teams"]'); page.wait_for_selector('.tabel')
     page.click('.zb-item[data-desk="doelen"]'); page.wait_for_selector('#doelenInhoud .doel-rij'); page.wait_for_timeout(150)
     page.click('#doelenInhoud [data-doelteam="accountmanagement"]'); page.wait_for_selector('#doelenInhoud .hkaart:has-text("Joris") .doel-rij')  # v4.2: doelen per team
     page.screenshot(path=OUT + '/27_desk_doelen.png')
@@ -792,6 +866,15 @@ with sync_playwright() as p:
     pp.goto('http://127.0.0.1:8765/?t=verkeerdtoken12345678&api=http%3A%2F%2F127.0.0.1%3A8765%2Fapi'); pp.wait_for_selector('#portaalKop:has-text("werkt niet meer")')
     ctx4.close()
     scenario_bezetting_per_project(b)  # v7.5: eigen context, zodat de keuze Per project (localStorage) de stappen hierboven niet raakt
+    # v7.9 (R13) "v7.9 oude backend": apiCrm zonder backendVersie (Code.gs nog 7.8) → de app verbergt Week, MT en de Beheer-knoppen van v7.9, zonder foutmelding
+    assert mock_post({'fn': '_backendVersie', 'args': ['7.8']}).get('ok'), 'de mock kent _backendVersie'
+    c8 = b.new_context(viewport={'width': 1280, 'height': 800}); p8 = c8.new_page(); fouten8 = []
+    p8.on('pageerror', lambda e: meldingen.append(('pageerror oude backend', str(e))))
+    p8.goto(BASIS + '/'); p8.wait_for_selector('#apiInput'); p8.fill('#apiInput', BASIS + '/api'); p8.fill('#codeInput', 'test123'); p8.click('#codeOpslaan'); p8.wait_for_selector('#homeInhoud .hkaart'); p8.wait_for_timeout(800)
+    p8.click('.zb-item[data-desk="rapporten"]'); p8.wait_for_selector('#crmInhoud .tabel'); p8.wait_for_timeout(500)
+    assert p8.locator('[data-rweergave]').count() == 0 and p8.locator('[data-beheer="cijfers"], [data-beheer="aannames"], [data-beheer="v79"], [data-beheer="werkelijkedatums"]').count() == 0 and p8.locator('#dqBlok').count() == 0, 'oude backend: geen Week, MT, datakwaliteit of v7.9-beheer'
+    assert p8.locator('#toast.aan:has-text("Niet gelukt")').count() == 0, 'oude backend: geen foutmelding'
+    c8.close(); mock_post({'fn': '_reset'})
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

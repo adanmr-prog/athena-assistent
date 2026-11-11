@@ -9,7 +9,7 @@
 # If-None-Match; Chromium bewaart HTTP/1.0-antwoorden met no-store niet in de HTTP-cache, waardoor de service worker alles opnieuw ophaalde),
 # MOCK_PACE=1 (trage 4G in de server zelf: 150 ms per aanvraag en 1,6 Mbit/s als één gedeelde pijp — ook voor de fetches van de service worker,
 # die de netwerkrem van CDP op de pagina niet raakt) en MOCK_HTML_VERTRAAG_MS=<ms> (index.html pas na zo lang als de url ?traag= bevat: hangende server).
-import json, datetime, uuid, copy, os, time, io, gzip, hashlib, threading
+import json, datetime, uuid, copy, os, time, io, gzip, hashlib, threading, re
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 from urllib.parse import urlparse, parse_qs
@@ -503,7 +503,13 @@ def basis():
             'projecten': [{'id': t['id'], 'naam': t['traject'] + ' ' + t['schooljaar'], 'schoolId': t['schoolId'], 'school': t['school'], 'kansId': t['kansId'], 'status': t['status'], 'am': t['am']} for t in TRAJECTEN if eigen_project(t)], 'scholen': scholen, 'personen': [persoon_uit(p) for p in PERSONEN],
             'kansenKort': [{'id': k['id'], 'naam': k['naam'], 'school': k['school'], 'schoolId': k['schoolId']} for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')],  # v4.5
             # v7.9: klantvoorstel (alleen ids), schooljaren, sturingVerplicht, rollen en de versie van de backend
-            'klantIn': {'2025-2026': ['s1', 's2'], '2026-2027': ['s1', 's2']}, 'schooljaren': ['2026-2027', '2027-2028'], 'sturingVerplicht': False, 'rollenIngesteld': True, 'backendVersie': '7.9'}
+            'klantIn': {'2025-2026': ['s1', 's2'], '2026-2027': ['s1', 's2']}, 'schooljaren': ['2026-2027', '2027-2028'], 'sturingVerplicht': False, 'rollenIngesteld': True, 'backendVersie': BACKEND_VERSIE[0]}
+def basis_versie():  # v7.9 (R13): een oudere backend (via _backendVersie) kent de velden van v7.9 niet
+    b = basis()
+    if [int(x) for x in BACKEND_VERSIE[0].split('.')] < [7, 9]:
+        for k in ('backendVersie', 'klantIn', 'schooljaren', 'sturingVerplicht', 'rollenIngesteld'): b.pop(k, None)
+        b['mijlpalen'] = [{x: m[x] for x in m if x != 'rol'} for m in b['mijlpalen']]
+    return b
 def tijdlijn(f): return [act_uit(a) for a in sorted([a for a in ACTIVITEITEN if f(a)], key=lambda a: a['datum'], reverse=True)]
 def opslaan(lijst, o, prefix):
     o = dict(o)
@@ -512,7 +518,7 @@ def opslaan(lijst, o, prefix):
             if x['id'] == o['id']: x.update(o); return x
     o['id'] = prefix + uuid.uuid4().hex[:6]; lijst.append(o); return o
 def handle_crm(fn, args):
-    if fn == 'apiCrm': return basis()
+    if fn == 'apiCrm': return basis_versie()  # v7.9: met _backendVersie een oudere vorm
     if fn == 'apiSchool':
         s = per_id(SCHOLEN)[args[0]]; ps = [p for p in PERSONEN if p['schoolId'] == s['id']]; ks = [k for k in CRMKANSEN if k['schoolId'] == s['id']]
         pids, kids = {p['id'] for p in ps}, {k['id'] for k in ks}
@@ -578,8 +584,13 @@ def handle_crm(fn, args):
             botst = [k for k in oud if norm(cur.get(k)) != norm(oud[k]) and norm(cur.get(k)) != norm(o.get(k))]
             if botst: raise ValueError('Intussen gewijzigd: ' + ', '.join(botst) + ' (laatst bewerkt door Mees om 14:02). Het scherm is ververst; voer je wijziging opnieuw in.')
         if 'tags' in o or not o.get('id'): o['tags'] = [t.strip().lower() for t in str(o.get('tags', '')).split(',') if t.strip()] if isinstance(o.get('tags'), str) else o.get('tags', [])
+        if 'brin' in o or 'vestiging' in o:  # v7.9 (punt 6): dezelfde vorm als brinIn in Code.gs (twee cijfers en twee tekens; vestiging aangevuld tot twee cijfers)
+            b = str(o.get('brin', per_id(SCHOLEN).get(o.get('id'), {}).get('brin', '')) or '').upper().replace(' ', ''); v = str(o.get('vestiging', '') or '').strip()
+            if b and not re.match(r'^\d{2}[A-Z0-9]{2}$', b): raise ValueError('Een BRIN-nummer is twee cijfers en twee tekens, bijvoorbeeld 12AB.')
+            if not b and v: raise ValueError('Vul eerst het BRIN-nummer in; een vestiging hoort bij een BRIN.')
+            o['brin'] = b; o['vestiging'] = ('0' + (v or '0'))[-2:] if b else ''
         o.setdefault('velden', {}); new = not o.get('id')
-        if new: o.update({'status': o.get('status') or 'lead', 'aangemaakt': nu(), 'laatsteContact': ''}); [o.setdefault(k, '') for k in ['plaats', 'type', 'bestuur', 'adres', 'website', 'leerlingen', 'telefoon', 'email', 'notities', 'eigenaar']]
+        if new: o.update({'status': o.get('status') or 'lead', 'aangemaakt': nu(), 'laatsteContact': ''}); [o.setdefault(k, '') for k in ['plaats', 'type', 'bestuur', 'adres', 'website', 'leerlingen', 'telefoon', 'email', 'notities', 'eigenaar', 'brin', 'vestiging']]
         return opslaan(SCHOLEN, o, 's')
     if fn == 'apiPersoonOpslaan':
         o = dict(args[0]); o.pop('_oud', None); o['tags'] = [t.strip() for t in str(o.get('tags', '')).split(',') if t.strip()] if isinstance(o.get('tags'), str) else o.get('tags', [])
@@ -621,10 +632,11 @@ def handle_crm(fn, args):
             o['kans'] = 100 if o['fase'] == 'gewonnen' else 0 if o['fase'] == 'verloren' else next((m['kans'] for m in MIJLPALEN if m['mijlpaal'] == o['fase']), 0)
             o['gesloten'] = datum_w if o['fase'] in ('gewonnen', 'verloren') else ''
             ACTIVITEITEN.append({'id': 'e' + uuid.uuid4().hex[:5], 'type': 'fase', 'datum': nu(), 'door': 'Menno', 'schoolId': oud['schoolId'], 'persoonId': oud['persoonId'], 'kansId': oud['id'], 'onderwerp': 'Mijlpaal: ' + oud['fase'] + ' → ' + o['fase'], 'tekst': o.get('verliesReden', ''), 'duurMin': 0, 'bron': 'app'})
+        oude_fase = oud['fase'] if oud else ''  # v7.9: vóór opslaan (dat werkt de rij in place bij), anders wordt van gelijk aan naar
         k = opslaan(CRMKANSEN, o, 'k'); traject = None; fw = None
         if wissel or not oud:  # v7.9: elke fasewissel en elke nieuwe kans als gebeurtenis
             bron = 'winformulier' if k['fase'] == 'gewonnen' else 'verloren' if k['fase'] == 'verloren' else 'aanmaken' if not oud else wi.get('bron') if wi.get('bron') in ('detail', 'slepen', 'toets', 'bulk') else 'detail'
-            fw = wissel_maken(k, oud['fase'] if oud else '', k['fase'], datum_w, bron)
+            fw = wissel_maken(k, oude_fase, k['fase'], datum_w, bron)
         if (wissel or not oud) and k['fase'] == 'gewonnen' and not any(t.get('kansId') == k['id'] for t in TRAJECTEN):  # v3.8: altijd een project
             traject = {'id': 'p' + uuid.uuid4().hex[:5], 'schoolId': k['schoolId'], 'school': k['school'], 'plaats': '', 'traject': k['naam'], 'schooljaar': '2026-2027', 'start': '', 'eind': '', 'status': 'opstart', 'ondersteuners': 0, 'urenPerWeek': 0, 'tarief': 0, 'omzet': k['waarde'], 'contactpersoon': '', 'am': k.get('am', ''), 'adviseur': k['eigenaar'], 'kansId': k['id'], 'samenvatting': '', 'bijgewerkt': nu(),
                        'soortFacturatie': '', 'gefactureerd': '', 'factuurDatum': '', 'vakanties': '', 'bijzonderheden': '', 'factuurnummer': '',
@@ -931,6 +943,7 @@ def handle_crm(fn, args):
 BREIN_UITGEVOERD = []
 INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt']}
 FAAL = {}  # v7.3 (H2): api-naam -> hoeveel aanroepen nog moeten mislukken (gezet met {"fn":"_faal","args":[naam, n]})
+BACKEND_VERSIE = ['7.9']  # v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
 # v7.3 (FL-1): de seed bevriezen zodra alle tabellen gevuld zijn. reset() zet elke lijst en dict in place terug (de handlers houden de modulevariabelen
 # bij naam vast), dus een draaiende mock begint daarna weer bij dezelfde uitgangsstand; ook HUIDIG (de ingelogde code) en FAAL gaan terug.
 _SEED = {k: copy.deepcopy(v) for k, v in list(globals().items()) if k.isupper() and isinstance(v, (list, dict))}
@@ -1153,6 +1166,8 @@ class H(SimpleHTTPRequestHandler):
         if self.path.startswith('/supa/auth/v1/logout'): self.send_response(204); self.end_headers(); return
         body = json.loads(ruw)
         if body.get('fn') == '_reset': return self.json(reset())  # v7.3 (FL-1): testhulp, zonder koppelcode
+        if body.get('fn') == '_backendVersie':  # v7.9 (R13): testhulp: de versie die apiCrm noemt (een oudere = zonder backendVersie)
+            v = str((body.get('args') or ['7.9'])[0] or '7.9'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
         if body.get('fn') == '_faal':  # v7.3 (H2): testhulp: de volgende n aanroepen van een api mislukken
             try: return self.json(faal_zetten(body.get('args') or []))
             except Exception as e: return self.json({'ok': False, 'fout': str(e)})

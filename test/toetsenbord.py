@@ -61,7 +61,7 @@ def kort(e):
 # --- JavaScript dat in de pagina draait -------------------------------------------------------------------------------
 HULP = r"""
 var INTERACTIEF = %s;
-function zichtbaar(e) { var r = e.getBoundingClientRect(), s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; }
+function zichtbaar(e) { var r = e.getBoundingClientRect(), s = getComputedStyle(e); if (e.closest('details:not([open])') && !e.closest('summary')) return false; return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; }  // v7.9: de inhoud van een dichte <details> (content-visibility: hidden) is niet zichtbaar
 function beschrijf(e) {
   var t = (e.getAttribute('aria-label') || e.textContent || e.value || e.getAttribute('placeholder') || e.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
   var data = Array.prototype.map.call(e.attributes, function (a) { return a.name; }).filter(function (n) { return n.indexOf('data-') === 0 && n !== 'data-tb' && n !== 'data-tb-laatst'; });
@@ -427,6 +427,61 @@ KIES = r"""(function (soort) {
   return '';
 })"""
 
+def toets_v79(page, items):
+    """v7.9 (pakket 3): (9) de chips Week (data-rweergave) en Definities (data-defs) zijn met Tab bereikbaar en werken met Enter; (10) het
+    voorstelvenster na een pijltoets op het bord: de focus in het venster, Tab blijft erin, Escape = Annuleren (de kaart terug, geen aanroep) en de
+    focus terug op de kaart; (11) Enter op een regel van het blok Datakwaliteit opent het item; (12) het datum-, verloren-, weekdoelen- en
+    overstapvenster houden Tab binnen het venster en Escape sluit ze."""
+    r = {'rol': 'sophie', 'scherm': 'v7.9', 'tabs': 0, 'onbereikbaar': [], 'zonderFocus': [], 'toetsen': {}}; rapport.append(r)
+    if 'rapporten' in items:
+        page.evaluate("deskNaar('rapporten')"); wacht(page, 600)
+        el = tab_tot(page, "a.getAttribute('data-rweergave') === 'week'")
+        if el: page.keyboard.press('Enter'); wacht(page, 600)
+        (ok if el and page.locator('.week-tabel').count() == 1 else fout)('sophie/rapporten: de chip Week is met Tab bereikbaar en Enter opent de weekweergave')
+        el = tab_tot(page, "a.getAttribute('data-defs')")
+        if el: page.keyboard.press('Enter'); page.wait_for_timeout(200)
+        (ok if el and page.evaluate("document.body.classList.contains('defs-aan')") else fout)('sophie/rapporten: de chip Definities is met Tab bereikbaar en Enter zet de definities aan')
+        if el: page.keyboard.press('Enter'); page.wait_for_timeout(200)
+        page.evaluate("(function () { var b = document.querySelector('[data-rweergave=\"teams\"]'); if (b) b.click(); })()"); wacht(page, 700)
+        page.evaluate("(function () { var d = document.querySelector('.dq-eigenaar'); if (!d) { var v = document.querySelector('[data-dqvers]'); if (v) v.click(); } })()"); wacht(page, 600)
+        page.evaluate("document.querySelectorAll('.dq-eigenaar').forEach(function (d) { d.open = true; })")
+        el = tab_tot(page, "a.classList.contains('dq-regel') && a.getAttribute('data-crm-open')")
+        if el:
+            page.keyboard.press('Enter'); wacht(page, 600); open_ = page.evaluate("CRM.detail ? CRM.detail.soort + ':' + CRM.detail.id : ''")
+            (ok if open_ == el['crm'] else fout)('sophie/rapporten: Enter op de regel %s van het blok Datakwaliteit opent %s' % (kort(el), open_ or 'niets'))
+            page.evaluate("CRM.terugNaar = ''; if (CRM.detail) sluitDetail();"); wacht(page, 300)
+        else: fout('sophie/rapporten: geen regel van het blok Datakwaliteit krijgt focus met Tab')
+        page.evaluate("deskNaar('rapporten')"); wacht(page, 600)
+        toets_venster(page, 'sophie', 'rapporten', r, "document.querySelector('[data-beheer=\"v79\"]')", 'vensterOverstap')
+    if 'pipeline' in items:  # (10) k12 zonder tekendatum: twee keer → (lead → gesprek → voorstel) opent het voorstelvenster
+        page.evaluate("run('apiKansOpslaan', { id: 'k12', verwachteSluiting: '', _oud: {} }).then(function () { crmVerouderd(); deskNaar('pipeline'); })"); wacht(page, 900)
+        page.evaluate("document.querySelector('[data-sleep=\"kans:k12\"]').focus()"); page.keyboard.press('ArrowRight'); wacht(page, 900)
+        page.evaluate("document.querySelector('[data-sleep=\"kans:k12\"]').focus()"); page.keyboard.press('ArrowRight'); wacht(page, 600)
+        venster = page.locator('#venster.aan [data-voorstelovers]').count() > 0; binnen = page.evaluate(IN_VENSTER)
+        (ok if venster and binnen else fout)('sophie/pipeline: na de pijltoets naar voorstel opent het voorstelvenster met de focus erin (venster %s, focus %s)' % (venster, binnen))
+        if venster:
+            tab_rond(page, 'sophie/pipeline (voorstelvenster)', r, 'voorstelvenster')
+            page.keyboard.press('Escape'); page.wait_for_timeout(500)
+            kol = page.evaluate("(function () { var k = document.querySelector('[data-sleep=\"kans:k12\"]'); return k ? k.closest('[data-sleepdoel]').getAttribute('data-sleepdoel') : ''; })()")
+            fase = page.evaluate("(CRM.pipeline.kansen.filter(function (k) { return k.id === 'k12'; })[0] || {}).fase")
+            foc = page.evaluate("document.activeElement && document.activeElement.getAttribute('data-sleep')")
+            (ok if page.locator('#venster.aan').count() == 0 and kol == 'kans:gesprek' and fase == 'gesprek' else fout)('sophie/pipeline: Escape = Annuleren, de kaart terug in gesprek zonder aanroep (%s, %s)' % (kol, fase))
+            (ok if foc == 'kans:k12' else fout)('sophie/pipeline: de focus na het voorstelvenster terug op de kaart → %s' % foc)
+    if 'pipeline' in items:  # (12) het datumvenster (potlood bij een wissel) en het verlorenvenster in de kansdetail
+        page.evaluate("routeHash('kans:k10')"); wacht(page, 800)
+        toets_venster(page, 'sophie', 'detail:kans (datum)', r, "document.querySelector('.fw-lijst [data-fwdatum]')", 'vensterDatum')
+        oud = page.evaluate("document.querySelector('[data-kansfase]').value")
+        page.evaluate("(function () { var s = document.querySelector('[data-kansfase]'); s.focus(); s.value = 'verloren'; s.dispatchEvent(new Event('change', { bubbles: true })); })()"); wacht(page, 400)
+        binnen = page.evaluate(IN_VENSTER); (ok if page.locator('#venster.aan #vf-verliesReden').count() and binnen else fout)('sophie/detail:kans: het verlorenvenster opent met de focus erin')
+        tab_rond(page, 'sophie/detail:kans (verloren)', r, 'vensterVerloren')
+        page.keyboard.press('Escape'); wacht(page, 600)
+        (ok if page.locator('#venster.aan').count() == 0 and page.evaluate("document.querySelector('[data-kansfase]').value") == oud else fout)('sophie/detail:kans: Escape sluit het verlorenvenster en de mijlpaal blijft %s' % oud)
+        page.evaluate('CRM.terugNaar = ""; if (CRM.detail) sluitDetail();'); wacht(page, 300)
+    if 'doelen' in items:  # (12) het weekdoelenvenster
+        page.evaluate("deskNaar('doelen')"); wacht(page, 700)
+        page.evaluate("(function () { var b = document.querySelector('[data-doelteam=\"consultancy\"]'); if (b) b.click(); })()"); wacht(page, 700)
+        toets_venster(page, 'sophie', 'doelen', r, "document.querySelector('[data-weekdoelen]')", 'vensterWeekdoelen')
+
 def open_detail(page, scherm, soort):
     page.evaluate('deskNaar(%r)' % scherm); wacht(page)
     id_ = page.evaluate(KIES + '(%r)' % soort)
@@ -500,6 +555,7 @@ with sync_playwright() as p:
     r = next(x for x in rapport if x['rol'] == 'sophie' and x['scherm'] == 'home')
     toets_palet(page, 'sophie', r)
     toets_spinner_venster(page, 'sophie', r)  # v7.3 (iOS-review O3, O2)
+    toets_v79(page, items)  # v7.9: weergaven, Definities, het voorstelvenster na een pijltoets, datakwaliteit en de nieuwe vensters
     # detailschermen: één per soort, de standaardtab
     for scherm, soort in (('contacten', 'school'), ('contacten', 'persoon'), ('pipeline', 'kans'), ('projecten', 'project'), ('talent', 'talent')):
         if scherm not in items: info('sophie: %s niet in de zijbalk, detail %s overgeslagen' % (scherm, soort)); continue
