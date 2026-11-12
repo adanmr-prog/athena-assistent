@@ -2614,8 +2614,10 @@ function rollenAfwijkend() {
 //   bij zijn naam past, blijft een momentopname, ook als de beheerder die mijlpaal op een andere fase zet. De proefdraai toont het verschil in de historische telling.
 function fasenScholen() { return mijlpalen().filter(function (m) { return m.pipeline === 'Scholen'; }); }
 // v7.9.1 (review r5, H1): "eerder toegepast" is een eigen markering die Toepassen als laatste schrijft (na de kansen); FASEN_KOPPELING staat er al eerder
-// (voor het herstel), dus na een onderbreking telt de stap nog niet als eerder toegepast en gaan de gewichten alsnog naar het rekenmodel
-function fasenEerderToegepast() { return !!P.getProperty('FASEN_TOEGEPAST'); }
+// (voor het herstel), dus na een onderbreking telt de stap nog niet als eerder toegepast en gaan de gewichten alsnog naar het rekenmodel.
+// r6 (R5V-H1-server): de markering is de instelling fasenToegepast (tabblad Instellingen), geen scripteigenschap: op de server schrijft flush() de
+// tabbladen in één transactie, een eigenschap meteen; zo rolt een mislukte commit de markering mee terug
+function fasenEerderToegepast() { return !!instelling('fasenToegepast'); }
 // v7.9.1 (review r4, R1): klaar = de vijf namen en rollen staan zo én er staat geen open kans meer in een oude naam (fasenVerweesd: een onderbroken Toepassen)
 function fasenAlGedaan(kansen) {
   var ms = fasenScholen(), eerder = fasenEerderToegepast();
@@ -2750,6 +2752,7 @@ function migratieFasen(opties, toepassen) {
   }
   return metLock(function () {
     ['Kansen', 'Mijlpalen', 'Fasewissels', 'Aannames'].forEach(vergeet);  // F7: alles binnen de lock opnieuw lezen
+    if (fasenAlGedaan() && !fasenEerderToegepast()) zetInstelling('fasenToegepast', datumStr(new Date()));  // r6 (R5V-H1-geen-markering): staat al zo zonder markering: vanaf nu is een ander gewicht een later besluit
     if (fasenAlGedaan()) return { stap: 'fasen', toegepast: true, alGedaan: true, gewijzigd: false, mijlpalen: 0, verhuisd: {}, gewonnen: 0, dealDatum: 0, eerderGewonnen: 0, wissels: 0, herzien: 0, herzienVerschil: {}, gewichtenTerug: 0, aanname: null, rollen: rollenStatus(),
       melding: 'De pipeline Scholen heeft de fasen van Capsule al; er is niets veranderd.' };
     var A = fasenLezen();
@@ -2797,7 +2800,7 @@ function migratieFasen(opties, toepassen) {
     // R1 (r4): de volgorde maakt een onderbroken Toepassen herstelbaar: eerst de koppeling (daarmee vindt een volgende keer de kansen in een oude naam terug),
     // de herziene app-wissels en de versie van de gewichten (de mijlpalen staan dan nog zoals ze waren, dus de volgende keer doet alles opnieuw), dan de
     // mijlpalen (eerst schrijven, dan de oude weg), de nieuwe wissels (een herhaling schrijft ze niet dubbel), de kansen (tot dan: fasenVerweesd) en als
-    // laatste de markering FASEN_TOEGEPAST (r5, H1: pas daarna geldt de stap als eerder toegepast).
+    // laatste de markering fasenToegepast (r5, H1: pas daarna geldt de stap als eerder toegepast; r6: een instelling).
     P.setProperty('FASEN_KOPPELING', JSON.stringify(kopNa));
     wisselsBijwerken(herzien);
     var gewichten = {}, vorigeA = aanname('fasegewichten'), versie = null;
@@ -2811,14 +2814,16 @@ function migratieFasen(opties, toepassen) {
     verwijderRijen('Mijlpalen', function (r) { return String(r.pipeline || 'Scholen') === 'Scholen' && !uitMap(nieuweIds, String(r.id)); });
     // de wissels na het schrijven van de mijlpalen (naarRol uit de nieuwe fasen), alle samen in één schrijfVeel (R2); F8: met dealDatum een reconstructie met die datum
     // r5 (H5): een herstel (ook op een latere dag) schrijft geen tweede hernoemd-wissel voor dezelfde kans, van en naar; het id zonder dag en zonder slug van het kans-id
-    var vandaag = datumStr(new Date()), alHernoemd = function (x) { return wisselsVanKans(x.k.id).some(function (w) { return w.bron === 'hernoemd' && !w.verwijderd && w.van === x.van && w.naar === x.naar; }); };
+    // r6 (R5V-H5): alleen als die hernoemd-wissel de laatste geldige wissel van de kans is (een latere, legitieme tweede hernoeming krijgt wel een wissel, met een volgnummer in het id)
+    var vandaag = datumStr(new Date()), alHernoemd = function (x) { var l = wisselsVanKans(x.k.id).filter(wisselGeldig).sort(volgordeIngevoerd), w = l[l.length - 1]; return !!w && w.bron === 'hernoemd' && w.van === x.van && w.naar === x.naar; };
+    var faId = function (x) { var basis = 'fa-' + String(x.k.id) + '-' + x.d + '-' + slug(x.van).slice(0, 40), ids = {}, id = basis, n = 2; wisselsVanKans(x.k.id).forEach(function (w) { ids[String(w.id)] = true; }); while (ids[id]) id = basis + '-' + n++; return id; };
     var wissels = fasewisselsSchrijven(plan.filter(function (x) { return x.dealDatum || !alHernoemd(x); }).map(function (x) {
       var k = { id: x.k.id, schoolId: x.k.schoolId, eigenaar: x.k.eigenaar, waarde: x.k.waarde, fase: x.naar, pipeline: 'Scholen' };
       return x.dealDatum ? faseWisselRij(k, x.van, x.naar, { bron: 'reconstructie', datum: x.dealDatum, zekerheid: 'hoog', id: 'rec-' + slug(x.k.id + '-gewonnen-' + x.dealDatum), vanPipeline: x.vanPipeline })
-        : faseWisselRij(k, x.van, x.naar, { bron: 'hernoemd', datum: vandaag, id: 'fa-' + String(x.k.id) + '-' + x.d + '-' + slug(x.van).slice(0, 40), vanPipeline: x.vanPipeline });
+        : faseWisselRij(k, x.van, x.naar, { bron: 'hernoemd', datum: vandaag, id: faId(x), vanPipeline: x.vanPipeline });
     }));
     if (wijzig.length) schrijfVeel('Kansen', wijzig);
-    P.setProperty('FASEN_TOEGEPAST', vandaag);  // r5 (H1): als laatste
+    zetInstelling('fasenToegepast', vandaag);  // r5 (H1): als laatste; r6: in Instellingen
     var n = Object.keys(verhuisd).reduce(function (t, f) { return t + verhuisd[f]; }, 0);
     return { stap: 'fasen', toegepast: true, alGedaan: false, gewijzigd: true, mijlpalen: rijen.length, verhuisd: verhuisd, gewonnen: gewonnen, dealDatum: dealDatum, eerderGewonnen: eerderGewonnen, ongewijzigd: ongewijzigd, hersteld: hersteld, wissels: wissels.length,
       herzien: herzien.length, herzienVerschil: herzienVerschil, gewichtenTerug: gewTerug.length, aanname: versie, rollen: rollenStatus(),
@@ -2958,14 +2963,19 @@ function apiFasewisselsImport(tekst, opties) {
     if (zk === 'onbekend') { uit.overgeslagen.onbekend++; continue; }
     if (!kId || !fase || !dIn || ['hoog', 'midden', 'laag'].indexOf(zk) < 0) { uit.overgeslagen.leeg++; continue; }
     var k = perId_[kId] || perCap[kId]; if (!k) { uit.overgeslagen.onbekendeKans++; if (uit.regels.onbekendeKans.length < 50) uit.regels.onbekendeKans.push(i + 1); continue; }
-    fase = importFase(fase, k, mp, cI); if (vanIn) vanIn = importFase(vanIn, k, mp, cI);  // v7.9.1 (review r4, R3)
+    var ruw = fase; fase = importFase(fase, k, mp, cI); if (vanIn) vanIn = importFase(vanIn, k, mp, cI);  // v7.9.1 (review r4, R3)
     if (fase !== 'gewonnen' && fase !== 'verloren' && !uitMap(mp, fase)) { uit.overgeslagen.onbekendeFase++; continue; }
     var dt = /^\d{1,2}-\d{1,2}-\d{4}$/.test(dIn) ? (parseDatumNl(dIn) ? datumStr(parseDatumNl(dIn)) : '') : datumIn(dIn);
     if (!dt || (/^\d{4}-/.test(dIn) && dt !== dIn.slice(0, 10)) || dt > vandaag) { uit.overgeslagen.datum++; continue; }
     // v7.9.1 (review r5, R4L-2): ook een wissel die nog de oude naam draagt (vóór stap fasen geschreven) telt als dezelfde fase: geen dubbele reconstructie, wel aanvullen
-    var bestaand = wisselsVanKans(k.id).filter(function (w) { return !w.verwijderd && (w.naar === fase || importFase(klein(w.naar), k, mp, cI) === fase); });
+    // r6 (L2-1): nooit voor gewonnen of verloren (een oude wissel naar '6. deal/lopend traject' is geen deal) en nooit een administratieve wissel (hernoemd)
+    var bestaand = wisselsVanKans(k.id).filter(function (w) {
+      return !w.verwijderd && FASE_TELT_NIET.indexOf(w.bron) < 0 && (w.naar === fase || (fase !== 'gewonnen' && fase !== 'verloren' && importFase(klein(w.naar), k, mp, cI) === fase));
+    });
     if (bestaand.some(function (w) { return w.werkelijkeDatum === dt; }) || nieuweIds['rec-' + slug(k.id + '-' + fase + '-' + dt)]) { uit.ongewijzigd++; continue; }
-    var leeg = bestaand.filter(function (w) { return !w.werkelijkeDatum && !aangevuldIds[w.id] && ['import', 'capsule', 'tijdlijn'].indexOf(w.bron) >= 0; })[0];
+    // r6 (L2-2): eerst de wissel met precies de naam uit de regel, dan die met de (vertaalde) fase, dan een via de koppeling
+    var leeg = bestaand.filter(function (w) { return !w.werkelijkeDatum && !aangevuldIds[w.id] && ['import', 'capsule', 'tijdlijn'].indexOf(w.bron) >= 0; })
+      .sort(function (a, b) { var r = function (w) { return klein(w.naar) === ruw ? 0 : w.naar === fase ? 1 : 2; }; return r(a) - r(b); })[0];
     if (leeg) {
       // v7.9 (review C4): ook het aanvullen volgt werkelijkeDatumIn: niet na het invoermoment van de wissel
       try { werkelijkeDatumIn(dt, { zonderOndergrens: true, ingevoerdOp: leeg.ingevoerdOp }); } catch (e) { uit.overgeslagen.datum++; continue; }
@@ -3146,11 +3156,20 @@ function capsulePagina(stap, pagina) {
     });
     // v7.9.1 (review r4, N1): gewonnen of verloren zonder closedOn (ook een open Capsule-kans in fase 6) houdt de datum van zijn laatste sluitende wissel
     // (bijvoorbeeld uit Werkelijke datums importeren), zodat Kansen.gesloten en dealWissels gelijk blijven (N8); nooit terug naar leeg
-    // r5 (R4L-3): ook mét closedOn wint een latere sluitende wissel (bijvoorbeeld uit de import): gesloten = de laatste sluitende wissel (N8)
+    // r5 (R4L-3): ook mét closedOn wint een latere sluitende wissel (bijvoorbeeld uit de import): gesloten = de laatste sluitende wissel (N8).
+    // r6 (L2-3): blijft de fase gelijk (geen nieuwe capsule-wissel) en is de laatste sluitende wissel er een van Capsule met een andere datum dan closedOn,
+    // dan volgt die wissel de correctie uit Capsule (in dezelfde schrijfVeel); gesloten is daarna altijd de laatste datum van de sluitende wissels
     rijen.forEach(function (r) {
       if ((r.fase !== 'gewonnen' && r.fase !== 'verloren') || faseNu[r.id] === undefined) return;
-      var ls = laatsteSluitendeWissel(r.id, r.fase), d = ls && ls.werkelijkeDatum ? String(ls.werkelijkeDatum).slice(0, 10) : '', g = r.gesloten ? String(r.gesloten).slice(0, 10) : '';
-      if (d && (!g || d > g)) r.gesloten = d;
+      var g = r.gesloten ? datumIn(String(r.gesloten)) : '', nieuw = wissels.some(function (w) { return w.kansId === String(r.id) && w.naar === r.fase && w.werkelijkeDatum !== undefined && w.bron === 'capsule'; });
+      var ws = wisselsVanKans(r.id).filter(function (w) { return wisselGeldig(w) && FASE_TELT_NIET.indexOf(w.bron) < 0 && w.naar === r.fase; }).sort(volgordeWerkelijk), ls = ws[ws.length - 1];
+      var datums = ws.map(function (w) { return String(w.werkelijkeDatum || '').slice(0, 10); });
+      if (!nieuw && ls && ls.bron === 'capsule' && g && g <= vandaag && g !== datums[datums.length - 1]) {
+        try { werkelijkeDatumIn(g, { zonderOndergrens: true, ingevoerdOp: ls.ingevoerdOp }); wissels.push({ id: ls.id, werkelijkeDatum: g, zekerheid: ls.zekerheid || 'laag' }); datums[datums.length - 1] = g; } catch (e) { /* een datum na het invoermoment: de wissel blijft */ }
+      }
+      if (nieuw && g) datums.push(g);
+      var max = datums.filter(Boolean).sort().pop() || '';
+      if (max) r.gesloten = max;
     });
     schrijfVeel('Kansen', rijen);
     fasewisselsSchrijven(wissels);

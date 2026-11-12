@@ -3295,10 +3295,10 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       var f = faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p0) });
       ctx.aannameVastleggen = echtAanname; ctx.schrijfVeel = echtSchrijf; ctx._LEES = {};
       var s1 = roep(SOPHIE, 'apiMigratieV79', 'status'), p1 = roep(SOPHIE, 'apiMigratieV79', 'fasen');
-      eis(!p0.alGedaan && /storing/.test(f) && !ctx.P.getProperty('FASEN_TOEGEPAST') && !s1.fasen.alGedaan && !p1.alGedaan && !p1.gewichtenBlijven,
-        'review r5 H1: storing op ' + waar + ' in een Sheet met de Capsule-namen al: geen markering FASEN_TOEGEPAST, status en proefdraai zeggen niet "staat zo"');
+      eis(!p0.alGedaan && /storing/.test(f) && !ctx.instelling('fasenToegepast') && !s1.fasen.alGedaan && !p1.alGedaan && !p1.gewichtenBlijven,
+        'review r5 H1: storing op ' + waar + ' in een Sheet met de Capsule-namen al: geen markering fasenToegepast, status en proefdraai zeggen niet "staat zo"');
       var r1 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p1) }), v = ctx.aannameVersies('fasegewichten');
-      eis(scholen().map(function (m) { return Number(m.kans); }).join() === '0,0,25,40,70' && !!ctx.P.getProperty('FASEN_TOEGEPAST') && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan &&
+      eis(scholen().map(function (m) { return Number(m.kans); }).join() === '0,0,25,40,70' && !!ctx.instelling('fasenToegepast') && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan &&
         JSON.stringify(v[v.length - 1].waarde).indexOf('"Scholen|' + DOEL[4] + '":70') >= 0 && r1.toegepast,
         'review r5 H1: de volgende keer Toepassen zet de gewichten alsnog naar het rekenmodel (0, 0, 25, 40, 70), ook in de laatste versie van fasegewichten, en daarna pas de markering');
     } catch (e) { eis(false, 'v7.9.1 review r5 (H1 ' + waar + '): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { ctx.aannameVastleggen = echtAanname; ctx.schrijfVeel = echtSchrijf; standTerug(st); }
@@ -3375,6 +3375,70 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       'review r5 R4L-5/6: een lead zonder schooljaar telt bij leads (niet bij zonder schooljaar); een kans in "Gesprek" telt bij de mijlpaal gesprek (geen eigen rij)');
   } catch (e) { eis(false, 'v7.9.1 review r5 (R4L-5/6): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
   function klein0(x) { return String(x || '').trim().toLowerCase(); }
+})();
+
+/* ---- v7.9.1, review ronde 6: R5V-H1 (de markering is de instelling fasenToegepast, ook gezet als de stap al zo staat), L2-1 (een import "gewonnen" telt
+   een oude wissel naar "6. deal/lopend traject" niet als dezelfde fase), L2-3 (Capsule corrigeert closedOn: de capsule-wissel volgt, N8), R5V-H5 (een
+   legitieme tweede hernoeming krijgt wel een wissel). Alles op de verzonnen demo-seed. ---- */
+(function () {
+  var DOEL = ctx.CAPSULE_FASEN.map(function (f) { return f.mijlpaal; });
+  var voorstelKop = function (p) { var k = {}; p.mijlpalen.forEach(function (m) { k[m.id] = m.voorstel; }); return k; };
+  var echtSchrijf = ctx.schrijfVeel;
+
+  // --- R5V-H1: de stap staat al zo zonder markering (Capsule-import met de gewichten van het rekenmodel): Toepassen zet alleen de markering ---
+  vers79(); var st = standBewaren();
+  try {
+    ctx.verwijderRijen('Mijlpalen', function () { return true; });
+    echtSchrijf('Mijlpalen', ctx.CAPSULE_FASEN.map(function (f, i) { return { id: 'cap-m' + (951 + i), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: f.kans, dagenNorm: f.dagenNorm, rol: f.rol }; })); ctx._LEES = {};
+    var p1 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), nA = ctx.aannameVersies('fasegewichten').length;
+    var r1 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p1) }); ctx._LEES = {};
+    eis(p1.alGedaan && r1.alGedaan && !!ctx.instelling('fasenToegepast') && ctx.aannameVersies('fasegewichten').length === nA,
+      'review r6: staat de stap al zo zonder markering, dan zet Toepassen alleen de markering fasenToegepast (een later gewicht is daarna een besluit)');
+  } catch (e) { eis(false, 'v7.9.1 review r6 (markering): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- L2-1: een oude wissel naar "6. deal/lopend traject" zonder datum; na de stap maakt een importregel "gewonnen" wel een deal ---
+  vers79(); st = standBewaren();
+  try {
+    var deal = '6. deal/lopend traject';
+    ctx.verwijderRijen('Mijlpalen', function () { return true; });
+    echtSchrijf('Mijlpalen', DOEL.concat([deal]).map(function (n, i) { return { id: 'cap-m' + (971 + i), pipeline: 'Scholen', mijlpaal: n, volgorde: i + 1, kans: [0, 0, 25, 40, 70, 90][i], dagenNorm: 14, rol: ['lead', '', 'ap', 'ad', 'voorstel', ''][i] }; }));
+    var kd = ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && k.pipeline !== 'Besturen'; })[0];
+    echtSchrijf('Kansen', [{ id: kd.id, fase: deal, pipeline: 'Scholen' }]);
+    echtSchrijf('Fasewissels', [ctx.faseWisselRij({ id: kd.id, schoolId: kd.schoolId, eigenaar: kd.eigenaar, waarde: kd.waarde, fase: deal, pipeline: 'Scholen' }, DOEL[4], deal, { bron: 'capsule', id: 'cap-r6-' + kd.id })]); ctx._LEES = {};
+    var p2 = roep(SOPHIE, 'apiMigratieV79', 'fasen'); roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p2) }); ctx._LEES = {};
+    var i2 = roep(SOPHIE, 'apiFasewisselsImport', 'kans;fase;werkelijke datum;zekerheid\n' + kd.id + ';gewonnen;' + plusDagen(-3) + ';hoog\n', { toepassen: true }); ctx._LEES = {};
+    var dw = ctx.dealWissels().filter(function (w) { return String(w.kansId) === String(kd.id); })[0];
+    eis(ctx.vind('Kansen', kd.id).fase === 'gewonnen' && i2.nieuw === 1 && i2.aangevuld === 0 && dw && dw.werkelijkeDatum === plusDagen(-3) && String(ctx.vind('Kansen', kd.id).gesloten).slice(0, 10) === plusDagen(-3),
+      'review r6 L2-1: na de stap maakt een importregel "gewonnen" een deal-wissel (nieuw 1), ook als er een oude wissel naar "6. deal/lopend traject" zonder datum staat; gesloten volgt (N8)');
+  } catch (e) { eis(false, 'v7.9.1 review r6 (L2-1): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- L2-3: Capsule corrigeert closedOn naar later (fase blijft Won): de capsule-wissel volgt, gesloten = dealWissels ---
+  vers79(); st = standBewaren();
+  var echtCapsule = ctx.capsule, gesl = plusDagen(-30);
+  try {
+    ctx._demoProps.CAPSULE_MIJLPALEN = JSON.stringify({ 603: { naam: 'Won', complete: true, kans: 100, pipeline: 'Scholen' } });
+    ctx.capsule = function () { return { data: { opportunities: [{ id: 9301, name: 'Capsulekans correctie', party: null, milestone: { id: 603 }, closedOn: gesl, value: { amount: 2500 }, owner: { name: 'Lars Visser' }, createdAt: plusDagen(-90) + 'T09:00:00Z' }] }, meer: false }; };
+    ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.capsulePagina('kansen', 1); ctx._LEES = {};
+    gesl = plusDagen(-20); ctx.GEBRUIKER = null; ctx.capsulePagina('kansen', 1); ctx._LEES = {};
+    var dw3 = ctx.dealWissels().filter(function (w) { return String(w.kansId) === 'cap-k9301'; })[0], g3 = String(ctx.vind('Kansen', 'cap-k9301').gesloten).slice(0, 10);
+    eis(g3 === plusDagen(-20) && dw3 && dw3.werkelijkeDatum === g3 && wisselsVan('cap-k9301').length === 1, 'review r6 L2-3: een gecorrigeerde closedOn in Capsule verschuift de capsule-wissel mee (geen tweede wissel); gesloten en dealWissels gelijk (N8)');
+  } catch (e) { eis(false, 'v7.9.1 review r6 (L2-3): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { ctx.capsule = echtCapsule; standTerug(st); }
+
+  // --- R5V-H5: een legitieme tweede hernoeming krijgt wel een wissel (met een eigen id) ---
+  vers79(); st = standBewaren();
+  try {
+    var p4 = roep(SOPHIE, 'apiMigratieV79', 'fasen'); roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p4) }); ctx._LEES = {};
+    var k4 = ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && k.fase === DOEL[2]; })[0];
+    var rij = ctx.mijlpalen().filter(function (m) { return m.pipeline === 'Scholen'; }).map(function (m) { return { id: m.id, pipeline: m.pipeline, mijlpaal: m.mijlpaal, volgorde: m.volgorde, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol }; });
+    echtSchrijf('Mijlpalen', [{ id: 'r6-gesprek', pipeline: 'Scholen', mijlpaal: 'gesprek', volgorde: 9, kans: 25, dagenNorm: 10, rol: '' }]);
+    roep(SOPHIE, 'apiKansOpslaan', { id: k4.id, fase: 'gesprek', _oud: { fase: k4.fase }, wissel: { bron: 'detail' } }); ctx._LEES = {};
+    var h0 = wisselsVan(k4.id).filter(function (w) { return w.bron === 'hernoemd'; }).length;
+    var p4b = roep(SOPHIE, 'apiMigratieV79', 'fasen'); roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p4b) }); ctx._LEES = {};
+    var h = wisselsVan(k4.id).filter(function (w) { return w.bron === 'hernoemd'; }), ids = h.map(function (w) { return w.id; });
+    eis(ctx.vind('Kansen', k4.id).fase === DOEL[2] && h.length === h0 + 1 && ids.length === uniekeLen(ids),
+      'review r6 R5V-H5: een kans die na de stap weer in een oude naam is gezet, krijgt bij een tweede keer een eigen hernoemd-wissel (eigen id, geen overschrijving)');
+  } catch (e) { eis(false, 'v7.9.1 review r6 (H5): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+  function uniekeLen(l) { var u = {}; l.forEach(function (x) { u[x] = 1; }); return Object.keys(u).length; }
 })();
 
 /* ---- bestaande schermen blijven werken ---- */
