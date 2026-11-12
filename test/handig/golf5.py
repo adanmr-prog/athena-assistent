@@ -513,6 +513,28 @@ with sync_playwright() as p:
     stap('g5_fasen', g5_fasen)
     c.close()
 
+    # ===== 5b. v7.9.1 (review r3): de signalen in de overstap: een eerder gewonnen kans in fase 6 (F1), een rol die niet bij de naam past (R4) =====
+    c, pg = nieuw(b, 'sophie')
+    def g5_fasen_r3():
+        g1 = kans('k1')['kans']['gesloten']
+        api('apiKansOpslaan', {'id': 'k1', 'fase': 'onderhandeling', '_oud': {'fase': 'gewonnen'}})
+        ms = [{'pipeline': m['pipeline'], 'mijlpaal': m['mijlpaal'], 'kans': m['kans'], 'dagenNorm': m['dagenNorm'], 'rol': m['rol']} for m in api('apiCrm')['mijlpalen']]
+        ms += [{'pipeline': 'Besturen', 'mijlpaal': 'intake', 'kans': 10, 'dagenNorm': 14, 'rol': 'lead'}, {'pipeline': 'Besturen', 'mijlpaal': 'gesprek', 'kans': 30, 'dagenNorm': 10, 'rol': 'ap'}, {'pipeline': 'Besturen', 'mijlpaal': 'voorstel', 'kans': 50, 'dagenNorm': 10, 'rol': 'ad'}]
+        api('apiMijlpalenOpslaan', ms, {'onderbouwing': 'golf5 r3 (verzonnen)', 'besluitdatum': dag(0)})
+        desk('rapporten', '#crmInhoud [data-beheer="v79"]'); pg.click('[data-beheer="v79"]'); venster_open('[data-v79="fasen:proef"]')
+        ok('r3: de status van Rollen noemt een rol die niet bij de naam past (R4)', '1 rol past niet bij de naam' in pg.inner_text('#v79Lijst'), pg.inner_text('#v79Lijst')[:300])
+        pg.click('[data-v79="rollen:proef"]'); pg.wait_for_selector('#v79-rolafwijkend')
+        ok('r3: de proefdraai van Rollen toont het signaal met het voorstel (Besturen · voorstel heeft ad, op naam voorstel) en laat Beheer → Mijlpalen het rechtzetten', 'Besturen · voorstel heeft ad, op naam voorstel' in pg.inner_text('#v79-rolafwijkend') and 'Beheer → Mijlpalen' in pg.inner_text('#v79-rolafwijkend'))
+        pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#venster [data-v79fase]')
+        pg.select_option('#venster [data-v79fase="scholen-onderhandeling"]', '6'); pg.wait_for_selector('#v79-deal .hint')
+        ok('r3: bij fase 6 noemt de stap de kans die eerder gewonnen was (telt weer als deal, F1)', '1 daarvan was eerder gewonnen en telt weer als deal' in pg.inner_text('#v79-deal') and 'Datakwaliteit' in pg.inner_text('#v79-deal'), pg.inner_text('#v79-deal'))
+        n0 = n_calls(); pg.click('[data-v79="fasen:toepassen"]'); toast('eerder gewonnen'); pg.wait_for_selector('#v79Lijst:has-text("staat zo")')
+        k1 = kans('k1')['kans']
+        ok('r3: na toepassen is k1 gewonnen met gesloten = de datum van de eerdere winst (N8), en de melding noemt hem', k1['fase'] == 'gewonnen' and g1 and k1['gesloten'] == g1, [k1['fase'], k1['gesloten'], g1])
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_fasen_r3', g5_fasen_r3)
+    c.close()
+
     # ===== 6. v7.9.1: de stap fasen op de telefoon (390 px): keuzelijsten 44 px en 16 px, geen horizontale scroll in het venster =====
     c, pg = nieuw(b, 'sophie', tel=True)
     def g5_fasen_telefoon():
