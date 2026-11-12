@@ -1,13 +1,15 @@
-// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
+// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
 // onaangeraakt); per mutant draait `CODE_GS=<kopie> node test/node_rooktest.js`. Een mutant is "gedood" als de rooktest faalt
 // (exitcode ≠ 0, crash of timeout) en "OVERLEEFD" als hij ALLES GOED geeft: dan mist de rooktest een eis(...) voor die invariant.
-// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 14 van 15 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
+// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 16 van 17 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
 // v7.9 (review T3, T5): de noemerregel zonder waarde en zonder schooljaarcontrole, en het venster van de voorspelling één week opgeschoven.
+// v7.9.2: vraagtStart_niet_verplicht (een kans gaat zonder verwachte startdatum naar fase 5b bijna rond) en (review r1) fasenEffectief_5b_leeg (5b erft de
+// voorstelrol niet meer, zodat stap fasen een historische VO-wissel stil herziet).
 // Resultaat als json in test/shots/robuust/mutatie.json (staat in .gitignore).
 var fs = require('fs'), path = require('path'), cp = require('child_process');
 var R = path.join(__dirname, '..'), BRON = path.join(R, 'backend/Code.gs'), ROOKTEST = path.join(__dirname, 'node_rooktest.js');
 var UIT_MAP = path.join(R, 'test/shots/robuust'), UIT = path.join(UIT_MAP, 'mutatie.json');
-var TIMEOUT_MS = 120000, MIN_GEDOOD = 14;  // v7.9 (review): vijftien mutanten, norm ≥ 14
+var TIMEOUT_MS = 120000, MIN_GEDOOD = 16;  // v7.9 (review): vijftien mutanten, norm ≥ 14; v7.9.2: zestien, norm ≥ 15; review r1: zeventien, norm ≥ 16
 
 // De kopieën staan buiten de repo: standaard in de scratchpad van de sessie (--map overschrijft), nooit naast het origineel.
 var argMap = process.argv.indexOf('--map');
@@ -80,7 +82,18 @@ var MUTANTEN = [
   { id: 'voorspelling_venster', gebied: 'voorspellingslog (M13)', invariant: 'voorspelDealsWeek telt de N hele weken vóór de week van de voorspelling',
     zoek: "  for (var i = n; i >= 1; i--) { var b = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() - 7 * i, 12)",
     vervang: "  for (var i = n - 1; i >= 0; i--) { var b = new Date(ma.getFullYear(), ma.getMonth(), ma.getDate() - 7 * i, 12)",
-    voorstel: "eis(ctx.voorspelDealsWeek(ma).verwacht === 1.4, 'M13: de lopende week telt niet mee in het venster');" }
+    voorstel: "eis(ctx.voorspelDealsWeek(ma).verwacht === 1.4, 'M13: de lopende week telt niet mee in het venster');" },
+  // v7.9.2: een mijlpaal met vraagtStart (fase 5b bijna rond) eist vanuit de app en de assistent een verwachte startdatum vandaag of later
+  { id: 'vraagtStart_niet_verplicht', gebied: 'fase 5b (v7.9.2)', invariant: 'kansOpslaan weigert een kans zonder (of met een verlopen) verwachteStart in een mijlpaal met vraagtStart',
+    zoek: "      if (!startNa || startNa < datumStr(new Date())) { eisNieuweApp('7.9.2'); throw new Error(START_FOUT); }",
+    vervang: "      if (false) { eisNieuweApp('7.9.2'); throw new Error(START_FOUT); }  // MUTANT",
+    voorstel: "eis(faalt(LARS, 'apiKansOpslaan', { id: k5.id, fase: B, _oud: { fase: VO } }) === ctx.START_FOUT, 'naar 5b zonder startdatum geweigerd');" },
+  // v7.9.2 (review r1, B1): 5b heeft geen eigen rol en erft voorstel; zonder die erfenis herziet stap fasen een app-wissel naar een eigen mijlpaal "mondeling
+  // akkoord" (erft voorstel, telt als VO) naar naarRol '' en verdwijnt een historische VO stil uit de tellingen
+  { id: 'fasenEffectief_5b_leeg', gebied: 'fase 5b (v7.9.2)', invariant: 'fasenEffectief geeft 5b de geërfde voorstelrol (stap fasen herziet een VO-wissel naar 5b niet)',
+    zoek: "uit['6'] = 'deal'; return uit; }",
+    vervang: "uit['5b'] = ''; uit['6'] = 'deal'; return uit; }  // MUTANT",
+    voorstel: "eis(ctx.fasenEffectief()['5b'] === 'voorstel' && pB.herzien === 0 && ctx.telRol(wisselRij(wB.id)) === 'voorstel', 'een VO-wissel naar mondeling akkoord blijft na stap fasen een VO');" }
 ];
 
 var fouten = 0, overleefd = 0, gedood = 0, t0 = Date.now();
@@ -147,7 +160,7 @@ resultaat.gedood = gedood; resultaat.overleefd = overleefd; resultaat.looptijdS 
 resultaat.geslaagd = gedood >= MIN_GEDOOD && resultaat.mutanten.every(function (r) { return r.toegepast; });
 fs.writeFileSync(UIT, JSON.stringify(resultaat, null, 2));
 console.log('     ' + gedood + ' van ' + MUTANTEN.length + ' gedood, ' + overleefd + ' overleefd; json: ' + path.relative(R, UIT) + '; looptijd ' + looptijdS + ' s');
-// Oordeel: ≥ 14 van 15 gedood (v7.9 na de review; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
+// Oordeel: ≥ 16 van 17 gedood (v7.9.2 na review r1; daarvoor ≥ 15 van 16; v7.9 na de review ≥ 14 van 15; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
 if (resultaat.geslaagd) console.log('ALLES GOED' + (overleefd ? ' (met ' + overleefd + ' overlevende mutant: zie de FOUT-regel hierboven)' : ''));
 else console.log('FOUTEN: ' + fouten);
 process.exit(resultaat.geslaagd ? 0 : 1);

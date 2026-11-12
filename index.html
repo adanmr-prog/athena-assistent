@@ -241,6 +241,9 @@
   #le-tf .le-rij { flex-wrap: wrap; }
   #le-tf [data-le=tekst] { flex: 1 1 100% !important; }
   .le-k { flex-shrink: 0; width: 44px; height: 44px; border: 1.5px solid var(--lijn); border-radius: 8px; background: var(--wit); color: var(--inkt2); cursor: pointer; }
+  .le-rij.met-vink { flex-wrap: wrap; }
+  .le-vink { flex: 1 1 100%; display: flex; gap: 8px; align-items: center; min-height: 44px; font-size: var(--fs-zacht); color: var(--inkt2); cursor: pointer; }  /* v7.9.2: Vraagt startdatum, een eigen regel met een tikdoel van 44 px */
+  .le-vink input { width: 22px; height: 22px; margin: 0; flex-shrink: 0; }
   .doc-link { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
   [data-taakbewerk] { cursor: pointer; }
   .veld.breed { grid-column: 1 / -1; }
@@ -927,6 +930,7 @@
     body.desk .dq-regel[data-crm-open] { min-height: 44px; display: flex; align-items: center; }
     body.desk .v79-keuze select { min-height: 44px; }  /* v7.9.1: de keuzelijsten van de overstap (fasen, rollen, redenen) ook 44 px op de iPad */
     body.desk .v79-stap .veld input[type=date], body.desk #venster .v79-stap .balk .knop { min-height: 44px; }  /* v7.9.1 (review r2, R2): de besluitdatum en Proefdraaien/Toepassen ook 44 px op de iPad (#venster: gaat voor op body.desk #venster .knop) */
+    body.desk #venster #vf-verwachteStart, body.desk #venster .start-venster .balk .knop { min-height: 44px; }  /* v7.9.2 (review r1, R2): het startdatumvenster (het datumveld, Opslaan en Annuleren) ook 44 px op de iPad, zoals de keuzelijst die het opent */
   }
   /* De definitie naast elk getal: één schakelaar per scherm (body.defs-aan); in het MT-overzicht altijd zichtbaar */
   .t-def { display: none; font-size: var(--fs-klein); font-weight: 400; color: var(--gedempt); margin-top: 4px; line-height: 1.35; text-align: left; }
@@ -1566,7 +1570,7 @@
      maxMs en één ingekorte foutmelding zonder e-mailadressen. Nooit argumenten of gegevens. Verzenden (stil, nooit een toast, nooit een lus) zodra er
      iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
-  var APP_VERSIE = '7.9.1';  // v7.9.1: de zes fasen van Capsule (overstapstap fasen); v7.9: sturing; gaat ook als v mee in elke aanroep (versiewacht); v7.8: prestatie, ronde 2; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
+  var APP_VERSIE = '7.9.2';  // v7.9.2: fase 5b bijna rond (verwachte startdatum); v7.9.1: de zes fasen van Capsule (overstapstap fasen); v7.9: sturing; gaat ook als v mee in elke aanroep (versiewacht); v7.8: prestatie, ronde 2; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
   var SW_REGISTREER = function () {};  // v7.9: wordt onderaan gezet als er een service worker kan zijn (zie de registratie)
   var NIEUWE_VERSIE = function () {};  // v7.9 (iOS-review): update-check en dan #updateBalk (Herladen, Later); onderaan gezet bij de service worker, zoals SW_REGISTREER
   var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
@@ -1660,6 +1664,7 @@
   function backendMinstens(min) { var B = CRM.basis, v = B ? B.backendVersie || '' : BACKEND.versie; return !!(v && !versieKleinerApp(v, min)); }
   function v79() { return backendMinstens('7.9'); }
   function v791() { return backendMinstens('7.9.1'); }  // v7.9.1: de overstapstap fasen; een backend van 7.9 kent hem niet (Onbekende stap), dan verbergt de app hem
+  function v792() { return backendMinstens('7.9.2'); }  // v7.9.2: Mijlpalen.vraagtStart en Kansen.verwachteStart (fase 5b); een backend van 7.9.1 kent ze niet, dan geen veld, vinkje of startdatumvenster
   // Het register één keer per sessie (R9): na de eerste geslaagde aanroep, stil en buiten het kritieke pad (zoals metingenVerzend). De vorige versie staat per
   // apparaat in aa_defs_register (een gemak: meteen zichtbaar bij het volgende openen, daarna ververst). Schermen tekenen hun getallen zonder te wachten;
   // defsBijwerken() vult de definitieregels en titels van het open scherm aan zodra het register er is, zonder nieuwe aanroep.
@@ -1759,20 +1764,50 @@
   // v7.9 (review T4): de instelling komt met apiPipeline (het bord), niet meer met apiCrm; zonder bord (kansdetail) geldt uit en weigert de backend zo nodig met een melding
   function sturingVerplichtApp() { return !!((CRM.pipeline && CRM.pipeline.sturingVerplicht) || (CRM.basis && CRM.basis.sturingVerplicht)); }
   function voorstelNodig(k, naar) { return !!k && effectieveRolApp(naar, k.pipeline) === 'voorstel' && (!(Number(k.waarde) > 0) || !k.verwachteSluiting); }
-  function voorstelVenster(k, naar, doorgaan, terugzetten) {
-    var verplicht = sturingVerplichtApp(), velden = [], heeftW = Number(k.waarde) > 0, heeftS = !!k.verwachteSluiting;
+  // v7.9.2: vraagt de mijlpaal een verwachte startdatum (Mijlpalen.vraagtStart, fase 5b bijna rond)? Spiegel van mijlpaalVraagtStart in Code.gs: de mijlpaal in de pipeline
+  // van de kans, anders die met deze naam; nooit op de naam als betekenis. Alleen met een backend van 7.9.2 of hoger (v792).
+  function vraagtStartApp(fase, pipeline) {
+    if (!v792() || !fase || fase === 'gewonnen' || fase === 'verloren') return false;
+    var eigen = mijlpalenApp().filter(function (m) { return m.mijlpaal === fase; }), x = eigen.filter(function (m) { return pipeline && m.pipeline === pipeline; })[0] || eigen[0];
+    return !!(x && x.vraagtStart);
+  }
+  function startNodig(k, naar) { return !!k && vraagtStartApp(naar, k.pipeline); }
+  // Moet er vóór de aanroep een venster komen? Naar de voorstelrol zonder waarde of tekendatum (v7.9), of naar een mijlpaal die een startdatum vraagt (v7.9.2: altijd,
+  // voorgevuld met de bestaande startdatum, zodat de adviseur hem bevestigt)
+  function faseVensterNodig(k, naar) { return (v79() && voorstelNodig(k, naar)) || startNodig(k, naar); }
+  // v7.9.2: één venster met alle verplichte velden. Waarde en tekendatum zoals in v7.9 (alleen wat leeg is; Overslaan alleen zonder sturingVerplicht en zonder startdatum),
+  // plus "Verwachte startdatum" (verplicht, voorgevuld, niet vóór vandaag) als de mijlpaal hem vraagt. alleenStart = alleen de startdatum (bulk, + Kans, de assistent).
+  // Annuleren, Escape of buiten het venster tikken = geen aanroep en terugzetten(); doorgaan(extra) doet de aanroep met de velden erbij.
+  function voorstelVenster(k, naar, doorgaan, terugzetten, alleenStart) {
+    var verplicht = sturingVerplichtApp(), velden = [], vn = !alleenStart && v79() && voorstelNodig(k, naar), sn = !!alleenStart || startNodig(k, naar);
+    var heeftW = !vn || Number(k.waarde) > 0, heeftS = !vn || !!k.verwachteSluiting;
     if (!heeftW) velden.push({ naam: 'waarde', label: 'Waarde (€)', type: 'number' });
     if (!heeftS) velden.push({ naam: 'verwachteSluiting', label: 'Verwachte tekendatum', type: 'date' });
-    var html = formHtml((k.school || k.naam || 'Kans') + ' naar ' + naar, velden, {}, 'Opslaan', function (f) {
+    if (sn) velden.push({ naam: 'verwachteStart', label: 'Verwachte startdatum *', type: 'date', min: vandaagStr(), breed: true });
+    var titel = sn && !vn ? 'Verwachte startdatum' : (k.school || k.naam || 'Kans') + ' naar ' + naar;
+    var html = formHtml(titel, velden, { verwachteStart: sn ? String(k.verwachteStart || '').slice(0, 10) : '' }, 'Opslaan', function (f) {
       var extra = {};
+      if (sn) {  // v7.9.2: verplicht, een geldige datum, vandaag of later (kalenderdagen; iOS dwingt min niet af)
+        var vs = String(f.verwachteStart || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(vs) || vs < vandaagStr()) { toast('Vul de verwachte startdatum in (vandaag of later).'); return; }
+        extra.verwachteStart = vs;
+      }
       if (f.waarde !== undefined && f.waarde !== '') { var w = Number(String(f.waarde).replace(',', '.')); if (!(w > 0)) { toast('Vul een waarde in van meer dan € 0.'); return; } extra.waarde = w; }
       if (f.verwachteSluiting) extra.verwachteSluiting = f.verwachteSluiting;
-      if ((!heeftW && !extra.waarde) || (!heeftS && !extra.verwachteSluiting)) { if (verplicht || !Object.keys(extra).length) { toast(verplicht ? 'Vul de waarde en de verwachte tekendatum in (verplicht vanaf de voorstelfase).' : 'Vul de waarde of de tekendatum in, of kies Overslaan.'); return; } }
+      if ((!heeftW && !extra.waarde) || (!heeftS && !extra.verwachteSluiting)) { if (verplicht || (!sn && !Object.keys(extra).length)) { toast(verplicht ? 'Vul de waarde en de verwachte tekendatum in (verplicht vanaf de voorstelfase).' : 'Vul de waarde of de tekendatum in, of kies Overslaan.'); return; } }
       VENSTER.annuleer = null; VENSTER.overslaan = null; sluitVenster(); return doorgaan(extra);
-    }, '<div class="hint">Vanaf de voorstelfase telt de kans mee in de gewogen pijplijn en de voorspelling. ' + (verplicht ? 'De waarde en de verwachte tekendatum zijn verplicht.' : 'Overslaan mag; het blok Datakwaliteit signaleert lege velden.') + '</div>');
-    if (!verplicht) html = html.replace('<button class="knop licht" data-cf-annuleer="1">', '<button class="knop licht" data-voorstelovers="1">Overslaan</button><button class="knop licht" data-cf-annuleer="1">');
+    }, '<div class="hint">' + (vn ? 'Vanaf de voorstelfase telt de kans mee in de gewogen pijplijn en de voorspelling. ' + (verplicht ? 'De waarde en de verwachte tekendatum zijn verplicht. ' : sn ? 'Waarde en tekendatum mogen leeg blijven; het blok Datakwaliteit signaleert ze. ' : 'Overslaan mag; het blok Datakwaliteit signaleert lege velden.') : '') +
+      (sn ? 'Deze fase is voor een kans die zo goed als rond is: wanneer kan het traject starten? Vandaag of later.' : '') + '</div>');
+    if (!verplicht && vn && !sn) html = html.replace('<button class="knop licht" data-cf-annuleer="1">', '<button class="knop licht" data-voorstelovers="1">Overslaan</button><button class="knop licht" data-cf-annuleer="1">');
+    if (sn) html = '<div class="start-venster">' + html + '</div>';  // v7.9.2 (review r1, R2): de klasse geeft op de iPad (hover: none) de knoppen 44 px
     openVenster(html);
-    VENSTER.annuleer = terugzetten; VENSTER.overslaan = function () { return doorgaan({}); };
+    VENSTER.annuleer = terugzetten || null; VENSTER.overslaan = vn && !sn && !verplicht ? function () { return doorgaan({}); } : null;
+  }
+  // v7.9.2: + Kans en de assistent: is de startdatum nodig en nog niet (geldig) ingevuld, dan eerst het venster; anders meteen doorgaan(). Geeft undefined als het venster opent.
+  function metStartdatum(k, naar, doorgaan, terugzetten) {
+    var vs = String((k && k.verwachteStart) || '').slice(0, 10);
+    if (!startNodig(k, naar) || (/^\d{4}-\d{2}-\d{2}$/.test(vs) && vs >= vandaagStr())) return doorgaan({});
+    voorstelVenster(k, naar, doorgaan, terugzetten, true);
   }
   document.addEventListener('click', function (ev) {
     if (!ev.target.closest || !ev.target.closest('[data-voorstelovers]')) return;
@@ -1922,7 +1957,7 @@
   // v3.5: het Brein is een assistent. Antwoorden kunnen voorgestelde acties bevatten; die voert de backend pas uit na Uitvoeren.
   var AK_LABEL = { titel: 'Titel', school: 'School', contactpersoon: 'T.a.v.', inleiding: 'Inleiding', hulpvraag: 'Hulpvraag', aanpak: 'Aanpak', rooster: 'Rooster', kosten: 'Kosten', voorwaarden: 'Voorwaarden', afsluiting: 'Afsluiting',
     aan: 'Aan', onderwerp: 'Onderwerp', tekst: 'Tekst', deadline: 'Deadline', prio: 'Prio', eigenaar: 'Voor', notitie: 'Notitie', type: 'Soort', datum: 'Datum',
-    fase: 'Mijlpaal', waarde: 'Waarde', volgendeActie: 'Volgende actie', verwachteSluiting: 'Verwachte tekendatum', start: 'Start', duurMin: 'Duur (min)', locatie: 'Locatie', uitnodigen: 'Persoon uitnodigen', werkelijkeDatum: 'Datum mijlpaal' };  // v7.9: tekendatum, datum mijlpaal
+    fase: 'Mijlpaal', waarde: 'Waarde', volgendeActie: 'Volgende actie', verwachteSluiting: 'Verwachte tekendatum', verwachteStart: 'Verwachte start', start: 'Start', duurMin: 'Duur (min)', locatie: 'Locatie', uitnodigen: 'Persoon uitnodigen', werkelijkeDatum: 'Datum mijlpaal' };  // v7.9: tekendatum, datum mijlpaal
   var AK_LANG = { inleiding: 1, hulpvraag: 1, aanpak: 1, rooster: 1, kosten: 1, voorwaarden: 1, afsluiting: 1, tekst: 1, notitie: 1 };
   var AK_VERBORGEN = { schoolId: 1, persoonId: 1, kansId: 1, threadId: 1 };
   var AK_STATUS = { bezig: 'bezig…', uitgevoerd: 'uitgevoerd', geannuleerd: 'geannuleerd' };
@@ -1939,6 +1974,7 @@
         if (typeof v === 'boolean') return lab + ' <input type="checkbox" data-akveld="' + esc(k) + '"' + (v ? ' checked' : '') + ' style="width:auto"></label>';
         if (AK_LANG[k]) return lab + '</label><textarea data-akveld="' + esc(k) + '">' + esc(v) + '</textarea>';
         if (k === 'werkelijkeDatum') return lab + '</label><input type="date" data-akveld="' + esc(k) + '" max="' + vandaagStr() + '" value="' + esc(v) + '">';  // v7.9
+        if (k === 'verwachteStart') return lab + '</label><input type="date" data-akveld="' + esc(k) + '" min="' + vandaagStr() + '" value="' + esc(v) + '">';  // v7.9.2
         return lab + '</label><input data-akveld="' + esc(k) + '"' + (typeof v === 'number' ? ' inputmode="decimal" data-getal="1"' : '') + ' value="' + esc(v) + '">';
       }).join('') + '</div>';
     } else {
@@ -1994,6 +2030,7 @@
   el('vraagKnop').addEventListener('click', function () { vraag(); });
   el('vraagInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') vraag(); });
   el('nieuwGesprek').addEventListener('click', function () { if (S.bezig) return; zetOpslag('aa_chat', ''); S.chat = leesChat(); herrenderChat(); });
+  var BREIN_BASIS = { bezig: false };  // review r1 (R1): de basis (mijlpalen) wordt voor een actiekaart opgehaald; een tweede tik wacht niet dubbel
   el('breinBerichten').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-ak]'); if (!b) return;
     var kaart = b.closest('.actiekaart'), mi = Number(kaart.dataset.akmsg), m = S.chat[mi], a = m && m.acties && m.acties[Number(kaart.dataset.akidx)];
@@ -2005,12 +2042,31 @@
       if (k === 'werkelijkeDatum' && a.invoer.werkelijkeDatum === undefined && x.value === x.defaultValue) return;  // review I2: onaangeroerd = vandaag bij het uitvoeren (de backend)
       a.invoer[k] = x.type === 'checkbox' ? x.checked : x.dataset.getal ? (Number(String(x.value).replace(',', '.')) || 0) : x.value;
     });
-    a.status = 'bezig'; herrenderBericht(mi);
-    run('apiBreinUitvoeren', { soort: a.soort, invoer: a.invoer }).then(function (r) {
-      a.status = 'uitgevoerd'; a.resultaat = r || {}; saveChat(); herrenderBericht(mi);
-      toast((r && r.melding) || 'Uitgevoerd.');
-      CRM.basis = null;  // CRM-lijsten opnieuw ophalen bij de volgende keer openen
-    }).catch(function () { a.status = ''; herrenderBericht(mi); });
+    var voerUit = function () {
+      a.status = 'bezig'; herrenderBericht(mi);
+      run('apiBreinUitvoeren', { soort: a.soort, invoer: a.invoer }).then(function (r) {
+        a.status = 'uitgevoerd'; a.resultaat = r || {}; saveChat(); herrenderBericht(mi);
+        toast((r && r.melding) || 'Uitgevoerd.');
+        CRM.basis = null;  // CRM-lijsten opnieuw ophalen bij de volgende keer openen
+      }).catch(function (e) {
+        if (a.soort === 'wijzig_kans' && a.invoer.verwachteStart === undefined && /startdatum/.test(String((e && e.message) || ''))) a.invoer.verwachteStart = '';  // v7.9.2: Aanpassen toont dan het datumveld
+        a.status = ''; herrenderBericht(mi);
+      });
+    };
+    // v7.9.2: zet het voorstel een kans in een mijlpaal die een startdatum vraagt, dan eerst het startdatumvenster (zoals in het kansdetail); Annuleren voert niets uit
+    if (a.soort === 'wijzig_kans' && a.invoer.fase) {
+      var naarFase = String(a.invoer.fase).trim().toLowerCase();
+      var startEerst = function () { return metStartdatum({ naam: 'Kans', verwachteStart: a.invoer.verwachteStart || '' }, naarFase, function (extra) { if (extra.verwachteStart) a.invoer.verwachteStart = extra.verwachteStart; voerUit(); }); };
+      // review r1 (R1): na een eerder uitgevoerde actie is CRM.basis leeg (voerUit) en op de telefoon het bord en het kansdetail vaak ook; zonder mijlpalen weet de app
+      // niet of de fase een startdatum vraagt. Dan eerst de basis opnieuw ophalen (één aanroep; niet bij een bekende backend van vóór 7.9.2), daarna het venster
+      if (!mijlpalenApp().length && (BACKEND.versie === null || v792())) {
+        if (BREIN_BASIS.bezig) return;
+        BREIN_BASIS.bezig = true;
+        return laadCrmBasis().then(function () { BREIN_BASIS.bezig = false; startEerst(); }, function () { BREIN_BASIS.bezig = false; });  // een fout toont run() al
+      }
+      return startEerst();
+    }
+    voerUit();
   });
   // Vanuit een mail op Vandaag of Home: het Brein een conceptreactie laten schrijven.
   document.addEventListener('click', function (ev) {
@@ -2779,7 +2835,7 @@
   // v7.9 (punt 4): bovenaan de getekende contractwaarde en de akkoorddatum, allebei verplicht; de akkoorddatum is de datum van de deal (standaard de datum uit het
   // veld vóór de keuzelijst, anders vandaag). De getekende waarde wordt de contractwaarde van het project; het schooljaar volgt de startdatum.
   function winVenster(obj, s, dt) {
-    var k = (CRM.detail && CRM.detail.data && CRM.detail.data.kans) || {}, w = { contractwaarde: '', akkoorddatum: dt && dt.datum ? dt.datum : vandaagStr(), rol: 'Onderwijsondersteuner', aantal: '', rooster: '', startdatum: '', bijzonderheden: '', am: k.am || '' };
+    var k = (CRM.detail && CRM.detail.data && CRM.detail.data.kans) || {}, w = { contractwaarde: '', akkoorddatum: dt && dt.datum ? dt.datum : vandaagStr(), rol: 'Onderwijsondersteuner', aantal: '', rooster: '', startdatum: String(k.verwachteStart || '').slice(0, 10), bijzonderheden: '', am: k.am || '' };  // v7.9.2: startdatum = de verwachte start van de kans
     // v7.9 (review I7): korte labels, zodat contractwaarde en akkoorddatum op 390 px op één hoogte staan ("getekend" staat in de hint); aantal en startdatum allebei breed
     openVenster(formHtml('Kans gewonnen: overdracht', [{ naam: 'contractwaarde', label: 'Contractwaarde (€) *', type: 'number' }, { naam: 'akkoorddatum', label: 'Akkoorddatum *', type: 'date' },  // v7.9
       { naam: 'aantal', label: 'Aantal ondersteuners *', type: 'number', breed: true }, { naam: 'startdatum', label: 'Gewenste startdatum *', type: 'date', breed: true },  // iOS: een leeg datumveld staat anders scheef naast het getalveld
@@ -3354,7 +3410,7 @@
       }).join('') + '</select>';
     } else if (v.type === 'textarea') binnen = '<textarea' + attr + (v.plaats ? ' placeholder="' + esc(v.plaats) + '"' : '') + '>' + esc(w) + '</textarea>';
     else if (v.type === 'snel') return '<div class="veld breed"><label for="' + id + '">' + esc(v.label) + '</label><input type="text"' + attr + ' data-snel="form" value=""' + (v.plaats ? ' placeholder="' + esc(v.plaats) + '"' : '') + ' autocomplete="off"><div class="p-chip"></div></div>';  // v4.5: snelinvoer die de velden eronder vult
-    else binnen = '<input type="' + (v.type || 'text') + '"' + attr + ' value="' + esc(w) + '"' + (v.type === 'number' ? ' inputmode="decimal"' : '') + (v.plaats ? ' placeholder="' + esc(v.plaats) + '"' : '') + ' autocomplete="off">';
+    else binnen = '<input type="' + (v.type || 'text') + '"' + attr + ' value="' + esc(w) + '"' + (v.type === 'number' ? ' inputmode="decimal"' : '') + (v.min ? ' min="' + esc(v.min) + '"' : '') + (v.plaats ? ' placeholder="' + esc(v.plaats) + '"' : '') + ' autocomplete="off">';  // v7.9.2: min (de verwachte startdatum)
     return '<div class="veld' + (v.breed || v.type === 'textarea' ? ' breed' : '') + '"><label for="' + id + '">' + esc(v.label) + '</label>' + binnen + '</div>';
   }
   function formHtml(titel, velden, waarden, knop, actie, extra) {
@@ -3418,7 +3474,9 @@
       v.push({ naam: 'fase', label: 'Mijlpaal', type: 'select', opties: optiesMijlpalen('', false) });  // bij een bestaande kans via de keuzelijst bovenaan (logt de wissel)
       if (v79()) v.push({ naam: 'wisselDatum', label: 'Datum van deze mijlpaal', type: 'date', standaard: vandaagStr() });  // v7.9 (punt 2): de werkelijke datum van de eerste wissel
     }
-    v = v.concat([{ naam: 'verwachteSluiting', label: 'Verwachte tekendatum', type: 'date' }, { naam: 'eigenaar', label: 'Onderwijsadviseur', type: 'select', opties: optiesGebruikers(k.eigenaar) },  // v7.9: tekendatum (punt 5, één naam)
+    v.push({ naam: 'verwachteSluiting', label: 'Verwachte tekendatum', type: 'date' });  // v7.9: tekendatum (punt 5, één naam)
+    if (k.id && v792()) v.push({ naam: 'verwachteStart', label: 'Verwachte start', type: 'date' });  // v7.9.2: de potentiële startdatum van het traject (bewerkvenster; bij een nieuwe kans in een mijlpaal die hem vraagt het startdatumvenster)
+    v = v.concat([{ naam: 'eigenaar', label: 'Onderwijsadviseur', type: 'select', opties: optiesGebruikers(k.eigenaar) },
       { naam: 'am', label: 'Accountmanager na winst', type: 'select', opties: [{ waarde: '', label: '— later kiezen' }].concat(optiesGebruikers(k.am)) }]);  // v3.8: krijgt het project als de kans gewonnen is
     if (v79()) {  // v7.9 (punt 7, 16, 23): klant, schooljaar van de opdracht en productsoort; bij een nieuwe kans met het voorstel in het label
       var sj = k.id ? k.schooljaar : schooljaarVoorstelApp(k.verwachteSluiting), kl = k.id ? k.klant : klantVoorstelApp(k.schoolId, sj), ps = keuzeApp('productsoorten');
@@ -3590,13 +3648,21 @@
     var m = P.mijlpalen.filter(function (x) { return x.mijlpaal === k.fase; })[0];
     return m ? m.pipeline : P.pipelines[0];
   }
-  function kaartje(k) {
-    var rw = recht('pipeline', 'wijzigen'), sleep = rw === 'alles' || rw === 'team' || (rw === 'eigen' && k.eigenaar === ikNaam());  // v6.7: alleen wat je mag wijzigen is sleepbaar (de backend controleert opnieuw)
-    return '<div class="kaartje' + (sleep ? ' sleepbaar" tabindex="0" data-sleep="kans:' + esc(k.id) + '"' : '"') + ' data-crm-open="kans:' + esc(k.id) + '"><b>' + esc(k.school || k.naam) + '</b><div class="r-meta">' + [k.school ? esc(k.naam) : '', euro(k.waarde), esc(k.eigenaar), k.stil ? '<b>' + esc(k.dagenStil) + ' d stil</b>' : ''].filter(Boolean).join(' · ') + '</div></div>';
+  // v7.9.2: de verwachte start kort op de kaart in een kolom die hem vraagt (5b bijna rond); ontbreekt hij of is hij voorbij, dan vet (zoals "stil")
+  function startKort(k) { var d = String(k.verwachteStart || '').slice(0, 10); return !d ? '<b>geen start</b>' : d < vandaagStr() ? '<b>start ' + esc(kortDatum(d)) + ' voorbij</b>' : 'start ' + esc(kortDatum(d)); }
+  function startVeld(k) {  // v7.9.2: in het kansdetail; in een mijlpaal die hem vraagt ook als hij ontbreekt
+    if (!v792()) return '';
+    var nodig = vraagtStartApp(k.fase, k.pipeline), d = String(k.verwachteStart || '').slice(0, 10);
+    if (!d) return nodig ? veld('Verwachte start', '<b style="color:var(--rood)">ontbreekt</b>') : '';
+    return veld('Verwachte start', esc(kortDatum(d)) + (nodig && d < vandaagStr() ? ' <b style="color:var(--rood)">voorbij</b>' : ''));
   }
-  function kolomHtml(titel, sub, ks, doel) {
+  function kaartje(k, metStart) {
+    var rw = recht('pipeline', 'wijzigen'), sleep = rw === 'alles' || rw === 'team' || (rw === 'eigen' && k.eigenaar === ikNaam());  // v6.7: alleen wat je mag wijzigen is sleepbaar (de backend controleert opnieuw)
+    return '<div class="kaartje' + (sleep ? ' sleepbaar" tabindex="0" data-sleep="kans:' + esc(k.id) + '"' : '"') + ' data-crm-open="kans:' + esc(k.id) + '"><b>' + esc(k.school || k.naam) + '</b><div class="r-meta">' + [k.school ? esc(k.naam) : '', euro(k.waarde), esc(k.eigenaar), metStart ? startKort(k) : '', k.stil ? '<b>' + esc(k.dagenStil) + ' d stil</b>' : ''].filter(Boolean).join(' · ') + '</div></div>';
+  }
+  function kolomHtml(titel, sub, ks, doel, metStart) {  // v7.9.2: metStart = de mijlpaal vraagt een startdatum
     ks.sort(function (a, b) { return b.waarde - a.waarde; });
-    return '<div class="kolom"' + (doel ? ' data-sleepdoel="kans:' + esc(doel) + '"' : '') + '><h3>' + esc(titel) + '</h3><div class="k-som">' + ks.length + ' · ' + euro(som(ks, 'waarde')) + ' · ' + esc(sub) + '</div>' + (ks.length ? ks.map(kaartje).join('') : '<div class="leeg" style="padding:8px 2px;font-size:var(--fs-zacht)">Leeg</div>') + '</div>';
+    return '<div class="kolom"' + (doel ? ' data-sleepdoel="kans:' + esc(doel) + '"' : '') + '><h3>' + esc(titel) + '</h3><div class="k-som">' + ks.length + ' · ' + euro(som(ks, 'waarde')) + ' · ' + esc(sub) + '</div>' + (ks.length ? ks.map(function (k) { return kaartje(k, metStart); }).join('') : '<div class="leeg" style="padding:8px 2px;font-size:var(--fs-zacht)">Leeg</div>') + '</div>';
   }
   function renderPipeline() {
     var P = CRM.pipeline, B = CRM.basis, q = CRM.zoek.toLowerCase();
@@ -3607,7 +3673,7 @@
     var open = ks.filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; }), overig = open.filter(function (k) { return namen.indexOf(k.fase) < 0; });
     var dicht = ks.filter(function (k) { return k.fase === 'gewonnen' || k.fase === 'verloren'; }).sort(function (a, b) { return String(b.gesloten).localeCompare(String(a.gesloten)); });
     el('crmInhoud').innerHTML = vervolgBalk() + '<div class="tegels drie">' + tegel(open.length, 'Open kansen', '', 'openKansen') + tegel(euro(som(open, 'waarde')), 'Open waarde', '', 'openWaarde') + tegel(euro(som(open, 'gewogen')), 'Gewogen pijplijn', 'oranje', 'gewogenPijplijn') + '</div>' +  // v7.9 (punt 17): één definitie per naam
-      '<div class="bord" tabindex="0" role="region" aria-label="Bord">' + ms.map(function (m) { return kolomHtml(m.mijlpaal, m.kans + '%', open.filter(function (k) { return k.fase === m.mijlpaal; }), m.mijlpaal); }).join('') + (overig.length ? kolomHtml('Overig', 'mijlpaal onbekend', overig) : '') + '</div>' +
+      '<div class="bord" tabindex="0" role="region" aria-label="Bord">' + ms.map(function (m) { return kolomHtml(m.mijlpaal, m.kans + '%', open.filter(function (k) { return k.fase === m.mijlpaal; }), m.mijlpaal, v792() && !!m.vraagtStart); }).join('') + (overig.length ? kolomHtml('Overig', 'mijlpaal onbekend', overig) : '') + '</div>' +
       '<div class="hint">' + (magApp('pipeline', 'wijzigen') ? (isDesk() ? 'Sleep een kans naar een andere mijlpaal (Shift-klik om er meer tegelijk te pakken), of klik erop om hem te openen.' : 'Houd een kans even vast en sleep hem naar een andere mijlpaal; tik om te openen.') : 'Tik op een kans om hem te openen.') + ' Rood = langer stil dan de norm van de mijlpaal.</div>' +
       '<div class="kop">Gesloten <small>laatste 60 dagen</small></div>' + (dicht.length ? dicht.map(function (k) { return kansRij(k, true); }).join('') : '<div class="leeg">Nog niets gesloten.</div>');
   }
@@ -4337,7 +4403,7 @@
         // v7.9 (punt 2, N7): de datum van de wissel staat vóór de keuzelijst, want de keuzelijst slaat meteen op (op de telefoon erboven, over de volle breedte)
         lijst: kl ? '<div class="k-rij"><span>Mijlpaal</span><b>' + esc(k.fase) + '</b></div>' : '<div class="fasewissel-rij">' + (v79() ? '<label for="kfd-' + esc(k.id) + '">Datum van de wissel</label><input type="date" id="kfd-' + esc(k.id) + '" data-kansfasedatum="' + esc(k.id) + '" max="' + vandaagStr() + '" value="' + vandaagStr() + '">' : '') +  /* v7.9 (review I6): alleen het zichtbare label (Label in Name) */
           '<select data-kansfase="' + esc(k.id) + '" aria-label="Mijlpaal">' + fases.map(function (f) { return '<option value="' + esc(f.waarde) + '"' + (f.waarde === k.fase ? ' selected' : '') + '>' + esc(f.label) + '</option>'; }).join('') + '</select></div>',
-        velden: veld('Waarde', euro(k.waarde)) + veld('Kans', esc(k.kans) + '% · gewogen ' + euro(k.gewogen)) + veld('Verwachte tekendatum', k.verwachteSluiting ? esc(kortDatum(k.verwachteSluiting)) : '') + veld('Adviseur', esc(k.eigenaar)) + veld('Accountmanager', esc(k.am)) +  // v7.9: tekendatum
+        velden: veld('Waarde', euro(k.waarde)) + veld('Kans', esc(k.kans) + '% · gewogen ' + euro(k.gewogen)) + veld('Verwachte tekendatum', k.verwachteSluiting ? esc(kortDatum(k.verwachteSluiting)) : '') + startVeld(k) + veld('Adviseur', esc(k.eigenaar)) + veld('Accountmanager', esc(k.am)) +  // v7.9: tekendatum
           veld('Klant', esc(k.klant)) + veld('Schooljaar', esc(k.schooljaar)) + veld('Productsoort', esc(k.productsoort)) +  // v7.9 (punt 7, 16, 23)
           veld('Volgende actie', k.volgendeActie ? esc(k.volgendeActie) + (k.deadline ? ' · ' + esc(kortDatum(k.deadline)) : '') : '') + veld('Laatste contact', k.dagenStil !== null && k.dagenStil !== undefined ? (k.stil ? '<b style="color:var(--rood)">' + esc(k.dagenStil) + ' dagen geleden</b>' : esc(k.dagenStil) + ' dagen geleden') : '') +
           veld('Gesloten', k.gesloten ? esc(kortDatum(k.gesloten)) : '') + veld('Reden verloren', esc(k.verliesReden)) + veld('Toelichting', esc(k.verliesToelichting)),
@@ -4459,7 +4525,9 @@
         if (!f.naam) { toast('Geef de kans een naam.'); return; }
         if (!kop.schoolId) { toast('Koppel deze persoon eerst aan een school.'); return; }
         var ko = nieuweKansObj(f); if (!ko) return;  // v7.9: de datum van de mijlpaal als wissel
-        return run('apiKansOpslaan', samen(kop, ko)).then(function (r) { toast('Kans aangemaakt' + (r.fasewissel && r.fasewissel.label === 'direct' ? ' (direct in ' + r.kans.fase + ')' : '') + '.'); crmVerouderd(); openDetail('kans', r.kans.id, true); });
+        return metStartdatum(ko, ko.fase, function (extra) {  // v7.9.2: in een mijlpaal die een startdatum vraagt, eerst het venster (tenzij het veld al goed is)
+          return run('apiKansOpslaan', samen(samen(kop, ko), extra)).then(function (r) { toast('Kans aangemaakt' + (r.fasewissel && r.fasewissel.label === 'direct' ? ' (direct in ' + r.kans.fase + ')' : '') + '.'); crmVerouderd(); openDetail('kans', r.kans.id, true); });
+        });
       });
     } else if (soort === 'persoon') {
       h = formHtml('Nieuwe persoon bij ' + naam, persoonVelden(false), { eigenaar: ikNaam() }, 'Opslaan', function (f) {
@@ -4539,7 +4607,9 @@
     else if (soort === 'kans') h = formHtml('Nieuwe kans', kansVelden({}, true), { eigenaar: ikNaam() }, 'Opslaan', function (f) {
       if (!f.naam || !f.schoolId) { toast('Naam en school zijn nodig.'); return; }
       var ko = nieuweKansObj(f); if (!ko) return;  // v7.9: de datum van de mijlpaal als wissel
-      return run('apiKansOpslaan', samen({}, ko)).then(function (r) { toast('Kans aangemaakt' + (r.fasewissel && r.fasewissel.label === 'direct' ? ' (direct in ' + r.kans.fase + ')' : '') + '.'); doel.innerHTML = ''; crmVerouderd(); openDetail('kans', r.kans.id, true); });
+      return metStartdatum(ko, ko.fase, function (extra) {  // v7.9.2: in een mijlpaal die een startdatum vraagt, eerst het venster (tenzij het veld al goed is)
+        return run('apiKansOpslaan', samen(ko, extra)).then(function (r) { toast('Kans aangemaakt' + (r.fasewissel && r.fasewissel.label === 'direct' ? ' (direct in ' + r.kans.fase + ')' : '') + '.'); doel.innerHTML = ''; crmVerouderd(); openDetail('kans', r.kans.id, true); });
+      });
     });
     else if (soort === 'taak') h = formHtml('Nieuwe taak', taakVelden(true), { eigenaar: ikNaam() }, 'Opslaan', function (f) {
       delete f.snel;  // v4.5: het snelinvoerveld zelf gaat niet mee
@@ -4686,7 +4756,8 @@
       }).catch(herlaadDetail);  // v3.7
     };
     // v7.9 (punt 5, R14): naar de voorstelrol zonder waarde of tekendatum: eerst het kleine venster, vóór de aanroep; Annuleren zet de keuze terug
-    if (v79() && voorstelNodig(kd, obj.fase)) { voorstelVenster(kd, obj.fase, doe, function () { s.value = obj._oud.fase; s.disabled = false; setTimeout(function () { focusStil(s); }, 0); }); return; }
+    // v7.9.2: ook naar een mijlpaal die een startdatum vraagt (5b bijna rond), in hetzelfde venster
+    if (faseVensterNodig(kd, obj.fase)) { voorstelVenster(kd, obj.fase, doe, function () { s.value = obj._oud.fase; s.disabled = false; setTimeout(function () { focusStil(s); }, 0); }); return; }
     doe({});
   });
   // v7.9 (B2): ongedaan maken in de kansdetail = de vlag op de wissel (geen tweede gebeurtenis); zonder wissel-id (oudere backend) gewoon de oude fase terug
@@ -5005,16 +5076,18 @@
     return '<div class="le" id="' + id + '">' + rijen.map(function (r) { return leRij(kolommen, r); }).join('') + '</div><div class="balk" style="margin-top:6px"><button class="knop licht klein" data-le-erbij="' + id + '">+ Regel</button></div>';
   }
   function leRij(kolommen, r) {
-    return '<div class="le-rij" data-oud="' + esc(JSON.stringify(r.oud || null)) + '">' + kolommen.map(function (k) {
+    var vinkjes = kolommen.filter(function (k) { return k.type === 'checkbox'; });  // v7.9.2: een vinkje (Vraagt startdatum) staat op een eigen regel onder de velden en knoppen
+    return '<div class="le-rij' + (vinkjes.length ? ' met-vink' : '') + '" data-oud="' + esc(JSON.stringify(r.oud || null)) + '">' + kolommen.filter(function (k) { return k.type !== 'checkbox'; }).map(function (k) {
       var v = r[k.naam] === undefined || r[k.naam] === null ? '' : r[k.naam];
       return '<input data-le="' + k.naam + '" value="' + esc(v) + '" placeholder="' + esc(k.label) + '" aria-label="' + esc(k.label) + '"' + (k.getal ? ' inputmode="decimal"' : '') + (k.type ? ' type="' + k.type + '"' : '') + (k.lijst ? ' list="' + k.lijst + '"' : '') + ' style="flex:' + (k.flex || 1) + '">';
-    }).join('') + '<button class="le-k" data-le-op="1" aria-label="Omhoog">↑</button><button class="le-k" data-le-weg="1" aria-label="Weghalen">✕</button></div>';
+    }).join('') + '<button class="le-k" data-le-op="1" aria-label="Omhoog">↑</button><button class="le-k" data-le-weg="1" aria-label="Weghalen">✕</button>' +
+      vinkjes.map(function (k) { return '<label class="le-vink"><input type="checkbox" data-le="' + k.naam + '"' + (r[k.naam] ? ' checked' : '') + '><span>' + esc(k.label) + '</span></label>'; }).join('') + '</div>';
   }
   function leesLijst(id) {
     var rijen = el(id) ? el(id).querySelectorAll('.le-rij') : [];
     return [].map.call(rijen, function (r) {
       var o = { oud: null }; try { o.oud = JSON.parse(r.getAttribute('data-oud') || 'null'); } catch (e) {}
-      r.querySelectorAll('[data-le]').forEach(function (i) { o[i.getAttribute('data-le')] = i.value.trim(); });
+      r.querySelectorAll('[data-le]').forEach(function (i) { o[i.getAttribute('data-le')] = i.type === 'checkbox' ? i.checked : i.value.trim(); });  // v7.9.2: vinkje
       return o;
     });
   }
@@ -5081,10 +5154,11 @@
   // Een echte wijziging van een fasegewicht vraagt eerst een onderbouwing en een besluitdatum (N6, een versie van de aanname fasegewichten); na een gewijzigde
   // rol een knop "Rollen opnieuw toepassen" (data-rollentoepassen) voor wissels uit import, Capsule en de oude tijdlijn.
   function beheerMijlpalen() {
-    var ms = CRM.basis.mijlpalen, metRol = v79(), geenRol = metRol && !ms.some(function (m) { return m.rol; });
-    var kolommen = [{ naam: 'pipeline', label: 'Pipeline', flex: 2 }, { naam: 'mijlpaal', label: 'Mijlpaal', flex: 3 }, { naam: 'kans', label: '%', getal: true, flex: 1 }, { naam: 'dagenNorm', label: 'Dagen', getal: true, flex: 1 }].concat(metRol ? [{ naam: 'rol', label: 'Rol', lijst: 'dl-rollen', flex: 1.4 }] : []);
+    var ms = CRM.basis.mijlpalen, metRol = v79(), metStart = v792(), geenRol = metRol && !ms.some(function (m) { return m.rol; });
+    var kolommen = [{ naam: 'pipeline', label: 'Pipeline', flex: 2 }, { naam: 'mijlpaal', label: 'Mijlpaal', flex: 3 }, { naam: 'kans', label: '%', getal: true, flex: 1 }, { naam: 'dagenNorm', label: 'Dagen', getal: true, flex: 1 }].concat(metRol ? [{ naam: 'rol', label: 'Rol', lijst: 'dl-rollen', flex: 1.4 }] : [])
+      .concat(metStart ? [{ naam: 'vraagtStart', label: 'Vraagt startdatum', type: 'checkbox' }] : []);  // v7.9.2: per mijlpaal
     toonForm(el('crmBeheer'), formHtml('Mijlpalen', [], {}, 'Opslaan', function () {
-      var lijst = leesLijst('leMijlpalen').filter(function (m) { return m.mijlpaal; }).map(function (m) { var x = { pipeline: m.pipeline || 'Scholen', mijlpaal: m.mijlpaal, kans: Number(String(m.kans).replace(',', '.')) || 0, dagenNorm: Number(m.dagenNorm) || 0, oud: m.oud }; if (metRol) x.rol = String(m.rol || '').trim().toLowerCase(); return x; });
+      var lijst = leesLijst('leMijlpalen').filter(function (m) { return m.mijlpaal; }).map(function (m) { var x = { pipeline: m.pipeline || 'Scholen', mijlpaal: m.mijlpaal, kans: Number(String(m.kans).replace(',', '.')) || 0, dagenNorm: Number(m.dagenNorm) || 0, oud: m.oud }; if (metRol) x.rol = String(m.rol || '').trim().toLowerCase(); if (metStart) x.vraagtStart = m.vraagtStart === true; return x; });  // v7.9.2: vraagtStart alleen met een backend die hem kent
       if (!lijst.length) { toast('Geef minstens één mijlpaal.'); return; }
       var rolFout = lijst.filter(function (m) { return metRol && ['', 'lead', 'ap', 'ad', 'voorstel'].indexOf(m.rol) < 0; })[0];
       if (rolFout) { toast('Onbekende rol: ' + rolFout.rol + '. Kies lead, ap, ad, voorstel of laat leeg.'); return; }
@@ -5106,9 +5180,10 @@
         }, '<div class="hint">Een gewijzigd fasegewicht verandert de gewogen pijplijn (M06). Het wordt een nieuwe versie van de aanname fasegewichten, met onderbouwing en besluitdatum.</div>'));
     }, '<div class="hint">Per regel: pipeline, mijlpaal, kans in %, dagen tot een kans "stil" is' + (metRol ? ' en de rol' : '') + '. Hernoem je een mijlpaal of pipeline, dan verhuizen de kansen mee. Gewonnen en verloren bestaan altijd.</div>' +
       (metRol ? '<div class="hint">Rol: lead, ap (AP gepland), ad (AP gehouden), voorstel. Tellingen lezen de rol, niet de naam. Elke rol hoogstens één keer per pipeline, in die volgorde; een mijlpaal zonder rol erft die van de mijlpaal ervoor.</div>' : '') +
+      (metStart ? '<div class="hint">Vraagt startdatum: wie een kans naar deze mijlpaal zet, vult de verwachte startdatum van het traject in (vandaag of later), zoals bij 5b bijna rond.</div>' : '') +  // v7.9.2
       (geenRol ? '<div class="waarschuwing">Nog geen rollen: AP, AD, VO en conversie zijn geblokkeerd. Stel ze in of kies Beheer → Overstap naar v7.9.</div>' : '') +
       (metRol ? '<datalist id="dl-rollen"><option value="lead"><option value="ap"><option value="ad"><option value="voorstel"></datalist>' : '') +
-      lijstEditor('leMijlpalen', kolommen, ms.map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol || '', oud: { pipeline: m.pipeline, mijlpaal: m.mijlpaal } }; }))));
+      lijstEditor('leMijlpalen', kolommen, ms.map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol || '', vraagtStart: !!m.vraagtStart, oud: { pipeline: m.pipeline, mijlpaal: m.mijlpaal } }; }))));
   }
   // v7.9 (§2.5, R7): Rollen opnieuw toepassen = apiMigratieV79('wissels'): eerst een proefdraai, dan na bevestiging toepassen
   function rollenOpnieuw(knop) {
@@ -5331,6 +5406,8 @@
     return '<div class="hint">' + (p.gewichtenBlijven ? 'Na de vorige keer aangepaste gewichten blijven staan: ' : 'De gewichten van bestaande fasen worden die uit het rekenmodel: ') + esc(l) + '.</div>';
   }
   // v7.9.1: bovenaan de stap fasen: de pipeline Scholen krijgt de zes fasen van Capsule; per mijlpaal een keuze (1–6), plus onderbouwing en besluitdatum van de gewichten
+  // v7.9.2: met een backend van 7.9.2 komt 5b bijna rond erbij (FASEN_TEKST_792 in plaats van de tekst hieronder)
+  var FASEN_TEKST_792 = 'De pipeline Scholen krijgt de fasen van Capsule: 1 tot en met 5 en 5b als mijlpalen met rol en gewicht (pre-AP 0 %, AP 25 %, AD 40 %, VO 70 %, 5b bijna rond 90 % met een verplichte startdatum), 6 (deal/lopend traject) is gewonnen. Kies per mijlpaal de fase; open kansen verhuizen mee en dat telt nergens. Staan de fasen er al (v7.9.1), dan komt alleen 5b erbij. Andere pipelines blijven zoals ze zijn.';
   var V79_STAPPEN = [['fasen', 'Fasen zoals Capsule', 'De pipeline Scholen krijgt de zes fasen van Capsule: 1 tot en met 5 als mijlpalen met rol en gewicht (pre-AP 0 %, AP 25 %, AD 40 %, VO 70 %), 6 (deal/lopend traject) is gewonnen. Kies per mijlpaal de fase; open kansen verhuizen mee en dat telt nergens. Andere pipelines blijven zoals ze zijn.'],
     ['rollen', 'Rollen van de mijlpalen', 'Een rol per mijlpaal (lead, AP gepland, AP gehouden, voorstel). Zonder rollen zijn AP, AD, VO en conversie geblokkeerd.'],
     ['tijdlijn', 'Oude tijdlijnregels omzetten', 'De regels "Mijlpaal: a → b" worden wissels met bron tijdlijn (zonder werkelijke datum).'],
@@ -5375,7 +5452,7 @@
           ((p.afwijkend || []).length ? '<div class="hint" id="v79-rolafwijkend">De rol past niet bij de naam van de mijlpaal: ' + esc(p.afwijkend.map(function (m) { return m.pipeline + ' · ' + m.mijlpaal + ' heeft ' + (m.rol || 'geen rol') + ', op naam ' + (m.voorstel || 'geen rol'); }).join('; ')) + '. Zet het recht in Beheer → Mijlpalen; de overstap past dit niet aan.</div>' : '');  // v7.9.1 (review r3, R4): alleen een signaal
         else if (p && st[0] === 'redenen') keuzes = (p.redenen || []).map(function (x, i) { var gekozen = v79Keuze('reden:' + x.reden, x.voorstel); return '<div class="v79-keuze"><span>' + esc(x.reden) + ' (' + esc(x.aantal) + '×)</span><select data-v79reden="' + i + '" aria-label="Reden voor ' + esc(x.reden) + '"><option value="">kies een reden</option>' + (p.lijst || []).map(function (l) { return '<option' + (l === gekozen ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle redenen staan al in de lijst.</div>';
         else if (p) keuzes = '<div class="r-meta">Proefdraai: ' + esc(Object.keys(p).filter(function (k) { return typeof p[k] === 'number'; }).map(function (k) { return k + ' ' + p[k]; }).join(' · ')) + '</div>';
-        return '<div class="v79-stap" id="v79stap-' + st[0] + '"><div class="r-titel" tabindex="-1">' + esc(st[1]) + ' <small class="zacht">' + esc(v79Telling(st[0], S0)) + '</small></div><div class="hint" style="margin-top:2px">' + esc(st[2]) + '</div>' + keuzes +
+        return '<div class="v79-stap" id="v79stap-' + st[0] + '"><div class="r-titel" tabindex="-1">' + esc(st[1]) + ' <small class="zacht">' + esc(v79Telling(st[0], S0)) + '</small></div><div class="hint" style="margin-top:2px">' + esc(st[0] === 'fasen' && v792() ? FASEN_TEKST_792 : st[2]) + '</div>' + keuzes +
           '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p && !p.alGedaan && !(st[0] === 'fasen' && !(p.mijlpalen || []).length) ? '' : ' disabled') + '>Toepassen</button></div></div>';
       }).join('') + '</div><div class="balk"><button class="knop" data-cf-annuleer="1">Sluiten</button></div>';
     vensterNaam();
@@ -6114,7 +6191,16 @@
   function kaartFocus(id) { setTimeout(function () { var n = document.querySelector('[data-sleep="kans:' + String(id).replace(/["\\]/g, '') + '"]'); if (n) focusStil(n); }, 30); }
   // v7.9 (R14, K6): bulk naar een kolom. Met sturingVerplicht gaan kansen zonder waarde of tekendatum naar de voorstelrol niet mee (vóór de aanroep); één
   // samenvatting na de reeks, nooit een venster of een toast per kans. Zonder de instelling een melding als er kansen zonder waarde of tekendatum bij zaten.
+  // v7.9.2: naar een mijlpaal die een startdatum vraagt eerst één venster met alleen de startdatum, die voor de hele selectie geldt; Annuleren verplaatst niets
   function bulkKansen(ids, naar) {
+    var P = CRM.pipeline, eerste = P && P.kansen.filter(function (x) { return ids.indexOf(x.id) >= 0; })[0];
+    if (!eerste || !startNodig(eerste, naar)) return bulkKansenReeks(ids, naar, {});
+    return new Promise(function (klaar) {
+      voorstelVenster({ naam: ids.length + (ids.length === 1 ? ' kans' : ' kansen'), pipeline: eerste.pipeline, verwachteStart: '' }, naar, function (extra) { return bulkKansenReeks(ids, naar, extra).then(klaar); },
+        function () { klaar('Niets verplaatst: zonder verwachte startdatum gaat een kans niet naar ' + naar + '.'); }, true);
+    });
+  }
+  function bulkKansenReeks(ids, naar, extra) {
     var P = CRM.pipeline, verplicht = sturingVerplichtApp(), mee = [], over = 0, leeg = 0;
     ids.forEach(function (id) {
       var k = P && P.kansen.filter(function (x) { return x.id === id; })[0], nodig = !!k && v79() && voorstelNodig(k, naar);
@@ -6122,7 +6208,7 @@
       if (nodig) leeg++;
       mee.push(id);
     });
-    return bulkReeks(mee, function (id) { return sleepZet('kans', id, naar, true, true, { bron: 'bulk' }); }).then(function (r) {
+    return bulkReeks(mee, function (id) { return sleepZet('kans', id, naar, true, true, { bron: 'bulk', extra: extra }); }).then(function (r) {
       return r.ok + ' verplaatst naar ' + naar + (r.over ? ' · ' + r.over + ' stond er al' : '') + (r.fout ? ' · ' + r.fout + ' niet gelukt' : '') +
         (over ? ', ' + over + ' overgeslagen: waarde of tekendatum ontbreekt' : '') + (leeg ? ' · ' + leeg + (leeg === 1 ? ' kans' : ' kansen') + ' zonder waarde of tekendatum' : '') + '.';
     });
@@ -6133,14 +6219,14 @@
     lijsten.forEach(function (l) { (l || []).forEach(function (x) { if (x.id === id) t = t || x; }); });
     return t;
   }
-  // v7.9: opties = { bron, ongedaan, venster }. Bij een kans gaat wissel: { bron, ongedaan } mee (bron slepen, toets of bulk; ongedaan = het id van de wissel die
+  // v7.9: opties = { bron, ongedaan, venster } (v7.9.2: en extra, velden die bulk meestuurt). Bij een kans gaat wissel: { bron, ongedaan } mee (bron slepen, toets of bulk; ongedaan = het id van de wissel die
   // Ongedaan maken terugdraait, B2). Naar de voorstelrol zonder waarde of tekendatum opent eerst het voorstelvenster (R14), met de kaart voorlopig in de nieuwe
   // kolom; Annuleren zet hem terug zonder aanroep. Bulk (stil) opent geen venster: bulkKansen() laat kansen zonder waarde of tekendatum weg als het moet.
   function sleepZet(soort, id, naar, terug, stil, opties) {
     opties = opties || {};
     if (soort === 'kans') {
       var P = CRM.pipeline, k = P && P.kansen.filter(function (x) { return x.id === id; })[0]; if (!k || k.fase === naar) return null;
-      var oud = k.fase, kopieVoor = { waarde: k.waarde, verwachteSluiting: k.verwachteSluiting, pipeline: k.pipeline, school: k.school, naam: k.naam, fase: oud };
+      var oud = k.fase, kopieVoor = { waarde: k.waarde, verwachteSluiting: k.verwachteSluiting, verwachteStart: k.verwachteStart || '', pipeline: k.pipeline, school: k.school, naam: k.naam, fase: oud };  // v7.9.2: verwachteStart
       k.fase = naar; metBordScroll(renderPipeline);
       var terugzetten = function () { k.fase = oud; if (CRM.pipeline === P && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); kaartFocus(id); };
       var doe = function (extra) {
@@ -6156,8 +6242,8 @@
           return true;
         }).catch(function () { k.fase = oud; if (CRM.pipeline === P && CRM.tab === 'pipeline' && !CRM.detail) metBordScroll(renderPipeline); return false; });
       };
-      if (!terug && !stil && !opties.ongedaan && v79() && voorstelNodig(kopieVoor, naar)) { opties.venster = true; voorstelVenster(kopieVoor, naar, doe, terugzetten); return null; }
-      return doe({});
+      if (!terug && !stil && !opties.ongedaan && faseVensterNodig(kopieVoor, naar)) { opties.venster = true; voorstelVenster(kopieVoor, naar, doe, terugzetten); return null; }  // v7.9.2: ook de startdatum
+      return doe(opties.extra || {});  // v7.9.2: bulk geeft één startdatum mee voor de hele selectie
     }
     if (soort === 'project') {
       var l = projectenLokaal(id); if (!l.length || l[0].status === naar) return null;

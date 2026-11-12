@@ -1081,7 +1081,7 @@ eis(/winformulier/.test(faalt(LARS, 'apiKansOpslaan', { id: 'k10', fase: 'gewonn
 (function () {
   ctx.GEBRUIKER = null;
   var c1 = ctx.controleer();
-  eis(c1.indexOf('Athena Assistent, backend 7.9.1\n') === 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1) && /Fasewissels: \d+ rijen/.test(c1), 'controleer(): begint met "Athena Assistent, backend 7.9.1", geen afwijkende koppen in de demo-sheet, Fasewissels aanwezig');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch; v7.5: release; v7.6: metingen; v7.7: alle gegevens inladen; v7.9: sturing; v7.9.1: de zes fasen van Capsule
+  eis(c1.indexOf('Athena Assistent, backend 7.9.2\n') === 0 && c1.indexOf('AFWIJKENDE KOP') < 0 && /Scholen: \d+ rijen/.test(c1) && /Fasewissels: \d+ rijen/.test(c1), 'controleer(): begint met "Athena Assistent, backend 7.9.2", geen afwijkende koppen in de demo-sheet, Fasewissels aanwezig');  // v7.3; v7.4: versie mee omhoog; v7.4.1: backend-patch; v7.5: release; v7.6: metingen; v7.7: alle gegevens inladen; v7.9: sturing; v7.9.1: de zes fasen van Capsule
   var b = ctx.blad('Scholen'), kop = ctx.TABELLEN.Scholen, was = b.getRange(1, 2, 1, 1).getValues()[0][0];
   b.getRange(1, 2, 1, 1).setValues([['schoolnaam']]);
   var c2 = ctx.controleer(), regel = c2.split('\n').filter(function (r) { return r.indexOf('- Scholen:') === 0; })[0] || '';
@@ -2081,7 +2081,7 @@ var GEWICHT_OK = { onderbouwing: 'Rooktest: verzonnen gewicht', besluitdatum: pl
     var k1 = roep(LARS, 'apiKansOpslaan', { naam: 'Kans A', schoolId: sA.id }), k2 = roep(LARS, 'apiKansOpslaan', { naam: 'Kans B', schoolId: sB.id }), k3 = roep(LARS, 'apiKansOpslaan', { naam: 'Kans C', schoolId: sB.id, klant: 'Bestaand' });
     eis(k1.kans.klant === 'bestaand' && k2.kans.klant === 'nieuw' && k3.kans.klant === 'bestaand' && /nieuw of bestaand/.test(faalt(LARS, 'apiKansOpslaan', { naam: 'Kans D', schoolId: sB.id, klant: 'misschien' })), 'een nieuwe kans krijgt het klantvoorstel; een meegegeven klant gaat voor; een andere waarde wordt geweigerd');
     var ci = roep(LARS, 'apiCrm');
-    eis(ci.klantIn[vorig].indexOf('s1') >= 0 && ci.klantIn[vorig].indexOf(sA.id) >= 0 && ci.klantIn[vorig].indexOf(sB.id) < 0 && ci.schooljaren[0] === sj && ci.schooljaren[1] === (j1 + 1) + '-' + (j1 + 2) && ci.sturingVerplicht === undefined && roep(LARS, 'apiPipeline').sturingVerplicht === false && ci.backendVersie === '7.9.1' && ci.rollenIngesteld === true &&
+    eis(ci.klantIn[vorig].indexOf('s1') >= 0 && ci.klantIn[vorig].indexOf(sA.id) >= 0 && ci.klantIn[vorig].indexOf(sB.id) < 0 && ci.schooljaren[0] === sj && ci.schooljaren[1] === (j1 + 1) + '-' + (j1 + 2) && ci.sturingVerplicht === undefined && roep(LARS, 'apiPipeline').sturingVerplicht === false && ci.backendVersie === '7.9.2' && ci.rollenIngesteld === true &&
       ci.keuzes.verliesRedenen.indexOf('opgeschoond') >= 0 && ci.keuzes.productsoorten.indexOf('overig') >= 0 && ci.mijlpalen.every(function (m) { return 'rol' in m; }), 'apiCrm: klantIn (alleen ids), schooljaren, rollenIngesteld, backendVersie en de keuzelijsten; sturingVerplicht via apiPipeline (review T4)');
     // schooljaar: schrijfwijzen, ongeldig, voorstel uit de verwachte tekendatum
     var sk = roep(LARS, 'apiKansOpslaan', { naam: 'Kans SJ', schoolId: 's1', schooljaar: "'" + String(j1 + 1).slice(2) + '/' + String(j1 + 2).slice(2) });
@@ -2282,7 +2282,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       /Onbekend cijfer/.test(faalt(SOPHIE, 'apiCijferAftekenen', 'toString', 1)) && /tolerantie/.test(faalt(SOPHIE, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'x', eigenaar: 'beheerder', tolerantie: 'veel' })) &&
       /eigenaar/.test(faalt(SOPHIE, 'apiCijferOpslaan', { metriek: 'gesprekken', definitie: 'x', eigenaar: 'iemand' })), 'N1: constructor, __proto__ en toString als cijfer geven "Onbekend cijfer."; een ongeldige tolerantie of eigenaar wordt geweigerd');
     var kort = roep(LARS, 'apiCijfers', { kort: true });
-    eis(ids.every(function (id) { return kort.defs[id] && kort.defs[id].definitie && typeof kort.defs[id].versie === 'number'; }) && /^7\.9\.1\|/.test(kort.stempel) && kort.defs.contactmomenten.status === 'afgetekend', 'apiCijfers({ kort: true }): een definitie voor elke sleutel (ook voor een medewerker), met versie, status en een stempel');
+    eis(ids.every(function (id) { return kort.defs[id] && kort.defs[id].definitie && typeof kort.defs[id].versie === 'number'; }) && /^7\.9\.2\|/.test(kort.stempel) && kort.defs.contactmomenten.status === 'afgetekend', 'apiCijfers({ kort: true }): een definitie voor elke sleutel (ook voor een medewerker), met versie, status en een stempel');
     // R9: Home, Vandaag, Financiën, het teamrapport en het oude rapport lezen het register niet
     var tel = leesTeller(function () { roep(SOPHIE, 'apiHome'); roep(SOPHIE, 'apiOverzicht'); roep(SOPHIE, 'apiFinancien', ''); roep(SOPHIE, 'apiTeamRapport', 'maand', 'consultancy', '', 0); roep(SOPHIE, 'apiRapport', 'maand', '', 0); });
     eis(!tel.Cijferdefinities && ['apiHome', 'apiOverzicht', 'apiFinancien', 'apiTeamRapport', 'apiRapport'].every(function (f) { return String(ctx[f]).indexOf('definitiesVan(') < 0 && String(ctx[f]).indexOf('registerVan(') < 0; }),
@@ -2343,7 +2343,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
   try {
     var sj = sjNu(), vandaag = plusDagen(0), wk = ctx.isoWeekStr(new CtxDate79()), open = function (S) { return S.kansen.filter(function (k) { return k.fase !== 'gewonnen' && k.fase !== 'verloren'; }); };
     var C0 = contractenOp();
-    eis(ctx.CONTRACTEN.length === 19 && ctx.CONTRACTEN.every(function (c) { return C0[c[0]] && ctx.CONTRACT_STANDEN.indexOf(C0[c[0]].stand) >= 0; }), 'negentien contracten, elk met een stand uit geslaagd, gezakt, niet getoetst of geblokkeerd');
+    eis(ctx.CONTRACTEN.length === 20 && ctx.CONTRACTEN.every(function (c) { return C0[c[0]] && ctx.CONTRACT_STANDEN.indexOf(C0[c[0]].stand) >= 0; }), 'twintig contracten (v7.9.2: start_bij_bijna_rond), elk met een stand uit geslaagd, gezakt, niet getoetst of geblokkeerd');
     function paar(id, goed, fout, extra) {
       var G = contractenOp(goed)[id], F = contractenOp(fout)[id];
       eis(G.stand === 'geslaagd' && F.stand === 'gezakt' && F.afwijkingen.length > 0 && (!extra || extra(G, F)), 'contract ' + id + ': slaagt (' + G.stand + (G.reden ? ', ' + G.reden : '') + ') en zakt (' + F.stand + ', ' + F.afwijkingen.length + ' afwijking(en))');
@@ -2726,13 +2726,13 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       'rolVanNaam: lead, geen, ap, ad, voorstel, geen; rollenOpNaam: elke rol één keer en alleen vooruit (een dubbele of teruglopende rol blijft leeg), null als niets herkend wordt');
     // --- versievergelijking: 7.9.1 is niet ouder dan 7.9; een app van 7.9 krijgt geen "Herlaad de app" ---
     var herlaad = function (v) { ctx.KLANT_VERSIE = v; try { ctx.eisNieuweApp(); return ''; } catch (e) { return e.message; } finally { ctx.KLANT_VERSIE = null; } };
-    eis(ctx.VERSIE === '7.9.1' && !ctx.versieKleiner('7.9.1', '7.9') && ctx.versieKleiner('7.9', '7.9.1') && !ctx.versieKleiner('7.10', '7.9.1') && ctx.versieKleiner('7.8.9', '7.9') && !ctx.versieKleiner('7.9.0', '7.9') && ctx.versieKleiner('', '7.9') &&
+    eis(ctx.VERSIE === '7.9.2' && !ctx.versieKleiner('7.9.1', '7.9') && ctx.versieKleiner('7.9', '7.9.1') && !ctx.versieKleiner('7.10', '7.9.1') && ctx.versieKleiner('7.8.9', '7.9') && !ctx.versieKleiner('7.9.0', '7.9') && ctx.versieKleiner('', '7.9') &&
       herlaad('7.9') === '' && herlaad('7.9.1') === '' && /Herlaad de app/.test(herlaad('7.8')) && /Herlaad de app/.test(herlaad('')),
-      'versieKleiner per deel (x.y.z): VERSIE 7.9.1, niet ouder dan 7.9, 7.10 niet ouder dan 7.9.1; eisNieuweApp: een app van 7.9 of 7.9.1 geen herlaadmelding, een van 7.8 of zonder versie wel');
+      'versieKleiner per deel (x.y.z): VERSIE 7.9.2, niet ouder dan 7.9, 7.10 niet ouder dan 7.9.1; eisNieuweApp: een app van 7.9 of 7.9.1 geen herlaadmelding, een van 7.8 of zonder versie wel');
     var dp = function (body) { var u = JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } })); ctx.KLANT_VERSIE = null; return u; };
     var mZonder = ctx.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.mijlpaal === 'gesprek' ? 30 : m.kans, dagenNorm: m.dagenNorm, rol: m.rol }; });
     var d79 = dp({ fn: 'apiMijlpalenOpslaan', args: [mZonder], secret: SOPHIE, v: '7.9' }), d78 = dp({ fn: 'apiMijlpalenOpslaan', args: [mZonder], secret: SOPHIE, v: '7.8' }), dC = dp({ fn: 'apiCrm', args: [], secret: SOPHIE, v: '7.9' });
-    eis(!d79.ok && /onderbouwing/.test(d79.fout) && !/Herlaad/.test(d79.fout) && /Herlaad de app/.test(d78.fout) && dC.ok && dC.result.backendVersie === '7.9.1', 'doPost: een app van 7.9 krijgt van backend 7.9.1 de gewone melding (geen herlaadmelding), een app van 7.8 wel; apiCrm noemt backendVersie 7.9.1');
+    eis(!d79.ok && /onderbouwing/.test(d79.fout) && !/Herlaad/.test(d79.fout) && /Herlaad de app/.test(d78.fout) && dC.ok && dC.result.backendVersie === '7.9.2', 'doPost: een app van 7.9 krijgt van backend 7.9.2 de gewone melding (geen herlaadmelding), een app van 7.8 wel; apiCrm noemt backendVersie 7.9.2');
     ctx._LEES = {};
 
     // --- proefdraai op de demoseed ---
@@ -2740,8 +2740,8 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var p = roep(SOPHIE, 'apiMigratieV79', 'fasen'), vs = {}; p.mijlpalen.forEach(function (m) { vs[m.mijlpaal] = m; });
     var som = p.mijlpalen.reduce(function (a, m) { return a + m.open; }, 0);
     eis(!p.toegepast && !p.alGedaan && vs.lead.voorstel === '1' && vs.gesprek.voorstel === '3' && vs.voorstel.voorstel === '5' && vs.onderhandeling.voorstel === '5' && som === open0.length && vs.gesprek.open === open0.filter(function (k) { return k.fase === 'gesprek'; }).length &&
-      p.doelen.length === 6 && p.doelen.map(function (d) { return d.fase; }).join() === '1,2,3,4,5,6' && p.doelen[5].mijlpaal === 'gewonnen' && /deal\/lopend traject/.test(p.doelen[5].label) && p.onderbouwing === ctx.FASEN_ONDERBOUWING && namenVrij(p),
-      'stap fasen proefdraai op de demoseed: lead → 1, gesprek → 3, voorstel → 5, onderhandeling → 5; per mijlpaal het aantal open kansen; zes doelfasen (6 = gewonnen); geen namen');
+      p.doelen.length === 7 && p.doelen.map(function (d) { return d.fase; }).join() === '1,2,3,4,5,5b,6' && p.doelen[6].mijlpaal === 'gewonnen' && /deal\/lopend traject/.test(p.doelen[6].label) && /startdatum verplicht/.test(p.doelen[5].label) && p.onderbouwing === ctx.FASEN_ONDERBOUWING && namenVrij(p),
+      'stap fasen proefdraai op de demoseed: lead → 1, gesprek → 3, voorstel → 5, onderhandeling → 5; per mijlpaal het aantal open kansen; zeven doelfasen (v7.9.2: 5b, 6 = gewonnen); geen namen');
     eis(scholenRijen().map(function (m) { return m.mijlpaal; }).join() === 'lead,gesprek,voorstel,onderhandeling' && open0.every(function (k) { return ctx.vind('Kansen', k.id).fase === k.fase; }) && !roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.mijlpalen === 4,
       'stap fasen: proefdraaien schrijft niets; status.fasen zegt dat de pipeline nog niet zo staat');
     eis(/management/i.test(faalt(YARA, 'apiMigratieV79', 'fasen')) && /management/i.test(faalt(LARS, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: { 'scholen-lead': '1' } })), 'stap fasen: alleen management (ook proefdraaien)');
@@ -2750,19 +2750,20 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       /Kies voor elke mijlpaal/.test(faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: { 'scholen-lead': '1', 'scholen-gesprek': '7', 'scholen-voorstel': '5', 'scholen-onderhandeling': '5' } })) &&
       /Kies voor elke mijlpaal/.test(faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true })) && /verwacht tekst/.test(faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: { 'scholen-lead': '1', 'scholen-gesprek': '3', 'scholen-voorstel': '5', 'scholen-onderhandeling': '5' }, onderbouwing: { x: 1 } })) &&
       /besluitdatum/.test(faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: { 'scholen-lead': '1', 'scholen-gesprek': '3', 'scholen-voorstel': '5', 'scholen-onderhandeling': '5' }, besluitdatum: 'morgen' })) &&
-      scholenRijen().length === 4 && aantalWissels() === nW0, 'stap fasen: een ontbrekende koppeling, een fase buiten 1–6, een object als onderbouwing of een ongeldige besluitdatum geeft een Nederlandse fout en schrijft niets');
+      scholenRijen().length === 4 && aantalWissels() === nW0, 'stap fasen: een ontbrekende koppeling, een fase buiten 1–6 en 5b, een object als onderbouwing of een ongeldige besluitdatum geeft een Nederlandse fout en schrijft niets');
 
     // --- toepassen ---
     var vanM = plusDagen(-60), totM = plusDagen(0), c0 = consultancyTotaal(vanM, totM), w0 = roep(LARS, 'apiSturing', 'week', {}).rijen[0].cijfers, nA0 = ctx.aannameVersies('fasegewichten').length;
     var kop = {}; p.mijlpalen.forEach(function (m) { kop[m.id] = m.voorstel; });
     var t = telSchrijfVeel(function () { return roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kop }); }), r = t.uit, ms = scholenRijen();
-    eis(r.toegepast && !r.alGedaan && r.mijlpalen === 5 && ms.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.join('|') && ms.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel' && ms.map(function (m) { return m.kans; }).join() === '0,0,25,40,70' && ms.map(function (m) { return m.volgorde; }).join() === '1,2,3,4,5' && namenVrij(r),
-      'stap fasen toepassen: Mijlpalen van Scholen = de vijf fasen met rollen lead, geen, ap, ad, voorstel en kans 0, 0, 25, 40, 70; geen namen in het antwoord');
+    eis(r.toegepast && !r.alGedaan && r.mijlpalen === 6 && ms.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.join('|') && ms.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && ms.map(function (m) { return m.kans; }).join() === '0,0,25,40,70,90' && ms.map(function (m) { return m.volgorde; }).join() === '1,2,3,4,5,6' &&
+      ms.map(function (m) { return m.vraagtStart ? 'ja' : ''; }).join() === ',,,,,ja' && namenVrij(r),
+      'stap fasen toepassen: Mijlpalen van Scholen = de zes open fasen met rollen lead, geen, ap, ad, voorstel, geen en kans 0, 0, 25, 40, 70, 90; vraagtStart alleen bij 5b; geen namen in het antwoord');
     var naar = { lead: DOEL[0], gesprek: DOEL[2], voorstel: DOEL[4], onderhandeling: DOEL[4] }, nieuw = aantalWissels() - nW0;
     var hern = ctx.lees('Fasewissels').slice(-nieuw), tellIds = {}; ctx.tellendeWissels().forEach(function (w) { tellIds[w.id] = 1; });
     eis(open0.every(function (k) { var x = ctx.vind('Kansen', k.id); return x.fase === naar[fase0[k.id]] && x.pipeline === 'Scholen'; }) && nieuw === open0.length && r.wissels === nieuw && t.n === 1 &&
       hern.every(function (w) { return w.bron === 'hernoemd' && !tellIds[w.id] && w.werkelijkeDatum === plusDagen(0) && w.naar === naar[w.van] && fase0[w.kansId] === w.van; }) &&
-      r.verhuisd['1'] === 2 && r.verhuisd['3'] === 3 && r.verhuisd['5'] === 3 && r.gewonnen === 0,
+      r.verhuisd['1'] === 2 && r.verhuisd['3'] === 3 && r.verhuisd['5'] === 3 && r.verhuisd['5b'] === 0 && r.gewonnen === 0,
       'stap fasen toepassen: elke open kans verhuist naar zijn nieuwe fase met één administratieve wissel (bron hernoemd, telt niet), alle wissels in één schrijfVeel; tellingen per doel');
     var c1 = consultancyTotaal(vanM, totM), w1 = roep(LARS, 'apiSturing', 'week', {}).rijen[0].cijfers;
     eis(['ap', 'ad', 'voorstellen', 'gewonnen', 'verloren'].every(function (m) { return tVan(c1, m) === tVan(c0, m); }) && ['ap', 'ad', 'voorstellen', 'gewonnen'].every(function (m) { return w1[m] === w0[m]; }),
@@ -2771,10 +2772,10 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     eis(st1.ingesteld && !st1.pipelinesZonder.length && ctx.effectieveRol(DOEL[1], 'Scholen') === 'lead' && ctx.fasegewichtVan({ fase: DOEL[1], pipeline: 'Scholen' }) === 0 && ctx.fasegewichtVan({ fase: DOEL[0], pipeline: 'Scholen' }) === 0 &&
       ctx.fasegewichtVan({ fase: DOEL[2], pipeline: 'Scholen' }) === 25 && ctx.fasegewichtVan({ fase: DOEL[3] }) === 40 && ctx.fasegewichtVan({ fase: DOEL[4], pipeline: 'Scholen' }) === 70,
       'na de fasen: rollen ingesteld; pre-ap erft lead met gewicht 0, ap 25, ad 40 (ook zonder pipeline), vo 70');
-    eis(ctx.aannameVersies('fasegewichten').length === nA0 + 1 && r.aanname === a.versie && a.onderbouwing === ctx.FASEN_ONDERBOUWING && a.besluitdatum === plusDagen(0) && a.waarde['Scholen|' + DOEL[2]] === 25 && a.waarde['Scholen|' + DOEL[4]] === 70 && Object.keys(a.waarde).length === 5,
+    eis(ctx.aannameVersies('fasegewichten').length === nA0 + 1 && r.aanname === a.versie && a.onderbouwing === ctx.FASEN_ONDERBOUWING && a.besluitdatum === plusDagen(0) && a.waarde['Scholen|' + DOEL[2]] === 25 && a.waarde['Scholen|' + DOEL[4]] === 70 && a.waarde['Scholen|' + DOEL[5]] === 90 && Object.keys(a.waarde).length === 6,
       'stap fasen: de gewichten zijn een nieuwe versie van aanname fasegewichten, met de standaardonderbouwing en vandaag als besluitdatum (N6)');
     var s1 = roep(SOPHIE, 'apiMigratieV79', 'status'), p1 = roep(SOPHIE, 'apiMigratieV79', 'fasen');
-    eis(s1.fasen.alGedaan && s1.fasen.mijlpalen === 5 && p1.alGedaan && p1.mijlpalen.map(function (m) { return m.voorstel; }).join() === '1,2,3,4,5', 'na de fasen: status en proefdraai zeggen dat de pipeline zo staat; het voorstel voor de nieuwe namen is 1 tot en met 5');
+    eis(s1.fasen.alGedaan && s1.fasen.mijlpalen === 6 && p1.alGedaan && p1.mijlpalen.map(function (m) { return m.voorstel; }).join() === '1,2,3,4,5,5b', 'na de fasen: status en proefdraai zeggen dat de pipeline zo staat; het voorstel voor de nieuwe namen is 1 tot en met 5 en 5b');
     // idempotent: een tweede toepassen (ook met de koppeling van de eerste keer) verandert niets en zegt dat
     var nW1 = aantalWissels(), r2 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kop });
     eis(r2.alGedaan && r2.gewijzigd === false && /al/.test(r2.melding) && aantalWissels() === nW1 && ctx.aannameVersies('fasegewichten').length === nA0 + 1 && scholenRijen().map(function (m) { return m.id; }).join() === ms.map(function (m) { return m.id; }).join(),
@@ -2824,9 +2825,9 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     eis(pc.mijlpalen.map(function (m) { return m.voorstel; }).join() === '1,2,3,4,5,6' && pc.mijlpalen.every(function (m) { return m.open === 1; }) && !pc.alGedaan, 'stap fasen bij de Capsule-namen: voorstel 1 tot en met 6, elk met één open kans');
     pc.mijlpalen.forEach(function (m) { kc[m.id] = m.voorstel; });
     var nWc = aantalWissels(), rc = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kc }), mc = scholenRijen();
-    eis(mc.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.join('|') && mc.map(function (m) { return m.id; }).join() === 'cap-m801,cap-m802,cap-m803,cap-m804,cap-m805' && mc.every(function (m) { return m.dagenNorm === 21; }) && !mc.some(function (m) { return /deal/.test(m.mijlpaal); }) &&
-      ctx.lees('Mijlpalen').length === 5 && rc.ongewijzigd === 5 && rc.gewonnen === 1 && aantalWissels() === nWc + 1 && ctx.vind('Kansen', 'k7').fase === 'gewonnen' && ctx.vind('Kansen', 'k8').fase === DOEL[2] && mc.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel',
-      'na toepassen: geen open mijlpaal deal/lopend traject meer; de vijf rijen houden hun id en dagenNorm en krijgen rol en gewicht; kansen in 1–5 blijven (geen wissel), de kans in 6 wordt gewonnen');
+    eis(mc.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.join('|') && mc.map(function (m) { return m.id; }).join() === 'cap-m801,cap-m802,cap-m803,cap-m804,cap-m805,' + ctx.slug('Scholen-' + DOEL[5]) && mc.slice(0, 5).every(function (m) { return m.dagenNorm === 21; }) && mc[5].dagenNorm === 14 && !mc.some(function (m) { return /deal/.test(m.mijlpaal); }) &&
+      ctx.lees('Mijlpalen').length === 6 && rc.ongewijzigd === 5 && rc.gewonnen === 1 && rc.toegevoegd === 1 && aantalWissels() === nWc + 1 && ctx.vind('Kansen', 'k7').fase === 'gewonnen' && ctx.vind('Kansen', 'k8').fase === DOEL[2] && mc.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,',
+      'na toepassen: geen open mijlpaal deal/lopend traject meer; de vijf rijen houden hun id en dagenNorm en krijgen rol en gewicht, 5b komt erbij (v7.9.2); kansen in 1–5 blijven (geen wissel), de kans in 6 wordt gewonnen');
   } catch (e) { eis(false, 'v7.9.1 fasen (Capsule-namen): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
 
   // --- de Capsule-import: rollen op naam, deal/lopend traject = gewonnen, geen dubbele mijlpaal naast een rij uit stap fasen ---
@@ -2844,7 +2845,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       'capsuleFase: "6. Deal/Lopend traject" (open in Capsule) is gewonnen; de andere fasen houden hun naam; Won en Lost blijven gewonnen en verloren');
     ctx.capsulePagina('mijlpalen', 1);
     var cm = ctx.lees('Mijlpalen'), crol = cm.map(function (m) { return m.rol; }).join();
-    eis(cm.length === 5 && cm.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.join('|') && crol === 'lead,,ap,ad,voorstel' && !cm.some(function (m) { return /deal/.test(m.mijlpaal); }),
+    eis(cm.length === 5 && cm.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.slice(0, 5).join('|') && crol === 'lead,,ap,ad,voorstel' && !cm.some(function (m) { return /deal/.test(m.mijlpaal); }),
       'capsulePagina(mijlpalen) met de Capsule-namen: de rol op naam (lead, geen, ap, ad, voorstel), geen mijlpaalrij voor deal/lopend traject, Won en Lost');
     ctx._LEES = {}; ctx.capsulePagina('kansen', 1);
     var kd = ctx.vind('Kansen', 'cap-k9201'), ka = ctx.vind('Kansen', 'cap-k9202');
@@ -2857,8 +2858,8 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var idsVoor = scholenRijen().map(function (m) { return m.id; }).join();
     ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.capsulePagina('mijlpalen', 1);
     var na = ctx.lees('Mijlpalen');
-    eis(na.length === 5 && na.map(function (m) { return m.id; }).join() === idsVoor && na.map(function (m) { return Number(m.kans); }).join() === '0,0,25,40,70' && na.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel',
-      'Capsule-herrun na stap fasen: dezelfde pipeline en naam houdt het id van de rij uit stap fasen (geen dubbele mijlpaal), met rol en gewicht (N6)');
+    eis(na.length === 6 && na.map(function (m) { return m.id; }).join() === idsVoor && na.map(function (m) { return Number(m.kans); }).join() === '0,0,25,40,70,90' && na.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && ctx.mijlpalen().filter(function (m) { return m.vraagtStart; }).length === 1,
+      'Capsule-herrun na stap fasen: dezelfde pipeline en naam houdt het id van de rij uit stap fasen (geen dubbele mijlpaal), met rol en gewicht (N6); 5b (niet in Capsule) blijft met vraagtStart');
   } catch (e) { eis(false, 'v7.9.1 fasen (Capsule-import): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { ctx.capsule = echtCapsule; standTerug(st); }
 })();
 
@@ -2965,9 +2966,19 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var nA1 = ctx.aannameVersies('fasegewichten').length;
     ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.capsulePagina('mijlpalen', 1); ctx._LEES = {};
     var c1 = scholenRijen();
-    eis(nA1 === nA + 1 && c1.map(function (m) { return m.id; }).join() === 'cap-m901,cap-m902,cap-m903,cap-m904,cap-m905' && c1.map(function (m) { return m.kans; }).join() === '0,0,25,40,70' && c1[2].dagenNorm === 12 && c1[0].dagenNorm === 30 &&
-      c1.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel' && ctx.fasenAlGedaan() && ctx.aannameVersies('fasegewichten').length === nA1 && ctx.fasegewichtVan({ fase: DOEL[2], pipeline: 'Scholen' }) === 25,
-      'review r2 F4: een Capsule-herrun na stap fasen houdt bij de ids cap-m… de gewichten 0, 0, 25, 40, 70 en een aangepaste dagenNorm; alGedaan blijft waar, geen nieuwe versie van fasegewichten');
+    eis(nA1 === nA + 1 && c1.map(function (m) { return m.id; }).join() === 'cap-m901,cap-m902,cap-m903,cap-m904,cap-m905,' + ctx.slug('Scholen-' + DOEL[5]) && c1.map(function (m) { return m.kans; }).join() === '0,0,25,40,70,90' && c1[2].dagenNorm === 12 && c1[0].dagenNorm === 30 &&
+      c1.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && ctx.fasenAlGedaan() && ctx.aannameVersies('fasegewichten').length === nA1 && ctx.fasegewichtVan({ fase: DOEL[2], pipeline: 'Scholen' }) === 25,
+      'review r2 F4: een Capsule-herrun na stap fasen houdt bij de ids cap-m… de gewichten 0, 0, 25, 40, 70 (en 5b 90, v7.9.2) en een aangepaste dagenNorm; alGedaan blijft waar, geen nieuwe versie van fasegewichten');
+    // v7.9.2 (review r1, R1): 5b komt niet uit Capsule en staat op volgorde 6. Een displayOrder met een gat (een verwijderde mijlpaal), verschoven of in
+    // stappen mag een bestaande rij van Scholen na stap fasen niet hernummeren: anders komt 5b vóór VO (of vooraan) en erft hij ad of niets
+    [[1, 2, 3, 5, 7, 8], [3, 4, 5, 6, 7, 8], [10, 20, 30, 40, 50, 60]].forEach(function (orde) {
+      mijl.forEach(function (m, i) { m.displayOrder = orde[i]; });
+      ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.capsulePagina('mijlpalen', 1); ctx._LEES = {};
+      var c2 = scholenRijen();
+      eis(c2.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.join('|') && c2.map(function (m) { return m.volgorde; }).join() === '1,2,3,4,5,6' && ctx.effectieveRol(DOEL[5], 'Scholen') === 'voorstel' &&
+        ctx.effectieveRol(DOEL[3], 'Scholen') === 'ad' && ctx.vanafVoorstel(DOEL[5], 'Scholen') && ctx.fasenAlGedaan(),
+        'review r1 (R1): een Capsule-herrun na stap fasen met displayOrder ' + orde.join(',') + ' houdt de volgorde van Scholen (1–6): 5b blijft na VO, erft voorstel en de stap staat zo');
+    });
   } catch (e) { eis(false, 'v7.9.1 review r2 (F4): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { ctx.capsule = echtCapsule; standTerug(st); }
 
   // --- F6: de pipeline van Capsule heet anders dan Scholen ---
@@ -3108,7 +3119,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       'review r3 R5 en R2: de proefdraai toont het verschil in de historische telling (AP +1, VO −1) en de bestaande gewichten die naar het rekenmodel gaan (5 → 0, 10 → 0, 20 → 25, 60 → 70; AD 40 is al gelijk)');
     var rb2 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kopVan(pb2) });
     eis(rb2.herzien === 2 && JSON.stringify(rb2.herzienVerschil) === JSON.stringify({ ap: 1, voorstel: -1 }) && rb2.gewichtenTerug === 4 && /4 gewichten van bestaande fasen naar het rekenmodel/.test(rb2.melding) &&
-      scholenRijen().map(function (m) { return m.kans; }).join() === '0,0,25,40,70' && roep(SOPHIE, 'apiMigratieV79', 'rollen').afwijkend.length === 0 && roep(SOPHIE, 'apiMigratieV79', 'status').rollen.afwijkend === 0,
+      scholenRijen().map(function (m) { return m.kans; }).join() === '0,0,25,40,70,90' && roep(SOPHIE, 'apiMigratieV79', 'rollen').afwijkend.length === 0 && roep(SOPHIE, 'apiMigratieV79', 'status').rollen.afwijkend === 0,
       'review r3 R2 en R4: de eerste keer gaan de gewichten naar het rekenmodel en zegt de melding dat (niet stil); daarna past elke rol in Scholen bij zijn naam');
   } catch (e) { eis(false, 'v7.9.1 review r3 (stand b): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
 
@@ -3138,8 +3149,8 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     };
     ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.capsulePagina('mijlpalen', 1);
     var na = scholenRijen();
-    eis(na.length === 5 && !ctx.lees('Mijlpalen').some(function (m) { return m.id === 'cap-m805'; }) && na[4].id === vo.id && na[4].mijlpaal === DOEL[4] && na.map(function (m) { return m.kans; }).join() === '0,0,25,40,70' &&
-      na.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel' && ctx.fasenAlGedaan() && ctx.aannameVersies('fasegewichten').length === nA6,
+    eis(na.length === 6 && !ctx.lees('Mijlpalen').some(function (m) { return m.id === 'cap-m805'; }) && na[4].id === vo.id && na[4].mijlpaal === DOEL[4] && na.map(function (m) { return m.kans; }).join() === '0,0,25,40,70,90' &&
+      na.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && ctx.fasenAlGedaan() && ctx.aannameVersies('fasegewichten').length === nA6,
       'review r3 R3: een Capsule-herrun met "5. VO (Voorstel/Offerte)" gebruikt de rij van stap fasen met dezelfde fase (id, naam, rol en gewicht blijven): geen tweede VO-mijlpaal, "staat zo" blijft waar');
     ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.capsulePagina('kansen', 1);
     var kv = ctx.vind('Kansen', 'cap-k9301'), ka = ctx.vind('Kansen', 'cap-k9302');
@@ -3183,7 +3194,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var f1 = faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p0) });
     ctx.schrijfVeel = echtSchrijf; ctx._LEES = {};
     var s1 = roep(SOPHIE, 'apiMigratieV79', 'status'), p1 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), z1 = zoek();
-    eis(n0 > 0 && /storing/.test(f1) && z1 === n0 && !s1.fasen.alGedaan && !p1.alGedaan && p1.verweesd === n0 && p1.mijlpalen.length === 5,
+    eis(n0 > 0 && /storing/.test(f1) && z1 === n0 && !s1.fasen.alGedaan && !p1.alGedaan && p1.verweesd === n0 && p1.mijlpalen.length === 6,
       'review r4 R1: na een storing op de kansen staan ' + z1 + ' open kansen in een oude naam; status en proefdraai zeggen niet "staat zo" en tellen ze (verweesd)');
     var r1 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p1) });
     eis(r1.hersteld === n0 && zoek() === 0 && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan && hernoemd() === nH + n0 && ctx.aannameVersies('fasegewichten').length === nA + 1 && telling() === t0 && /onderbroken/.test(r1.melding),
@@ -3199,11 +3210,11 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var f2 = faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p2) });
     ctx.verwijderRijen = echtWeg; ctx._LEES = {};
     var p2b = roep(SOPHIE, 'apiMigratieV79', 'fasen');
-    eis(/storing/.test(f2) && Object.keys(scholenNamen()).length === nScholen + 5 && zoek() === 0 && !p2b.alGedaan && somOpen(p2b) === n2,
+    eis(/storing/.test(f2) && Object.keys(scholenNamen()).length === nScholen + 6 && zoek() === 0 && !p2b.alGedaan && somOpen(p2b) === n2,
       'review r4 R1: eerst de nieuwe rijen, dan de oude weg: na een storing ertussen staan oude en nieuwe mijlpalen naast elkaar, geen kans zoek en de proefdraai ziet alles');
     roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p2b) });
     var nm = Object.keys(scholenNamen());
-    eis(nm.length === 5 && DOEL.every(function (d) { return nm.indexOf(d) >= 0; }) && zoek() === 0 && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan,
+    eis(nm.length === 6 && DOEL.every(function (d) { return nm.indexOf(d) >= 0; }) && zoek() === 0 && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan,
       'review r4 R1: de volgende keer Toepassen ruimt de oude rijen op en verhuist de kansen');
   } catch (e) { eis(false, 'v7.9.1 review r4 (R1b): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { ctx.verwijderRijen = echtWeg; standTerug(st); }
 
@@ -3279,7 +3290,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
   var hernoemd = function () { return ctx.lees('Fasewissels').filter(function (w) { return w.bron === 'hernoemd' && !w.verwijderd; }); };
   var standC = function () {  // de Capsule-namen al in de Sheet (zoals na de Capsule-migratie), rollen op naam, gewichten uit Capsule (verzonnen)
     ctx.verwijderRijen('Mijlpalen', function () { return true; });
-    echtSchrijf('Mijlpalen', DOEL.map(function (n, i) { return { id: 'cap-m' + (901 + i), pipeline: 'Scholen', mijlpaal: n, volgorde: i + 1, kans: [10, 15, 30, 50, 75][i], dagenNorm: 21, rol: ['lead', '', 'ap', 'ad', 'voorstel'][i] }; }));
+    echtSchrijf('Mijlpalen', DOEL.slice(0, 5).map(function (n, i) { return { id: 'cap-m' + (901 + i), pipeline: 'Scholen', mijlpaal: n, volgorde: i + 1, kans: [10, 15, 30, 50, 75][i], dagenNorm: 21, rol: ['lead', '', 'ap', 'ad', 'voorstel'][i] }; }));  // v7.9.2: de vijf van Capsule (5b bestaat daar niet)
     var oud = { lead: DOEL[0], gesprek: DOEL[2], voorstel: DOEL[4], onderhandeling: DOEL[4] };
     echtSchrijf('Kansen', ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && oud[k.fase]; }).map(function (k) { return { id: k.id, fase: oud[k.fase] }; })); ctx._LEES = {};
   };
@@ -3298,7 +3309,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       eis(!p0.alGedaan && /storing/.test(f) && !ctx.instelling('fasenToegepast') && !s1.fasen.alGedaan && !p1.alGedaan && !p1.gewichtenBlijven,
         'review r5 H1: storing op ' + waar + ' in een Sheet met de Capsule-namen al: geen markering fasenToegepast, status en proefdraai zeggen niet "staat zo"');
       var r1 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p1) }), v = ctx.aannameVersies('fasegewichten');
-      eis(scholen().map(function (m) { return Number(m.kans); }).join() === '0,0,25,40,70' && !!ctx.instelling('fasenToegepast') && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan &&
+      eis(scholen().map(function (m) { return Number(m.kans); }).join() === '0,0,25,40,70,90' && !!ctx.instelling('fasenToegepast') && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan &&
         JSON.stringify(v[v.length - 1].waarde).indexOf('"Scholen|' + DOEL[4] + '":70') >= 0 && r1.toegepast,
         'review r5 H1: de volgende keer Toepassen zet de gewichten alsnog naar het rekenmodel (0, 0, 25, 40, 70), ook in de laatste versie van fasegewichten, en daarna pas de markering');
     } catch (e) { eis(false, 'v7.9.1 review r5 (H1 ' + waar + '): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { ctx.aannameVastleggen = echtAanname; ctx.schrijfVeel = echtSchrijf; standTerug(st); }
@@ -3389,7 +3400,7 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
   vers79(); var st = standBewaren();
   try {
     ctx.verwijderRijen('Mijlpalen', function () { return true; });
-    echtSchrijf('Mijlpalen', ctx.CAPSULE_FASEN.map(function (f, i) { return { id: 'cap-m' + (951 + i), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: f.kans, dagenNorm: f.dagenNorm, rol: f.rol }; })); ctx._LEES = {};
+    echtSchrijf('Mijlpalen', ctx.CAPSULE_FASEN.map(function (f, i) { return { id: 'cap-m' + (951 + i), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: f.kans, dagenNorm: f.dagenNorm, rol: f.rol, vraagtStart: f.vraagtStart ? 'ja' : '' }; })); ctx._LEES = {};  // v7.9.2: met 5b
     var p1 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), nA = ctx.aannameVersies('fasegewichten').length;
     var r1 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p1) }); ctx._LEES = {};
     eis(p1.alGedaan && r1.alGedaan && !!ctx.instelling('fasenToegepast') && ctx.aannameVersies('fasegewichten').length === nA,
@@ -3439,6 +3450,212 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       'review r6 R5V-H5: een kans die na de stap weer in een oude naam is gezet, krijgt bij een tweede keer een eigen hernoemd-wissel (eigen id, geen overschrijving)');
   } catch (e) { eis(false, 'v7.9.1 review r6 (H5): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
   function uniekeLen(l) { var u = {}; l.forEach(function (x) { u[x] = 1; }); return Object.keys(u).length; }
+})();
+
+/* ---- v7.9.2: fase 5b bijna rond — het model (zesde open fase zonder eigen rol, 90 %, vraagtStart), de herkenner, de versie, stap fasen (zes rijen, koppeling
+   naar 5b, een installatie die v7.9.1 al toepaste krijgt alleen 5b erbij), de verwachte startdatum (verplicht vanuit de app en de assistent, nooit vanuit een
+   import), de tellingen (5 → 5b telt nergens, 4 → 5b als VO, 5b → gewonnen als deal), het gewicht (M06), het contract start_bij_bijna_rond met de melding bij de
+   eigenaar en apiMijlpalenOpslaan (vraagtStart blijft als het veld ontbreekt). Alles op de verzonnen demo-seed. ---- */
+(function () {
+  var DOEL = ctx.CAPSULE_FASEN.map(function (f) { return f.mijlpaal; }), B = DOEL[5], VO = DOEL[4], AD = DOEL[3];
+  var voorstelKop = function (p) { var k = {}; p.mijlpalen.forEach(function (m) { k[m.id] = m.voorstel; }); return k; };
+  var scholenRijen = function () { return ctx.mijlpalen().filter(function (m) { return m.pipeline === 'Scholen'; }); };
+  var fasenToepassen = function (wijzig) { var p = roep(SOPHIE, 'apiMigratieV79', 'fasen'), k = voorstelKop(p); if (wijzig) wijzig(k, p); return roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: k }); };
+  var herlaad = function (v, min) { ctx.KLANT_VERSIE = v; try { ctx.eisNieuweApp(min); return ''; } catch (e) { return e.message; } finally { ctx.KLANT_VERSIE = null; } };
+  var week = function () { return roep(LARS, 'apiSturing', 'week', {}).rijen[0].cijfers; };
+  var nieuweKans = function (naam, fase, extra) { var o = { naam: naam, schoolId: 's7', fase: fase, schooljaar: sjNu(), klant: 'nieuw', waarde: 10000, verwachteSluiting: plusDagen(20) }; Object.keys(extra || {}).forEach(function (x) { o[x] = extra[x]; }); return roep(LARS, 'apiKansOpslaan', o).kans; };
+  var echtSchrijf = ctx.schrijfVeel;
+
+  // --- het model, de herkenner en de versie ---
+  vers79(); var st = standBewaren();
+  try {
+    var f5b = ctx.capsuleFaseRij('5b');
+    eis(ctx.CAPSULE_FASEN.length === 6 && ctx.fasenSleutels().join() === '1,2,3,4,5,5b,6' && f5b && f5b.mijlpaal === '5b. bijna rond' && f5b.rol === '' && f5b.kans === 90 && f5b.dagenNorm === 14 && f5b.vraagtStart === true &&
+      ctx.CAPSULE_FASEN.filter(function (f) { return f.vraagtStart; }).length === 1 && ctx.capsuleFaseRij('6') === null && ctx.capsuleFaseRij('7') === null && ctx.capsuleFaseRij('constructor') === null && ctx.capsuleFaseRij('3').mijlpaal === DOEL[2],
+      'v7.9.2 model: zes open fasen; 5b bijna rond zonder eigen rol, 90 %, dagenNorm 14 en als enige vraagtStart; opzoeken op sleutel (6, 7 en constructor geven null)');
+    eis(ctx.faseVanNaam(B) === '5b' && ctx.faseVanNaam('Bijna rond') === '5b' && ctx.faseVanNaam('Mondeling akkoord') === '5b' && ctx.faseVanNaam('Commit') === '5b' && ctx.faseVanNaam('Voorstel mondeling akkoord') === '5b' &&
+      ctx.faseVanNaam('5B Bijna rond') === '5b' && ctx.faseVanNaam('Commitment') === '' && ctx.faseVanNaam('Nog niet bijna rond') === '' && ctx.faseVanNaam('Niet rond') === '' && ctx.faseVanNaam(VO) === '5' && ctx.faseVanNaam('voorstel') === '5' && ctx.rolVanNaam(B) === '' &&
+      ctx.rollenOpNaam(DOEL).join() === 'lead,,ap,ad,voorstel,',
+      'v7.9.2 faseVanNaam: 5b, bijna rond, mondeling akkoord en commit zijn 5b (vóór VO); commitment en een ontkenning niet; 5b heeft geen eigen rol');
+    eis(ctx.VERSIE === '7.9.2' && /Herlaad de app/.test(herlaad('7.9.1', '7.9.2')) && /Herlaad de app/.test(herlaad('', '7.9.2')) && herlaad('7.9.2', '7.9.2') === '' && herlaad('7.10', '7.9.2') === '' && herlaad('7.9.1') === '' && herlaad(null, '7.9.2') === '',
+      'v7.9.2 versie: VERSIE 7.9.2; eisNieuweApp(7.9.2) geeft een app van 7.9.1 of zonder versie "Herlaad de app", een app van 7.9.2 of 7.10 niet; zonder minimum blijft 7.9 de grens');
+    eis(ctx.mijlpalen().every(function (m) { return m.vraagtStart === false; }) && roep(LARS, 'apiCrm').mijlpalen.every(function (m) { return 'vraagtStart' in m; }) && roep(LARS, 'apiPipeline').mijlpalen.every(function (m) { return 'vraagtStart' in m; }) &&
+      roep(LARS, 'apiPipeline').kansen.every(function (k) { return 'verwachteStart' in k; }) && 'verwachteStart' in roep(SOPHIE, 'apiKans', 'k6').kans,
+      'v7.9.2: mijlpalen() geeft vraagtStart (true/false) door aan apiCrm, apiPipeline en apiKans; kansen hebben verwachteStart');
+    var C0 = contractenOp().start_bij_bijna_rond;
+    eis(C0.stand === 'niet getoetst' && /geen mijlpaal vraagt een startdatum/.test(C0.reden) && /startdatum/.test(ctx.CONTRACT_REDENEN.start_bij_bijna_rond), 'contract start_bij_bijna_rond: zonder mijlpaal met vraagtStart niet getoetst (nooit geslaagd), met een reden');
+  } catch (e) { eis(false, 'v7.9.2 model: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- stap fasen op de demoseed met een koppeling naar 5b; de startdatum, de tellingen, het gewicht en het contract ---
+  vers79(); st = standBewaren();
+  try {
+    var inOnd = ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && k.fase === 'onderhandeling'; }), nW0 = aantalWissels();
+    var r = fasenToepassen(function (k) { k['scholen-onderhandeling'] = '5b'; }), ms = scholenRijen();
+    eis(r.toegepast && r.mijlpalen === 6 && r.verhuisd['5b'] === inOnd.length && ms.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && ms.map(function (m) { return m.kans; }).join() === '0,0,25,40,70,90' &&
+      ms.map(function (m) { return m.vraagtStart; }).join() === 'false,false,false,false,false,true' && ctx.lees('Mijlpalen').filter(function (m) { return m.vraagtStart === 'ja'; }).length === 1,
+      'stap fasen: zes rijen (rollen lead, geen, ap, ad, voorstel, geen; gewichten 0, 0, 25, 40, 70, 90; vraagtStart alleen bij 5b, als "ja" in de Sheet); onderhandeling → 5b werkt');
+    eis(inOnd.length > 0 && inOnd.every(function (k) { var x = ctx.vind('Kansen', k.id); return x.fase === B && !x.verwachteStart; }) && aantalWissels() === nW0 + r.wissels &&
+      ctx.lees('Fasewissels').slice(-r.wissels).every(function (w) { return w.bron === 'hernoemd'; }),
+      'stap fasen: een kans die in 5b komt, krijgt geen startdatum (alleen een hernoemd-wissel); dat meldt het contract');
+    var a = ctx.aanname('fasegewichten');
+    eis(ctx.effectieveRol(B, 'Scholen') === 'voorstel' && ctx.vanafVoorstel(B, 'Scholen') && ctx.fasegewichtVan({ fase: B, pipeline: 'Scholen' }) === 90 && ctx.fasegewichtVan({ fase: B }) === 90 && ctx.mijlpaalVraagtStart(B, 'Scholen') && ctx.mijlpaalVraagtStart(B, '') &&
+      !ctx.mijlpaalVraagtStart(VO, 'Scholen') && !ctx.mijlpaalVraagtStart('gewonnen', 'Scholen') && !ctx.mijlpaalVraagtStart('bestaat niet', 'Scholen') && a.waarde['Scholen|' + B] === 90,
+      'na de stap: 5b erft de voorstelrol, weegt 90 (ook zonder pipeline) en vraagt een startdatum; VO, gewonnen en een onbekende mijlpaal niet; aanname fasegewichten heeft 90 voor 5b');
+    // het contract: zonder startdatum gezakt bij de eigenaar van de kans; met een datum vandaag of later geslaagd; met een verlopen datum gezakt
+    var C1 = contractenOp().start_bij_bijna_rond, eig = {}; inOnd.forEach(function (k) { eig[k.id] = ctx.vind('Kansen', k.id).eigenaar; });
+    eis(C1.stand === 'gezakt' && C1.afwijkingen.length === inOnd.length && C1.afwijkingen.every(function (x) { return x.soort === 'kans' && x.eigenaar === eig[x.id]; }) && C1.label === 'Bijna rond heeft een verwachte startdatum' && C1.eigenaarSoort === 'eigenaar van de kans',
+      'contract start_bij_bijna_rond: een kans in 5b zonder startdatum zakt, met als eigenaar de eigenaar van de kans (' + C1.afwijkingen.length + ' afwijking(en))');
+    var metStart = function (d) { return function (S) { S.kansen.forEach(function (k) { if (eig[k.id]) k.verwachteStart = d; }); }; };
+    eis(contractenOp(metStart(plusDagen(0))).start_bij_bijna_rond.stand === 'geslaagd' && contractenOp(metStart(plusDagen(30))).start_bij_bijna_rond.stand === 'geslaagd' && contractenOp(metStart(plusDagen(-1))).start_bij_bijna_rond.stand === 'gezakt' &&
+      contractenOp(function (S) { metStart(plusDagen(-1))(S); S.kansen.forEach(function (k) { if (eig[k.id]) k.fase = 'verloren'; }); }).start_bij_bijna_rond.stand === 'geslaagd',
+      'contract start_bij_bijna_rond: een startdatum vandaag of later slaagt, een verlopen datum zakt; een gesloten kans telt niet');
+    // de dagelijkse controle: een rij per eigenaar en een melding bij die eigenaar
+    ctx.verwijderRijen('Datakwaliteit', function () { return true; }); ctx._LEES = {}; ctx.GEBRUIKER = null;
+    ctx.datakwaliteitDag(plusDagen(0));
+    var dqR = ctx.lees('Datakwaliteit').filter(function (x) { return x.contract === 'start_bij_bijna_rond'; }), eigs = ctx.uniek(Object.keys(eig).map(function (id) { return eig[id]; }));
+    var meld = ctx.lees('Meldingen').filter(function (m) { return m.link === 'rapport:datakwaliteit' && eigs.indexOf(m.voor) >= 0 && /Bijna rond heeft een verwachte startdatum/.test(m.tekst); });
+    eis(dqR.length === eigs.length && dqR.every(function (x) { return x.stand === 'gezakt' && eigs.indexOf(String(x.eigenaar)) >= 0; }) && meld.length === eigs.length,
+      'datakwaliteit: start_bij_bijna_rond geeft per eigenaar een rij en een melding bij die eigenaar');
+    // gewogen pijplijn (M06) en het bord rekenen met 90 %
+    var nk = nieuweKans('Bijna-rond-proef', VO), m0 = mtCijfers().gewogenPijplijn.waarde;
+    var verder = roep(LARS, 'apiKansOpslaan', { id: nk.id, fase: B, verwachteStart: plusDagen(14), _oud: { fase: VO, verwachteStart: '' } }), m1 = mtCijfers().gewogenPijplijn.waarde;
+    var opBord = roep(LARS, 'apiPipeline').kansen.filter(function (k) { return k.id === nk.id; })[0];
+    eis(Math.round((m1 - m0) * 100) === 200000 && opBord.kans === 90 && opBord.gewogen === 9000 && opBord.verwachteStart === plusDagen(14) && verder.kans.verwachteStart === plusDagen(14),
+      'fasegewicht 5b = 90: de gewogen pijplijn (M06) stijgt met 20 % van de waarde bij 5 → 5b; op het bord kans 90 en gewogen 9000; verwachteStart komt terug');
+  } catch (e) { eis(false, 'v7.9.2 stap fasen en contract: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- de verwachte startdatum in kansOpslaan; de tellingen ---
+  vers79(); st = standBewaren();
+  try {
+    fasenToepassen();
+    var k5 = nieuweKans('Startproef', VO), w0 = week(), c0 = consultancyTotaal(plusDagen(0), plusDagen(0)), nW = aantalWissels();
+    var zonder = faalt(LARS, 'apiKansOpslaan', { id: k5.id, fase: B, _oud: { fase: VO } }), verleden = faalt(LARS, 'apiKansOpslaan', { id: k5.id, fase: B, verwachteStart: plusDagen(-1), _oud: { fase: VO } });
+    var ongeldig = faalt(LARS, 'apiKansOpslaan', { id: k5.id, fase: B, verwachteStart: 'volgende week', _oud: { fase: VO } }), obj = faalt(LARS, 'apiKansOpslaan', { id: k5.id, fase: B, verwachteStart: { d: 1 }, _oud: { fase: VO } });
+    var bulk = faalt(LARS, 'apiKansOpslaan', { id: k5.id, fase: B, _oud: { fase: VO }, wissel: { bron: 'bulk' } });
+    eis(zonder === ctx.START_FOUT && verleden === ctx.START_FOUT && /Ongeldige verwachte startdatum/.test(ongeldig) && /verwacht tekst/.test(obj) && bulk === ctx.START_FOUT && ctx.vind('Kansen', k5.id).fase === VO && aantalWissels() === nW,
+      'kansOpslaan naar 5b: zonder startdatum, met een datum in het verleden en via bulk een Nederlandse fout ("' + ctx.START_FOUT + '"); een ongeldige datum of een object ook; er verandert niets');
+    var ok = roep(LARS, 'apiKansOpslaan', { id: k5.id, fase: B, verwachteStart: plusDagen(0), _oud: { fase: VO } }), w1 = week(), c1 = consultancyTotaal(plusDagen(0), plusDagen(0));
+    eis(ok.kans.fase === B && ok.kans.verwachteStart === plusDagen(0) && wisselRij(ok.fasewissel.id).naarRol === 'voorstel' && wisselRij(ok.fasewissel.id).vanRol === 'voorstel' && ctx.telRol(wisselRij(ok.fasewissel.id)) === '' &&
+      ['ap', 'ad', 'voorstellen', 'gewonnen'].every(function (m) { return w1[m] === w0[m]; }) && ['ap', 'ad', 'voorstellen', 'gewonnen'].every(function (m) { return tVan(c1, m) === tVan(c0, m); }),
+      'kansOpslaan naar 5b met een startdatum vandaag: opgeslagen; 5 → 5b telt nergens (voorstel → voorstel; weekweergave en teamcijfers gelijk)');
+    // bewerken: alleen de gewijzigde velden met _oud; leegmaken of het verleden in 5b geweigerd; een ander veld bij een verlopen datum mag
+    eis(ctx.START_FOUT === faalt(LARS, 'apiKansOpslaan', { id: k5.id, verwachteStart: '', _oud: { verwachteStart: plusDagen(0) } }) && ctx.START_FOUT === faalt(LARS, 'apiKansOpslaan', { id: k5.id, verwachteStart: plusDagen(-3), _oud: { verwachteStart: plusDagen(0) } }) &&
+      roep(LARS, 'apiKansOpslaan', { id: k5.id, verwachteStart: plusDagen(40), _oud: { verwachteStart: plusDagen(0) } }).kans.verwachteStart === plusDagen(40) && /Intussen gewijzigd/.test(faalt(LARS, 'apiKansOpslaan', { id: k5.id, verwachteStart: plusDagen(41), _oud: { verwachteStart: plusDagen(0) } })),
+      'verwachteStart bewerken (alleen gewijzigde velden met _oud): leegmaken of in het verleden in 5b geweigerd, later mag; een verouderde _oud geeft "Intussen gewijzigd"');
+    echtSchrijf('Kansen', [{ id: k5.id, verwachteStart: plusDagen(-5) }]); ctx._LEES = {};
+    eis(roep(LARS, 'apiKansOpslaan', { id: k5.id, waarde: 12000, _oud: { waarde: 10000 } }).kans.waarde === 12000 && contractenOp().start_bij_bijna_rond.afwijkingen.some(function (x) { return x.id === k5.id; }),
+      'een verlopen startdatum blokkeert geen ander veld (waarde); het contract meldt hem');
+    var buiten = nieuweKans('Startproef buiten 5b', AD);
+    eis(roep(LARS, 'apiKansOpslaan', { id: buiten.id, verwachteStart: plusDagen(-10), _oud: { verwachteStart: '' } }).kans.verwachteStart === plusDagen(-10), 'buiten een mijlpaal met vraagtStart is verwachteStart een gewoon datumveld (ook in het verleden)');
+    // 4 → 5b telt als VO; 5b → gewonnen als deal; direct in 5b aanmaken
+    var wa = week(), ca = consultancyTotaal(plusDagen(0), plusDagen(0));
+    var w45 = roep(LARS, 'apiKansOpslaan', { id: buiten.id, fase: B, verwachteStart: plusDagen(7), _oud: { fase: AD } }).fasewissel, wb = week(), cb = consultancyTotaal(plusDagen(0), plusDagen(0));
+    eis(ctx.telRol(wisselRij(w45.id)) === 'voorstel' && wb.voorstellen === wa.voorstellen + 1 && tVan(cb, 'voorstellen') === tVan(ca, 'voorstellen') + 1 && wb.ad === wa.ad,
+      '4 → 5b telt als VO (weekweergave en teamcijfers)');
+    var won = roep(LARS, 'apiKansOpslaan', { id: buiten.id, fase: 'gewonnen', _oud: { fase: B }, overdracht: { aantal: 1, rol: 'Onderwijsassistent', startdatum: plusDagen(7), contractwaarde: 9000, akkoorddatum: plusDagen(0) } }), wc = week(), cc = consultancyTotaal(plusDagen(0), plusDagen(0));
+    eis(won.kans.fase === 'gewonnen' && ctx.dealWissels().some(function (w) { return w.kansId === buiten.id; }) && wc.gewonnen === wb.gewonnen + 1 && tVan(cc, 'gewonnen') === tVan(cb, 'gewonnen') + 1 && wc.voorstellen === wb.voorstellen,
+      '5b → gewonnen is een deal (winformulier; weekweergave en teamcijfers)');
+    var dz = faalt(LARS, 'apiKansOpslaan', { naam: 'Direct bijna rond', schoolId: 's7', fase: B, schooljaar: sjNu(), klant: 'nieuw' }), d1 = roep(LARS, 'apiKansOpslaan', { naam: 'Direct bijna rond', schoolId: 's7', fase: B, schooljaar: sjNu(), klant: 'nieuw', verwachteStart: plusDagen(3) });
+    eis(dz === ctx.START_FOUT && d1.kans.fase === B && d1.kans.verwachteStart === plusDagen(3) && d1.fasewissel.label === 'direct', '+ Kans direct in 5b: zonder startdatum geweigerd, met een startdatum aangemaakt (telt direct als VO)');
+    // de assistent: dezelfde regel (bron assistent); een import eist niets
+    var ka = nieuweKans('Assistentproef', VO), fa = faalt(LARS, 'apiBreinUitvoeren', { soort: 'wijzig_kans', invoer: { kansId: ka.id, fase: B } });
+    var ua = roep(LARS, 'apiBreinUitvoeren', { soort: 'wijzig_kans', invoer: { kansId: ka.id, fase: B, verwachteStart: plusDagen(10) } }), wA = wisselsVan(ka.id).filter(function (w) { return w.naar === B; })[0];
+    eis(fa === ctx.START_FOUT && /Kans bijgewerkt/.test(ua.melding) && ctx.vind('Kansen', ka.id).verwachteStart === plusDagen(10) && wA && wA.bron === 'assistent' && ctx.BREIN_ACTIES.wijzig_kans.properties.verwachteStart,
+      'de assistent (wijzig_kans) naar 5b: zonder startdatum dezelfde fout, met verwachteStart opgeslagen (bron assistent); het hulpmiddel kent het veld');
+    roep(SOPHIE, 'apiImporteer', 'kansen', [{ id: 'rk-imp5b', naam: 'Import bijna rond', school: 'Esdoorn Lyceum', schoolId: 's1', fase: B, pipeline: 'Scholen', eigenaar: 'Noor Hendriks', waarde: 4000, schooljaar: sjNu(), klant: 'nieuw' }]); ctx._LEES = {};
+    eis(ctx.vind('Kansen', 'rk-imp5b') && ctx.vind('Kansen', 'rk-imp5b').fase === B && !ctx.vind('Kansen', 'rk-imp5b').verwachteStart && contractenOp().start_bij_bijna_rond.afwijkingen.some(function (x) { return x.id === 'rk-imp5b' && x.eigenaar === 'Noor Hendriks'; }),
+      'een import naar 5b eist niets (geen startdatum); het contract meldt de kans bij zijn eigenaar');
+    // een app van 7.9.1 krijgt "Herlaad de app", een van 7.9.2 de gewone melding
+    var kv = nieuweKans('Versieproef', VO); ctx._LEES = {};
+    var dp2 = function (v) { var u = JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify({ fn: 'apiKansOpslaan', args: [{ id: kv.id, fase: B, _oud: { fase: VO } }], secret: LARS, v: v }) } })); ctx.KLANT_VERSIE = null; ctx._LEES = {}; return u; };
+    var o791 = dp2('7.9.1'), o792 = dp2('7.9.2');
+    eis(ctx.vind('Kansen', kv.id).fase === VO && !o791.ok && /Herlaad de app/.test(o791.fout) && !o792.ok && o792.fout === ctx.START_FOUT, 'doPost: een app van 7.9.1 die een kans zonder startdatum naar 5b zet, krijgt "Herlaad de app"; een app van 7.9.2 de gewone melding');
+  } catch (e) { eis(false, 'v7.9.2 startdatum: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- apiMijlpalenOpslaan: vraagtStart opslaan en behouden als het veld ontbreekt (R13) ---
+  vers79(); st = standBewaren();
+  try {
+    fasenToepassen();
+    var basis = function () { return scholenRijen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol }; }).concat(ctx.mijlpalen().filter(function (m) { return m.pipeline !== 'Scholen'; }).map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol }; })); };
+    var vs = function () { return scholenRijen().map(function (m) { return m.vraagtStart ? 'ja' : ''; }).join(); };
+    roep(SOPHIE, 'apiMijlpalenOpslaan', basis()); ctx._LEES = {};
+    var zonderVeld = vs();
+    var l2 = basis(); l2[5].vraagtStart = false; l2[4].vraagtStart = true; roep(SOPHIE, 'apiMijlpalenOpslaan', l2); ctx._LEES = {};
+    var gewisseld = vs();
+    var l3 = basis(); l3[4].vraagtStart = 'ja'; l3[5].vraagtStart = ''; l3[5].oud = { pipeline: 'Scholen', mijlpaal: B }; l3[5].mijlpaal = '5b. bijna rond (mondeling)';
+    roep(SOPHIE, 'apiMijlpalenOpslaan', l3); ctx._LEES = {};
+    var l4 = basis(); l4[4].oud = { pipeline: 'Scholen', mijlpaal: VO }; l4[4].mijlpaal = '5. vo (offerte)'; roep(SOPHIE, 'apiMijlpalenOpslaan', l4, { onderbouwing: 'Rooktest: hernoemd', besluitdatum: plusDagen(0) }); ctx._LEES = {};
+    var hernoemd = scholenRijen()[4];
+    var fout = faalt(SOPHIE, 'apiMijlpalenOpslaan', basis().map(function (m, i) { if (i === 5) m.vraagtStart = { ja: 1 }; return m; }));
+    eis(zonderVeld === ',,,,,ja' && gewisseld === ',,,,ja,' && hernoemd.mijlpaal === '5. vo (offerte)' && hernoemd.vraagtStart === true && /ja of nee/.test(fout),
+      'apiMijlpalenOpslaan: zonder het veld blijft vraagtStart (oudere app, R13), true/false en ja/leeg slaan op, een hernoemde mijlpaal houdt hem; een object geeft een Nederlandse fout');
+  } catch (e) { eis(false, 'v7.9.2 apiMijlpalenOpslaan: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- een installatie die stap fasen met v7.9.1 al toepaste (vijf rijen, markering, een later gewicht): opnieuw toepassen voegt alleen 5b toe ---
+  vers79(); st = standBewaren();
+  try {
+    ctx.verwijderRijen('Mijlpalen', function () { return true; });
+    echtSchrijf('Mijlpalen', ctx.CAPSULE_FASEN.slice(0, 5).map(function (f, i) { return { id: 'v791-' + (i + 1), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: i === 4 ? 65 : f.kans, dagenNorm: i === 2 ? 12 : f.dagenNorm, rol: f.rol }; }));
+    var oud = { lead: DOEL[0], gesprek: DOEL[2], voorstel: VO, onderhandeling: VO };
+    echtSchrijf('Kansen', ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && oud[k.fase]; }).map(function (k) { return { id: k.id, fase: oud[k.fase], pipeline: 'Scholen' }; }));
+    ctx._demoProps.FASEN_KOPPELING = JSON.stringify({ lead: DOEL[0], gesprek: DOEL[2], voorstel: VO, onderhandeling: VO });
+    ctx.zetInstelling('fasenToegepast', plusDagen(-20)); ctx._LEES = {};
+    var kansVoor = JSON.stringify(ctx.lees('Kansen').map(function (k) { return [k.id, k.fase, k.pipeline || '']; })), nW1 = aantalWissels(), nA = ctx.aannameVersies('fasegewichten').length;
+    var s0 = roep(SOPHIE, 'apiMigratieV79', 'status'), p0 = roep(SOPHIE, 'apiMigratieV79', 'fasen');
+    eis(!s0.fasen.alGedaan && !ctx.fasenAlGedaan() && !p0.alGedaan && p0.gewichtenBlijven && p0.verweesd === 0 && p0.mijlpalen.map(function (m) { return m.voorstel; }).join() === '1,2,3,4,5' && p0.doelen.length === 7,
+      'v7.9.1 al toegepast (vijf rijen, markering): status en proefdraai zeggen "nog niet" (5b ontbreekt); het voorstel is 1 tot en met 5, zeven doelen');
+    var r3 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p0) }), na = scholenRijen(), v = ctx.aanname('fasegewichten');
+    eis(r3.toegepast && r3.toegevoegd === 1 && /nieuwe fase: 5b\. bijna rond/.test(r3.melding) && r3.ongewijzigd > 0 && r3.wissels === 0 && r3.gewichtenTerug === 0 && aantalWissels() === nW1 &&
+      na.map(function (m) { return m.id; }).join() === 'v791-1,v791-2,v791-3,v791-4,v791-5,' + ctx.slug('Scholen-' + B) && na.map(function (m) { return m.kans; }).join() === '0,0,25,40,65,90' && na[2].dagenNorm === 12 && na[5].dagenNorm === 14 &&
+      na.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && na.map(function (m) { return m.vraagtStart; }).join() === 'false,false,false,false,false,true' &&
+      JSON.stringify(ctx.lees('Kansen').map(function (k) { return [k.id, k.fase, k.pipeline || '']; })) === kansVoor && ctx.aannameVersies('fasegewichten').length === nA + 1 && v.waarde['Scholen|' + VO] === 65 && v.waarde['Scholen|' + B] === 90,
+      'opnieuw toepassen na v7.9.1: de vijf rijen houden id, gewicht (een later besluit: 65) en dagenNorm, de kansen blijven (geen wissel), alleen 5b komt erbij (90 in een nieuwe versie van fasegewichten)');
+    var r4 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(roep(SOPHIE, 'apiMigratieV79', 'fasen')) });
+    eis(r4.alGedaan && r4.gewijzigd === false && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.mijlpalen === 6, 'daarna staat de stap zo: een derde keer verandert niets');
+  } catch (e) { eis(false, 'v7.9.2 na v7.9.1: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- review r1 (B1): een v7.9-installatie met een eigen mijlpaal "mondeling akkoord" zonder rol (erft voorstel) en een app-wissel "gesprek gevoerd" →
+  // "mondeling akkoord" (vanRol ad, naarRol voorstel, rolBron mijlpaal: telt als VO). Stap fasen koppelt 1/3/4/5/5b; 5b erft de voorstelrol (fasenEffectief),
+  // dus de wissel is geen v7.9-volgordefout: de proefdraai herziet niets en na toepassen telt hij nog altijd als VO (nooit stil uit de historische tellingen) ---
+  vers79(); st = standBewaren();
+  try {
+    var NB = ['lead', 'gesprek gepland', 'gesprek gevoerd', 'offerte', 'mondeling akkoord'];
+    ctx.verwijderRijen('Mijlpalen', function () { return true; });
+    echtSchrijf('Mijlpalen', NB.map(function (n, i) { return { id: 'mp' + i, pipeline: 'Scholen', mijlpaal: n, volgorde: i + 1, kans: [5, 20, 40, 60, 80][i], dagenNorm: 14, rol: ['lead', 'ap', 'ad', 'voorstel', ''][i] }; }));
+    var openB = ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && (!k.pipeline || k.pipeline === 'Scholen'); });
+    echtSchrijf('Kansen', openB.map(function (k) { return { id: k.id, fase: 'lead', pipeline: 'Scholen' }; })); ctx._LEES = {};
+    var kB = openB[0].id; echtSchrijf('Kansen', [{ id: kB, fase: 'gesprek gevoerd' }]); ctx._LEES = {};
+    var wB = roep(SOPHIE, 'apiKansOpslaan', { id: kB, fase: 'mondeling akkoord', _oud: { fase: 'gesprek gevoerd' } }).fasewissel, rB0 = wisselRij(wB.id);
+    var pB = roep(SOPHIE, 'apiMigratieV79', 'fasen'), kopB = voorstelKop(pB);
+    eis(ctx.fasenEffectief()['5b'] === 'voorstel' && rB0.vanRol === 'ad' && rB0.naarRol === 'voorstel' && rB0.rolBron === 'mijlpaal' && ctx.telRol(rB0) === 'voorstel' &&
+      NB.map(function (n, i) { return kopB['mp' + i]; }).join() === '1,3,4,5,5b' && pB.herzien === 0 && JSON.stringify(pB.herzienVerschil) === '{}',
+      'review r1 (B1): fasenEffectief geeft 5b de voorstelrol; een app-wissel AD → "mondeling akkoord" (eigen mijlpaal zonder rol, telt als VO) wordt bij koppeling 1/3/4/5/5b niet herzien (herzien 0, herzienVerschil {})');
+    var tB = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kopB }); ctx._LEES = {};
+    var rB1 = wisselRij(wB.id);
+    eis(tB.toegepast && tB.herzien === 0 && JSON.stringify(tB.herzienVerschil) === '{}' && ctx.vind('Kansen', kB).fase === B && rB1.vanRol === 'ad' && rB1.naarRol === 'voorstel' && ctx.telRol(rB1) === 'voorstel' &&
+      ctx.effectieveRol(B, 'Scholen') === 'voorstel',
+      'review r1 (B1): na toepassen staat de kans in 5b en blijft de historische wissel naarRol voorstel (telRol voorstel): geen VO verdwijnt stil uit de tellingen');
+  } catch (e) { eis(false, 'v7.9.2 review r1 (B1): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- review r1 (R2): na stap fasen is vraagtStart een later besluit van de beheerder (Beheer → Mijlpalen), net als een gewicht: status en proefdraai
+  // zeggen niet blijvend "nog niet" en opnieuw toepassen zet de keuze niet stil terug ---
+  vers79(); st = standBewaren();
+  try {
+    fasenToepassen();
+    var vsR = function () { ctx._LEES = {}; return scholenRijen().map(function (m) { return m.vraagtStart ? 'ja' : ''; }).join(); };
+    var rijR = function (wijzig) { return scholenRijen().map(function (m, i) { var o = { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol, vraagtStart: m.vraagtStart }; if (wijzig) wijzig(o, i); return o; })
+      .concat(ctx.mijlpalen().filter(function (m) { return m.pipeline !== 'Scholen'; }).map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol, vraagtStart: m.vraagtStart }; })); };
+    roep(SOPHIE, 'apiMijlpalenOpslaan', rijR(function (o, i) { if (i === 4) o.vraagtStart = true; if (i === 5) o.vraagtStart = false; })); ctx._LEES = {};
+    var sR = roep(SOPHIE, 'apiMigratieV79', 'status'), pR = roep(SOPHIE, 'apiMigratieV79', 'fasen'), nWR = aantalWissels();
+    var tR = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(pR) });
+    eis(vsR() === ',,,,ja,' && sR.fasen.alGedaan && ctx.fasenAlGedaan() && pR.alGedaan && tR.alGedaan && tR.gewijzigd === false && aantalWissels() === nWR,
+      'review r1 (R2): vraagtStart in Beheer omgezet (VO aan, 5b uit) na stap fasen: status, proefdraai en toepassen zeggen "staat al zo"; de keuze blijft');
+    // een rol die afwijkt dwingt de stap opnieuw: de rijen worden herschreven, vraagtStart van een bestaande rij blijft (een later besluit), zoals het gewicht
+    echtSchrijf('Mijlpalen', [{ id: scholenRijen()[3].id, rol: '' }]); ctx._LEES = {};
+    var pR2 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), tR2 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(pR2) });
+    eis(!pR2.alGedaan && tR2.toegepast && tR2.gewijzigd === true && scholenRijen().map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && vsR() === ',,,,ja,' && ctx.fasenAlGedaan(),
+      'review r1 (R2): opnieuw toepassen (een rol week af) herstelt de rol en houdt vraagtStart bij VO aan en bij 5b uit; daarna staat de stap zo');
+  } catch (e) { eis(false, 'v7.9.2 review r1 (R2): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
 })();
 
 /* ---- bestaande schermen blijven werken ---- */

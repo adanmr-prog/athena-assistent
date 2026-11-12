@@ -382,6 +382,12 @@ log(!!toon.ok, 'portaal: het eigen profiel blijft via het portaal gewoon bereikb
   var r3 = roepRuw(LARS, 'apiKansOpslaan', [{ id: k.id, fase: 'voorstel', _oud: { fase: 'gesprek' }, wissel: { bron: 'import' } }, false, { bron: 'import', datum: '2020-01-01' }]); aantalAanroepen++;
   var w3 = r3.ok ? lees('Fasewissels').filter(function (w) { return w.id === r3.result.fasewissel.id; })[0] : null;
   noteer('R1: apiKansOpslaan(obj, false, { bron: import }) door een medewerker', LARS, 'apiKansOpslaan', r3, !!w3 && ctx.FASE_BRONNEN_APP.indexOf(w3.bron) >= 0 && w3.werkelijkeDatum === vandaag(), 'toegestaan met een app-bron (detail) en vandaag als datum'); herstel(); aantalHerstel++;
+  // v7.9.2: een mijlpaal met vraagtStart eist een verwachte startdatum; een interne bron als derde argument (import, die niets eist) omzeilt dat niet
+  ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function (m) { return { id: m.id, pipeline: m.pipeline, mijlpaal: m.mijlpaal, volgorde: m.volgorde, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol, vraagtStart: m.mijlpaal === 'voorstel' ? 'ja' : '' }; })); vers();
+  var k4 = lees('Kansen').filter(function (x) { return x.eigenaar === 'Lars Visser' && x.fase === 'gesprek'; })[0], nW4 = lees('Fasewissels').length;
+  var r4 = roepRuw(LARS, 'apiKansOpslaan', [{ id: k4.id, fase: 'voorstel', _oud: { fase: 'gesprek' }, wissel: { bron: 'import' } }, false, { bron: 'import' }]); aantalAanroepen++;
+  noteer('fase 5b (v7.9.2): naar vraagtStart zonder startdatum, met { bron: import }', LARS, 'apiKansOpslaan', r4, !r4.ok && r4.fout === ctx.START_FOUT && lees('Kansen').filter(function (x) { return x.id === k4.id; })[0].fase === 'gesprek' && lees('Fasewissels').length === nW4,
+    'geweigerd met de Nederlandse melding; er verandert niets'); herstel(); aantalHerstel++;
   // weekdoelen: een medewerker, een teamlead buiten zijn team en een teamlead van een ander team worden geweigerd
   var wk = ctx.isoWeekStr(ctx.plusDagen(0));
   [[LARS, 'Lars Visser', 'een medewerker voor zichzelf'], [YARA, 'Femke de Wit', 'de teamlead consultancy voor een accountmanager'], [BAS, 'Lars Visser', 'de teamlead accountmanagement voor een OC']].forEach(function (x) {

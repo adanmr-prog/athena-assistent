@@ -4,7 +4,8 @@
 # heropenen van een gewonnen kans, B2), bron toets en bulk, bulk met sturingVerplicht (één samenvatting), het voorstelvenster vóór de aanroep (R14), het
 # winformulier en het verlorenvenster, een nieuwe kans (direct, klant- en schooljaarvoorstel, productsoort), BRIN, mijlpalen met rol, de overstap, de
 # keuzelijsten, weekdoelen, de weergaven Week en MT, datakwaliteit, het register, jaardoel en aannames, werkelijke datums importeren, de actiekaart van
-# de assistent, de definities op Home, Financiën en Rapporten, en de telefoon (390 px).
+# de assistent, de definities op Home, Financiën en Rapporten, en de telefoon (390 px). v7.9.2: fase 5b bijna rond (secties 7 en 8; review r1: sectie 9, de assistent
+# na een eerder uitgevoerde actie op de telefoon en het startdatumvenster op de iPad).
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -477,7 +478,7 @@ with sync_playwright() as p:
         ok('fasen: Toepassen kan pas na de proefdraai', pg.is_disabled('[data-v79="fasen:toepassen"]'))
         pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#venster [data-v79fase]')
         v = pg.evaluate("[].map.call(document.querySelectorAll('#venster [data-v79fase]'), function (s) { return [s.getAttribute('data-v79fase'), s.value, s.getAttribute('aria-label'), s.options.length]; })")
-        ok('fasen: per mijlpaal een keuzelijst met label en zes fasen, voorgevuld (lead 1, gesprek 3, voorstel 5, onderhandeling 5)', [x[0] + '=' + x[1] for x in v] == ['scholen-lead=1', 'scholen-gesprek=3', 'scholen-voorstel=5', 'scholen-onderhandeling=5'] and all(x[2] and 'Fase in Capsule' in x[2] and x[3] == 7 for x in v), v)
+        ok('fasen: per mijlpaal een keuzelijst met label en zeven fasen (v7.9.2: met 5b) plus "kies een fase", voorgevuld (lead 1, gesprek 3, voorstel 5, onderhandeling 5)', [x[0] + '=' + x[1] for x in v] == ['scholen-lead=1', 'scholen-gesprek=3', 'scholen-voorstel=5', 'scholen-onderhandeling=5'] and all(x[2] and 'Fase in Capsule' in x[2] and x[3] == 8 for x in v), v)
         ok('fasen: fase 6 is deal/lopend traject (gewonnen)', 'deal/lopend traject (gewonnen)' in pg.inner_text('#venster [data-v79fase="scholen-lead"]'))
         # v7.9.1 (review r5, A1): na de proefdraai staat de focus op de titel van de stap; Tab en Shift+Tab blijven daarvandaan binnen het venster
         ok('fasen: na Proefdraaien heeft de titel van de stap de focus (review r4/r5)', pg.evaluate("(function () { var a = document.activeElement; return !!(a && a.classList.contains('r-titel') && a.closest('#v79stap-fasen')); })()"))
@@ -509,7 +510,7 @@ with sync_playwright() as p:
         ok('fasen: Toepassen stuurt de koppeling, de onderbouwing en de besluitdatum (zonder fase 6 geen dealDatum)', a[0] == 'fasen' and a[1].get('toepassen') is True and a[1].get('koppeling') == {'scholen-lead': '1', 'scholen-gesprek': '3', 'scholen-voorstel': '5', 'scholen-onderhandeling': '5'} and a[1].get('onderbouwing') == 'Rekenmodel van het MT-rapport (golf5)' and a[1].get('besluitdatum') == dag(0) and 'dealDatum' not in a[1], a)
         ok('fasen: daarna laadt de status opnieuw (staat zo)', any(x['args'][0] == 'status' for x in calls('apiMigratieV79', n0)))
         ms = [m for m in api('apiCrm')['mijlpalen'] if m['pipeline'] == 'Scholen']
-        ok('fasen: de pipeline Scholen heeft de vijf fasen van Capsule met rollen', [m['mijlpaal'] for m in ms] == ['1. nog niet gebeld', '2. pre-ap', '3. ap (appointment planned)', '4. ad (appointment done)', '5. vo (voorstel / offerte)'] and [m['rol'] for m in ms] == ['lead', '', 'ap', 'ad', 'voorstel'], ms)
+        ok('fasen: de pipeline Scholen heeft de zes open fasen (v7.9.2: met 5b bijna rond) met rollen', [m['mijlpaal'] for m in ms] == ['1. nog niet gebeld', '2. pre-ap', '3. ap (appointment planned)', '4. ad (appointment done)', '5. vo (voorstel / offerte)', '5b. bijna rond'] and [m['rol'] for m in ms] == ['lead', '', 'ap', 'ad', 'voorstel', ''] and [m['vraagtStart'] for m in ms] == [False] * 5 + [True], ms)
         ok('fasen: een open kans in gesprek staat nu in 3. ap', kans('k8')['kans']['fase'] == '3. ap (appointment planned)')
         f = [x for x in api('apiAannames')['aannames'] if x['naam'] == 'fasegewichten'][0]; ok('fasen: de gewichten zijn een versie van fasegewichten met de onderbouwing', f['huidig'] and 'golf5' in f['huidig']['onderbouwing'], f['huidig'])
         pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#v79Lijst .hint:has-text("al")')
@@ -550,6 +551,145 @@ with sync_playwright() as p:
         ok('telefoon: het venster scrolt niet horizontaal', pg.evaluate("(function () { var v = document.getElementById('vensterInhoud'); return v.scrollWidth <= v.clientWidth + 1 && document.documentElement.scrollWidth <= window.innerWidth + 1; })()"))
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_fasen_telefoon', g5_fasen_telefoon)
+    c.close()
+
+    # ===== 7. v7.9.2: fase 5b bijna rond (Sophie, verse demo, na stap fasen): het startdatumvenster bij de fasekeuze, slepen, ← →, bulk, + Kans en de
+    # assistent (annuleren zet terug, zonder aanroep), de start op de kaart en in het kansdetail, het winformulier, het vinkje in Beheer → Mijlpalen =====
+    VO, B5, AP = '5. vo (voorstel / offerte)', '5b. bijna rond', '3. ap (appointment planned)'
+    def fasen_toepassen():
+        pr = api('apiMigratieV79', 'fasen', {}); api('apiMigratieV79', 'fasen', {'toepassen': True, 'koppeling': {m['id']: m['voorstel'] for m in pr['mijlpalen']}})
+        pg.evaluate("crmVerouderd(); laadCrmBasis()"); pg.wait_for_timeout(700)
+    c, pg = nieuw(b, 'sophie')
+    def g5_5b_detail():
+        fasen_toepassen(); detail('kans:k6'); n0 = n_calls()
+        ok('5b: de keuzelijst in het kansdetail kent 5b bijna rond', pg.locator('[data-kansfase="k6"] option[value="%s"]' % B5).count() == 1)
+        pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart')
+        ok('5b detail: vóór de aanroep het venster "Verwachte startdatum" (verplicht, min vandaag, leeg zonder eerdere datum), zonder Overslaan', not calls('apiKansOpslaan', n0) and pg.inner_text('#vf-formkop') == 'Verwachte startdatum' and
+           pg.get_attribute('#vf-verwachteStart', 'min') == dag(0) and pg.input_value('#vf-verwachteStart') == '' and pg.locator('#venster [data-voorstelovers]').count() == 0, pg.inner_text('#vensterInhoud')[:200])
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht(); pg.wait_for_timeout(300)
+        ok('5b detail: Annuleren zet de keuze terug zonder aanroep; de focus terug op de keuzelijst', pg.input_value('[data-kansfase="k6"]') == VO and not calls('apiKansOpslaan', n0) and pg.evaluate("document.activeElement && document.activeElement.getAttribute('data-kansfase')") == 'k6')
+        pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart'); pg.click('#venster [data-cf-opslaan]'); toast('verwachte startdatum')
+        pg.fill('#vf-verwachteStart', dag(-1)); pg.click('#venster [data-cf-opslaan]'); toast('verwachte startdatum')
+        ok('5b detail: leeg of in het verleden geeft een melding zonder aanroep', not calls('apiKansOpslaan', n0) and pg.locator('#venster.aan').count() == 1)
+        pg.fill('#vf-verwachteStart', dag(12)); pg.click('#venster [data-cf-opslaan]'); toast('Mijlpaal: ' + B5); pg.wait_for_timeout(600)
+        a = calls('apiKansOpslaan', n0)
+        ok('5b detail: één aanroep met fase, verwachteStart (met _oud) en de wissel (bron detail)', len(a) == 1 and a[0]['args'][0].get('fase') == B5 and a[0]['args'][0].get('verwachteStart') == dag(12) and (a[0]['args'][0].get('_oud') or {}).get('verwachteStart') == '' and (a[0]['args'][0].get('wissel') or {}).get('bron') == 'detail', a)
+        ok('5b detail: het kansdetail toont de verwachte start', 'Verwachte start' in pg.inner_text('#crmDetailScherm') and kans('k6')['kans']['verwachteStart'] == dag(12))
+        # het bewerkvenster kent het veld; het winformulier neemt de verwachte start over als gewenste startdatum
+        pg.click('#crmDetailScherm [data-composer="bewerk"]'); pg.wait_for_selector('#cf-verwachteStart')
+        ok('5b detail: het bewerkvenster heeft het veld Verwachte start (datum) met de opgeslagen waarde', pg.get_attribute('#cf-verwachteStart', 'type') == 'date' and pg.input_value('#cf-verwachteStart') == dag(12))
+        pg.click('#crmComposer [data-cf-annuleer]'); pg.wait_for_timeout(200)
+        pg.select_option('[data-kansfase="k6"]', 'gewonnen'); venster_open('#vf-startdatum')
+        ok('5b detail: het winformulier vult de gewenste startdatum in met de verwachte start', pg.input_value('#vf-startdatum') == dag(12))
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_5b_detail', g5_5b_detail)
+
+    def g5_5b_bord():
+        pipeline(); n0 = n_calls()
+        ok('5b bord: een kolom 5b bijna rond (90%)', pg.locator('.bord [data-sleepdoel="kans:%s"]' % B5).count() == 1 and '90%' in pg.inner_text('.bord [data-sleepdoel="kans:%s"] .k-som' % B5))
+        ok('5b bord: de kaart in 5b toont de start', 'start ' in pg.inner_text('[data-sleep="kans:k6"]'), pg.inner_text('[data-sleep="kans:k6"]'))
+        muis('[data-sleep="kans:k10"]', '[data-sleepdoel="kans:%s"]' % B5); venster_open('#vf-verwachteStart')
+        ok('5b slepen: het venster vóór de aanroep, de kaart voorlopig in 5b', not calls('apiKansOpslaan', n0) and kol('[data-sleep="kans:k10"]') == 'kans:' + B5)
+        pg.keyboard.press('Escape'); venster_dicht(); pg.wait_for_timeout(400)
+        ok('5b slepen: Escape zet de kaart terug zonder aanroep', kol('[data-sleep="kans:k10"]') == 'kans:' + VO and not calls('apiKansOpslaan', n0))
+        pg.locator('[data-sleep="kans:k10"]').focus(); pg.keyboard.press('ArrowRight'); venster_open('#vf-verwachteStart')
+        ok('5b ← →: een pijltoets naar 5b opent hetzelfde venster (de focus in het venster)', not calls('apiKansOpslaan', n0) and pg.evaluate("document.getElementById('venster').contains(document.activeElement)"))
+        pg.fill('#vf-verwachteStart', dag(20)); pg.click('#venster [data-cf-opslaan]'); pg.wait_for_selector('#toast.aan:has-text("→ %s")' % B5); pg.wait_for_timeout(500)
+        a = calls('apiKansOpslaan', n0)
+        ok('5b ← →: één aanroep met verwachteStart en bron toets; de focus op de kaart in 5b', len(a) == 1 and a[0]['args'][0].get('verwachteStart') == dag(20) and (a[0]['args'][0].get('wissel') or {}).get('bron') == 'toets' and kol('[data-sleep="kans:k10"]') == 'kans:' + B5 and
+           pg.evaluate("document.activeElement && document.activeElement.getAttribute('data-sleep')") == 'kans:k10', a)
+        n1 = n_calls(); muis('[data-sleep="kans:k7"]', '[data-sleepdoel="kans:%s"]' % B5); venster_open('#vf-verwachteStart'); pg.fill('#vf-verwachteStart', dag(0)); pg.click('#venster [data-cf-opslaan]')
+        pg.wait_for_selector('#toast.aan:has-text("→ %s")' % B5); pg.wait_for_timeout(500); a = calls('apiKansOpslaan', n1)
+        ok('5b slepen: vandaag mag; één aanroep met bron slepen', len(a) == 1 and a[0]['args'][0].get('verwachteStart') == dag(0) and (a[0]['args'][0].get('wissel') or {}).get('bron') == 'slepen', a)
+        # bulk: één venster (alleen de startdatum) voor de hele selectie; Annuleren verplaatst niets
+        n2 = n_calls(); pg.click('[data-sleep="kans:k8"]', modifiers=['Shift']); pg.click('[data-sleep="kans:k11"]', modifiers=['Shift']); pg.wait_for_selector('#selectieBalk.aan [data-bulkveld="kolom"]')
+        pg.select_option('#selectieBalk [data-bulkveld="kolom"]', B5); venster_open('#vf-verwachteStart')
+        ok('5b bulk: één venster met alleen de startdatum, vóór de aanroepen', not calls('apiKansOpslaan', n2) and pg.locator('#venster [data-cf]').count() == 1)
+        pg.click('#venster [data-cf-annuleer]'); toast('Niets verplaatst'); pg.wait_for_timeout(300)
+        ok('5b bulk: Annuleren verplaatst niets (geen aanroep)', not calls('apiKansOpslaan', n2) and kol('[data-sleep="kans:k8"]') == 'kans:' + AP and kol('[data-sleep="kans:k11"]') == 'kans:' + AP)
+        pg.click('[data-sleep="kans:k8"]', modifiers=['Shift']); pg.click('[data-sleep="kans:k11"]', modifiers=['Shift']); pg.wait_for_selector('#selectieBalk.aan [data-bulkveld="kolom"]')
+        pg.select_option('#selectieBalk [data-bulkveld="kolom"]', B5); venster_open('#vf-verwachteStart'); pg.fill('#vf-verwachteStart', dag(30)); pg.click('#venster [data-cf-opslaan]'); toast('verplaatst naar ' + B5, 8000)
+        a = calls('apiKansOpslaan', n2)
+        ok('5b bulk: één datum voor de hele selectie, bron bulk', len(a) == 2 and all(x['args'][0].get('verwachteStart') == dag(30) and (x['args'][0].get('wissel') or {}).get('bron') == 'bulk' for x in a), a)
+    stap('g5_5b_bord', g5_5b_bord)
+
+    def g5_5b_aanmaken():
+        pipeline(); pg.click('#deskActies [data-crmnieuw="kans"]'); pg.wait_for_selector('#crmNieuw #cf-fase')
+        pg.fill('#cf-naam', 'Bijna rond golf5'); pg.select_option('#cf-schoolId', 's1'); pg.select_option('#cf-fase', B5); pg.fill('#cf-waarde', '7000'); n0 = n_calls()
+        pg.click('#crmNieuw [data-cf-opslaan]'); venster_open('#vf-verwachteStart')
+        ok('5b + Kans: in 5b eerst het startdatumvenster, nog geen aanroep', not calls('apiKansOpslaan', n0))
+        pg.fill('#vf-verwachteStart', dag(5)); pg.click('#venster [data-cf-opslaan]'); toast('Kans aangemaakt'); pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("Bijna rond golf5")')
+        a = calls('apiKansOpslaan', n0)
+        ok('5b + Kans: één aanroep met fase 5b en verwachteStart', len(a) == 1 and a[0]['args'][0].get('fase') == B5 and a[0]['args'][0].get('verwachteStart') == dag(5), a)
+    stap('g5_5b_aanmaken', g5_5b_aanmaken)
+
+    def g5_5b_assistent():
+        pg.evaluate("""(function () { S.chat.push({ rol: 'bot', tekst: 'Voorstel', acties: [{ id: 'g5b', soort: 'wijzig_kans', titel: 'Kans bijwerken', invoer: { kansId: 'k16', fase: '%s' } }] }); saveChat(); })()""" % B5)
+        desk('brein', '#breinBerichten .actiekaart'); kaart = pg.locator('.actiekaart').last; n0 = n_calls()
+        kaart.locator('[data-ak="uitvoeren"]').click(); venster_open('#vf-verwachteStart')
+        ok('5b assistent: Uitvoeren naar 5b opent eerst het startdatumvenster', not calls('apiBreinUitvoeren', n0))
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+        ok('5b assistent: Annuleren voert niets uit', not calls('apiBreinUitvoeren', n0) and pg.locator('.actiekaart').last.locator('[data-ak="uitvoeren"]').count() == 1)
+        pg.locator('.actiekaart').last.locator('[data-ak="uitvoeren"]').click(); venster_open('#vf-verwachteStart'); pg.fill('#vf-verwachteStart', dag(9)); pg.click('#venster [data-cf-opslaan]')
+        pg.wait_for_selector('.actiekaart.uitgevoerd:has-text("Verwachte start")', timeout=8000); a = calls('apiBreinUitvoeren', n0)
+        l = wissels('k16')
+        ok('5b assistent: één aanroep met verwachteStart; de wissel naar 5b heeft bron assistent', len(a) == 1 and a[0]['args'][0]['invoer'].get('verwachteStart') == dag(9) and l[-1]['naar'] == B5 and l[-1]['bron'] == 'assistent' and kans('k16')['kans']['verwachteStart'] == dag(9), a)
+    stap('g5_5b_assistent', g5_5b_assistent)
+
+    def g5_5b_beheer():
+        desk('rapporten', '#crmInhoud [data-beheer="mijlpalen"]'); pg.click('[data-beheer="mijlpalen"]'); pg.wait_for_selector('#leMijlpalen .le-vink')
+        v = pg.evaluate("[].map.call(document.querySelectorAll('#leMijlpalen .le-rij'), function (r) { var x = r.querySelector('[data-le=\"vraagtStart\"]'), l = r.querySelector('.le-vink'); return [r.querySelector('[data-le=\"mijlpaal\"]').value, !!(x && x.checked), l ? Math.round(l.getBoundingClientRect().height) : 0]; })")
+        ok('5b beheer: per mijlpaal een vinkje Vraagt startdatum (44 px), alleen 5b aangevinkt', len(v) == 6 and [x[0] for x in v if x[1]] == [B5] and all(x[2] >= 44 for x in v), v)
+        pg.locator('#leMijlpalen .le-rij').nth(3).locator('[data-le="vraagtStart"]').check(); n0 = n_calls()
+        pg.click('#crmBeheer [data-cf-opslaan]'); toast('Mijlpalen opgeslagen'); a = calls('apiMijlpalenOpslaan', n0)
+        ok('5b beheer: Opslaan stuurt vraagtStart per mijlpaal (4. ad erbij); de backend bewaart het', a and [m.get('vraagtStart') for m in a[0]['args'][0]] == [False, False, False, True, False, True] and
+           [m['vraagtStart'] for m in api('apiCrm')['mijlpalen'] if m['pipeline'] == 'Scholen'] == [False, False, False, True, False, True], a and [m.get('vraagtStart') for m in a[0]['args'][0]])
+    stap('g5_5b_beheer', g5_5b_beheer)
+    c.close()
+
+    # ===== 8. v7.9.2: het startdatumvenster en het vinkje op de telefoon (390 px): 16 px, 44 px, geen horizontale scroll =====
+    c, pg = nieuw(b, 'sophie', tel=True)
+    def g5_5b_telefoon():
+        fasen_toepassen(); pg.evaluate("routeHash('kans:k6')"); pg.wait_for_selector('[data-kansfase="k6"]'); pg.wait_for_timeout(400)
+        pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart')
+        m = pg.evaluate("(function () { var i = document.getElementById('vf-verwachteStart'), r = i.getBoundingClientRect(), k = [].map.call(document.querySelectorAll('#venster .balk .knop'), function (b) { return Math.round(b.getBoundingClientRect().height); }); return { fs: parseFloat(getComputedStyle(i).fontSize), h: Math.round(r.height), k: k, x: document.getElementById('vensterInhoud').scrollWidth <= document.getElementById('vensterInhoud').clientWidth + 1 }; })()")
+        ok('telefoon: het startdatumveld 16 px en minstens 44 px hoog, knoppen 44 px, geen horizontale scroll', m['fs'] >= 16 and m['h'] >= 44 and m['k'] and all(x >= 44 for x in m['k']) and m['x'], m)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+        pg.click('nav button[data-view="relaties"]'); pg.wait_for_timeout(300); pg.click('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('[data-beheer="mijlpalen"]')
+        pg.click('[data-beheer="mijlpalen"]'); pg.wait_for_selector('#leMijlpalen .le-vink')
+        h = pg.evaluate("[].map.call(document.querySelectorAll('#leMijlpalen .le-vink'), function (l) { return Math.round(l.getBoundingClientRect().height); })")
+        ok('telefoon: de vinkjes Vraagt startdatum zijn minstens 44 px hoog en de pagina scrolt niet horizontaal', len(h) == 6 and all(x >= 44 for x in h) and pg.evaluate("document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth + 1"), h)
+    stap('g5_5b_telefoon', g5_5b_telefoon)
+    c.close()
+
+    # ===== 9. v7.9.2 (review r1, R1): de assistent op de telefoon na een eerder uitgevoerde actie (CRM.basis leeg, geen bord of kansdetail geladen): eerst de
+    # basis, dan het startdatumvenster vóór apiBreinUitvoeren; (R2) het startdatumvenster op de iPad in landschap: datumveld en knoppen 44 px =====
+    c, pg = nieuw(b, 'sophie', tel=True)
+    def g5_5b_assistent_na_actie():
+        fasen_toepassen()
+        pg.evaluate("""(function () { S.chat.push({ rol: 'bot', tekst: 'Voorstel', acties: [{ id: 'g5w', soort: 'wijzig_kans', titel: 'Waarde bijwerken', invoer: { kansId: 'k8', waarde: 4321 } },
+          { id: 'g5s', soort: 'wijzig_kans', titel: 'Bijna rond', invoer: { kansId: 'k16', fase: '%s' } }] }); saveChat(); })()""" % B5)
+        pg.click('nav button[data-view="brein"]'); pg.wait_for_selector('#breinBerichten .actiekaart'); pg.wait_for_timeout(300)
+        pg.locator('.actiekaart').nth(-2).locator('[data-ak="uitvoeren"]').click(); pg.wait_for_selector('.actiekaart.uitgevoerd', timeout=8000); pg.wait_for_timeout(300)
+        ok('5b assistent na een actie: de eerste actie is uitgevoerd en CRM.basis is leeg, zonder bord of kansdetail (de route uit de review)',
+           pg.evaluate("CRM.basis === null && !(CRM.pipeline && CRM.pipeline.mijlpalen) && !(CRM.detail && CRM.detail.data && CRM.detail.data.mijlpalen)") and kans('k8')['kans']['waarde'] == 4321)
+        n0 = n_calls(); pg.locator('.actiekaart').last.locator('[data-ak="uitvoeren"]').click(); venster_open('#vf-verwachteStart')
+        ok('5b assistent na een actie: eerst apiCrm (de mijlpalen), dan het startdatumvenster; nog geen apiBreinUitvoeren', calls('apiCrm', n0) and not calls('apiBreinUitvoeren', n0), [x['fn'] for x in calls(None, n0)])
+        pg.fill('#vf-verwachteStart', dag(6)); pg.click('#venster [data-cf-opslaan]'); pg.wait_for_selector('.actiekaart.uitgevoerd:has-text("Verwachte start")', timeout=8000)
+        a = calls('apiBreinUitvoeren', n0)
+        ok('5b assistent na een actie: één aanroep met verwachteStart, geen foutmelding', len(a) == 1 and a[0]['args'][0]['invoer'].get('verwachteStart') == dag(6) and kans('k16')['kans']['verwachteStart'] == dag(6) and
+           pg.locator('#toast.aan:has-text("startdatum (vandaag of later)")').count() == 0, a)
+    stap('g5_5b_assistent_na_actie', g5_5b_assistent_na_actie)
+    c.close()
+    c = b.new_context(viewport={'width': 1180, 'height': 820}, is_mobile=True, has_touch=True)
+    pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('ipad 5b: ' + str(e))); pg.on('dialog', dialoog)
+    pg.goto(U + 'sophie'); pg.wait_for_selector('#zijbalk'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG)
+    def g5_5b_ipad():
+        fasen_toepassen(); detail('kans:k6'); pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart')
+        m = pg.evaluate("[].map.call(document.querySelectorAll('#vf-verwachteStart, #venster .balk .knop'), function (x) { return Math.round(x.getBoundingClientRect().height); })")
+        ok('ipad: in het startdatumvenster het datumveld, Opslaan en Annuleren minstens 44 px (review r1, R2)', pg.evaluate("document.body.classList.contains('desk') && matchMedia('(hover: none)').matches") and len(m) == 3 and all(x >= 44 for x in m), m)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_5b_ipad', g5_5b_ipad)
     c.close()
     b.close()
 
