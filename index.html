@@ -925,6 +925,7 @@
     body.desk .fw-regel .t-bewerk { width: 44px; height: 44px; }  /* v7.9 (iOS-review): het potlood van een wissel, uitklapregels en doorklikregels ook 44 px op de iPad */
     body.desk .legenda-defs summary, body.desk .dq-eigenaar summary { min-height: 44px; }
     body.desk .dq-regel[data-crm-open] { min-height: 44px; display: flex; align-items: center; }
+    body.desk .v79-keuze select { min-height: 44px; }  /* v7.9.1: de keuzelijsten van de overstap (fasen, rollen, redenen) ook 44 px op de iPad */
   }
   /* De definitie naast elk getal: één schakelaar per scherm (body.defs-aan); in het MT-overzicht altijd zichtbaar */
   .t-def { display: none; font-size: var(--fs-klein); font-weight: 400; color: var(--gedempt); margin-top: 4px; line-height: 1.35; text-align: left; }
@@ -1564,7 +1565,7 @@
      maxMs en één ingekorte foutmelding zonder e-mailadressen. Nooit argumenten of gegevens. Verzenden (stil, nooit een toast, nooit een lus) zodra er
      iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
-  var APP_VERSIE = '7.9';  // v7.9: sturing; gaat ook als v mee in elke aanroep (versiewacht); v7.8: prestatie, ronde 2; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
+  var APP_VERSIE = '7.9.1';  // v7.9.1: de zes fasen van Capsule (overstapstap fasen); v7.9: sturing; gaat ook als v mee in elke aanroep (versiewacht); v7.8: prestatie, ronde 2; v7.6: gaat mee in de metingen; bump bij elke release (zie /release)
   var SW_REGISTREER = function () {};  // v7.9: wordt onderaan gezet als er een service worker kan zijn (zie de registratie)
   var NIEUWE_VERSIE = function () {};  // v7.9 (iOS-review): update-check en dan #updateBalk (Herladen, Later); onderaan gezet bij de service worker, zoals SW_REGISTREER
   var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
@@ -1655,7 +1656,9 @@
   }
   // De laatst bekende versie blijft staan als CRM.basis even leeg is (crmVerouderd na een wijziging); elke nieuwe apiCrm zet hem opnieuw (ook leeg: een oudere backend)
   var BACKEND = { versie: null };
-  function v79() { var B = CRM.basis, v = B ? B.backendVersie || '' : BACKEND.versie; return !!(v && !versieKleinerApp(v, '7.9')); }
+  function backendMinstens(min) { var B = CRM.basis, v = B ? B.backendVersie || '' : BACKEND.versie; return !!(v && !versieKleinerApp(v, min)); }
+  function v79() { return backendMinstens('7.9'); }
+  function v791() { return backendMinstens('7.9.1'); }  // v7.9.1: de overstapstap fasen; een backend van 7.9 kent hem niet (Onbekende stap), dan verbergt de app hem
   // Het register één keer per sessie (R9): na de eerste geslaagde aanroep, stil en buiten het kritieke pad (zoals metingenVerzend). De vorige versie staat per
   // apparaat in aa_defs_register (een gemak: meteen zichtbaar bij het volgende openen, daarna ververst). Schermen tekenen hun getallen zonder te wachten;
   // defsBijwerken() vult de definitieregels en titels van het open scherm aan zodra het register er is, zonder nieuwe aanroep.
@@ -5277,13 +5280,16 @@
   });
   // De overstap naar v7.9 (§2.5): per stap een telling, eerst proefdraaien, dan toepassen. Rollen: een keuze per mijlpaal; redenen: een keuze per oude reden
   var V79 = { status: null, proef: {} };
-  var V79_STAPPEN = [['rollen', 'Rollen van de mijlpalen', 'Een rol per mijlpaal (lead, AP gepland, AP gehouden, voorstel). Zonder rollen zijn AP, AD, VO en conversie geblokkeerd.'],
+  // v7.9.1: bovenaan de stap fasen: de pipeline Scholen krijgt de zes fasen van Capsule; per mijlpaal een keuze (1–6), plus onderbouwing en besluitdatum van de gewichten
+  var V79_STAPPEN = [['fasen', 'Fasen zoals Capsule', 'De pipeline Scholen krijgt de zes fasen van Capsule: 1 tot en met 5 als mijlpalen met rol en gewicht (pre-AP 0 %, AP 25 %, AD 40 %, VO 70 %), 6 (deal/lopend traject) is gewonnen. Kies per mijlpaal de fase; open kansen verhuizen mee en dat telt nergens. Andere pipelines blijven zoals ze zijn.'],
+    ['rollen', 'Rollen van de mijlpalen', 'Een rol per mijlpaal (lead, AP gepland, AP gehouden, voorstel). Zonder rollen zijn AP, AD, VO en conversie geblokkeerd.'],
     ['tijdlijn', 'Oude tijdlijnregels omzetten', 'De regels "Mijlpaal: a → b" worden wissels met bron tijdlijn (zonder werkelijke datum).'],
     ['wissels', 'Rollen opnieuw toepassen', 'Wissels uit import, Capsule en de tijdlijn (en wissels zonder rol) krijgen de rol van nu. Wissels uit de app houden hun rol.'],
     ['kansen', 'Open kansen aanvullen', 'Een leeg schooljaar of een lege klant krijgt het voorstel (schooljaar van de tekendatum; klant uit het vorige schooljaar).'],
     ['redenen', 'Verliesredenen koppelen', 'Elke oude vrije reden aan een reden uit de keuzelijst. Tot dan zijn conversie en verloren "niet getoetst".']];
   function v79Telling(stap, S0) {
     if (!S0) return '';
+    if (stap === 'fasen') return S0.fasen ? (S0.fasen.alGedaan ? 'staat zo' : 'nog niet overgenomen') : '';
     if (stap === 'rollen') return S0.rollen.ingesteld ? 'ingesteld' + (S0.rollen.pipelinesZonder.length ? ' (zonder rol: ' + S0.rollen.pipelinesZonder.join(', ') + ')' : '') : 'nog niet ingesteld';
     if (stap === 'tijdlijn') return S0.tijdlijn.teOmzetten + ' om te zetten · ' + S0.tijdlijn.alOmgezet + ' al omgezet';
     if (stap === 'wissels') return S0.wissels.teHerzien + ' te herzien';
@@ -5298,13 +5304,18 @@
   function tekenOverstap() {
     var S0 = V79.status;
     el('vensterInhoud').innerHTML = '<div class="kop" style="margin-top:14px">Overstap naar v7.9</div><div class="hint">Na de livegang, in deze volgorde. Elke stap eerst proefdraaien; toepassen schrijft pas na je keuze. Alleen tellingen, geen namen.</div><div id="v79Lijst">' +
-      V79_STAPPEN.map(function (st) {
+      V79_STAPPEN.filter(function (st) { return st[0] !== 'fasen' || v791(); }).map(function (st) {
         var p = V79.proef[st[0]], keuzes = '';
-        if (p && st[0] === 'rollen') keuzes = (p.mijlpalen || []).map(function (m) { return '<div class="v79-keuze"><span>' + esc(m.pipeline + ' · ' + m.mijlpaal) + '</span><select data-v79rol="' + esc(m.id) + '" aria-label="Rol van ' + esc(m.mijlpaal) + '">' + ['', 'lead', 'ap', 'ad', 'voorstel'].map(function (x) { return '<option value="' + x + '"' + (x === m.voorstel ? ' selected' : '') + '>' + (x || 'geen rol') + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle pipelines hebben al rollen.</div>';
+        if (p && st[0] === 'fasen') keuzes = p.alGedaan ? '<div class="hint">De pipeline Scholen heeft de fasen van Capsule al.</div>' : (p.mijlpalen || []).map(function (m) {
+          return '<div class="v79-keuze"><span>' + esc(m.mijlpaal) + ' (' + esc(m.open) + ' open)</span><select data-v79fase="' + esc(m.id) + '" aria-label="Fase in Capsule voor ' + esc(m.mijlpaal) + '"><option value="">kies een fase</option>' +
+            (p.doelen || []).map(function (d) { return '<option value="' + esc(d.fase) + '"' + (d.fase === m.voorstel ? ' selected' : '') + '>' + esc(d.label) + '</option>'; }).join('') + '</select></div>';
+        }).join('') + '<div class="veld"><label for="v79-onderbouwing">Onderbouwing van de gewichten</label><textarea id="v79-onderbouwing">' + esc(p.onderbouwing || '') + '</textarea></div>' +
+          '<div class="veld"><label for="v79-besluitdatum">Besluitdatum</label><input type="date" id="v79-besluitdatum" value="' + vandaagStr() + '"></div>';
+        else if (p && st[0] === 'rollen') keuzes = (p.mijlpalen || []).map(function (m) { return '<div class="v79-keuze"><span>' + esc(m.pipeline + ' · ' + m.mijlpaal) + '</span><select data-v79rol="' + esc(m.id) + '" aria-label="Rol van ' + esc(m.mijlpaal) + '">' + ['', 'lead', 'ap', 'ad', 'voorstel'].map(function (x) { return '<option value="' + x + '"' + (x === m.voorstel ? ' selected' : '') + '>' + (x || 'geen rol') + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle pipelines hebben al rollen.</div>';
         else if (p && st[0] === 'redenen') keuzes = (p.redenen || []).map(function (x, i) { return '<div class="v79-keuze"><span>' + esc(x.reden) + ' (' + esc(x.aantal) + '×)</span><select data-v79reden="' + i + '" aria-label="Reden voor ' + esc(x.reden) + '"><option value="">kies een reden</option>' + (p.lijst || []).map(function (l) { return '<option' + (l === x.voorstel ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle redenen staan al in de lijst.</div>';
         else if (p) keuzes = '<div class="r-meta">Proefdraai: ' + esc(Object.keys(p).filter(function (k) { return typeof p[k] === 'number'; }).map(function (k) { return k + ' ' + p[k]; }).join(' · ')) + '</div>';
         return '<div class="v79-stap"><div class="r-titel">' + esc(st[1]) + ' <small class="zacht">' + esc(v79Telling(st[0], S0)) + '</small></div><div class="hint" style="margin-top:2px">' + esc(st[2]) + '</div>' + keuzes +
-          '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p ? '' : ' disabled') + '>Toepassen</button></div></div>';
+          '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p && !p.alGedaan ? '' : ' disabled') + '>Toepassen</button></div></div>';
       }).join('') + '</div><div class="balk"><button class="knop" data-cf-annuleer="1">Sluiten</button></div>';
     vensterNaam();
   }
@@ -5325,6 +5336,13 @@
       return;
     }
     var v = x.getAttribute('data-v79'), i = v.indexOf(':'), stap = v.slice(0, i), toepassen = v.slice(i + 1) === 'toepassen', opties = { toepassen: toepassen };
+    if (toepassen && stap === 'fasen') {  // v7.9.1: een fase per mijlpaal, plus onderbouwing en besluitdatum van de gewichten
+      opties.koppeling = {}; var leegF = false;
+      el('vensterInhoud').querySelectorAll('[data-v79fase]').forEach(function (s0) { if (!s0.value) leegF = true; opties.koppeling[s0.getAttribute('data-v79fase')] = s0.value; });
+      if (leegF) { toast('Kies voor elke mijlpaal een fase uit Capsule.'); return; }
+      opties.onderbouwing = el('v79-onderbouwing') ? el('v79-onderbouwing').value.trim() : ''; opties.besluitdatum = el('v79-besluitdatum') ? el('v79-besluitdatum').value : '';
+      if (!opties.onderbouwing || !opties.besluitdatum) { toast('Geef een onderbouwing en een besluitdatum.'); return; }
+    }
     if (toepassen && stap === 'rollen') { opties.rollen = {}; el('vensterInhoud').querySelectorAll('[data-v79rol]').forEach(function (s0) { if (s0.value) opties.rollen[s0.getAttribute('data-v79rol')] = s0.value; }); }
     if (toepassen && stap === 'redenen') {
       var p = V79.proef.redenen || {}; opties.koppeling = {}; var leeg = false;
@@ -5335,7 +5353,7 @@
     x.disabled = true;
     run('apiMigratieV79', stap, opties).then(function (r) {
       if (!toepassen) { V79.proef[stap] = r; tekenOverstap(); return; }
-      toast('Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; crmVerouderd(); CRM.sturing = null;
+      toast(r && r.melding ? r.melding : 'Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; crmVerouderd(); CRM.sturing = null;  // v7.9.1: de stap fasen geeft zijn eigen melding (ook: staat al zo)
       return run('apiMigratieV79', 'status', {}).then(function (s0) { V79.status = s0; if (el('v79Lijst')) tekenOverstap(); });
     }).catch(function () { x.disabled = false; });
   });

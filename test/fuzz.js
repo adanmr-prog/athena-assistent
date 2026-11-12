@@ -148,7 +148,7 @@ var BASIS = {
   // v7.9: fasewissels, de overstap, de eenmalige import en de weekdoelen
   apiFasewisselDatum: function (rol) { var grens = ctx.ondergrensWerkelijkeDatum(), w = (SEEDRIJEN.Fasewissels || []).filter(function (x) { return x.eigenaar === rol.naam && x.werkelijkeDatum >= grens && !x.ongedaan; })[0] || (SEEDRIJEN.Fasewissels || [])[0]; return [w.id, w.werkelijkeDatum || plusDagen(-1), {}]; },
   apiFasewisselsImport: function () { return [fs.readFileSync(path.join(R, 'test/voorbeelden/werkelijke_datums.csv'), 'utf8'), {}]; },
-  apiMigratieV79: function () { return ['status', {}]; },
+  apiMigratieV79: function (rol, i) { return [i % 2 ? 'fasen' : 'status', {}]; },  // v7.9.1: om en om de stap fasen (proefdraai)
   apiWeekdoelenOpslaan: function (rol) { var oc = rol.team === 'consultancy' ? rol.naam : 'Lars Visser'; return [ctx.isoWeekStr(new CtxDate()), [{ eigenaar: oc, metric: 'ap', doel: 2 }]]; },
   // v7.9 (pakket 2): het register, de aannames en de sturingsweergaven (om en om ook constructor als naam, N1; de mutaties op weergave en stap raken de andere weergaven en onzin)
   apiCijfers: function (rol, i) { return [i % 2 ? {} : { kort: true }]; },

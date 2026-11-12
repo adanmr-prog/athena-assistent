@@ -99,6 +99,11 @@ NOTITIES = {'t1': [{'id': 'n1', 'datum': '2026-09-10 09:12', 'tekst': 'Tweede on
 GEBRUIKERS_NAMEN = ['Menno', 'Mees']
 MIJLPALEN = [{'pipeline': 'Scholen', 'mijlpaal': 'lead', 'volgorde': 1, 'kans': 10, 'dagenNorm': 14, 'rol': 'lead'}, {'pipeline': 'Scholen', 'mijlpaal': 'gesprek', 'volgorde': 2, 'kans': 25, 'dagenNorm': 10, 'rol': 'ap'},
              {'pipeline': 'Scholen', 'mijlpaal': 'voorstel', 'volgorde': 3, 'kans': 50, 'dagenNorm': 7, 'rol': 'voorstel'}, {'pipeline': 'Scholen', 'mijlpaal': 'onderhandeling', 'volgorde': 4, 'kans': 75, 'dagenNorm': 7, 'rol': ''}]  # v7.9: rol
+# v7.9.1: de doelfasen van de overstapstap fasen (zoals CAPSULE_FASEN in Code.gs; 6 = gewonnen)
+FASEN_ONDERBOUWING = 'Fasen en gewichten overgenomen uit Capsule (rekenmodel van het MT-rapport)'
+FASEN_DOELEN = [{'fase': '1', 'mijlpaal': '1. nog niet gebeld', 'label': '1. nog niet gebeld', 'rol': 'lead', 'kans': 0}, {'fase': '2', 'mijlpaal': '2. pre-ap', 'label': '2. pre-ap', 'rol': '', 'kans': 0},
+                {'fase': '3', 'mijlpaal': '3. ap (appointment planned)', 'label': '3. ap (appointment planned)', 'rol': 'ap', 'kans': 25}, {'fase': '4', 'mijlpaal': '4. ad (appointment done)', 'label': '4. ad (appointment done)', 'rol': 'ad', 'kans': 40},
+                {'fase': '5', 'mijlpaal': '5. vo (voorstel / offerte)', 'label': '5. vo (voorstel / offerte)', 'rol': 'voorstel', 'kans': 70}, {'fase': '6', 'mijlpaal': 'gewonnen', 'label': '6. deal/lopend traject (gewonnen)', 'rol': 'deal', 'kans': 100}]
 TRACKS = [{'id': 'std-lead', 'naam': 'Nieuwe lead opvolgen', 'omschrijving': '', 'stappen': [{'tekst': 'Kennismakingsmail sturen', 'categorie': 'mailen', 'dagenNaStart': 0, 'prio': 'hoog'}, {'tekst': 'Nabellen', 'categorie': 'bellen', 'dagenNaStart': 3, 'prio': 'midden'}]},
           {'id': 'std-voorstel', 'naam': 'Voorstel opvolgen', 'omschrijving': '', 'stappen': [{'tekst': 'Voorstel nabellen', 'categorie': 'bellen', 'dagenNaStart': 3, 'prio': 'hoog'}, {'tekst': 'Beslismoment vastleggen', 'categorie': 'opvolgen', 'dagenNaStart': 14, 'prio': 'hoog'}]}]
 SCHOLEN = [
@@ -664,13 +669,20 @@ def handle_crm(fn, args):
     if fn == 'apiMigratieV79':  # v7.9: vaste vormen per stap (de rekenregels test test/node_rooktest.js tegen Code.gs)
         if not beheer(): raise ValueError('Alleen het management kan dit.')
         stap = args[0] if args else ''; opt = args[1] if len(args) > 1 and isinstance(args[1], dict) else {}; toe = opt.get('toepassen') is True
-        if stap == 'status': return {'stap': 'status', 'rollen': {'ingesteld': True, 'pipelinesZonder': []}, 'tijdlijn': {'teOmzetten': 0, 'alOmgezet': 1}, 'wissels': {'teHerzien': 0}, 'kansen': {'zonderSchooljaar': 0, 'zonderKlant': 0}, 'redenen': {'gekoppeld': True, 'buitenLijst': 0}}
+        if stap == 'fasen':  # v7.9.1: de zes fasen van Capsule; een plausibele vorm (de rekenregels test test/node_rooktest.js tegen Code.gs); de mock verandert de mijlpalen niet
+            if not toe: return {'stap': 'fasen', 'toegepast': False, 'alGedaan': False, 'pipeline': 'Scholen', 'onderbouwing': FASEN_ONDERBOUWING, 'doelen': FASEN_DOELEN,
+                                'mijlpalen': [{'id': 'scholen-' + m['mijlpaal'], 'mijlpaal': m['mijlpaal'], 'open': len([k for k in CRMKANSEN if k['fase'] == m['mijlpaal']]), 'voorstel': {'lead': '1', 'gesprek': '3', 'voorstel': '5', 'onderhandeling': '5'}.get(m['mijlpaal'], '')} for m in MIJLPALEN if m['pipeline'] == 'Scholen']}
+            kop = opt.get('koppeling') if isinstance(opt.get('koppeling'), dict) else {}
+            if any(str(kop.get('scholen-' + m['mijlpaal'], '')) not in ('1', '2', '3', '4', '5', '6') for m in MIJLPALEN if m['pipeline'] == 'Scholen'): raise ValueError('Kies voor elke mijlpaal van Scholen een fase uit Capsule (1 tot en met 6).')
+            return {'stap': 'fasen', 'toegepast': True, 'alGedaan': False, 'gewijzigd': True, 'mijlpalen': 5, 'verhuisd': {'1': 2, '2': 0, '3': 3, '4': 0, '5': 3}, 'gewonnen': 0, 'ongewijzigd': 0, 'wissels': 8, 'aanname': 1,
+                    'rollen': {'ingesteld': True, 'pipelinesZonder': []}, 'melding': 'De pipeline Scholen heeft nu de fasen van Capsule: 8 open kansen verhuisd.'}
+        if stap == 'status': return {'stap': 'status', 'fasen': {'alGedaan': False, 'mijlpalen': len([m for m in MIJLPALEN if m['pipeline'] == 'Scholen'])}, 'rollen': {'ingesteld': True, 'pipelinesZonder': []}, 'tijdlijn': {'teOmzetten': 0, 'alOmgezet': 1}, 'wissels': {'teHerzien': 0}, 'kansen': {'zonderSchooljaar': 0, 'zonderKlant': 0}, 'redenen': {'gekoppeld': True, 'buitenLijst': 0}}
         if stap == 'rollen': return {'stap': 'rollen', 'toegepast': True, 'gewijzigd': 0, 'rollen': {'ingesteld': True, 'pipelinesZonder': []}} if toe else {'stap': 'rollen', 'toegepast': False, 'pipelines': [], 'mijlpalen': []}
         if stap == 'tijdlijn': return {'stap': 'tijdlijn', 'toegepast': toe, 'teOmzetten': 0, 'alOmgezet': 1, 'zonderKans': 0, 'geschreven': 0}
         if stap == 'wissels': return {'stap': 'wissels', 'toegepast': toe, 'bekeken': 0, 'gewijzigd': 0, 'perBron': {}, 'nogLeeg': 0}
         if stap == 'kansen': return {'stap': 'kansen', 'toegepast': toe, 'aantal': 0, 'perSchooljaar': {}, 'perKlant': {}}
         if stap == 'redenen': return {'stap': 'redenen', 'toegepast': toe, 'gekoppeld': True, 'redenen': [], 'lijst': VERLIES_REDENEN} if not toe else {'stap': 'redenen', 'toegepast': True, 'kansen': 0, 'wissels': 0, 'gekoppeld': True}
-        raise ValueError('Onbekende stap. Kies status, rollen, tijdlijn, wissels, kansen, redenen.')
+        raise ValueError('Onbekende stap. Kies status, fasen, rollen, tijdlijn, wissels, kansen, redenen.')
     if fn == 'apiFasewisselsImport':  # v7.9: proefdraai en toepassen met de tellingen van het verzonnen voorbeeld
         if not beheer(): raise ValueError('Alleen het management kan dit.')
         if not str(args[0] if args else '').strip(): raise ValueError('Het bestand is leeg.')
@@ -685,7 +697,7 @@ def handle_crm(fn, args):
     # v7.9 (pakket 2): register van cijfers, aannames en jaardoel, de sturingsweergaven en de tussenstand
     if fn == 'apiCijfers':
         defs = {k: {'m': v[0], 'label': v[1], 'definitie': v[2], 'versie': CIJFER_VERSIES.get(k, 0), 'status': 'afgetekend' if CIJFER_VERSIES.get(k) else 'concept', 'eigenaar': 'beheerder', 'blokkade': v[3]} for k, v in REGISTER.items()}
-        if args and isinstance(args[0], dict) and args[0].get('kort') is True: return {'stempel': '7.9|' + str(len(CIJFER_HISTORIE)), 'defs': defs}
+        if args and isinstance(args[0], dict) and args[0].get('kort') is True: return {'stempel': BACKEND_VERSIE[0] + '|' + str(len(CIJFER_HISTORIE)), 'defs': defs}
         return {'cijfers': [dict(defs[k], id=k, soort='aantal', team='sturing', ingang=d(-21), besluit='B4', tolerantie='0', historie=[h for h in CIJFER_HISTORIE if h['metriek'] == k]) for k in REGISTER],
                 'eigenaren': ['FD', 'beheerder', 'teamlead AM', 'boekhouder'], 'besluiten': ['B%d' % i for i in range(1, 15)], 'magWijzigen': beheer()}
     if fn == 'apiCijferOpslaan':
@@ -944,7 +956,7 @@ BREIN_UITGEVOERD = []
 INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt']}
 FAAL = {}  # v7.3 (H2): api-naam -> hoeveel aanroepen nog moeten mislukken (gezet met {"fn":"_faal","args":[naam, n]})
 FAAL_FOUT = {}  # v7.9 (iOS-review): api-naam -> eigen melding van die storing (derde argument van _faal, bijv. "Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.")
-BACKEND_VERSIE = ['7.9']  # v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
+BACKEND_VERSIE = ['7.9.1']  # v7.9.1: release; v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
 # v7.3 (FL-1): de seed bevriezen zodra alle tabellen gevuld zijn. reset() zet elke lijst en dict in place terug (de handlers houden de modulevariabelen
 # bij naam vast), dus een draaiende mock begint daarna weer bij dezelfde uitgangsstand; ook HUIDIG (de ingelogde code) en FAAL gaan terug.
 _SEED = {k: copy.deepcopy(v) for k, v in list(globals().items()) if k.isupper() and isinstance(v, (list, dict))}
@@ -1171,7 +1183,7 @@ class H(SimpleHTTPRequestHandler):
         body = json.loads(ruw)
         if body.get('fn') == '_reset': return self.json(reset())  # v7.3 (FL-1): testhulp, zonder koppelcode
         if body.get('fn') == '_backendVersie':  # v7.9 (R13): testhulp: de versie die apiCrm noemt (een oudere = zonder backendVersie)
-            v = str((body.get('args') or ['7.9'])[0] or '7.9'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
+            v = str((body.get('args') or ['7.9.1'])[0] or '7.9.1'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
         if body.get('fn') == '_faal':  # v7.3 (H2): testhulp: de volgende n aanroepen van een api mislukken
             try: return self.json(faal_zetten(body.get('args') or []))
             except Exception as e: return self.json({'ok': False, 'fout': str(e)})

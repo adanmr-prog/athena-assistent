@@ -296,7 +296,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
     # v7.9 "v7.9 labels" (punt 17): één definitie per naam — contractwaarde (niet omzet) en open waarde (niet "in de pijplijn"); runKern stuurt v mee
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
-    assert all(x.get('v') == '7.9' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'
+    assert all(x.get('v') == '7.9.1' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.1
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
     assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
     # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is
@@ -891,6 +891,22 @@ with sync_playwright() as p:
     assert p8.locator('#updateBalk [data-update="herladen"]').is_visible() and p8.evaluate("window.__swUpdate") == 1 and p8.evaluate("window.__updateKlaar > 0 && window.__balkOp >= window.__updateKlaar") and p8.evaluate("window.__blijft") == 1, 'Herlaad de app: de balk Nieuwe versie met Herladen pas na de update-check, en geen automatisch herladen'
     p8.click('#updateBalk [data-update="later"]'); assert p8.locator('#updateBalk:not([hidden])').count() == 0 and p8.evaluate("window.__blijft") == 1, 'Herlaad de app: Later verbergt de balk'
     c8.close(); mock_post({'fn': '_reset'})
+    # v7.9.1 "7.9-backend": de overstapstap fasen vraagt backend 7.9.1; tegen een backend van 7.9 verbergt de app hem (de rest van de overstap blijft), tegen 7.9.1 staat hij bovenaan
+    def overstap(p):
+        p.goto(BASIS + '/'); p.wait_for_selector('#apiInput'); p.fill('#apiInput', BASIS + '/api'); p.fill('#codeInput', 'test123'); p.click('#codeOpslaan'); p.wait_for_selector('#homeInhoud .hkaart'); p.wait_for_timeout(600)
+        p.click('.zb-item[data-desk="rapporten"]'); p.wait_for_selector('#crmInhoud [data-beheer="v79"]'); p.click('[data-beheer="v79"]'); p.wait_for_selector('#venster.aan [data-v79="rollen:proef"]')
+    assert mock_post({'fn': '_backendVersie', 'args': ['7.9']}).get('ok')
+    c9 = b.new_context(viewport={'width': 1280, 'height': 800}); p9 = c9.new_page(); p9.on('pageerror', lambda e: meldingen.append(('pageerror 7.9-backend', str(e))))
+    overstap(p9)
+    assert p9.locator('[data-v79="fasen:proef"]').count() == 0 and p9.locator('[data-v79="redenen:proef"]').count() == 1, '7.9-backend: geen stap fasen, wel de andere stappen'
+    c9.close(); mock_post({'fn': '_reset'})
+    c9 = b.new_context(viewport={'width': 1280, 'height': 800}); p9 = c9.new_page(); p9.on('pageerror', lambda e: meldingen.append(('pageerror fasen', str(e)))); p9.on('dialog', lambda dl: dl.accept())
+    overstap(p9)
+    assert p9.locator('#v79Lijst .v79-stap').first.locator('[data-v79="fasen:proef"]').count() == 1, 'backend 7.9.1: de stap fasen staat bovenaan'
+    p9.click('[data-v79="fasen:proef"]'); p9.wait_for_selector('#venster [data-v79fase]')
+    assert p9.locator('#venster [data-v79fase]').count() == 4 and p9.input_value('#venster [data-v79fase="scholen-gesprek"]') == '3' and p9.input_value('#v79-besluitdatum'), 'stap fasen: per mijlpaal een voorgevulde keuze en een besluitdatum'
+    p9.click('[data-v79="fasen:toepassen"]'); p9.wait_for_selector('#toast.aan:has-text("fasen van Capsule")')
+    c9.close(); mock_post({'fn': '_reset'})
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

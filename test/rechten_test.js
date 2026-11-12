@@ -372,8 +372,8 @@ log(!!toon.ok, 'portaal: het eigen profiel blijft via het portaal gewoon bereikb
   [[YARA, 'teamlead consultancy'], [BAS, 'teamlead accountmanagement'], [IRIS, 'teamlead talent'], [LARS, 'medewerker']].forEach(function (x) {
     var r1 = roepRuw(x[0], 'apiFasewisselsImport', [csv, { toepassen: true }]); aantalAanroepen++;
     noteer('apiFasewisselsImport (toepassen) door een ' + x[1], x[0], 'apiFasewisselsImport', r1, !r1.ok && netteWeigering(r1.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
-    ['status', 'rollen', 'tijdlijn', 'wissels', 'kansen', 'redenen'].forEach(function (stap) {
-      var r2 = roepRuw(x[0], 'apiMigratieV79', [stap, { toepassen: true, rollen: { 'scholen-lead': 'lead' }, koppeling: {} }]); aantalAanroepen++;
+    ['status', 'fasen', 'rollen', 'tijdlijn', 'wissels', 'kansen', 'redenen'].forEach(function (stap) {  // v7.9.1: ook de stap fasen (met een volledige koppeling)
+      var r2 = roepRuw(x[0], 'apiMigratieV79', [stap, { toepassen: true, rollen: { 'scholen-lead': 'lead' }, koppeling: stap === 'fasen' ? { 'scholen-lead': '1', 'scholen-gesprek': '3', 'scholen-voorstel': '5', 'scholen-onderhandeling': '6' } : {} }]); aantalAanroepen++;
       noteer('apiMigratieV79 ' + stap + ' (toepassen) door een ' + x[1], x[0], 'apiMigratieV79', r2, !r2.ok && netteWeigering(r2.fout) && !gewijzigdeBladen().length); herstel(); aantalHerstel++;
     });
   });
