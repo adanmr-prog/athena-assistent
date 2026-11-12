@@ -4877,8 +4877,9 @@
   // iOS: het toetsenbord verkleint vh niet; het venster volgt de zichtbare viewport, zodat Opslaan bereikbaar blijft
   function pasVensterAan() {
     var v = el('venster'), vv = window.visualViewport;
-    if (!vv || !v.classList.contains('aan')) { v.style.height = ''; v.style.top = ''; return; }
+    if (!vv || !v.classList.contains('aan')) { v.style.height = ''; v.style.top = ''; v.style.paddingTop = ''; return; }
     v.style.height = vv.height + 'px'; v.style.top = vv.offsetTop + 'px';
+    v.style.paddingTop = vv.height < 300 ? '0px' : '';  // r4 (IOS4-R1): liggend met toetsenbord geen reserve van 104 px boven de sheet
   }
   if (window.visualViewport) { window.visualViewport.addEventListener('resize', pasVensterAan); window.visualViewport.addEventListener('scroll', pasVensterAan); }
   function ikBen() { return CRM.basis ? CRM.basis.ik : null; }

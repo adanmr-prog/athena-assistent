@@ -13,6 +13,7 @@
 # met de fout onder het veld (iOS-N1) en een nieuwe proefdraai na een andere fasekeuze zolang de onderbouwing die van de proefdraai is (C-N3).
 # Review r3 (sectie 10): de melding met knoppen nooit over titel, veld of fout van het venster op telefoon en iPad (R1), een veldfout schuift in beeld (N1),
 # geen oude veldfout na een weigering van de backend (N2) en Toepassen uit tijdens de proefdraai van de stap fasen (R2).
+# Review r4 (sectie 10, `g5_r4_liggend`): liggend met het toetsenbord open geen reserve boven de sheet, zodat label en veld in beeld blijven (IOS4-R1).
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -880,6 +881,24 @@ with sync_playwright() as p:
         ok('telefoon (r3, N2): weigert de backend na een geslaagde controle, dan staat de oude veldfout er niet meer (geen aria-invalid)', m['open'] and not m['fout'] and m['invalid'] == 0, m)
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_r3_fout_in_beeld', g5_r3_fout_in_beeld)
+    # r4 (IOS4-R1): liggend met het toetsenbord open (844×150, 667×130) is de zichtbare viewport te laag voor de reserve van 104 px boven de sheet; dan geen
+    # reserve, zodat label en veld in de sheet passen. Liggend zonder toetsenbord (844×390) blijft de reserve, ook weer na het sluiten van het toetsenbord.
+    LIGGEND = """(function () { var i = document.getElementById('vf-contractwaarde'), l = document.querySelector('label[for="vf-contractwaarde"]'), b = document.getElementById('vensterInhoud');
+      try { l.scrollIntoView({ block: 'start' }); } catch (x) {}
+      var rb = b.getBoundingClientRect(), rl = l.getBoundingClientRect(), ri = i.getBoundingClientRect();
+      return { sheet: Math.round(rb.height), zichtbaar: rl.top >= rb.top - 1 && ri.bottom <= rb.bottom + 1 && ri.height > 0, pad: getComputedStyle(document.getElementById('venster')).paddingTop }; })()"""
+    def g5_r4_liggend():
+        pg.set_viewport_size({'width': 844, 'height': 390}); pg.wait_for_timeout(300)
+        detail('kans:k7'); pg.select_option('[data-kansfase="k7"]', 'gewonnen'); venster_open('#vf-contractwaarde'); pg.focus('#vf-contractwaarde')
+        m0 = pg.evaluate(LIGGEND)
+        pg.set_viewport_size({'width': 844, 'height': 150}); pg.wait_for_timeout(300); m1 = pg.evaluate(LIGGEND)
+        ok('telefoon liggend 844×150 met toetsenbord (r4, IOS4-R1): label en veld van de contractwaarde staan in de sheet', m1['zichtbaar'] and m1['sheet'] >= 120, m1)
+        pg.set_viewport_size({'width': 667, 'height': 130}); pg.wait_for_timeout(300); m2 = pg.evaluate(LIGGEND)
+        ok('telefoon liggend 667×130 met toetsenbord (r4, IOS4-R1): label en veld van de contractwaarde staan in de sheet', m2['zichtbaar'] and m2['sheet'] >= 100, m2)
+        pg.set_viewport_size({'width': 844, 'height': 390}); pg.wait_for_timeout(300); m3 = pg.evaluate(LIGGEND)
+        ok('telefoon liggend 844×390 zonder toetsenbord (r4, IOS4-R1): de reserve boven de sheet blijft, ook na het sluiten van het toetsenbord', m0['pad'] == '104px' and m3['pad'] == '104px' and m3['zichtbaar'], [m0, m3])
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_r4_liggend', g5_r4_liggend)
     c.close()
     c = b.new_context(viewport={'width': 1180, 'height': 820}, is_mobile=True, has_touch=True)
     pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('ipad r3: ' + str(e))); pg.on('dialog', dialoog)
