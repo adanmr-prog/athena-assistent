@@ -926,6 +926,7 @@
     body.desk .legenda-defs summary, body.desk .dq-eigenaar summary { min-height: 44px; }
     body.desk .dq-regel[data-crm-open] { min-height: 44px; display: flex; align-items: center; }
     body.desk .v79-keuze select { min-height: 44px; }  /* v7.9.1: de keuzelijsten van de overstap (fasen, rollen, redenen) ook 44 px op de iPad */
+    body.desk .v79-stap .veld input[type=date], body.desk #venster .v79-stap .balk .knop { min-height: 44px; }  /* v7.9.1 (review r2, R2): de besluitdatum en Proefdraaien/Toepassen ook 44 px op de iPad (#venster: gaat voor op body.desk #venster .knop) */
   }
   /* De definitie naast elk getal: één schakelaar per scherm (body.defs-aan); in het MT-overzicht altijd zichtbaar */
   .t-def { display: none; font-size: var(--fs-klein); font-weight: 400; color: var(--gedempt); margin-top: 4px; line-height: 1.35; text-align: left; }
@@ -5279,7 +5280,33 @@
     var lezer = new FileReader(); lezer.onload = function () { FWI = { tekst: String(lezer.result || ''), naam: b.name }; if (kp) kp.disabled = !FWI.tekst; }; lezer.onerror = function () { toast('Kon het bestand niet lezen.'); }; lezer.readAsText(b);
   });
   // De overstap naar v7.9 (§2.5): per stap een telling, eerst proefdraaien, dan toepassen. Rollen: een keuze per mijlpaal; redenen: een keuze per oude reden
-  var V79 = { status: null, proef: {} };
+  // v7.9.1 (review r2, R1): keuze = wat de beheerder in de stappen koos ('fase:<id>', 'rol:<id>', 'reden:<oude reden>', onderbouwing, besluitdatum, dealDatum);
+  // gaat bij elk hertekenen (ook na de proefdraai van een andere stap) voor op het voorstel en de standaard, en verdwijnt pas na Toepassen van die stap
+  var V79 = { status: null, proef: {}, keuze: {} };
+  function v79Keuze(k, standaard) { return Object.prototype.hasOwnProperty.call(V79.keuze, k) ? V79.keuze[k] : standaard; }  // eigen sleutels: een reden als 'constructor' is geen geërfde waarde
+  function v79KeuzeWis(stap) {
+    var pre = { fasen: 'fase:', rollen: 'rol:', redenen: 'reden:' }[stap]; if (!pre) return;
+    Object.keys(V79.keuze).forEach(function (k) { if (k.indexOf(pre) === 0 || (stap === 'fasen' && ['onderbouwing', 'besluitdatum', 'dealDatum'].indexOf(k) >= 0)) delete V79.keuze[k]; });
+  }
+  function v79KeuzeVast(ev) {
+    var t = ev.target; if (!t || !t.closest || !t.closest('#v79Lijst')) return;
+    if (t.hasAttribute('data-v79fase')) { V79.keuze['fase:' + t.getAttribute('data-v79fase')] = t.value; if (ev.type === 'change' && el('v79-deal')) el('v79-deal').innerHTML = fasenDealHtml(V79.proef.fasen); }
+    else if (t.hasAttribute('data-v79rol')) V79.keuze['rol:' + t.getAttribute('data-v79rol')] = t.value;
+    else if (t.hasAttribute('data-v79reden')) { var rd = ((V79.proef.redenen || {}).redenen || [])[Number(t.getAttribute('data-v79reden'))]; if (rd) V79.keuze['reden:' + rd.reden] = t.value; }
+    else if (t.id === 'v79-onderbouwing') V79.keuze.onderbouwing = t.value;
+    else if (t.id === 'v79-besluitdatum') V79.keuze.besluitdatum = t.value;
+    else if (t.id === 'v79-dealdatum') V79.keuze.dealDatum = t.checked;
+  }
+  document.addEventListener('change', v79KeuzeVast); document.addEventListener('input', v79KeuzeVast);
+  // v7.9.1 (review r2, F8): wat fase 6 met de gekozen mijlpalen doet; zijn er kansen die in Athena (v7.9) naar zo'n mijlpaal zijn gezet, dan kiest de beheerder
+  // of hun datum de datum van de deal wordt (dealDatum); anders tellen ze pas als deal na Beheer → Werkelijke datums importeren
+  function fasenDealHtml(p) {
+    var n = 0, m = 0; ((p && p.mijlpalen) || []).forEach(function (x) { if (v79Keuze('fase:' + x.id, x.voorstel) === '6') { n += Number(x.open) || 0; m += Number(x.metDatum) || 0; } });
+    if (!n) return '';
+    return '<div class="hint">Fase 6: ' + n + (n === 1 ? ' open kans wordt' : ' open kansen worden') + ' gewonnen, zonder project en zonder winformulier.' + (m ? '' : ' Als deal tellen ze pas met hun werkelijke datum (Beheer → Werkelijke datums importeren).') + '</div>' +
+      (m ? '<div class="veld vinkje"><label><input type="checkbox" id="v79-dealdatum"' + (v79Keuze('dealDatum', false) === true ? ' checked' : '') + '>' + m + (m === 1 ? ' daarvan is' : ' daarvan zijn') + ' in Athena naar die fase gezet: leg ' + (m === 1 ? 'hem' : 'ze') + ' vast als deal op die datum</label></div>' +
+        '<div class="hint">Zonder vinkje tellen ze pas als deal na Beheer → Werkelijke datums importeren.</div>' : '');
+  }
   // v7.9.1: bovenaan de stap fasen: de pipeline Scholen krijgt de zes fasen van Capsule; per mijlpaal een keuze (1–6), plus onderbouwing en besluitdatum van de gewichten
   var V79_STAPPEN = [['fasen', 'Fasen zoals Capsule', 'De pipeline Scholen krijgt de zes fasen van Capsule: 1 tot en met 5 als mijlpalen met rol en gewicht (pre-AP 0 %, AP 25 %, AD 40 %, VO 70 %), 6 (deal/lopend traject) is gewonnen. Kies per mijlpaal de fase; open kansen verhuizen mee en dat telt nergens. Andere pipelines blijven zoals ze zijn.'],
     ['rollen', 'Rollen van de mijlpalen', 'Een rol per mijlpaal (lead, AP gepland, AP gehouden, voorstel). Zonder rollen zijn AP, AD, VO en conversie geblokkeerd.'],
@@ -5297,7 +5324,7 @@
     return S0.redenen.gekoppeld ? 'gekoppeld' : S0.redenen.buitenLijst + ' buiten de lijst';
   }
   function beheerOverstap() {
-    formActie = null; V79 = { status: null, proef: {} };
+    formActie = null; V79 = { status: null, proef: {}, keuze: {} };
     openVenster('<div class="spinner" id="v79Laden">Overstap laden</div>' + LADEN_ANNULEER);
     run('apiMigratieV79', 'status', {}).then(function (r) { if (!el('v79Laden') && !el('v79Lijst')) return; V79.status = r; tekenOverstap(); }).catch(function () { sluitVenster(); });
   }
@@ -5306,16 +5333,22 @@
     el('vensterInhoud').innerHTML = '<div class="kop" style="margin-top:14px">Overstap naar v7.9</div><div class="hint">Na de livegang, in deze volgorde. Elke stap eerst proefdraaien; toepassen schrijft pas na je keuze. Alleen tellingen, geen namen.</div><div id="v79Lijst">' +
       V79_STAPPEN.filter(function (st) { return st[0] !== 'fasen' || v791(); }).map(function (st) {
         var p = V79.proef[st[0]], keuzes = '';
-        if (p && st[0] === 'fasen') keuzes = p.alGedaan ? '<div class="hint">De pipeline Scholen heeft de fasen van Capsule al.</div>' : (p.mijlpalen || []).map(function (m) {
-          return '<div class="v79-keuze"><span>' + esc(m.mijlpaal) + ' (' + esc(m.open) + ' open)</span><select data-v79fase="' + esc(m.id) + '" aria-label="Fase in Capsule voor ' + esc(m.mijlpaal) + '"><option value="">kies een fase</option>' +
-            (p.doelen || []).map(function (d) { return '<option value="' + esc(d.fase) + '"' + (d.fase === m.voorstel ? ' selected' : '') + '>' + esc(d.label) + '</option>'; }).join('') + '</select></div>';
-        }).join('') + '<div class="veld"><label for="v79-onderbouwing">Onderbouwing van de gewichten</label><textarea id="v79-onderbouwing">' + esc(p.onderbouwing || '') + '</textarea></div>' +
-          '<div class="veld"><label for="v79-besluitdatum">Besluitdatum</label><input type="date" id="v79-besluitdatum" value="' + vandaagStr() + '"></div>';
-        else if (p && st[0] === 'rollen') keuzes = (p.mijlpalen || []).map(function (m) { return '<div class="v79-keuze"><span>' + esc(m.pipeline + ' · ' + m.mijlpaal) + '</span><select data-v79rol="' + esc(m.id) + '" aria-label="Rol van ' + esc(m.mijlpaal) + '">' + ['', 'lead', 'ap', 'ad', 'voorstel'].map(function (x) { return '<option value="' + x + '"' + (x === m.voorstel ? ' selected' : '') + '>' + (x || 'geen rol') + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle pipelines hebben al rollen.</div>';
-        else if (p && st[0] === 'redenen') keuzes = (p.redenen || []).map(function (x, i) { return '<div class="v79-keuze"><span>' + esc(x.reden) + ' (' + esc(x.aantal) + '×)</span><select data-v79reden="' + i + '" aria-label="Reden voor ' + esc(x.reden) + '"><option value="">kies een reden</option>' + (p.lijst || []).map(function (l) { return '<option' + (l === x.voorstel ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle redenen staan al in de lijst.</div>';
+        // v7.9.1 (review r2): de keuzes uit V79.keuze gaan voor (R1); zonder eigen mijlpalen in Scholen geen keuzes en geen Toepassen (F6); herzien = app-wissels die de rol van hun nieuwe fase krijgen (F2)
+        if (p && st[0] === 'fasen') keuzes = p.alGedaan ? '<div class="hint">De pipeline Scholen heeft de fasen van Capsule al.</div>' : !(p.mijlpalen || []).length ?
+          '<div class="hint">De pipeline Scholen heeft geen eigen mijlpalen. Hernoem eerst in Beheer → Mijlpalen de pipeline met de fasen van Capsule naar Scholen' + ((p.anderePipelines || []).length ? ' (herkende fasen in: ' + esc(p.anderePipelines.map(function (x) { return x.pipeline; }).join(', ')) + ')' : '') + '.</div>' :
+          (p.mijlpalen || []).map(function (m) {
+            var gekozen = v79Keuze('fase:' + m.id, m.voorstel);
+            return '<div class="v79-keuze"><span>' + esc(m.mijlpaal) + ' (' + esc(m.open) + ' open)</span><select data-v79fase="' + esc(m.id) + '" aria-label="Fase in Capsule voor ' + esc(m.mijlpaal) + '"><option value="">kies een fase</option>' +
+              (p.doelen || []).map(function (d) { return '<option value="' + esc(d.fase) + '"' + (d.fase === gekozen ? ' selected' : '') + '>' + esc(d.label) + '</option>'; }).join('') + '</select></div>';
+          }).join('') + '<div id="v79-deal">' + fasenDealHtml(p) + '</div>' +
+          (Number(p.herzien) > 0 ? '<div class="hint">Proefdraai: ' + esc(p.herzien) + (Number(p.herzien) === 1 ? ' wissel' : ' wissels') + ' uit de app ' + (Number(p.herzien) === 1 ? 'krijgt' : 'krijgen') + ' de rol van de nieuwe fase (de rollen van v7.9 waren een momentopname van de oude namen).</div>' : '') +
+          '<div class="veld"><label for="v79-onderbouwing">Onderbouwing van de gewichten</label><textarea id="v79-onderbouwing">' + esc(v79Keuze('onderbouwing', p.onderbouwing || '')) + '</textarea></div>' +
+          '<div class="veld"><label for="v79-besluitdatum">Besluitdatum</label><input type="date" id="v79-besluitdatum" value="' + esc(v79Keuze('besluitdatum', vandaagStr())) + '"></div>';
+        else if (p && st[0] === 'rollen') keuzes = (p.mijlpalen || []).map(function (m) { var gekozen = v79Keuze('rol:' + m.id, m.voorstel); return '<div class="v79-keuze"><span>' + esc(m.pipeline + ' · ' + m.mijlpaal) + '</span><select data-v79rol="' + esc(m.id) + '" aria-label="Rol van ' + esc(m.mijlpaal) + '">' + ['', 'lead', 'ap', 'ad', 'voorstel'].map(function (x) { return '<option value="' + x + '"' + (x === gekozen ? ' selected' : '') + '>' + (x || 'geen rol') + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle pipelines hebben al rollen.</div>';
+        else if (p && st[0] === 'redenen') keuzes = (p.redenen || []).map(function (x, i) { var gekozen = v79Keuze('reden:' + x.reden, x.voorstel); return '<div class="v79-keuze"><span>' + esc(x.reden) + ' (' + esc(x.aantal) + '×)</span><select data-v79reden="' + i + '" aria-label="Reden voor ' + esc(x.reden) + '"><option value="">kies een reden</option>' + (p.lijst || []).map(function (l) { return '<option' + (l === gekozen ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle redenen staan al in de lijst.</div>';
         else if (p) keuzes = '<div class="r-meta">Proefdraai: ' + esc(Object.keys(p).filter(function (k) { return typeof p[k] === 'number'; }).map(function (k) { return k + ' ' + p[k]; }).join(' · ')) + '</div>';
         return '<div class="v79-stap"><div class="r-titel">' + esc(st[1]) + ' <small class="zacht">' + esc(v79Telling(st[0], S0)) + '</small></div><div class="hint" style="margin-top:2px">' + esc(st[2]) + '</div>' + keuzes +
-          '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p && !p.alGedaan ? '' : ' disabled') + '>Toepassen</button></div></div>';
+          '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p && !p.alGedaan && !(st[0] === 'fasen' && !(p.mijlpalen || []).length) ? '' : ' disabled') + '>Toepassen</button></div></div>';
       }).join('') + '</div><div class="balk"><button class="knop" data-cf-annuleer="1">Sluiten</button></div>';
     vensterNaam();
   }
@@ -5342,6 +5375,11 @@
       if (leegF) { toast('Kies voor elke mijlpaal een fase uit Capsule.'); return; }
       opties.onderbouwing = el('v79-onderbouwing') ? el('v79-onderbouwing').value.trim() : ''; opties.besluitdatum = el('v79-besluitdatum') ? el('v79-besluitdatum').value : '';
       if (!opties.onderbouwing || !opties.besluitdatum) { toast('Geef een onderbouwing en een besluitdatum.'); return; }
+      if (el('v79-dealdatum') && el('v79-dealdatum').checked) opties.dealDatum = true;  // v7.9.1 (review r2, F8): besluit van de beheerder
+    }
+    if (!toepassen && stap === 'fasen') {  // v7.9.1 (review r2, F2): een nieuwe proefdraai telt met de gekozen fasen (herzien); niet gekozen = het voorstel
+      var kz = {}; Object.keys(V79.keuze).forEach(function (k) { if (k.indexOf('fase:') === 0 && V79.keuze[k]) kz[k.slice(5)] = V79.keuze[k]; });
+      if (Object.keys(kz).length) opties.koppeling = kz;
     }
     if (toepassen && stap === 'rollen') { opties.rollen = {}; el('vensterInhoud').querySelectorAll('[data-v79rol]').forEach(function (s0) { if (s0.value) opties.rollen[s0.getAttribute('data-v79rol')] = s0.value; }); }
     if (toepassen && stap === 'redenen') {
@@ -5353,7 +5391,7 @@
     x.disabled = true;
     run('apiMigratieV79', stap, opties).then(function (r) {
       if (!toepassen) { V79.proef[stap] = r; tekenOverstap(); return; }
-      toast(r && r.melding ? r.melding : 'Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; crmVerouderd(); CRM.sturing = null;  // v7.9.1: de stap fasen geeft zijn eigen melding (ook: staat al zo)
+      toast(r && r.melding ? r.melding : 'Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; v79KeuzeWis(stap); crmVerouderd(); CRM.sturing = null;  // v7.9.1: de stap fasen geeft zijn eigen melding (ook: staat al zo)
       return run('apiMigratieV79', 'status', {}).then(function (s0) { V79.status = s0; if (el('v79Lijst')) tekenOverstap(); });
     }).catch(function () { x.disabled = false; });
   });

@@ -881,20 +881,32 @@ var CAPSULE_FASE_ROL = { '1': 'lead', '2': '', '3': 'ap', '4': 'ad', '5': 'voors
 var FASEN_ONDERBOUWING = 'Fasen en gewichten overgenomen uit Capsule (rekenmodel van het MT-rapport)';
 // v7.9.1: de herkenning van een mijlpaalnaam, op hele woorden na het weghalen van accenten en leestekens. De volgorde telt: pre-ap vóór ap, en
 // "ap gehouden" of "gesprek gehouden" (AD) vóór ap en gesprek. 'ap', 'ad' en 'vo' tellen alleen als los woord (niet in 'adres', 'aparte' of 'vooraf').
+// v7.9.1 (review r2, F5): fase 6 alleen als de hele naam (na een volgnummer) een dealnaam is (FASE_DEAL), zodat "Lead won", "Voorstel / deal" of
+// "Deal voorbereiden" geen gewonnen worden; een ontkenning of een sluitend woord (FASE_ONTKENNING: "Geen deal", "Niet gewonnen", "Deal verloren") geeft
+// '' (de beheerder kiest), behalve "nog niet gebeld"; "ad hoc", "VO-school" en "VO (voortgezet onderwijs)" zijn geen AD of VO (FASE_NIET).
+var FASE_DEAL = /^(\d+ )?(deal|deals|deal lopend traject|lopend traject|lopende trajecten|won|gewonnen|deal gewonnen)$/;
+var FASE_ONTKENNING = /\b(geen|niet|verloren|lost)\b/;
+var FASE_NIET = /\b(ad hoc|vo (school|scholen|voortgezet onderwijs)|voortgezet onderwijs)\b/g;
 var FASE_HERKENNING = [
   ['2', /\bpre ?ap\b/],
-  ['6', /\b(deal|deals|lopend traject|lopende trajecten|won|gewonnen)\b/],
+  ['6', FASE_DEAL],
   ['1', /\b(nog niet gebeld|lead|leads)\b/],
-  ['4', /\b(ad|appointment done|afspraak gehouden|ap gehouden|gesprek gehouden)\b/],
+  ['4', /\b(ad|appointment done|afspraak gehouden|ap gehouden|gesprek gehouden|gesprek gevoerd|gesprek gehad|afspraak gehad|ap gehad)\b/],
   ['3', /\b(ap|appointment planned|afspraak gepland|gesprek gepland|gesprek)\b/],
   ['5', /\b(vo|voorstel|offerte|onderhandeling)\b/]
 ];
 // '1'..'6' (de fase van Capsule) of '' (niet herkend: de beheerder kiest)
 function faseVanNaam(naam) {
   var x = zonderAccenten(klein(typeof naam === 'string' ? naam : '')).replace(/[^a-z0-9]+/g, ' ').trim();
+  if (/\bnog niet gebeld\b/.test(x)) return '1';
+  if (FASE_ONTKENNING.test(x)) return '';
+  x = x.replace(FASE_NIET, ' ').replace(/\s+/g, ' ').trim();
   for (var i = 0; i < FASE_HERKENNING.length; i++) if (FASE_HERKENNING[i][1].test(x)) return FASE_HERKENNING[i][0];
   return '';
 }
+// v7.9.1 (review r2, F5): de automatische Capsule-paden (capsuleFase, capsulePagina) maken van een open mijlpaal alleen gewonnen als hij precies een
+// dealnaam is (FASE_DEAL, zonder ontkenning), nooit op een los woord
+function capsuleDealNaam(naam) { return faseVanNaam(naam) === '6'; }
 // De rol die bij een mijlpaalnaam hoort: 1 lead, 2 geen (erft), 3 ap, 4 ad, 5 voorstel; deal (6) en een onbekende naam geen
 function rolVanNaam(naam) { return uitMap(CAPSULE_FASE_ROL, faseVanNaam(naam)) || ''; }
 // De rollen van één pipeline (namen in volgorde) op naam: elke rol hoogstens één keer en alleen vooruit (lead < ap < ad < voorstel), zodat
@@ -1166,8 +1178,27 @@ function rollenData() {
     if (!perNaam[m.mijlpaal]) perNaam[m.mijlpaal] = m.pipeline;
   });
   var pipelines = Object.keys(per);
-  _ROLLEN = { bron: bron, per: per, perNaam: perNaam, status: { ingesteld: ingesteld, pipelinesZonder: pipelines.filter(function (pl) { return !metRol[pl]; }) } };
+  _ROLLEN = { bron: bron, per: per, perNaam: perNaam, koppeling: null, status: { ingesteld: ingesteld, pipelinesZonder: pipelines.filter(function (pl) { return !metRol[pl]; }) } };
   return _ROLLEN;
+}
+// v7.9.1 (review r2, F3): de vertaling van stap fasen, oude naam in Scholen → nieuwe naam (of 'gewonnen' bij doel 6), als scripteigenschap FASEN_KOPPELING.
+// Pas gelezen als een naam vertaald moet worden, en dan één keer per opbouw van de rollen (stap fasen schrijft hem vóór de mijlpalen, dus daarna leest
+// de nieuwe rollenData hem opnieuw).
+function fasenKoppelingLees() {
+  var x = null; try { x = JSON.parse(P.getProperty('FASEN_KOPPELING') || '{}'); } catch (e) { x = null; }
+  var uit = {}; if (x && typeof x === 'object' && !(x instanceof Array)) Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string' && x[k]) uit[k] = x[k]; });
+  return uit;
+}
+// De naam waarmee de rol van een wissel uit import, Capsule, de tijdlijn of een reconstructie bepaald wordt: een naam die in Scholen niet meer bestaat
+// (na stap fasen) via de koppeling; een naam die nog bestaat, een naam in een andere pipeline en gewonnen/verloren blijven zoals ze zijn.
+function naamNaFasen(naam, pl) {
+  var n = String(naam || ''); if (!n || n === 'gewonnen' || n === 'verloren' || (pl && pl !== 'Scholen')) return n;
+  var R = rollenData(), sch = uitMap(R.per, 'Scholen');
+  if (sch && (uitMap(sch, n) || uitMap(sch, klein(n)))) return n;
+  if (!pl && (uitMap(R.perNaam, n) || uitMap(R.perNaam, klein(n)))) return n;  // een kans zonder pipeline in een mijlpaal van een andere pipeline: zoals voorheen
+  if (!R.koppeling) R.koppeling = fasenKoppelingLees();
+  var x = uitMap(R.koppeling, klein(n));
+  return typeof x === 'string' && x ? x : n;
 }
 // { <mijlpaal>: { rol, effectief, volgorde } } van één pipeline; lezen met uitMap
 function mijlpaalRollen(pipeline) { var p = uitMap(rollenData().per, String(pipeline || '')), uit = {}; if (p) Object.keys(p).forEach(function (k) { uit[k] = p[k]; }); return uit; }
@@ -1675,10 +1706,13 @@ function faseWisselRij(k, van, naar, o) {
     zekerheid = !datum && bron !== 'demo' && bron !== 'voorbeeld' ? '' : ZEKERHEDEN.indexOf(o.zekerheid) >= 0 ? o.zekerheid : bron === 'demo' || bron === 'voorbeeld' ? 'vastgelegd' : 'laag';
   }
   var pl = pipelineVan(k) || pipelineVan({ fase: van }), status = rollenStatus();
+  // v7.9.1 (review r2, F3): bij een bron uit FASE_ROL_OPNIEUW (import, capsule, tijdlijn, reconstructie; ook "Rollen opnieuw toepassen" en de tijdlijnomzetting)
+  // telt een mijlpaalnaam die na stap fasen niet meer bestaat voor zijn nieuwe fase (naamNaFasen); de namen op de wissel zelf blijven de historie
+  var rn = FASE_ROL_OPNIEUW.indexOf(bron) >= 0 ? naamNaFasen : function (x) { return x; }, vpl = o.vanPipeline || pl;
   return {
     id: o.id || 'fw' + nieuwId().slice(1), kansId: String(k.id), schoolId: k.schoolId || '', van: String(van || ''), naar: String(naar), werkelijkeDatum: datum, ingevoerdOp: ingevoerd,
     door: o.door || ikNaam(), eigenaar: k.eigenaar || '', zekerheid: zekerheid, bron: bron, ongedaan: '',
-    vanRol: van ? effectieveRol(van, o.vanPipeline || pl) : '', naarRol: effectieveRol(naar, pl),
+    vanRol: van ? effectieveRol(rn(van, vpl), vpl) : '', naarRol: effectieveRol(rn(naar, pl), pl),
     waarde: o.waarde !== undefined ? Number(o.waarde) || 0 : Number(k.waarde) || 0, reden: naar === 'verloren' ? String(o.reden !== undefined ? o.reden : k.verliesReden || '') : '',
     bewijs: o.bewijs ? bewijsSoort(o.bewijs) : '', rolBron: bron === 'capsule' ? 'volgorde' : (pl ? status.pipelinesZonder.indexOf(pl) >= 0 : !status.ingesteld) ? 'leeg' : 'mijlpaal', verwijderd: ''
   };
@@ -1720,8 +1754,10 @@ function faseWisselOngedaan(k, fwId, o) {
 }
 // N8, B2: de laatste geldige sluitende wissel van een kans (naar gewonnen of verloren; niet ongedaan, niet verwijderd); volgorde werkelijkeDatum,
 // bij gelijke datum ingevoerdOp. naar = 'gewonnen' | 'verloren' | '' (beide); zonder = een id dat niet meetelt.
+// v7.9.1 (review r2, F1): een administratieve wissel (FASE_TELT_NIET, bron hernoemd; stap fasen met doel 6) sluit niets: zijn datum is de overstapdag,
+// niet de dag van de deal. Zo volgt Kansen.gesloten na een import van de werkelijke datum de deal-wissel (N8), net als dealWissels.
 function laatsteSluitendeWissel(kansId, naar, zonder) {
-  var l = wisselsVanKans(kansId).filter(function (w) { return wisselGeldig(w) && (naar ? w.naar === naar : w.naar === 'gewonnen' || w.naar === 'verloren') && String(w.id) !== String(zonder || ''); });
+  var l = wisselsVanKans(kansId).filter(function (w) { return wisselGeldig(w) && FASE_TELT_NIET.indexOf(w.bron) < 0 && (naar ? w.naar === naar : w.naar === 'gewonnen' || w.naar === 'verloren') && String(w.id) !== String(zonder || ''); });
   l.sort(volgordeWerkelijk);
   return l.length ? l[l.length - 1] : null;
 }
@@ -2517,6 +2553,20 @@ function redenenBuitenLijst() {
 function redenenGekoppeld() { return !Object.keys(redenenBuitenLijst()).length; }
 // Welke wissels zet "Rollen opnieuw toepassen" opnieuw: rol leeg of gegokt op volgorde, en elke bron uit FASE_ROL_OPNIEUW (nooit een app-wissel met rolBron mijlpaal)
 function wisselOpnieuw(w) { return w.rolBron === 'leeg' || w.rolBron === 'volgorde' || FASE_ROL_OPNIEUW.indexOf(w.bron) >= 0; }
+// "Rollen opnieuw toepassen": per wissel uit wisselOpnieuw dezelfde rolregel als bij het schrijven (faseWisselRij met bron tijdlijn: zonder datum, rol uit de
+// mijlpalen, sinds v7.9.1 een oude naam via de koppeling van stap fasen); er wordt geen rij geschreven. bijwerk = [{ id, vanRol, naarRol, rolBron }] met
+// alleen de wissels die echt veranderen. v7.9.1 (review r2): ook de status telt hiermee, zodat "te herzien" na de stap 0 wordt.
+function wisselsHerzienPlan() {
+  var kM = perId(lees('Kansen')), perBron = {}, bijwerk = [], nogLeeg = 0, alle = lees('Fasewissels').filter(wisselOpnieuw);
+  alle.forEach(function (w) {
+    var k = kM[String(w.kansId)] || {}, pl = pipelineVan({ pipeline: k.pipeline, fase: k.fase }) || pipelineVan({ fase: w.naar }) || pipelineVan({ fase: w.van });
+    var r = faseWisselRij({ id: w.kansId, pipeline: pl, fase: w.naar }, w.van, w.naar, { bron: 'tijdlijn', datum: '', id: w.id, door: w.door });
+    var x = { id: w.id, vanRol: r.vanRol, naarRol: r.naarRol, rolBron: r.rolBron };
+    if (x.rolBron === 'leeg') nogLeeg++;
+    if (x.vanRol !== String(w.vanRol || '') || x.naarRol !== String(w.naarRol || '') || x.rolBron !== String(w.rolBron || '')) { bijwerk.push(x); perBron[w.bron] = (perBron[w.bron] || 0) + 1; }
+  });
+  return { bekeken: alle.length, bijwerk: bijwerk, perBron: perBron, nogLeeg: nogLeeg };
+}
 var V79_STAPPEN = ['status', 'fasen', 'rollen', 'tijdlijn', 'wissels', 'kansen', 'redenen'];  // v7.9.1: fasen (de zes fasen van Capsule) vóór rollen
 
 // v7.9.1: stap fasen — de pipeline Scholen krijgt de zes fasen van Capsule (CAPSULE_FASEN; 6 = gewonnen). Proefdraai: per bestaande mijlpaal van Scholen het
@@ -2526,6 +2576,19 @@ var V79_STAPPEN = ['status', 'fasen', 'rollen', 'tijdlijn', 'wissels', 'kansen',
 // (ook met bron hernoemd: geen project, geen winformulier; Kansen.gesloten blijft, want een hernoemde mijlpaal heeft geen eigen datum) en de gewichten
 // worden een nieuwe versie van aanname fasegewichten (onderbouwing en besluitdatum, standaard FASEN_ONDERBOUWING en vandaag). Alles in één metLock met
 // één schrijfVeel per tabblad. Idempotent: staat de pipeline al zo, dan verandert er niets en zegt de melding dat. Alleen tellingen en ids.
+// v7.9.1 (review r2):
+// - F2: de rollen op app-wissels zijn een momentopname, maar die van v7.9 waren bij de Capsule-namen fout (volgorde: Pre-AP ap, AP ad, AD voorstel). Daarom
+//   herziet de stap de tellende wissels van Scholen met rolBron mijlpaal waarvan van of naar een mijlpaal uit de koppeling is: vanRol en naarRol worden de rol
+//   van de nieuwe fase (fasenEffectief; doel 6 = deal). De proefdraai telt ze (herzien, met de gekozen of voorgestelde koppeling); toepassen werkt ze in
+//   dezelfde lock bij met één wisselsBijwerken. "Rollen opnieuw toepassen" doet de overige wissels (import, Capsule, tijdlijn, reconstructie, rol leeg).
+// - F3: de koppeling oude naam → nieuwe naam (doel 6: gewonnen) wordt de scripteigenschap FASEN_KOPPELING (samengesteld met een eerdere), zodat een wissel
+//   met een oude naam uit import, Capsule, de tijdlijn of een reconstructie zijn rol van de nieuwe fase krijgt (naamNaFasen in faseWisselRij).
+// - F6: heeft Scholen geen eigen mijlpalen terwijl het tabblad wel rijen heeft (de pipeline van Capsule heet anders), dan noemt de proefdraai de pipelines
+//   met herkende namen (anderePipelines) en weigert toepassen met een Nederlandse fout: hernoem eerst die pipeline.
+// - F7: lezen, plan en alGedaan binnen metLock (na vergeet), zodat een kans die net is opgeslagen niet wordt teruggezet en twee keer Toepassen niets dubbel schrijft.
+// - F8: per mijlpaal het aantal open kansen met een vastgelegde wissel (in Athena, met werkelijke datum) naar die mijlpaal (metDatum): bij doel 6 zijn dat
+//   deals uit v7.9. Met opties.dealDatum === true (besluit van de beheerder) krijgt zo'n kans geen hernoemd-wissel maar een wissel naar gewonnen met bron
+//   reconstructie en die datum (zekerheid hoog), en Kansen.gesloten = die datum: dan telt hij als deal (N8). Anders: Beheer → Werkelijke datums importeren.
 function fasenScholen() { return mijlpalen().filter(function (m) { return m.pipeline === 'Scholen'; }); }
 function fasenAlGedaan() {
   var ms = fasenScholen();
@@ -2535,61 +2598,119 @@ function fasenDoelen() {
   return CAPSULE_FASEN.map(function (f) { return { fase: f.fase, mijlpaal: f.mijlpaal, label: f.mijlpaal, rol: f.rol, kans: f.kans }; })
     .concat([{ fase: '6', mijlpaal: 'gewonnen', label: CAPSULE_DEAL + ' (gewonnen)', rol: 'deal', kans: 100 }]);
 }
+// De effectieve rol van elke doelfase: 1 lead, 2 lead (erft), 3 ap, 4 ad, 5 voorstel, 6 deal (de fase gewonnen)
+function fasenEffectief() { var uit = {}, l = ''; CAPSULE_FASEN.forEach(function (f) { l = f.rol || l; uit[f.fase] = l; }); uit['6'] = 'deal'; return uit; }
 function zelfdeGewichten(a, b) {
   if (!a || typeof a !== 'object' || a instanceof Array) return false;
   var ka = Object.keys(a), kb = Object.keys(b);
   return ka.length === kb.length && kb.every(function (k) { return uitMap(a, k) !== undefined && Number(a[k]) === Number(b[k]); });
 }
-function migratieFasen(opties, toepassen) {
-  var ms = fasenScholen(), perNaam = {}, open = {};
-  ms.forEach(function (m) { perNaam[m.mijlpaal] = m; open[m.id] = 0; });
-  // open kansen van Scholen: met pipeline Scholen, of zonder pipeline in een mijlpaal van Scholen
+// Wat stap fasen leest: de mijlpalen van Scholen, de open kansen erin (met pipeline Scholen, of zonder pipeline in een mijlpaal van Scholen) en per kans de
+// datum van zijn laatste vastgelegde wissel naar zijn huidige mijlpaal (F8). Bij toepassen binnen metLock aangeroepen, na vergeet (F7).
+function fasenLezen() {
+  var ms = fasenScholen(), perNaam = {}, open = {}, metDatum = {}, dealDatum = {};
+  ms.forEach(function (m) { perNaam[m.mijlpaal] = m; open[m.id] = 0; metDatum[m.id] = 0; });
   var inScholen = lees('Kansen').filter(function (k) { return kansOpen(k) && (!k.pipeline || String(k.pipeline) === 'Scholen') && uitMap(perNaam, klein(k.fase)); });
-  inScholen.forEach(function (k) { open[perNaam[klein(k.fase)].id]++; });
-  var alGedaan = fasenAlGedaan();
-  if (!toepassen) return { stap: 'fasen', toegepast: false, alGedaan: alGedaan, pipeline: 'Scholen', doelen: fasenDoelen(), onderbouwing: FASEN_ONDERBOUWING,
-    mijlpalen: ms.map(function (m) { return { id: m.id, mijlpaal: m.mijlpaal, open: open[m.id], voorstel: faseVanNaam(m.mijlpaal) }; }) };
-  if (alGedaan) return { stap: 'fasen', toegepast: true, alGedaan: true, gewijzigd: false, mijlpalen: 0, verhuisd: {}, gewonnen: 0, wissels: 0, aanname: null, rollen: rollenStatus(),
-    melding: 'De pipeline Scholen heeft de fasen van Capsule al; er is niets veranderd.' };
-  var kop = opties.koppeling && typeof opties.koppeling === 'object' && !(opties.koppeling instanceof Array) ? opties.koppeling : {}, doel = {};
-  ms.forEach(function (m) {
-    var d = uitMap(kop, m.id); d = typeof d === 'number' ? String(d) : typeof d === 'string' ? d.trim() : '';
-    if (['1', '2', '3', '4', '5', '6'].indexOf(d) < 0) throw new Error('Kies voor elke mijlpaal van Scholen een fase uit Capsule (1 tot en met 6).');
-    doel[m.mijlpaal] = d;
-  });
-  var leeg = function (v) { return v === undefined || v === null || v === ''; };
-  var onderbouwing = leeg(opties.onderbouwing) ? FASEN_ONDERBOUWING : tekstIn(opties.onderbouwing).slice(0, 2000) || FASEN_ONDERBOUWING;
-  var besluitdatum = leeg(opties.besluitdatum) ? datumStr(new Date()) : typeof opties.besluitdatum === 'string' ? datumIn(opties.besluitdatum) : '';
-  if (!besluitdatum) throw new Error('Ongeldige besluitdatum.');
-  // de vijf rijen; een bestaande mijlpaal met dezelfde naam houdt zijn id en zijn dagenNorm
-  var rijen = CAPSULE_FASEN.map(function (f, i) {
-    var b = uitMap(perNaam, f.mijlpaal);
-    return { id: b && b.id ? b.id : slug('Scholen-' + f.mijlpaal), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: f.kans, dagenNorm: b && Number(b.dagenNorm) > 0 ? Number(b.dagenNorm) : f.dagenNorm, rol: f.rol };
-  });
-  rollenControle(rijen);
-  var wijzig = [], plan = [], verhuisd = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 }, gewonnen = 0, ongewijzigd = 0;
   inScholen.forEach(function (k) {
-    var d = doel[klein(k.fase)], naar = d === '6' ? 'gewonnen' : CAPSULE_FASEN[Number(d) - 1].mijlpaal;
-    if (naar === klein(k.fase)) { ongewijzigd++; return; }
-    if (d === '6') gewonnen++; else verhuisd[d]++;
-    wijzig.push({ id: k.id, fase: naar, pipeline: 'Scholen' });
-    plan.push({ k: k, van: String(k.fase || ''), naar: naar, vanPipeline: String(k.pipeline || 'Scholen') });
+    var m = perNaam[klein(k.fase)]; open[m.id]++;
+    var l = wisselsVanKans(k.id).filter(function (w) { return wisselGeldig(w) && w.zekerheid === 'vastgelegd' && FASE_TELT_NIET.indexOf(w.bron) < 0 && w.werkelijkeDatum && klein(w.naar) === m.mijlpaal; }).sort(volgordeWerkelijk);
+    if (l.length) { metDatum[m.id]++; dealDatum[String(k.id)] = String(l[l.length - 1].werkelijkeDatum).slice(0, 10); }
   });
+  var andere = [];
+  if (!ms.length) uniek(mijlpalen().map(function (m) { return m.pipeline; })).forEach(function (pl) {
+    var inPl = mijlpalen().filter(function (m) { return m.pipeline === pl; }), herkend = inPl.filter(function (m) { return faseVanNaam(m.mijlpaal); }).length;
+    if (herkend) andere.push({ pipeline: pl, mijlpalen: inPl.length, herkend: herkend });
+  });
+  return { ms: ms, perNaam: perNaam, open: open, metDatum: metDatum, dealDatum: dealDatum, inScholen: inScholen, andere: andere };
+}
+// De doelfase per oude naam: uit opties.koppeling ({ <mijlpaal-id>: '1'..'6' }); streng = elke mijlpaal een geldig doel (toepassen), anders het voorstel als terugval (proefdraai)
+function fasenDoel(A, opties, streng) {
+  var kop = opties.koppeling && typeof opties.koppeling === 'object' && !(opties.koppeling instanceof Array) ? opties.koppeling : {}, doel = {};
+  A.ms.forEach(function (m) {
+    var d = uitMap(kop, m.id); d = typeof d === 'number' ? String(d) : typeof d === 'string' ? d.trim() : '';
+    if (['1', '2', '3', '4', '5', '6'].indexOf(d) < 0) {
+      if (streng) throw new Error('Kies voor elke mijlpaal van Scholen een fase uit Capsule (1 tot en met 6).');
+      d = faseVanNaam(m.mijlpaal);
+    }
+    if (d) doel[m.mijlpaal] = d;
+  });
+  return doel;
+}
+// F2: de tellende wissels van Scholen met rolBron mijlpaal (niet ongedaan, niet verwijderd, niet administratief) met een van- of naar-naam uit de koppeling
+// waarvan vanRol of naarRol afwijkt van de rol van de nieuwe fase; [{ id, vanRol, naarRol }]
+function fasenHerzien(doel) {
+  var eff = fasenEffectief(), rolNa = {}, kMap = perId(lees('Kansen')), uit = [];
+  Object.keys(doel).forEach(function (n) { rolNa[n] = uitMap(eff, doel[n]); });
+  lees('Fasewissels').forEach(function (w) {
+    if (!wisselGeldig(w) || FASE_TELT_NIET.indexOf(w.bron) >= 0 || w.rolBron !== 'mijlpaal') return;
+    var k = kMap[String(w.kansId)]; if (k && k.pipeline && String(k.pipeline) !== 'Scholen') return;
+    var vn = w.van ? uitMap(rolNa, klein(w.van)) : undefined, nn = uitMap(rolNa, klein(w.naar));
+    if (vn === undefined && nn === undefined) return;
+    var x = { id: w.id, vanRol: vn !== undefined ? vn : String(w.vanRol || ''), naarRol: nn !== undefined ? nn : String(w.naarRol || '') };
+    if (x.vanRol !== String(w.vanRol || '') || x.naarRol !== String(w.naarRol || '')) uit.push(x);
+  });
+  return uit;
+}
+var FASEN_ZONDER_SCHOLEN = 'De pipeline Scholen heeft geen eigen mijlpalen. Hernoem eerst in Beheer → Mijlpalen de pipeline met de fasen van Capsule naar Scholen.';
+function migratieFasen(opties, toepassen) {
+  if (!toepassen) {
+    var A = fasenLezen(), dP = fasenDoel(A, opties, false);
+    return { stap: 'fasen', toegepast: false, alGedaan: fasenAlGedaan(), pipeline: 'Scholen', doelen: fasenDoelen(), onderbouwing: FASEN_ONDERBOUWING,
+      mijlpalen: A.ms.map(function (m) { return { id: m.id, mijlpaal: m.mijlpaal, open: A.open[m.id], metDatum: A.metDatum[m.id], voorstel: faseVanNaam(m.mijlpaal) }; }),
+      herzien: A.ms.length ? fasenHerzien(dP).length : 0, anderePipelines: A.andere };
+  }
   return metLock(function () {
+    ['Kansen', 'Mijlpalen', 'Fasewissels', 'Aannames'].forEach(vergeet);  // F7: alles binnen de lock opnieuw lezen
+    if (fasenAlGedaan()) return { stap: 'fasen', toegepast: true, alGedaan: true, gewijzigd: false, mijlpalen: 0, verhuisd: {}, gewonnen: 0, dealDatum: 0, wissels: 0, herzien: 0, aanname: null, rollen: rollenStatus(),
+      melding: 'De pipeline Scholen heeft de fasen van Capsule al; er is niets veranderd.' };
+    var A = fasenLezen();
+    if (!A.ms.length) throw new Error(FASEN_ZONDER_SCHOLEN + (A.andere.length ? ' Herkende fasen in: ' + A.andere.map(function (x) { return x.pipeline; }).join(', ') + '.' : ''));  // F6
+    var doel = fasenDoel(A, opties, true);
+    var leeg = function (v) { return v === undefined || v === null || v === ''; };
+    var onderbouwing = leeg(opties.onderbouwing) ? FASEN_ONDERBOUWING : tekstIn(opties.onderbouwing).slice(0, 2000) || FASEN_ONDERBOUWING;
+    var besluitdatum = leeg(opties.besluitdatum) ? datumStr(new Date()) : typeof opties.besluitdatum === 'string' ? datumIn(opties.besluitdatum) : '';
+    if (!besluitdatum) throw new Error('Ongeldige besluitdatum.');
+    var metDealDatum = opties.dealDatum === true;
+    // de vijf rijen; een bestaande mijlpaal met dezelfde naam houdt zijn id en zijn dagenNorm
+    var rijen = CAPSULE_FASEN.map(function (f, i) {
+      var b = uitMap(A.perNaam, f.mijlpaal);
+      return { id: b && b.id ? b.id : slug('Scholen-' + f.mijlpaal), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: f.kans, dagenNorm: b && Number(b.dagenNorm) > 0 ? Number(b.dagenNorm) : f.dagenNorm, rol: f.rol };
+    });
+    rollenControle(rijen);
+    var naarNaam = {}; Object.keys(doel).forEach(function (n) { naarNaam[n] = doel[n] === '6' ? 'gewonnen' : CAPSULE_FASEN[Number(doel[n]) - 1].mijlpaal; });
+    var wijzig = [], plan = [], verhuisd = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 }, gewonnen = 0, dealDatum = 0, ongewijzigd = 0;
+    A.inScholen.forEach(function (k) {
+      var d = doel[klein(k.fase)], naar = naarNaam[klein(k.fase)], dd = d === '6' && metDealDatum ? uitMap(A.dealDatum, String(k.id)) || '' : '';
+      if (naar === klein(k.fase)) { ongewijzigd++; return; }
+      if (d === '6') gewonnen++; else verhuisd[d]++;
+      if (dd) dealDatum++;
+      wijzig.push(dd ? { id: k.id, fase: naar, pipeline: 'Scholen', gesloten: dd } : { id: k.id, fase: naar, pipeline: 'Scholen' });
+      plan.push({ k: k, van: String(k.fase || ''), naar: naar, vanPipeline: String(k.pipeline || 'Scholen'), dealDatum: dd });
+    });
+    var herzien = fasenHerzien(doel);  // F2: vóór er iets geschreven is (de rollen van nu, de namen van vóór de stap)
+    // F3: de koppeling vóór de mijlpalen, samengesteld met een eerdere (a → b en nu b → c wordt a → c)
+    var vorigeKop = fasenKoppelingLees(), kopNa = {};
+    Object.keys(vorigeKop).forEach(function (n) { var v = uitMap(naarNaam, vorigeKop[n]); kopNa[n] = v !== undefined ? v : vorigeKop[n]; });
+    Object.keys(naarNaam).forEach(function (n) { kopNa[n] = naarNaam[n]; });
+    P.setProperty('FASEN_KOPPELING', JSON.stringify(kopNa));
     verwijderRijen('Mijlpalen', function (r) { return String(r.pipeline || 'Scholen') === 'Scholen'; });
     schrijfVeel('Mijlpalen', rijen);
     if (wijzig.length) schrijfVeel('Kansen', wijzig);
-    // de wissels na het schrijven van de mijlpalen (naarRol uit de nieuwe fasen), alle samen in één schrijfVeel (R2)
+    wisselsBijwerken(herzien);
+    // de wissels na het schrijven van de mijlpalen (naarRol uit de nieuwe fasen), alle samen in één schrijfVeel (R2); F8: met dealDatum een reconstructie met die datum
     var vandaag = datumStr(new Date()), wissels = fasewisselsSchrijven(plan.map(function (x) {
-      return faseWisselRij({ id: x.k.id, schoolId: x.k.schoolId, eigenaar: x.k.eigenaar, waarde: x.k.waarde, fase: x.naar, pipeline: 'Scholen' }, x.van, x.naar, { bron: 'hernoemd', datum: vandaag, vanPipeline: x.vanPipeline });
+      var k = { id: x.k.id, schoolId: x.k.schoolId, eigenaar: x.k.eigenaar, waarde: x.k.waarde, fase: x.naar, pipeline: 'Scholen' };
+      return x.dealDatum ? faseWisselRij(k, x.van, x.naar, { bron: 'reconstructie', datum: x.dealDatum, zekerheid: 'hoog', id: 'rec-' + slug(x.k.id + '-gewonnen-' + x.dealDatum), vanPipeline: x.vanPipeline })
+        : faseWisselRij(k, x.van, x.naar, { bron: 'hernoemd', datum: vandaag, vanPipeline: x.vanPipeline });
     }));
     var gewichten = {}, vorigeA = aanname('fasegewichten'), versie = null;
     mijlpalen().forEach(function (m) { gewichten[m.pipeline + '|' + m.mijlpaal] = m.kans; });
     if (!vorigeA || !zelfdeGewichten(vorigeA.waarde, gewichten)) versie = aannameVastleggen('fasegewichten', gewichten, { onderbouwing: onderbouwing, besluitdatum: besluitdatum, eigenaar: 'beheerder' }).versie;  // N6
     var n = wijzig.length - gewonnen;
-    return { stap: 'fasen', toegepast: true, alGedaan: false, gewijzigd: true, mijlpalen: rijen.length, verhuisd: verhuisd, gewonnen: gewonnen, ongewijzigd: ongewijzigd, wissels: wissels.length,
-      aanname: versie, rollen: rollenStatus(),
-      melding: 'De pipeline Scholen heeft nu de fasen van Capsule: ' + n + (n === 1 ? ' open kans' : ' open kansen') + ' verhuisd' + (gewonnen ? ', ' + gewonnen + ' gewonnen' : '') + '.' };
+    return { stap: 'fasen', toegepast: true, alGedaan: false, gewijzigd: true, mijlpalen: rijen.length, verhuisd: verhuisd, gewonnen: gewonnen, dealDatum: dealDatum, ongewijzigd: ongewijzigd, wissels: wissels.length,
+      herzien: herzien.length, aanname: versie, rollen: rollenStatus(),
+      melding: 'De pipeline Scholen heeft nu de fasen van Capsule: ' + n + (n === 1 ? ' open kans' : ' open kansen') + ' verhuisd' + (gewonnen ? ', ' + gewonnen + ' gewonnen' + (dealDatum ? ' (' + dealDatum + ' met de datum uit Athena)' : '') : '') +
+        (herzien.length ? '; ' + herzien.length + (herzien.length === 1 ? ' wissel uit de app telt' : ' wissels uit de app tellen') + ' nu voor de nieuwe fase' : '') + '.' };
   });
 }
 
@@ -2606,7 +2727,7 @@ function apiMigratieV79(stap, opties) {
   if (stap === 'status') {
     var kOpen = lees('Kansen').filter(kansOpen), buiten = redenenBuitenLijst(), tl = fasewisselsUitTijdlijn(false);
     return { stap: stap, fasen: { alGedaan: fasenAlGedaan(), mijlpalen: fasenScholen().length }, rollen: rollenStatus(), tijdlijn: { teOmzetten: tl.teOmzetten, alOmgezet: tl.alOmgezet, toekomst: tl.toekomst, fout: tl.fout },
-      wissels: { teHerzien: lees('Fasewissels').filter(wisselOpnieuw).length },
+      wissels: { teHerzien: wisselsHerzienPlan().bijwerk.length },  // v7.9.1 (review r2): wat "Rollen opnieuw toepassen" nu echt zou veranderen (na de stap 0)
       kansen: { zonderSchooljaar: kOpen.filter(function (k) { return !k.schooljaar; }).length, zonderKlant: kOpen.filter(function (k) { return !k.klant; }).length },
       redenen: { gekoppeld: !Object.keys(buiten).length, buitenLijst: Object.keys(buiten).reduce(function (n, r) { return n + buiten[r]; }, 0) } };
   }
@@ -2639,17 +2760,8 @@ function apiMigratieV79(stap, opties) {
     t0.stap = stap; t0.toegepast = toepassen; return t0;
   }
   if (stap === 'wissels') {
-    var kM = perId(lees('Kansen')), perBron = {}, bijwerk = [], nogLeeg = 0, alle = lees('Fasewissels').filter(wisselOpnieuw);
-    alle.forEach(function (w) {
-      var k = kM[String(w.kansId)] || {}, pl = pipelineVan({ pipeline: k.pipeline, fase: k.fase }) || pipelineVan({ fase: w.naar }) || pipelineVan({ fase: w.van });
-      // dezelfde rolregel als bij het schrijven: faseWisselRij rekent vanRol, naarRol en rolBron (bron tijdlijn: zonder datum, rol uit de mijlpalen); er wordt geen rij geschreven
-      var r = faseWisselRij({ id: w.kansId, pipeline: pl, fase: w.naar }, w.van, w.naar, { bron: 'tijdlijn', datum: '', id: w.id, door: w.door });
-      var x = { id: w.id, vanRol: r.vanRol, naarRol: r.naarRol, rolBron: r.rolBron };
-      if (x.rolBron === 'leeg') nogLeeg++;
-      if (x.vanRol !== String(w.vanRol || '') || x.naarRol !== String(w.naarRol || '') || x.rolBron !== String(w.rolBron || '')) { bijwerk.push(x); perBron[w.bron] = (perBron[w.bron] || 0) + 1; }
-    });
-    if (toepassen) metLock(function () { wisselsBijwerken(bijwerk); });
-    return { stap: stap, toegepast: toepassen, bekeken: alle.length, gewijzigd: bijwerk.length, perBron: perBron, nogLeeg: nogLeeg };
+    var hp = toepassen ? metLock(function () { vergeet('Fasewissels'); var x = wisselsHerzienPlan(); wisselsBijwerken(x.bijwerk); return x; }) : wisselsHerzienPlan();
+    return { stap: stap, toegepast: toepassen, bekeken: hp.bekeken, gewijzigd: hp.bijwerk.length, perBron: hp.perBron, nogLeeg: hp.nogLeeg };
   }
   if (stap === 'kansen') {
     var perSj = {}, perKlant = {}, vul = [];
@@ -2771,7 +2883,7 @@ function capsuleFase(m, mijl) {
   var x = m ? mijl[m.id] : null, naam = klein((x && x.naam) || (m && m.name));
   if (x && x.complete) return x.kans >= 100 ? 'gewonnen' : 'verloren';
   if (/^(lost|verloren)$/.test(naam)) return 'verloren';
-  if (/^(won|gewonnen)$/.test(naam) || faseVanNaam(naam) === '6') return 'gewonnen';  // v7.9.1: "6. Deal/Lopend traject" (een open mijlpaal in Capsule) is gewonnen
+  if (/^(won|gewonnen)$/.test(naam) || capsuleDealNaam(naam)) return 'gewonnen';  // v7.9.1: "6. Deal/Lopend traject" (een open mijlpaal in Capsule) is gewonnen; review r2 (F5): alleen een exacte dealnaam, nooit "Geen deal"
   return naam || STANDAARD_MIJLPALEN[0].mijlpaal;
 }
 // Kaarten van Capsule-id naar ons id; per pagina opnieuw opgebouwd (scholen kunnen door de data-run al met een ander id bestaan).
@@ -2807,14 +2919,17 @@ function capsulePagina(stap, pagina) {
   if (stap === 'mijlpalen') {
     res = capsule('milestones', { page: pagina, perPage: 100 });
     var mijl = pagina === 1 ? {} : K.mijl;
-    // v7.9.1: een bestaande rij met dezelfde pipeline en naam (uit de overstapstap fasen of Beheer → Mijlpalen) houdt zijn id en zijn gewicht (N6): geen dubbele mijlpaal
+    // v7.9.1: een bestaande rij met dezelfde pipeline en naam (uit de overstapstap fasen of Beheer → Mijlpalen) houdt zijn id en zijn gewicht (N6): geen dubbele mijlpaal.
+    // Review r2 (F4): ook een rij met het id cap-m<id> (de Sheet uit de Capsule-migratie, die stap fasen hernoemt maar zijn id laat houden): een herrun overschrijft
+    // nooit een gewicht (dat is een versie van aanname fasegewichten, N6) of een dagenNorm; alleen een nieuwe rij krijgt de waarschijnlijkheid en norm uit Capsule.
     var huidig = {}, opNaam = {}; lees('Mijlpalen').forEach(function (m) { huidig[String(m.id)] = m; opNaam[(m.pipeline || 'Scholen') + '|' + klein(m.mijlpaal)] = m; });
     (res.data.milestones || []).forEach(function (m) {
       var pl = (m.pipeline && m.pipeline.name) || 'Scholen';
       mijl[m.id] = { naam: m.name, complete: !!m.complete, kans: Number(m.probability) || 0, pipeline: pl };
-      if (m.complete || /^(won|lost|gewonnen|verloren)$/i.test(m.name) || faseVanNaam(m.name) === '6') return;  // v7.9.1: deal/lopend traject is de fase gewonnen (capsuleFase), geen mijlpaal
-      var b = uitMap(opNaam, pl + '|' + klein(m.name)), eigen = b && String(b.id) && String(b.id) !== 'cap-m' + m.id;
-      rijen.push({ id: eigen ? String(b.id) : 'cap-m' + m.id, pipeline: pl, mijlpaal: klein(m.name), volgorde: Number(m.displayOrder) || rijen.length + 1, kans: eigen ? Number(b.kans) || 0 : Number(m.probability) || 0, dagenNorm: Number(m.daysUntilStale) || 0 });
+      if (m.complete || /^(won|lost|gewonnen|verloren)$/i.test(m.name) || capsuleDealNaam(m.name)) return;  // v7.9.1: deal/lopend traject is de fase gewonnen (capsuleFase), geen mijlpaal
+      var b = uitMap(opNaam, pl + '|' + klein(m.name));
+      rijen.push({ id: b && String(b.id) ? String(b.id) : 'cap-m' + m.id, pipeline: pl, mijlpaal: klein(m.name), volgorde: Number(m.displayOrder) || rijen.length + 1,
+        kans: b ? Number(b.kans) || 0 : Number(m.probability) || 0, dagenNorm: b && Number(b.dagenNorm) > 0 ? Number(b.dagenNorm) : Number(m.daysUntilStale) || 0 });
     });
     P.setProperty('CAPSULE_MIJLPALEN', JSON.stringify(mijl));
     // v7.9 (R7): de rol per pipeline, alleen voor nieuwe rijen en rijen zonder rol, en alleen een rol die in die pipeline nog niet bestaat: een rol die de
