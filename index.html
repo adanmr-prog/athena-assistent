@@ -3961,7 +3961,7 @@
     else if (c.id === 'gewogenPijplijn') { e('kansen:', x.aantal); e('zonder waarde:', x.zonderWaarde); e('zonder schooljaar:', x.zonderSchooljaar); }
     else if (c.id === 'dekking') { if (x.nogTeVinden !== undefined) l.push('nog te vinden ' + euro(x.nogTeVinden)); e('noemer:', x.noemerLabel); }
     else if (c.id === 'gewonnenWaarde') { e('deals:', x.aantal); if (x.maand) l.push('deze maand ' + (x.maand.aantal || 0) + ' · ' + euro(x.maand.waarde || 0)); e('zonder werkelijke datum:', x.zonderDatum); }
-    else if (c.id === 'funnel') { e('leads (fase 1, telt niet als kans):', x.leads); e('zonder schooljaar:', x.zonderSchooljaar); }  // v7.9.1 (review r4, N3)
+    else if (c.id === 'funnel') { e('leads (telt niet als kans):', x.leads); e('zonder schooljaar:', x.zonderSchooljaar); }  // v7.9.1 (review r4, N3)
     else if (c.id === 'verwachteOpdrachten') { e('kansen:', x.aantal); if (x.verlopen) e('verlopen:', x.verlopen.aantal); e('zonder datum:', x.zonderDatum); }
     else if (c.id === 'ocActiviteit') { e('ingepland', (x.ingepland || 0) + ' (' + (x.ingeplandStatus || 'concept') + ')'); e('gedaan', x.gedaan); e('VO', x.vo); e('deals', x.deals); }
     else if (c.id === 'nogTeFactureren') e('achter:', typeof x.achter === 'object' ? (x.achter ? x.achter.aantal : '') : x.achter);
@@ -4733,6 +4733,12 @@
     if (el('palet') && el('palet').classList.contains('aan')) return;
     var v = el('venster'), a = document.activeElement, l = vensterFocusbaar(), i = l.indexOf(a), binnen = !!(a && v.contains(a));
     if (!l.length) { ev.preventDefault(); focusStil(el('vensterInhoud')); return; }
+    if (i < 0 && binnen && a !== el('vensterInhoud')) {  // v7.9.1 (review r5, A1): de focus staat op een titel met tabindex -1 (stap in de overstap): naar de buur in documentvolgorde, binnen het venster
+      ev.preventDefault();
+      var voor = l.filter(function (e) { return a.compareDocumentPosition(e) & 2; }), na = l.filter(function (e) { return a.compareDocumentPosition(e) & 4; });
+      focusStil(ev.shiftKey ? (voor.length ? voor[voor.length - 1] : l[l.length - 1]) : (na.length ? na[0] : l[0]));
+      return;
+    }
     if (ev.shiftKey) { if (i === 0 || !binnen || a === el('vensterInhoud')) { ev.preventDefault(); focusStil(l[l.length - 1]); } }
     else if (i === l.length - 1 || !binnen) { ev.preventDefault(); focusStil(l[0]); }
   }
@@ -5305,6 +5311,7 @@
   // import in Datakwaliteit bij de eigenaar van de kans (Gewonnen is getekend)
   function fasenDealHtml(p) {
     var n = 0, m = 0, e = 0; ((p && p.mijlpalen) || []).forEach(function (x) { if (v79Keuze('fase:' + x.id, x.voorstel) === '6') { n += Number(x.open) || 0; m += Number(x.metDatum) || 0; e += Number(x.eerderGewonnen) || 0; } });
+    var vd = (p && p.verweesdDeal) || {}; n += Number(vd.open) || 0; m += Number(vd.metDatum) || 0; e += Number(vd.eerderGewonnen) || 0;  // v7.9.1 (review r5, A3): ook kansen in een oude naam (herstel)
     if (!n) return '';
     return '<div class="hint">Fase 6: ' + n + (n === 1 ? ' open kans wordt' : ' open kansen worden') + ' gewonnen, zonder project en zonder winformulier.' +
       (e ? ' ' + e + (e === 1 ? ' daarvan was eerder gewonnen en telt' : ' daarvan waren eerder gewonnen en tellen') + ' weer als deal' + (m ? '' : ' op die eerdere datum') + '.' : '') +
@@ -5413,10 +5420,22 @@
     if (toepassen && !window.confirm('Stap "' + stap + '" toepassen?')) return;
     x.disabled = true;
     run('apiMigratieV79', stap, opties).then(function (r) {
-      if (!toepassen) { V79.proef[stap] = r; tekenOverstap(stap); return; }
+      if (!toepassen) { if (!el('v79Lijst')) return; V79.proef[stap] = r; tekenOverstap(stap); return; }  // v7.9.1 (review r5, A2): het venster kan intussen dicht zijn
       toast(r && r.melding ? r.melding : 'Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; v79KeuzeWis(stap); crmVerouderd(); CRM.sturing = null;  // v7.9.1: de stap fasen geeft zijn eigen melding (ook: staat al zo)
-      return run('apiMigratieV79', 'status', {}).then(function (s0) { V79.status = s0; if (el('v79Lijst')) tekenOverstap(stap); });
-    }).catch(function () { x.disabled = false; });
+      return run('apiMigratieV79', 'status', {}).then(function (s0) {
+        if (!el('v79Lijst')) return;
+        var a = document.activeElement, hier = el('v79stap-' + stap);  // v7.9.1 (review r5, N4): alleen naar deze stap als de beheerder niet intussen elders bezig is
+        V79.status = s0; tekenOverstap(!a || a === document.body || a === x || (hier && hier.contains(a)) ? stap : null);
+      });
+    }).catch(function () {
+      x.disabled = false;
+      // v7.9.1 (review r5, H6): een mislukte Toepassen van stap fasen kan de mijlpalen al vervangen hebben; status en proefdraai opnieuw, zodat het venster de
+      // nieuwe rijen en de kansen in een oude naam toont (run toont zelf al de fout)
+      if (!(toepassen && stap === 'fasen') || !el('v79Lijst')) return;
+      delete V79.proef.fasen;
+      run('apiMigratieV79', 'status', {}).then(function (s0) { V79.status = s0; return run('apiMigratieV79', 'fasen', {}); })
+        .then(function (p0) { if (!el('v79Lijst')) return; V79.proef.fasen = p0; tekenOverstap(); }).catch(function () {});
+    });
   });
   function hernoemTagVeld(soort, naam, weg) {
     var nieuw = '';

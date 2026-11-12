@@ -2607,13 +2607,15 @@ function rollenAfwijkend() {
 // - F1: een open kans met een eerdere tellende wissel naar gewonnen (gewonnen, heropend; of een Capsule-kans die bij een eerdere run Won was) telt bij doel 6
 //   weer als deal op die eerdere datum (dealWissels vindt die wissel); daarom zet de stap Kansen.gesloten = die datum (N8, zoals kansOpslaan en
 //   apiFasewisselDatum), telt de proefdraai ze per mijlpaal (eerderGewonnen) en noemt de melding het aantal.
-// - R2: "staat al zo" kijkt naar namen en rollen; de gewichten tellen alleen zolang de stap nog nooit is toegepast (FASEN_KOPPELING bestaat dan niet). Na de
+// - R2: "staat al zo" kijkt naar namen en rollen; de gewichten tellen alleen zolang de stap nog nooit is toegepast (r5: markering FASEN_TOEGEPAST). Na de
 //   stap is een ander gewicht een later besluit (Beheer → Mijlpalen, een versie van fasegewichten): de stap zet het niet stil terug, ook niet als hij opnieuw
 //   moet (een rol veranderd); een bestaande rij met dezelfde naam houdt dan zijn gewicht. De proefdraai noemt de gewichten die afwijken van het rekenmodel.
 // - R5: F2 herziet alleen een kant van een wissel waarvan de opgeslagen rol afwijkt van de rol die bij de oude naam hoort (de v7.9-volgordefout); een rol die
 //   bij zijn naam past, blijft een momentopname, ook als de beheerder die mijlpaal op een andere fase zet. De proefdraai toont het verschil in de historische telling.
 function fasenScholen() { return mijlpalen().filter(function (m) { return m.pipeline === 'Scholen'; }); }
-function fasenEerderToegepast() { return !!P.getProperty('FASEN_KOPPELING'); }
+// v7.9.1 (review r5, H1): "eerder toegepast" is een eigen markering die Toepassen als laatste schrijft (na de kansen); FASEN_KOPPELING staat er al eerder
+// (voor het herstel), dus na een onderbreking telt de stap nog niet als eerder toegepast en gaan de gewichten alsnog naar het rekenmodel
+function fasenEerderToegepast() { return !!P.getProperty('FASEN_TOEGEPAST'); }
 // v7.9.1 (review r4, R1): klaar = de vijf namen en rollen staan zo én er staat geen open kans meer in een oude naam (fasenVerweesd: een onderbroken Toepassen)
 function fasenAlGedaan(kansen) {
   var ms = fasenScholen(), eerder = fasenEerderToegepast();
@@ -2624,7 +2626,7 @@ function fasenAlGedaan(kansen) {
 // niet meer bestaat, met een doel dat nog bestaat (een nieuwe naam of gewonnen). Dat gebeurt alleen als Toepassen na de mijlpalen en vóór de kansen stopte
 // (Sheets-fout, tijdslimiet); de volgende keer Toepassen zet ze alsnog in hun fase. Zonder een eerdere keer (geen koppeling) altijd leeg.
 function fasenVerweesd(kansen) {
-  if (!fasenEerderToegepast()) return [];
+  if (!P.getProperty('FASEN_KOPPELING')) return [];  // r5 (H1): de koppeling, niet de markering: die komt pas na de kansen
   var kop = fasenKoppelingLees(), sch = {}, alle = {};
   mijlpalen().forEach(function (m) { alle[klein(m.mijlpaal)] = true; if (m.pipeline === 'Scholen') sch[klein(m.mijlpaal)] = true; });
   return (kansen || lees('Kansen')).filter(function (k) {
@@ -2653,6 +2655,13 @@ function zelfdeGewichten(a, b) {
 }
 // Wat stap fasen leest: de mijlpalen van Scholen, de open kansen erin (met pipeline Scholen, of zonder pipeline in een mijlpaal van Scholen) en per kans de
 // datum van zijn laatste vastgelegde wissel naar zijn huidige mijlpaal (F8). Bij toepassen binnen metLock aangeroepen, na vergeet (F7).
+// v7.9.1 (review r5, A3): het doel van een kans in een oude naam: de nieuwe naam uit de opgeslagen koppeling, en verder als die naam nu ook verhuist
+function fasenVerweesdNaar(k, kop, doel) {
+  var nr = String(uitMap(kop, klein(k.fase)) || ''), d = nr === 'gewonnen' ? '6' : uitMap(doel || {}, klein(nr));
+  if (nr !== 'gewonnen' && d !== undefined) nr = d === '6' ? 'gewonnen' : CAPSULE_FASEN[Number(d) - 1].mijlpaal;
+  else if (nr !== 'gewonnen') d = (CAPSULE_FASEN.filter(function (x) { return x.mijlpaal === nr; })[0] || {}).fase || '';
+  return { naar: nr, d: d };
+}
 // v7.9.1 (review r4, R2): namen altijd via klein() (een met de hand ingevulde naam met een hoofdletter of spatie: de app zet precies die naam in Kansen.fase);
 // bij twee rijen met dezelfde naam telt de eerste. R1: verweesd = de open kansen in een oude naam na een onderbroken Toepassen (fasenVerweesd).
 function fasenLezen() {
@@ -2730,8 +2739,12 @@ function fasenHerzienVerschil(herzien) {
 var FASEN_ZONDER_SCHOLEN = 'De pipeline Scholen heeft geen eigen mijlpalen. Hernoem eerst in Beheer → Mijlpalen de pipeline met de fasen van Capsule naar Scholen.';
 function migratieFasen(opties, toepassen) {
   if (!toepassen) {
-    var A = fasenLezen(), dP = fasenDoel(A, opties, false), hP = A.ms.length ? fasenHerzien(dP) : [];
-    return { stap: 'fasen', toegepast: false, alGedaan: fasenAlGedaan(A.kansen), verweesd: A.verweesd.length, pipeline: 'Scholen', doelen: fasenDoelen(), onderbouwing: FASEN_ONDERBOUWING,  // r4: R1
+    var A = fasenLezen(), dP = fasenDoel(A, opties, false), hP = A.ms.length ? fasenHerzien(dP) : [], kopP = fasenKoppelingLees(), vDeal = { open: 0, metDatum: 0, eerderGewonnen: 0 };
+    A.verweesd.forEach(function (k) {  // r5 (A3): kansen in een oude naam die naar gewonnen gaan, zodat de app het vinkje voor hun datum ook bij herstel toont
+      if (fasenVerweesdNaar(k, kopP, dP).naar !== 'gewonnen') return;
+      vDeal.open++; if (uitMap(A.dealDatum, String(k.id))) vDeal.metDatum++; if (uitMap(A.eerderDatum, String(k.id)) !== undefined) vDeal.eerderGewonnen++;
+    });
+    return { stap: 'fasen', toegepast: false, alGedaan: fasenAlGedaan(A.kansen), verweesd: A.verweesd.length, verweesdDeal: vDeal, pipeline: 'Scholen', doelen: fasenDoelen(), onderbouwing: FASEN_ONDERBOUWING,  // r4: R1
       mijlpalen: A.ms.map(function (m) { return { id: m.id, mijlpaal: m.mijlpaal, open: A.open[m.id], metDatum: A.metDatum[m.id], eerderGewonnen: A.eerder[m.id], voorstel: faseVanNaam(m.mijlpaal) }; }),
       herzien: hP.length, herzienVerschil: fasenHerzienVerschil(hP), gewichten: fasenGewichten(A.perNaam), gewichtenBlijven: fasenEerderToegepast(), anderePipelines: A.andere };  // r3: F1, R2, R5
   }
@@ -2756,13 +2769,11 @@ function migratieFasen(opties, toepassen) {
     rollenControle(rijen);
     var gewTerug = eerderToegepast ? [] : fasenGewichten(A.perNaam);  // R2: wat de stap terugzet naar het rekenmodel (in de melding, nooit stil)
     var naarNaam = {}; Object.keys(doel).forEach(function (n) { naarNaam[n] = doel[n] === '6' ? 'gewonnen' : CAPSULE_FASEN[Number(doel[n]) - 1].mijlpaal; });
-    var faseVan = function (naam) { if (naam === 'gewonnen') return '6'; var f = CAPSULE_FASEN.filter(function (x) { return x.mijlpaal === naam; })[0]; return f ? f.fase : ''; };
     var vorigeKop = fasenKoppelingLees();
     var wijzig = [], plan = [], verhuisd = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 }, gewonnen = 0, dealDatum = 0, eerderGewonnen = 0, ongewijzigd = 0, hersteld = 0;
     // R1 (r4): een open kans in een oude naam na een onderbroken Toepassen gaat naar het doel uit de opgeslagen koppeling (en verder als dat doel nu ook verhuist)
     var lijst = A.inScholen.map(function (k) { return { k: k, d: uitMap(doel, klein(k.fase)), naar: uitMap(naarNaam, klein(k.fase)) }; }).concat(A.verweesd.map(function (k) {
-      var nr = String(uitMap(vorigeKop, klein(k.fase))), verder = nr === 'gewonnen' ? undefined : uitMap(naarNaam, klein(nr)); if (verder !== undefined) nr = verder;
-      return { k: k, d: faseVan(nr), naar: nr };
+      var x = fasenVerweesdNaar(k, vorigeKop, doel); return { k: k, d: x.d, naar: x.naar };
     }).filter(function (y) { if (y.d) hersteld++; return !!y.d; }));
     lijst.forEach(function (y) {
       var k = y.k, d = y.d, naar = y.naar, dd = d === '6' && metDealDatum ? uitMap(A.dealDatum, String(k.id)) || '' : '';
@@ -2775,7 +2786,7 @@ function migratieFasen(opties, toepassen) {
       var eg = d === '6' ? uitMap(A.eerderDatum, String(k.id)) : undefined, gs = dd && eg && eg > dd ? eg : dd || eg || '';
       if (eg !== undefined && !(dd && dd >= eg)) eerderGewonnen++;
       wijzig.push(gs ? { id: k.id, fase: naar, pipeline: 'Scholen', gesloten: gs } : { id: k.id, fase: naar, pipeline: 'Scholen' });
-      plan.push({ k: k, van: String(k.fase || ''), naar: naar, vanPipeline: String(k.pipeline || 'Scholen'), dealDatum: dd });
+      plan.push({ k: k, d: d, van: String(k.fase || ''), naar: naar, vanPipeline: String(k.pipeline || 'Scholen'), dealDatum: dd });
     });
     var herzien = fasenHerzien(doel);  // F2: vóór er iets geschreven is (de rollen van nu, de namen van vóór de stap)
     var herzienVerschil = fasenHerzienVerschil(herzien);  // R5 (r3): idem, vóór het bijwerken
@@ -2785,7 +2796,8 @@ function migratieFasen(opties, toepassen) {
     Object.keys(naarNaam).forEach(function (n) { kopNa[n] = naarNaam[n]; });
     // R1 (r4): de volgorde maakt een onderbroken Toepassen herstelbaar: eerst de koppeling (daarmee vindt een volgende keer de kansen in een oude naam terug),
     // de herziene app-wissels en de versie van de gewichten (de mijlpalen staan dan nog zoals ze waren, dus de volgende keer doet alles opnieuw), dan de
-    // mijlpalen (eerst schrijven, dan de oude weg), de nieuwe wissels (ids per kans, doel en dag: een herhaling schrijft ze niet dubbel) en als laatste de kansen (tot dan: fasenVerweesd).
+    // mijlpalen (eerst schrijven, dan de oude weg), de nieuwe wissels (een herhaling schrijft ze niet dubbel), de kansen (tot dan: fasenVerweesd) en als
+    // laatste de markering FASEN_TOEGEPAST (r5, H1: pas daarna geldt de stap als eerder toegepast).
     P.setProperty('FASEN_KOPPELING', JSON.stringify(kopNa));
     wisselsBijwerken(herzien);
     var gewichten = {}, vorigeA = aanname('fasegewichten'), versie = null;
@@ -2798,12 +2810,15 @@ function migratieFasen(opties, toepassen) {
     schrijfVeel('Mijlpalen', rijen);
     verwijderRijen('Mijlpalen', function (r) { return String(r.pipeline || 'Scholen') === 'Scholen' && !uitMap(nieuweIds, String(r.id)); });
     // de wissels na het schrijven van de mijlpalen (naarRol uit de nieuwe fasen), alle samen in één schrijfVeel (R2); F8: met dealDatum een reconstructie met die datum
-    var vandaag = datumStr(new Date()), wissels = fasewisselsSchrijven(plan.map(function (x) {
+    // r5 (H5): een herstel (ook op een latere dag) schrijft geen tweede hernoemd-wissel voor dezelfde kans, van en naar; het id zonder dag en zonder slug van het kans-id
+    var vandaag = datumStr(new Date()), alHernoemd = function (x) { return wisselsVanKans(x.k.id).some(function (w) { return w.bron === 'hernoemd' && !w.verwijderd && w.van === x.van && w.naar === x.naar; }); };
+    var wissels = fasewisselsSchrijven(plan.filter(function (x) { return x.dealDatum || !alHernoemd(x); }).map(function (x) {
       var k = { id: x.k.id, schoolId: x.k.schoolId, eigenaar: x.k.eigenaar, waarde: x.k.waarde, fase: x.naar, pipeline: 'Scholen' };
       return x.dealDatum ? faseWisselRij(k, x.van, x.naar, { bron: 'reconstructie', datum: x.dealDatum, zekerheid: 'hoog', id: 'rec-' + slug(x.k.id + '-gewonnen-' + x.dealDatum), vanPipeline: x.vanPipeline })
-        : faseWisselRij(k, x.van, x.naar, { bron: 'hernoemd', datum: vandaag, id: 'fa-' + slug(x.k.id + '-' + x.naar + '-' + vandaag), vanPipeline: x.vanPipeline });
+        : faseWisselRij(k, x.van, x.naar, { bron: 'hernoemd', datum: vandaag, id: 'fa-' + String(x.k.id) + '-' + x.d + '-' + slug(x.van).slice(0, 40), vanPipeline: x.vanPipeline });
     }));
     if (wijzig.length) schrijfVeel('Kansen', wijzig);
+    P.setProperty('FASEN_TOEGEPAST', vandaag);  // r5 (H1): als laatste
     var n = Object.keys(verhuisd).reduce(function (t, f) { return t + verhuisd[f]; }, 0);
     return { stap: 'fasen', toegepast: true, alGedaan: false, gewijzigd: true, mijlpalen: rijen.length, verhuisd: verhuisd, gewonnen: gewonnen, dealDatum: dealDatum, eerderGewonnen: eerderGewonnen, ongewijzigd: ongewijzigd, hersteld: hersteld, wissels: wissels.length,
       herzien: herzien.length, herzienVerschil: herzienVerschil, gewichtenTerug: gewTerug.length, aanname: versie, rollen: rollenStatus(),
@@ -2907,11 +2922,19 @@ var FW_BEWIJS_SYNONIEMEN = { 'e-mail': 'mail', email: 'mail', 'agenda-afspraak':
 function bewijsSoort(t) { var x = klein(String(t || '')).replace(/\s+/g, ' ').trim(); if (!x) return ''; if (FW_BEWIJS.indexOf(x) >= 0) return x; return uitMap(FW_BEWIJS_SYNONIEMEN, x) || 'overig'; }
 // v7.9.1 (review r4, R3): een fase uit het bestand die geen mijlpaal (meer) is: een oude naam van Scholen via de koppeling van stap fasen (naamNaFasen),
 // de Capsule-naam van fase 6 ("6. Deal/Lopend traject", capsuleDealNaam) als gewonnen; een naam die nog een mijlpaal is, blijft zoals hij is
-function importFase(fase, k, mp) {
+// v7.9.1 (review r5, R4L-9): ook een schrijfwijze die alleen in spaties of leestekens afwijkt ("5. VO (Voorstel/Offerte)"), van een mijlpaal of van een oude
+// naam uit de koppeling, als er precies één zo'n naam is; c is een cache per import (de koppeling één keer gelezen)
+function naamNorm(x) { return zonderAccenten(klein(String(x || ''))).replace(/[^a-z0-9]+/g, ''); }
+function importFase(fase, k, mp, c) {
   if (!fase || fase === 'gewonnen' || fase === 'verloren' || uitMap(mp, fase)) return fase;
   var n = naamNaFasen(fase, pipelineVan(k));
   if (n !== fase && (n === 'gewonnen' || uitMap(mp, n))) return n;
-  return capsuleDealNaam(fase) ? 'gewonnen' : fase;
+  if (capsuleDealNaam(fase)) return 'gewonnen';
+  c = c || {}; if (!c.kop) c.kop = fasenKoppelingLees();
+  var nf = naamNorm(fase), m = Object.keys(mp).filter(function (x) { return naamNorm(x) === nf; });
+  if (m.length === 1) return m[0];
+  var o = Object.keys(c.kop).filter(function (x) { return naamNorm(x) === nf; }), v = o.length === 1 ? c.kop[o[0]] : '';
+  return v && (v === 'gewonnen' || uitMap(mp, v)) ? v : fase;
 }
 function apiFasewisselsImport(tekst, opties) {
   alleenBeheerder();
@@ -2926,7 +2949,7 @@ function apiFasewisselsImport(tekst, opties) {
   var kansen = lees('Kansen'), perId_ = perId(kansen), perCap = {}, mp = mijlpaalMap(), vandaag = datumStr(new Date());
   kansen.forEach(function (k) { if (k.capsuleId) perCap[String(k.capsuleId)] = k; });
   var uit = { gelezen: 0, nieuw: 0, aangevuld: 0, ongewijzigd: 0, bewijsOverig: 0, overgeslagen: { onbekend: 0, onbekendeKans: 0, onbekendeFase: 0, datum: 0, leeg: 0 }, regels: { onbekendeKans: [] }, kolommen: kop.filter(Boolean) };
-  var schrijfRijen = [], geraakt = {}, nieuweIds = {}, aangevuldIds = {};
+  var schrijfRijen = [], geraakt = {}, nieuweIds = {}, aangevuldIds = {}, cI = {};
   var cel = function (r, x) { return idx[x] >= 0 ? String(r[idx[x]] == null ? '' : r[idx[x]]).trim() : ''; };
   for (var i = 1; i < rijen.length; i++) {
     var r = rijen[i]; if (!r || !r.some(function (c) { return String(c).trim(); })) continue;
@@ -2935,11 +2958,12 @@ function apiFasewisselsImport(tekst, opties) {
     if (zk === 'onbekend') { uit.overgeslagen.onbekend++; continue; }
     if (!kId || !fase || !dIn || ['hoog', 'midden', 'laag'].indexOf(zk) < 0) { uit.overgeslagen.leeg++; continue; }
     var k = perId_[kId] || perCap[kId]; if (!k) { uit.overgeslagen.onbekendeKans++; if (uit.regels.onbekendeKans.length < 50) uit.regels.onbekendeKans.push(i + 1); continue; }
-    fase = importFase(fase, k, mp); if (vanIn) vanIn = importFase(vanIn, k, mp);  // v7.9.1 (review r4, R3)
+    fase = importFase(fase, k, mp, cI); if (vanIn) vanIn = importFase(vanIn, k, mp, cI);  // v7.9.1 (review r4, R3)
     if (fase !== 'gewonnen' && fase !== 'verloren' && !uitMap(mp, fase)) { uit.overgeslagen.onbekendeFase++; continue; }
     var dt = /^\d{1,2}-\d{1,2}-\d{4}$/.test(dIn) ? (parseDatumNl(dIn) ? datumStr(parseDatumNl(dIn)) : '') : datumIn(dIn);
     if (!dt || (/^\d{4}-/.test(dIn) && dt !== dIn.slice(0, 10)) || dt > vandaag) { uit.overgeslagen.datum++; continue; }
-    var bestaand = wisselsVanKans(k.id).filter(function (w) { return w.naar === fase && !w.verwijderd; });
+    // v7.9.1 (review r5, R4L-2): ook een wissel die nog de oude naam draagt (vóór stap fasen geschreven) telt als dezelfde fase: geen dubbele reconstructie, wel aanvullen
+    var bestaand = wisselsVanKans(k.id).filter(function (w) { return !w.verwijderd && (w.naar === fase || importFase(klein(w.naar), k, mp, cI) === fase); });
     if (bestaand.some(function (w) { return w.werkelijkeDatum === dt; }) || nieuweIds['rec-' + slug(k.id + '-' + fase + '-' + dt)]) { uit.ongewijzigd++; continue; }
     var leeg = bestaand.filter(function (w) { return !w.werkelijkeDatum && !aangevuldIds[w.id] && ['import', 'capsule', 'tijdlijn'].indexOf(w.bron) >= 0; })[0];
     if (leeg) {
@@ -3122,9 +3146,11 @@ function capsulePagina(stap, pagina) {
     });
     // v7.9.1 (review r4, N1): gewonnen of verloren zonder closedOn (ook een open Capsule-kans in fase 6) houdt de datum van zijn laatste sluitende wissel
     // (bijvoorbeeld uit Werkelijke datums importeren), zodat Kansen.gesloten en dealWissels gelijk blijven (N8); nooit terug naar leeg
+    // r5 (R4L-3): ook mét closedOn wint een latere sluitende wissel (bijvoorbeeld uit de import): gesloten = de laatste sluitende wissel (N8)
     rijen.forEach(function (r) {
-      if (r.gesloten || (r.fase !== 'gewonnen' && r.fase !== 'verloren') || faseNu[r.id] === undefined) return;
-      var ls = laatsteSluitendeWissel(r.id, r.fase); if (ls && ls.werkelijkeDatum) r.gesloten = String(ls.werkelijkeDatum).slice(0, 10);
+      if ((r.fase !== 'gewonnen' && r.fase !== 'verloren') || faseNu[r.id] === undefined) return;
+      var ls = laatsteSluitendeWissel(r.id, r.fase), d = ls && ls.werkelijkeDatum ? String(ls.werkelijkeDatum).slice(0, 10) : '', g = r.gesloten ? String(r.gesloten).slice(0, 10) : '';
+      if (d && (!g || d > g)) r.gesloten = d;
     });
     schrijfVeel('Kansen', rijen);
     fasewisselsSchrijven(wissels);
@@ -8571,14 +8597,17 @@ function sturingCijfers(peildatum) {
   else {
     var ms = mijlpalen(), meer = uniek(ms.map(function (m) { return m.pipeline; })).length > 1, perM = {}, volg = [];
     // v7.9.1: de leadfase is de mijlpaal met de rol lead zelf (Capsule fase 1); een mijlpaal die lead alleen erft (fase 2, Pre-AP) is een kans en krijgt het label niet
-    ms.forEach(function (m) { var sl = m.pipeline + '|' + m.mijlpaal, eff = (uitMap(mijlpaalRollen(m.pipeline), m.mijlpaal) || {}).effectief || ''; perM[sl] = { mijlpaal: m.mijlpaal, pipeline: m.pipeline, rol: eff, eigenRol: m.rol || '', aantal: 0, waarde: 0, zonderWaarde: 0 }; volg.push(sl); });
+    ms.forEach(function (m) { var sl = m.pipeline + '|' + klein(m.mijlpaal), eff = (uitMap(mijlpaalRollen(m.pipeline), m.mijlpaal) || {}).effectief || ''; perM[sl] = { mijlpaal: m.mijlpaal, pipeline: m.pipeline, rol: eff, eigenRol: m.rol || '', aantal: 0, waarde: 0, zonderWaarde: 0 }; volg.push(sl); });
     var totF = 0, leadsF = 0, zonderSjF = 0;
+    // r5 (R4L-5, R4L-6): de mijlpaal op naam in kleine letters; een lead (van het lopende schooljaar of zonder schooljaar) telt alleen in leads, nooit in zonderSchooljaar
     open.forEach(function (k) {
       if (!binnen(schoolVan(k))) return;
-      if (!k.schooljaar) { zonderSjF++; return; }
-      if (String(k.schooljaar) !== sj) return;
-      var sl = pipelineVan(k) + '|' + k.fase, x = perM[sl]; if (!x) { x = perM[sl] = { mijlpaal: k.fase, pipeline: pipelineVan(k), rol: '', eigenRol: '', aantal: 0, waarde: 0, zonderWaarde: 0 }; volg.push(sl); }
-      x.aantal++; if (x.eigenRol === 'lead') leadsF++; else totF++; if (Number(k.waarde) > 0) x.waarde += Number(k.waarde); else x.zonderWaarde++;
+      var sl = pipelineVan(k) + '|' + klein(k.fase), x = uitMap(perM, sl), lead = !!x && x.eigenRol === 'lead';
+      if (lead && k.schooljaar && String(k.schooljaar) !== sj) return;
+      if (!lead && !k.schooljaar) { zonderSjF++; return; }
+      if (!lead && String(k.schooljaar) !== sj) return;
+      if (!x) { x = perM[sl] = { mijlpaal: k.fase, pipeline: pipelineVan(k), rol: '', eigenRol: '', aantal: 0, waarde: 0, zonderWaarde: 0 }; volg.push(sl); }
+      x.aantal++; if (lead) leadsF++; else totF++; if (Number(k.waarde) > 0) x.waarde += Number(k.waarde); else x.zonderWaarde++;
     });
     var lijstF = volg.map(function (sl) { return perM[sl]; });
     // v7.9.1 (review r4, N3): de definitie zegt "de leadfase staat apart" en fase 1 is geen kans: waarde en uitsplitsing tellen alleen de mijlpalen zonder

@@ -479,6 +479,12 @@ with sync_playwright() as p:
         v = pg.evaluate("[].map.call(document.querySelectorAll('#venster [data-v79fase]'), function (s) { return [s.getAttribute('data-v79fase'), s.value, s.getAttribute('aria-label'), s.options.length]; })")
         ok('fasen: per mijlpaal een keuzelijst met label en zes fasen, voorgevuld (lead 1, gesprek 3, voorstel 5, onderhandeling 5)', [x[0] + '=' + x[1] for x in v] == ['scholen-lead=1', 'scholen-gesprek=3', 'scholen-voorstel=5', 'scholen-onderhandeling=5'] and all(x[2] and 'Fase in Capsule' in x[2] and x[3] == 7 for x in v), v)
         ok('fasen: fase 6 is deal/lopend traject (gewonnen)', 'deal/lopend traject (gewonnen)' in pg.inner_text('#venster [data-v79fase="scholen-lead"]'))
+        # v7.9.1 (review r5, A1): na de proefdraai staat de focus op de titel van de stap; Tab en Shift+Tab blijven daarvandaan binnen het venster
+        ok('fasen: na Proefdraaien heeft de titel van de stap de focus (review r4/r5)', pg.evaluate("(function () { var a = document.activeElement; return !!(a && a.classList.contains('r-titel') && a.closest('#v79stap-fasen')); })()"))
+        pg.keyboard.press('Shift+Tab')
+        ok('fasen: Shift+Tab vanaf de titel blijft in het venster (review r5, A1)', pg.evaluate("(function () { var a = document.activeElement; return !!(a && document.getElementById('venster').contains(a) && a !== document.getElementById('vensterInhoud')); })()"))
+        pg.evaluate("document.querySelector('#v79stap-fasen .r-titel').focus()"); pg.keyboard.press('Tab')
+        ok('fasen: Tab vanaf de titel gaat naar het eerste veld van de stap (review r5, A1)', pg.evaluate("(function () { var a = document.activeElement; return !!(a && a.matches('[data-v79fase]') && a.closest('#v79stap-fasen')); })()"))
         ok('fasen: onderbouwing en besluitdatum voorgevuld', 'Capsule' in pg.input_value('#v79-onderbouwing') and pg.input_value('#v79-besluitdatum') == dag(0))
         # v7.9.1 (review r2, F8): fase 6 voor onderhandeling: de melding wat er met de open kans gebeurt, en het vinkje voor de deal die in Athena naar die fase is gezet
         pg.select_option('#venster [data-v79fase="scholen-onderhandeling"]', '6'); pg.wait_for_selector('#v79-deal #v79-dealdatum')
