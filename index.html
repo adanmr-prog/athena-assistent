@@ -659,6 +659,7 @@
   .update-knop { background: none; border: none; color: var(--oranje); font: inherit; font-weight: 800; padding: 12px 10px; min-height: 44px; cursor: pointer; border-radius: 8px; white-space: nowrap; }
   .update-knop.later { color: #fff; opacity: .85; font-weight: 600; }
   body:has(#updateBalk:not([hidden])) #toast { bottom: calc(144px + env(safe-area-inset-bottom)); }
+  body.venster-open #toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto !important; }  /* r2 (iOS-R2): met een venster open bovenaan, niet over de sheet */
   /* v4.5: wat de snelinvoer begrepen heeft */
   .p-chip { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 2px 0; min-height: 0; font-size: var(--fs-klein); }
   .p-chip:empty { display: none; }
@@ -930,8 +931,7 @@
     body.desk .legenda-defs summary, body.desk .dq-eigenaar summary { min-height: 44px; }
     body.desk .dq-regel[data-crm-open] { min-height: 44px; display: flex; align-items: center; }
     body.desk .v79-keuze select { min-height: 44px; }  /* v7.9.1: de keuzelijsten van de overstap (fasen, rollen, redenen) ook 44 px op de iPad */
-    body.desk .v79-stap .veld input[type=date], body.desk #venster .v79-stap .balk .knop { min-height: 44px; }  /* v7.9.1 (review r2, R2): de besluitdatum en Proefdraaien/Toepassen ook 44 px op de iPad (#venster: gaat voor op body.desk #venster .knop) */
-    body.desk #venster .start-venster .veld input, body.desk #venster .start-venster .balk .knop { min-height: 44px; }  /* v7.9.2 (review r1, R2): het startdatumvenster (het datumveld, Opslaan en Annuleren) ook 44 px op de iPad, zoals de keuzelijst die het opent; v7.9.3 (I-N1): ook waarde en tekendatum */
+    body.desk #venster .veld input:not([type=checkbox]), body.desk #venster .veld select, body.desk #venster .knop { min-height: 44px; }  /* r2 (iOS-N1): elk veld en elke knop in het venster 44 px op de iPad, zoals op de telefoon */
   }
   /* De definitie naast elk getal: één schakelaar per scherm (body.defs-aan); in het MT-overzicht altijd zichtbaar */
   .t-def { display: none; font-size: var(--fs-klein); font-weight: 400; color: var(--gedempt); margin-top: 4px; line-height: 1.35; text-align: left; }
@@ -1726,11 +1726,11 @@
   // De werkelijke datum van een wissel controleren vóór de aanroep (N7; iOS dwingt max in de datumkiezer niet af): na vandaag een melding zonder aanroep;
   // vóór 1 augustus van het vorige schooljaar eerst bevestigen (dan gaat oudBevestigd mee, anders weigert de backend). null = niet doorgaan.
   function ondergrensWisselApp() { return (Number(String(schooljaarNu()).slice(0, 4)) - 1) + '-08-01'; }
-  function wisselDatumOk(datum) {
-    var d = String(datum || '').slice(0, 10), v = vandaagStr();
+  function wisselDatumOk(datum, veld) {  // r2 (iOS-N1): met veld de fout in het venster onder dat veld
+    var d = String(datum || '').slice(0, 10), v = vandaagStr(), fout = veld ? function (t) { vensterFout(veld, t); } : toast;
     if (!d) return { datum: v, oudBevestigd: false };
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { toast('Ongeldige datum.'); return null; }
-    if (d > v) { toast('De datum ligt in de toekomst.'); return null; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { fout('Ongeldige datum.'); return null; }
+    if (d > v) { fout('De datum ligt in de toekomst.'); return null; }
     if (d < ondergrensWisselApp()) { if (!window.confirm('Deze datum ligt vóór het vorige schooljaar. Klopt dat?')) return null; return { datum: d, oudBevestigd: true }; }
     return { datum: d, oudBevestigd: false };
   }
@@ -1746,7 +1746,7 @@
   function kansOpener(kansId) { var id = String(kansId || '').replace(/["\\]/g, ''); return id ? document.querySelector('[data-sleep="kans:' + id + '"]') || document.querySelector('[data-kansfase="' + id + '"]') : null; }
   function andereDatumVenster(fw, klaar, kansId) {
     openVenster(formHtml('Datum van de mijlpaal', [{ naam: 'datum', label: 'Werkelijke datum', type: 'date', breed: true }], { datum: fw.werkelijkeDatum || vandaagStr() }, 'Opslaan', function (f) {
-      var dt = wisselDatumOk(f.datum); if (!dt) return;
+      var dt = wisselDatumOk(f.datum, 'datum'); if (!dt) return;
       return run('apiFasewisselDatum', fw.id, dt.datum, { oudBevestigd: dt.oudBevestigd }).then(function (r) {
         sluitVenster(); toast('Datum van de mijlpaal: ' + kortDatum(r && r.fasewissel ? r.fasewissel.werkelijkeDatum : dt.datum) + '.'); if (klaar) klaar(r && r.fasewissel);
       });
@@ -1800,7 +1800,6 @@
     }, '<div class="hint">' + (vn ? 'Vanaf de voorstelfase telt de kans mee in de gewogen pijplijn en de voorspelling. ' + (verplicht ? 'De waarde en de verwachte tekendatum zijn verplicht. ' : sn ? 'Waarde en tekendatum mogen leeg blijven; het blok Datakwaliteit signaleert ze. ' : 'Overslaan mag; het blok Datakwaliteit signaleert lege velden.') : '') +
       (sn ? 'Deze fase is voor een kans die zo goed als rond is: wanneer kan het traject starten? Vandaag of later.' : '') + '</div>');
     if (!verplicht && vn && !sn) html = html.replace('<button class="knop licht" data-cf-annuleer="1">', '<button class="knop licht" data-voorstelovers="1">Overslaan</button><button class="knop licht" data-cf-annuleer="1">');
-    html = '<div class="start-venster">' + html + '</div>';  // v7.9.2 (review r1, R2): de klasse geeft op de iPad (hover: none) de knoppen 44 px; v7.9.3 (I-N1): ook alle velden, ook zonder startdatum
     openVenster(html);
     VENSTER.annuleer = terugzetten || null; VENSTER.overslaan = vn && !sn && !verplicht ? function () { return doorgaan({}); } : null;
   }
@@ -2076,7 +2075,7 @@
       if (!mijlpalenApp().length && (BACKEND.versie === null || v792())) {
         if (BREIN_BASIS.bezig) return;
         var vorige = a.status; BREIN_BASIS.bezig = true; a.status = 'bezig'; herrenderBericht(mi);  // v7.9.3 (I-N2): de kaart toont bezig… zonder knoppen, ook terug na een fout
-        var terug = function () { BREIN_BASIS.bezig = false; a.status = vorige; herrenderBericht(mi); };
+        var terug = function () { BREIN_BASIS.bezig = false; a.status = vorige; herrenderBericht(mi); focusStil(document.querySelector('.actiekaart[data-akmsg="' + mi + '"][data-akidx="' + kaart.dataset.akidx + '"] [data-ak="uitvoeren"]')); };  // r2 (iOS-R1): de focus terug op de nieuwe knop (opener van het venster)
         return laadCrmBasis().then(function () { terug(); startEerst(); }, terug);  // een fout toont run() al
       }
       return startEerst();
@@ -2858,11 +2857,11 @@
       { naam: 'am', label: 'Accountmanager', type: 'select', breed: true, opties: [{ waarde: '', label: '— later kiezen' }].concat(optiesTeam('accountmanagement', k.am)) },
       { naam: 'bijzonderheden', label: 'Bijzonderheden', type: 'textarea', plaats: 'Vakken, niveau, wensen van de school' }], w, 'Gewonnen', function (f) {
       var cw = Number(String(f.contractwaarde || '').replace(',', '.'));
-      if (!(cw > 0)) { toast('Vul de getekende contractwaarde in.'); return; }  // v7.9
-      if (!f.akkoorddatum) { toast('Vul de akkoorddatum in.'); return; }
-      var ad = wisselDatumOk(f.akkoorddatum); if (!ad) return;  // v7.9 (N7): niet in de toekomst; vóór het vorige schooljaar bevestigen
-      if (!(Number(f.aantal) >= 1)) { toast('Vul het aantal ondersteuners in.'); return; }
-      if (!f.startdatum) { toast('Vul de gewenste startdatum in.'); return; }
+      if (!(cw > 0)) { vensterFout('contractwaarde', 'Vul de getekende contractwaarde in.'); return; }  // v7.9; r2 (iOS-N1): de fout onder het veld
+      if (!f.akkoorddatum) { vensterFout('akkoorddatum', 'Vul de akkoorddatum in.'); return; }
+      var ad = wisselDatumOk(f.akkoorddatum, 'akkoorddatum'); if (!ad) return;  // v7.9 (N7): niet in de toekomst; vóór het vorige schooljaar bevestigen
+      if (!(Number(f.aantal) >= 1)) { vensterFout('aantal', 'Vul het aantal ondersteuners in.'); return; }
+      if (!f.startdatum) { vensterFout('startdatum', 'Vul de gewenste startdatum in.'); return; }
       obj.overdracht = { aantal: Number(f.aantal), startdatum: f.startdatum, rol: f.rol, rooster: f.rooster, bijzonderheden: f.bijzonderheden, contractwaarde: cw, akkoorddatum: ad.datum };
       obj.wissel = { datum: ad.datum, bron: 'detail', oudBevestigd: ad.oudBevestigd };
       if (f.am !== (k.am || '')) { obj.am = f.am; obj._oud.am = k.am || ''; }
@@ -2879,8 +2878,8 @@
     openVenster(formHtml('Kans verloren', [{ naam: 'datum', label: 'Datum *', type: 'date' },
       redenen.length ? { naam: 'verliesReden', label: 'Reden *', type: 'select', opties: [{ waarde: '', label: 'Kies een reden' }].concat(redenen.map(function (x) { return { waarde: x, label: x }; })) } : { naam: 'verliesReden', label: 'Reden *' },
       { naam: 'verliesToelichting', label: 'Toelichting', type: 'textarea', plaats: 'Wat speelde er? (optioneel)' }], w, 'Verloren', function (f) {
-      if (!f.verliesReden) { toast('Kies een reden.'); return; }
-      var vd = wisselDatumOk(f.datum); if (!vd) return;
+      if (!f.verliesReden) { vensterFout('verliesReden', 'Kies een reden.'); return; }
+      var vd = wisselDatumOk(f.datum, 'datum'); if (!vd) return;
       obj.verliesReden = f.verliesReden; obj.verliesToelichting = f.verliesToelichting || '';  // v7.9 (review C8): altijd mee, ook leeg (anders bleef een oude toelichting staan)
       obj.wissel = { datum: vd.datum, bron: 'detail', oudBevestigd: vd.oudBevestigd };
       return run('apiKansOpslaan', obj).then(function (x) {
@@ -5399,7 +5398,7 @@
   }
   function v79KeuzeVast(ev) {
     var t = ev.target; if (!t || !t.closest || !t.closest('#v79Lijst')) return;
-    if (t.hasAttribute('data-v79fase')) { V79.keuze['fase:' + t.getAttribute('data-v79fase')] = t.value; if (ev.type === 'change' && el('v79-deal')) el('v79-deal').innerHTML = fasenDealHtml(V79.proef.fasen); }
+    if (t.hasAttribute('data-v79fase')) { V79.keuze['fase:' + t.getAttribute('data-v79fase')] = t.value; if (ev.type === 'change') { if (el('v79-deal')) el('v79-deal').innerHTML = fasenDealHtml(V79.proef.fasen); v79FasenBij(t.getAttribute('data-v79fase')); } }
     else if (t.hasAttribute('data-v79rol')) V79.keuze['rol:' + t.getAttribute('data-v79rol')] = t.value;
     else if (t.hasAttribute('data-v79reden')) { var rd = ((V79.proef.redenen || {}).redenen || [])[Number(t.getAttribute('data-v79reden'))]; if (rd) V79.keuze['reden:' + rd.reden] = t.value; }
     else if (t.id === 'v79-onderbouwing') V79.keuze.onderbouwing = t.value;
@@ -5407,6 +5406,12 @@
     else if (t.id === 'v79-dealdatum') V79.keuze.dealDatum = t.checked;
   }
   document.addEventListener('change', v79KeuzeVast); document.addEventListener('input', v79KeuzeVast);
+  // r2 (C-N3): een andere fasekeuze terwijl de onderbouwing die van de proefdraai is = dezelfde proefdraai opnieuw met de keuzes; een eigen tekst blijft staan
+  function v79Kz() { var kz = {}; Object.keys(V79.keuze).forEach(function (k) { if (k.indexOf('fase:') === 0 && V79.keuze[k]) kz[k.slice(5)] = V79.keuze[k]; }); return kz; }
+  function v79FasenBij(vast) {
+    var p = V79.proef.fasen, o = el('v79-onderbouwing'), k = el('v79stap-fasen'); k = k && k.querySelector('[data-v79="fasen:proef"]');
+    if (p && o && k && !k.disabled && o.value === (p.onderbouwing || '') && JSON.stringify(v79Kz()) !== p.kz) { delete V79.keuze.onderbouwing; V79.vast = vast; k.click(); }  // geen eigen tekst
+  }
   // v7.9.1 (review r2, F8): wat fase 6 met de gekozen mijlpalen doet; zijn er kansen die in Athena (v7.9) naar zo'n mijlpaal zijn gezet, dan kiest de beheerder
   // of hun datum de datum van de deal wordt (dealDatum); anders tellen ze pas als deal na Beheer → Werkelijke datums importeren
   // v7.9.1 (review r3, F1): een kans die eerder gewonnen was (en heropend), telt weer als deal op die eerdere datum (eerderGewonnen); R1: de rest staat tot de
@@ -5488,8 +5493,9 @@
           '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p && !p.alGedaan && !(st[0] === 'fasen' && !(p.mijlpalen || []).length) ? '' : ' disabled') + '>Toepassen</button></div></div>';
       }).join('') + '</div><div class="balk"><button class="knop" data-cf-annuleer="1">Sluiten</button></div>';
     vensterNaam();
-    var stapEl = inBeeld && el('v79stap-' + inBeeld);
-    if (stapEl) { try { stapEl.scrollIntoView({ block: 'nearest' }); } catch (e) { stapEl.scrollIntoView(); } focusStil(stapEl.querySelector('.r-titel')); }
+    var stapEl = inBeeld && el('v79stap-' + inBeeld), vast = V79.vast; V79.vast = null;
+    if (stapEl) { try { stapEl.scrollIntoView({ block: 'nearest' }); } catch (e) { stapEl.scrollIntoView(); } if (!focusTerug([].filter.call(stapEl.querySelectorAll('[data-v79fase]'), function (x) { return x.getAttribute('data-v79fase') === vast; })[0])) focusStil(stapEl.querySelector('.r-titel')); }
+    v79FasenBij(vast);  // r2 (C-N3)
   }
   document.addEventListener('click', function (ev) {
     var x = ev.target.closest && ev.target.closest('[data-cijferversie], [data-cijferaf], [data-aanname], [data-fwimport], [data-v79]'); if (!x) return;
@@ -5517,8 +5523,7 @@
       if (el('v79-dealdatum') && el('v79-dealdatum').checked) opties.dealDatum = true;  // v7.9.1 (review r2, F8): besluit van de beheerder
     }
     if (!toepassen && stap === 'fasen') {  // v7.9.1 (review r2, F2): een nieuwe proefdraai telt met de gekozen fasen (herzien); niet gekozen = het voorstel
-      var kz = {}; Object.keys(V79.keuze).forEach(function (k) { if (k.indexOf('fase:') === 0 && V79.keuze[k]) kz[k.slice(5)] = V79.keuze[k]; });
-      if (Object.keys(kz).length) opties.koppeling = kz;
+      var kz = v79Kz(); if (Object.keys(kz).length) opties.koppeling = kz;
     }
     if (toepassen && stap === 'rollen') { opties.rollen = {}; el('vensterInhoud').querySelectorAll('[data-v79rol]').forEach(function (s0) { if (s0.value) opties.rollen[s0.getAttribute('data-v79rol')] = s0.value; }); }
     if (toepassen && stap === 'redenen') {
@@ -5529,7 +5534,7 @@
     if (toepassen && !window.confirm('Stap "' + stap + '" toepassen?')) return;
     x.disabled = true;
     run('apiMigratieV79', stap, opties).then(function (r) {
-      if (!toepassen) { if (!el('v79Lijst')) return; V79.proef[stap] = r; tekenOverstap(stap); return; }  // v7.9.1 (review r5, A2): het venster kan intussen dicht zijn
+      if (!toepassen) { if (!el('v79Lijst')) return; if (stap === 'fasen') r.kz = JSON.stringify(opties.koppeling || {}); V79.proef[stap] = r; tekenOverstap(stap); return; }  // v7.9.1 (review r5, A2): het venster kan intussen dicht zijn; r2: kz
       toast(r && r.melding ? r.melding : 'Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; v79KeuzeWis(stap); crmVerouderd(); CRM.sturing = null;  // v7.9.1: de stap fasen geeft zijn eigen melding (ook: staat al zo)
       return run('apiMigratieV79', 'status', {}).then(function (s0) {
         if (!el('v79Lijst')) return;

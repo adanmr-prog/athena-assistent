@@ -938,8 +938,10 @@ function rollenOpNaam(namen) {
   if (!gezien.voorstel) for (var i = 0; i < uit.length; i++) if (fasen[i] === '5b' && !uit.slice(i + 1).some(Boolean)) { uit[i] = 'voorstel'; break; }
   return herkend ? uit : null;
 }
-// v7.9.3 (C-N2): past de rol van een mijlpaal bij zijn naam? Een 5b-naam met de voorstelrol of zonder rol (erft) past altijd; anders de rol op naam (plan)
-function rolPastBijNaam(naam, rol, plan) { return String(rol || '') === String(plan || '') || (faseVanNaam(naam) === '5b' && (rol === 'voorstel' || !rol)); }
+// v7.9.3 (C-N2): past de rol van een mijlpaal bij zijn naam? Een 5b-naam met de voorstelrol of zonder rol (erft) past; anders de rol op naam (plan).
+// Review r2 (C-N1): zonder rol alleen als het plan voor die rij geen voorstel is. In een pipeline zonder voorstelrol (lead, gesprek = ap, "mondeling akkoord"
+// zonder rol erft ap) geeft rollenOpNaam de 5b-naam voorstel: daar telt anders nooit een VO, dus is een lege rol een signaal
+function rolPastBijNaam(naam, rol, plan) { return String(rol || '') === String(plan || '') || (faseVanNaam(naam) === '5b' && (rol === 'voorstel' || (!rol && plan !== 'voorstel'))); }
 // v7.9: keuzetabellen (objecten) altijd via uitMap(); lijsten via indexOf (N1). Zie docs/sturing-v7.9.md.
 var MIJLPAAL_ROLLEN = ['', 'lead', 'ap', 'ad', 'voorstel'];
 var ROL_ORDE = { '': 0, lead: 1, ap: 2, ad: 3, voorstel: 4, deal: 5, verloren: 5 };   // lezen met uitMap(ROL_ORDE, rol) || 0
@@ -1246,7 +1248,10 @@ function mijlpaalVraagtStart(fase, pipeline) {
   return !!(x && x.vraagtStart);
 }
 var START_FOUT = 'Deze fase vraagt een verwachte startdatum (vandaag of later).';
-var START_ONGEDAAN_FOUT = 'Ongedaan maken kan niet: deze fase vraagt een verwachte startdatum en de kans heeft er geen. Zet de kans in het detail in deze fase; dan vraagt de app de startdatum.';  // v7.9.3 (review r1)
+// v7.9.3 (review r1): ongedaan maken zet een open kans nooit zonder startdatum terug in een mijlpaal met vraagtStart. Review r2 (C-N2): de weigering blijft (anders
+// is de verplichte startdatum te omzeilen), maar de melding zegt wat de adviseur moet doen; ook voor een kans die al zonder startdatum in die mijlpaal stond
+// (import, Capsule, een eigen rij die stap fasen als 5b overnam): die meldt het contract start_bij_bijna_rond al bij de eigenaar
+function startOngedaanFout(fase) { return 'Deze kans heeft nog geen verwachte startdatum. Vul die eerst in bij de kans (Bewerken → Verwachte start) en zet hem daarna terug naar "' + String(fase || '') + '".'; }
 // v7.9 (M06): het fasegewicht van een kans in procent: gewonnen 100, verloren 0, de leadrol 0, anders Mijlpalen.kans van zijn mijlpaal in zijn pipeline (R8: zonder pipeline die van de mijlpaal)
 function fasegewichtVan(k) {
   if (k.fase === 'gewonnen') return 100;
@@ -1628,7 +1633,7 @@ function kansOpslaan(obj, intern) {
     if (!oud || !faseWissel || typeof w.ongedaan !== 'string') throw new Error('Er is niets om ongedaan te maken.');
     // v7.9.3 (review r1, risico C-R3a-omweg): nooit een open kans zonder startdatum terug in een mijlpaal die er een vraagt (5b → VO of verloren, daarna de
     // startdatum leeg, dan ongedaan maken). Een verlopen datum mag blijven: ongedaan maken is herstel. Interne bronnen blijven vrij (zoals bij 5b hieronder).
-    if (vanApp && kansOpen({ fase: fase }) && mijlpaalVraagtStart(fase, plOud) && !String(oud.verwachteStart || '').slice(0, 10)) throw new Error(START_ONGEDAAN_FOUT);
+    if (vanApp && kansOpen({ fase: fase }) && mijlpaalVraagtStart(fase, plOud) && !String(oud.verwachteStart || '').slice(0, 10)) throw new Error(startOngedaanFout(fase));  // review r2 (C-N2)
     var ls = (fase === 'gewonnen' || fase === 'verloren') ? laatsteSluitendeWissel(oud.id, fase, w.ongedaan) : null;
     o.gesloten = ls ? ls.werkelijkeDatum : '';
     o.verliesReden = fase === 'verloren' && ls ? ls.reden : '';
@@ -2687,16 +2692,30 @@ function fasenVanStap(m, f, kop) { var n = klein(m.mijlpaal), x = uitMap(kop, n)
 // v7.9.3 (review r1, risico C-R1-herkenning): het voorstel van de stap per mijlpaal-id. De eerste keer de herkenner (faseVanNaam). Na een eerdere keer gaat de
 // plek voor: één rij zonder de naam van een fase tussen twee rijen met de naam van een fase (of aan het begin of eind), waar precies één fase van de vorige keer
 // ontbreekt, krijgt die fase ("2. pre-ap" hernoemd naar "2. eerste gesprek gepland" blijft 2, niet 3 op "gesprek gepland"); anders de herkenner.
+// v7.9.3 (review r2, C-R1b): twee naburige hernoemde rijen vielen terug op de herkenner, die het voorvoegsel negeert ("1. lead" en "2. eerste gesprek gepland":
+// 1 en 3, dus verdween de rij, kwam "2. pre-ap" terug en ging de kans van 0 % naar 25 %; "2. eerste gesprek gepland" en "3. afspraak gepland": twee keer 3).
+// Daarom na een eerdere keer eerst het voorvoegsel: een naam die (via klein()) begint met het nummer van een fase van de vorige keer ("1." tot en met "5.",
+// "5b.", met of zonder spatie erna) dat in Scholen maar één keer voorkomt, krijgt die fase en is een anker, net als een rij met de naam van een fase. Dan de
+// plek: een reeks van k rijen zonder anker tussen twee ankers (of aan het begin of eind) waar precies k fasen van de vorige keer ontbreken, krijgt die fasen
+// op volgorde ("koud", "warm" vóór "3. ap (appointment planned)": 1 en 2); anders de herkenner (een eigen rij ertussen of een dubbel nummer: de beheerder kiest).
+var FASE_VOORVOEGSEL = /^([0-9]+[a-z]?)\./;
 function fasenVoorstel(ms) {
   var uit = {}; ms.forEach(function (m) { uit[m.id] = faseVanNaam(m.mijlpaal); });
   if (!fasenEerderToegepast()) return uit;
-  var vorige = fasenVorige(), namen = CAPSULE_FASEN.map(function (f) { return f.mijlpaal; }), plek = ms.map(function (m) { return namen.indexOf(klein(m.mijlpaal)); });
-  ms.forEach(function (m, i) {
-    if (plek[i] >= 0 || (i > 0 && plek[i - 1] < 0) || (i + 1 < ms.length && plek[i + 1] < 0)) return;  // alleen een losse rij tussen twee fasenamen
-    var van = i > 0 ? plek[i - 1] : -1, tot = i + 1 < ms.length ? plek[i + 1] : namen.length;
-    var gat = CAPSULE_FASEN.slice(van + 1, Math.max(van + 1, tot)).filter(function (f) { return vorige.indexOf(f.fase) >= 0 && plek.indexOf(namen.indexOf(f.mijlpaal)) < 0; });
-    if (gat.length === 1) uit[m.id] = gat[0].fase;
+  var vorige = fasenVorige(), namen = CAPSULE_FASEN.map(function (f) { return f.mijlpaal; }), telNr = {};
+  var nr = ms.map(function (m) { var x = FASE_VOORVOEGSEL.exec(klein(m.mijlpaal)); if (x) telNr[x[1]] = (uitMap(telNr, x[1]) || 0) + 1; return x ? x[1] : ''; });
+  var plek = ms.map(function (m, i) {
+    var p = namen.indexOf(klein(m.mijlpaal)), f = p < 0 && nr[i] && uitMap(telNr, nr[i]) === 1 && vorige.indexOf(nr[i]) >= 0 ? capsuleFaseRij(nr[i]) : null;
+    if (f) { uit[m.id] = f.fase; p = namen.indexOf(f.mijlpaal); }  // het voorvoegsel gaat voor de herkenner
+    return p;
   });
+  for (var i = 0, j = 0; i < ms.length; i = j) {
+    if (plek[i] >= 0) { j = i + 1; continue; }
+    for (j = i; j < ms.length && plek[j] < 0; j++) { /* de reeks i..j-1 zonder anker */ }
+    var van = i > 0 ? plek[i - 1] : -1, tot = j < ms.length ? plek[j] : namen.length;
+    var gat = CAPSULE_FASEN.slice(van + 1, Math.max(van + 1, tot)).filter(function (f) { return vorige.indexOf(f.fase) >= 0 && plek.indexOf(namen.indexOf(f.mijlpaal)) < 0; });
+    if (gat.length === j - i) for (var x = i; x < j; x++) uit[ms[x].id] = gat[x - i].fase;
+  }
   return uit;
 }
 // v7.9.1 (review r4, R1): klaar = de vijf namen en rollen staan zo én er staat geen open kans meer in een oude naam (fasenVerweesd: een onderbroken Toepassen)

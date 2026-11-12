@@ -3799,18 +3799,27 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
   } catch (e) { fout('C-R2', e); } finally { standTerug(st); }
 
   // --- C-R3 (a): ongedaan maken schrijft alleen de fase; andere meegestuurde velden worden genegeerd (de app stuurt id, fase, _oud en wissel) ---
+  // v7.9.3 (review r2, T-CR3a): elk deel een eigen kans en een eigen try/catch (zoals deelStart in v7.9.2), zodat een mutant die het eerste deel breekt het
+  // tweede niet meesleept: elke bewering toetst apart
   vers79(); st = standBewaren();
   try {
     fasenToepassen();
-    var ko = nieuweKans('Ongedaanproef', VO);
-    roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: B, verwachteStart: plusDagen(10), _oud: { fase: VO } });
-    var terugVO = roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: VO, _oud: { fase: B } });
-    var og = roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: B, verwachteStart: '', waarde: 1, naam: 'Anders', pipeline: 'Elders', eigenaar: 'Lars Visser', _oud: { fase: VO }, wissel: { ongedaan: terugVO.fasewissel.id } });
-    var kn = ctx.vind('Kansen', ko.id);
-    eis(og.kans.fase === B && kn.fase === B && String(kn.verwachteStart).slice(0, 10) === plusDagen(10) && Number(kn.waarde) === 10000 && kn.naam === 'Ongedaanproef' && kn.pipeline === 'Scholen' && !!wisselRij(terugVO.fasewissel.id).ongedaan,
-      'v7.9.3 C-R3a: ongedaan maken (5b → VO terug naar 5b) negeert meegestuurde velden: de startdatum blijft, waarde, naam en pipeline ook; de wissel is ongedaan');
-    var w5 = roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: VO, _oud: { fase: B } }).fasewissel, app = roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: B, _oud: { fase: VO }, wissel: { ongedaan: w5.id } });
-    eis(app.kans.fase === B && !!wisselRij(w5.id).ongedaan, 'v7.9.3 C-R3a: de aanroep van de app (id, fase, _oud en wissel.ongedaan) werkt zoals voorheen');
+    try {
+      var ko = nieuweKans('Ongedaanproef', VO);
+      roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: B, verwachteStart: plusDagen(10), _oud: { fase: VO } });
+      var terugVO = roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: VO, _oud: { fase: B } });
+      var og = roep(LARS, 'apiKansOpslaan', { id: ko.id, fase: B, verwachteStart: '', waarde: 1, naam: 'Anders', pipeline: 'Elders', eigenaar: 'Lars Visser', _oud: { fase: VO }, wissel: { ongedaan: terugVO.fasewissel.id } });
+      var kn = ctx.vind('Kansen', ko.id);
+      eis(og.kans.fase === B && kn.fase === B && String(kn.verwachteStart).slice(0, 10) === plusDagen(10) && Number(kn.waarde) === 10000 && kn.naam === 'Ongedaanproef' && kn.pipeline === 'Scholen' && !!wisselRij(terugVO.fasewissel.id).ongedaan,
+        'v7.9.3 C-R3a: ongedaan maken (5b → VO terug naar 5b) negeert meegestuurde velden: de startdatum blijft, waarde, naam en pipeline ook; de wissel is ongedaan');
+    } catch (e) { fout('C-R3a (andere velden)', e); }
+    try {
+      var ka = nieuweKans('Ongedaanproef app', VO);
+      roep(LARS, 'apiKansOpslaan', { id: ka.id, fase: B, verwachteStart: plusDagen(10), _oud: { fase: VO } });
+      var w5 = roep(LARS, 'apiKansOpslaan', { id: ka.id, fase: VO, _oud: { fase: B } }).fasewissel, app = roep(LARS, 'apiKansOpslaan', { id: ka.id, fase: B, _oud: { fase: VO }, wissel: { ongedaan: w5.id } });
+      eis(app.kans.fase === B && !!wisselRij(w5.id).ongedaan && String(ctx.vind('Kansen', ka.id).verwachteStart).slice(0, 10) === plusDagen(10),
+        'v7.9.3 C-R3a: de aanroep van de app (id, fase, _oud en wissel.ongedaan) werkt zoals voorheen');
+    } catch (e) { fout('C-R3a (aanroep van de app)', e); }
   } catch (e) { fout('C-R3a', e); } finally { standTerug(st); }
 
   // --- C-R3 (b): een pipelinewissel zonder fasewissel naar een pipeline waar dezelfde mijlpaal vraagtStart heeft, vraagt de startdatum ---
@@ -3979,6 +3988,141 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     eis(og.kans.fase === B && String(ctx.vind('Kansen', k2.id).verwachteStart).slice(0, 10) === plusDagen(-3) && !!wisselRij(w2.id).ongedaan,
       'v7.9.3 r1 C-R3a-omweg: een verlopen startdatum mag bij ongedaan maken blijven (herstel)');
   } catch (e) { fout('C-R3a-omweg', e); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9.3, review ronde 2 (herstel). C-R1b: na een eerdere keer beslist eerst het voorvoegsel van de naam ("1." tot en met "5.", "5b.") als dat een fase
+   van de vorige keer is en in Scholen maar één keer voorkomt; daarna krijgt een reeks van k rijen zonder anker tussen twee ankers (of aan het begin of eind)
+   met precies k ontbrekende fasen van de vorige keer die fasen op volgorde. Zo zijn "1. lead" en "2. eerste gesprek gepland" naast elkaar 1 en 2 (niet 1 en 3:
+   dan verdween de rij, kwam "2. pre-ap" terug en ging de kans van 0 % naar 25 %), en "2. eerste gesprek gepland" en "3. afspraak gepland" 2 en 3 (geen
+   dubbele fase 3). C-N1: een 5b-naam zonder rol past alleen als het plan voor die rij geen voorstel is. C-N2: ongedaan maken naar een mijlpaal met
+   vraagtStart zonder startdatum zegt wat de adviseur moet doen. T-CN1: na een eerdere keer vervangt toepassen de oude standaardonderbouwing. Alles op de
+   verzonnen demo-seed. ---- */
+(function () {
+  var DOEL = ctx.CAPSULE_FASEN.map(function (f) { return f.mijlpaal; }), B = DOEL[5], VO = DOEL[4];
+  var voorstelKop = function (p) { var k = {}; p.mijlpalen.forEach(function (m) { k[m.id] = m.voorstel; }); return k; };
+  var scholenRijen = function () { ctx._LEES = {}; return ctx.mijlpalen().filter(function (m) { return m.pipeline === 'Scholen'; }); };
+  var fasenToepassen = function () { var p = roep(SOPHIE, 'apiMigratieV79', 'fasen'); return roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p) }); };
+  var nieuweKans = function (naam, fase) { return roep(LARS, 'apiKansOpslaan', { naam: naam, schoolId: 's7', fase: fase, schooljaar: sjNu(), klant: 'nieuw', waarde: 10000, verwachteSluiting: plusDagen(20) }).kans; };
+  var kansStand = function () { ctx._LEES = {}; return JSON.stringify(ctx.lees('Kansen').map(function (k) { return [k.id, k.fase, k.pipeline || '']; })); };
+  var nulVerhuisd = function (r) { return Object.keys(r.verhuisd || {}).every(function (f) { return r.verhuisd[f] === 0; }) && !r.gewonnen; };
+  var echtSchrijf = ctx.schrijfVeel, st;
+  var fout = function (naam, e) { eis(false, 'v7.9.3 r2 ' + naam + ': onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); };
+  var beheerLijst = function () { ctx._LEES = {}; return ctx.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol, vraagtStart: m.vraagtStart }; }); };
+  var beheerOpslaan = function (l) { roep(SOPHIE, 'apiMijlpalenOpslaan', l, { onderbouwing: 'Rooktest: besluit in Beheer (verzonnen)', besluitdatum: plusDagen(-3) }); ctx._LEES = {}; };
+  var hernoem = function (l, i, naam, norm) { l[i].oud = { pipeline: 'Scholen', mijlpaal: l[i].mijlpaal }; l[i].mijlpaal = naam; if (norm) l[i].dagenNorm = norm; };
+  // stap fasen met v7.9.1: vijf rijen, de koppeling en de markering fasenToegepast (zonder fasenSleutels: die bestond toen niet)
+  var v791 = function () {
+    ctx.verwijderRijen('Mijlpalen', function () { return true; });
+    echtSchrijf('Mijlpalen', ctx.CAPSULE_FASEN.slice(0, 5).map(function (f, i) { return { id: 'v791-' + (i + 1), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: f.kans, dagenNorm: f.dagenNorm, rol: f.rol }; }));
+    var oud = { lead: DOEL[0], gesprek: DOEL[2], voorstel: VO, onderhandeling: VO };
+    echtSchrijf('Kansen', ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && oud[k.fase]; }).map(function (k) { return { id: k.id, fase: oud[k.fase], pipeline: 'Scholen' }; }));
+    ctx._demoProps.FASEN_KOPPELING = JSON.stringify(oud);
+    ctx.zetInstelling('fasenToegepast', plusDagen(-20)); ctx._LEES = {};
+  };
+
+  // --- C-R1b V3: na v7.9.1 "1. nog niet gebeld" hernoemd naar "1. lead" en "2. pre-ap" naar "2. eerste gesprek gepland" (dagenNorm 21), een open kans in fase 2 ---
+  vers79(); st = standBewaren();
+  try {
+    v791();
+    var l = beheerLijst(); hernoem(l, 0, '1. lead'); hernoem(l, 1, '2. eerste gesprek gepland', 21); beheerOpslaan(l);
+    var r0 = scholenRijen(), id1 = r0[0].id, id2 = r0[1].id, k = nieuweKans('Twee hernoemd', '1. lead');
+    roep(LARS, 'apiKansOpslaan', { id: k.id, fase: '2. eerste gesprek gepland', _oud: { fase: '1. lead' } }); ctx._LEES = {};
+    var nW = aantalWissels(), kv = kansStand(), p = roep(SOPHIE, 'apiMigratieV79', 'fasen'), kp = voorstelKop(p);
+    eis(r0[0].mijlpaal === '1. lead' && r0[1].mijlpaal === '2. eerste gesprek gepland' && kp[id1] === '1' && kp[id2] === '2' && (p.dubbel || []).length === 0 && (p.weg || []).length === 0 && (p.nieuw || []).join('|') === B && p.herzien === 0,
+      'v7.9.3 r2 C-R1b V3 proefdraai: "1. lead" en "2. eerste gesprek gepland" naast elkaar krijgen 1 en 2 (niet 3 op "gesprek gepland"); niets verdwijnt, alleen 5b komt erbij (voorstel ' + id1 + '=' + kp[id1] + ', ' + id2 + '=' + kp[id2] + ')');
+    var r = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kp }), na = scholenRijen();
+    eis(r.toegepast && r.wissels === 0 && aantalWissels() === nW && kansStand() === kv && nulVerhuisd(r) && (r.dubbel || []).length === 0 &&
+      na[0].id === id1 && na[0].mijlpaal === '1. lead' && na[1].id === id2 && na[1].mijlpaal === '2. eerste gesprek gepland' && na[1].dagenNorm === 21 && na[1].kans === 0 &&
+      ctx.vind('Kansen', k.id).fase === '2. eerste gesprek gepland' && ctx.fasenAlGedaan(),
+      'v7.9.3 r2 C-R1b V3 toepassen: beide rijen houden id, naam en norm (21), de kans blijft in "2. eerste gesprek gepland" (0 verhuisd, 0 wissels); daarna staat de stap zo');
+  } catch (e) { fout('C-R1b V3', e); } finally { standTerug(st); }
+
+  // --- C-R1b V3b: "2. pre-ap" hernoemd naar "2. eerste gesprek gepland" en "3. ap (appointment planned)" naar "3. afspraak gepland" (norm 12): geen dubbele fase 3 ---
+  vers79(); st = standBewaren();
+  try {
+    v791();
+    var l2 = beheerLijst(); hernoem(l2, 1, '2. eerste gesprek gepland'); hernoem(l2, 2, '3. afspraak gepland', 12); beheerOpslaan(l2);
+    var s2 = scholenRijen(), i2 = s2[1].id, i3 = s2[2].id, k3 = nieuweKans('Afspraak', DOEL[0]);
+    roep(LARS, 'apiKansOpslaan', { id: k3.id, fase: '3. afspraak gepland', _oud: { fase: DOEL[0] } }); ctx._LEES = {};
+    var nW2 = aantalWissels(), kv2 = kansStand(), p2 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), kp2 = voorstelKop(p2);
+    eis(kp2[i2] === '2' && kp2[i3] === '3' && (p2.dubbel || []).length === 0 && p2.gewichtenTerug === 0 && (p2.weg || []).length === 0 && (p2.nieuw || []).join('|') === B,
+      'v7.9.3 r2 C-R1b V3b proefdraai: "2. eerste gesprek gepland" en "3. afspraak gepland" krijgen 2 en 3: geen dubbele fase 3, niets verdwijnt (voorstel ' + kp2[i2] + ', ' + kp2[i3] + ')');
+    var rb = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kp2 }), nb = scholenRijen();
+    eis(rb.toegepast && rb.wissels === 0 && aantalWissels() === nW2 && kansStand() === kv2 && nulVerhuisd(rb) && (rb.dubbel || []).length === 0 && rb.gewichtenTerug === 0 &&
+      nb[1].id === i2 && nb[1].mijlpaal === '2. eerste gesprek gepland' && nb[2].id === i3 && nb[2].mijlpaal === '3. afspraak gepland' && nb[2].dagenNorm === 12 && nb[2].kans === 25 &&
+      ctx.vind('Kansen', k3.id).fase === '3. afspraak gepland' && ctx.fasenAlGedaan(),
+      'v7.9.3 r2 C-R1b V3b toepassen: beide rijen blijven (id, naam, norm), 0 kansen verhuisd, 0 wissels, geen gewicht terug');
+  } catch (e) { fout('C-R1b V3b', e); } finally { standTerug(st); }
+
+  // --- C-R1b V3c: een eigen rij tussen "1. nog niet gebeld" en "2. eerste gesprek gepland": de plek beslist niet (twee rijen, één ontbrekende fase), het
+  // voorvoegsel wel (2, de herkenner las 3); de eigen rij krijgt geen voorstel (de beheerder kiest) ---
+  vers79(); st = standBewaren();
+  try {
+    v791();
+    var l3 = beheerLijst(); hernoem(l3, 1, '2. eerste gesprek gepland'); l3.splice(1, 0, { pipeline: 'Scholen', mijlpaal: 'kwalificeren', kans: 0, dagenNorm: 7, rol: '', vraagtStart: false }); beheerOpslaan(l3);
+    var s3 = scholenRijen(), p3 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), vs3 = p3.mijlpalen.map(function (m) { return m.voorstel; }).join();
+    eis(s3.slice(0, 3).map(function (m) { return m.mijlpaal; }).join('|') === DOEL[0] + '|kwalificeren|2. eerste gesprek gepland' && vs3 === '1,,2,3,4,5',
+      'v7.9.3 r2 C-R1b V3c: met een eigen rij ertussen beslist het voorvoegsel ("2. eerste gesprek gepland" is 2, niet 3); de eigen rij krijgt geen voorstel (' + vs3 + ')');
+  } catch (e) { fout('C-R1b V3c', e); } finally { standTerug(st); }
+
+  // --- C-R1b: de regels los (fasenVoorstel op verzonnen rijen, na v7.9.1: de vorige keer 1 tot en met 5) ---
+  vers79(); st = standBewaren();
+  try {
+    v791();
+    var vst = function (namen) { var ms = namen.map(function (n, i) { return { id: 'r' + i, mijlpaal: n }; }), u = ctx.fasenVoorstel(ms); return ms.map(function (m) { return u[m.id]; }).join(); };
+    var reeks = vst(['koud', 'warm', DOEL[2], DOEL[3], DOEL[4]]), teVeel = vst(['koud', 'lauw', 'warm', DOEL[2], DOEL[3], DOEL[4]]);
+    var zonderSpatie = vst(['1.lead', '2.eerste gesprek gepland', DOEL[2], DOEL[3], DOEL[4]]), hoofd = vst([DOEL[0], DOEL[1], DOEL[2], DOEL[3], '5. Offerte', '5B. Mondeling akkoord']);
+    var tweeKeer = vst([DOEL[0], '2. eerste gesprek', '2. tweede gesprek', DOEL[2], DOEL[3], DOEL[4]]), geenFase = vst([DOEL[0], DOEL[1], '7. ap gehouden', DOEL[3], DOEL[4]]);
+    eis(reeks === '1,2,3,4,5', 'v7.9.3 r2 C-R1b reeks: twee rijen zonder nummer vóór "3. ap" waar precies 1 en 2 ontbreken, krijgen 1 en 2 op volgorde (' + reeks + ')');
+    eis(teVeel === ',,,3,4,5', 'v7.9.3 r2 C-R1b reeks: drie rijen voor twee ontbrekende fasen: geen voorstel op de plek, de herkenner (' + teVeel + ')');
+    eis(zonderSpatie === '1,2,3,4,5', 'v7.9.3 r2 C-R1b voorvoegsel zonder spatie ("2.eerste gesprek gepland") telt ook (' + zonderSpatie + ')');
+    eis(hoofd === '1,2,3,4,5,5b', 'v7.9.3 r2 C-R1b een voorvoegsel dat geen fase van de vorige keer is ("5B." na v7.9.1) beslist niet: de herkenner; "5. Offerte" is 5 (' + hoofd + ')');
+    eis(tweeKeer === '1,3,3,3,4,5', 'v7.9.3 r2 C-R1b voorvoegsel twee keer in Scholen ("2. eerste gesprek", "2. tweede gesprek") beslist niet: de herkenner (de stap meldt dan dubbel) (' + tweeKeer + ')');
+    eis(geenFase === '1,2,3,4,5', 'v7.9.3 r2 C-R1b een voorvoegsel zonder fase ("7. ap gehouden") beslist niet; de plek wel (3, de herkenner las 4) (' + geenFase + ')');
+  } catch (e) { fout('C-R1b regels', e); } finally { standTerug(st); }
+
+  // --- T-CN1: na een eerdere keer vervangt toepassen de oude standaardtekst ("overgenomen uit Capsule", van een oudere app) door de eigen onderbouwing ---
+  vers79(); st = standBewaren();
+  try {
+    v791();
+    var pc = roep(SOPHIE, 'apiMigratieV79', 'fasen'), rc = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(pc), onderbouwing: ctx.FASEN_ONDERBOUWING }), vc = ctx.aanname('fasegewichten');
+    eis(rc.toegepast && !!rc.aanname && rc.aanname === vc.versie && pc.onderbouwing !== ctx.FASEN_ONDERBOUWING && vc.onderbouwing === pc.onderbouwing,
+      'v7.9.3 r2 T-CN1: na een eerdere keer met de oude standaardtekst als onderbouwing krijgt de nieuwe versie van fasegewichten de eigen onderbouwing ("' + String(vc && vc.onderbouwing).slice(0, 60) + '…")');
+  } catch (e) { fout('T-CN1', e); } finally { standTerug(st); }
+
+  // --- C-N1: een 5b-naam zonder rol past alleen als het plan voor die rij geen voorstel is ---
+  vers79(); st = standBewaren();
+  try {
+    echtSchrijf('Mijlpalen', [
+      { id: 'n1a', pipeline: 'Stichtingen', mijlpaal: 'gesprek gevoerd', volgorde: 1, kans: 40, dagenNorm: 14, rol: 'ad' },
+      { id: 'n1b', pipeline: 'Stichtingen', mijlpaal: 'mondeling akkoord', volgorde: 2, kans: 80, dagenNorm: 14, rol: 'voorstel' },
+      { id: 'n1c', pipeline: 'Stichtingen', mijlpaal: 'offerte', volgorde: 3, kans: 70, dagenNorm: 14, rol: '' },
+      { id: 'n2a', pipeline: 'Gemeenten', mijlpaal: 'lead', volgorde: 1, kans: 5, dagenNorm: 14, rol: 'lead' },
+      { id: 'n2b', pipeline: 'Gemeenten', mijlpaal: 'gesprek', volgorde: 2, kans: 25, dagenNorm: 14, rol: 'ap' },
+      { id: 'n2c', pipeline: 'Gemeenten', mijlpaal: 'mondeling akkoord', volgorde: 3, kans: 80, dagenNorm: 14, rol: '' }]); ctx._LEES = {};
+    var af = ctx.rollenAfwijkend(), afApi = roep(SOPHIE, 'apiMigratieV79', 'rollen').afwijkend;
+    var heeft = function (lijst, id) { return lijst.filter(function (x) { return x.id === id; })[0] || null; };
+    eis(!heeft(af, 'n1b') && !!heeft(af, 'n1c') && heeft(af, 'n1c').voorstel === 'voorstel' && !heeft(afApi, 'n1b') && !!heeft(afApi, 'n1c'),
+      'v7.9.3 r2 C-N1: [gesprek gevoerd (ad), mondeling akkoord (voorstel), offerte (geen rol)]: "mondeling akkoord" past (5b met voorstel), "offerte" zonder rol is afwijkend (voorstel: voorstel)');
+    eis(!!heeft(af, 'n2c') && heeft(af, 'n2c').voorstel === 'voorstel' && !!heeft(afApi, 'n2c'),
+      'v7.9.3 r2 C-N1: een pipeline zonder voorstelrol (lead, gesprek = ap, mondeling akkoord zonder rol die ap erft): "mondeling akkoord" zonder rol is afwijkend, want daar telt een VO nooit');
+  } catch (e) { fout('C-N1', e); } finally { standTerug(st); }
+
+  // --- C-N2: ongedaan maken van 5b → VO voor een kans die al zonder startdatum in 5b stond (import) zegt wat de adviseur moet doen; met de datum gaat het ---
+  vers79(); st = standBewaren();
+  try {
+    fasenToepassen();
+    roep(SOPHIE, 'apiImporteer', 'kansen', [{ id: 'rk-r2-5b', naam: 'Import zonder start', school: 'Esdoorn Lyceum', schoolId: 's1', fase: B, pipeline: 'Scholen', eigenaar: 'Lars Visser', waarde: 4000, schooljaar: sjNu(), klant: 'nieuw' }]); ctx._LEES = {};
+    var ki = ctx.vind('Kansen', 'rk-r2-5b'), wv = roep(LARS, 'apiKansOpslaan', { id: ki.id, fase: VO, _oud: { fase: B } }).fasewissel;
+    var fo = faalt(LARS, 'apiKansOpslaan', { id: ki.id, fase: B, _oud: { fase: VO }, wissel: { ongedaan: wv.id } });
+    eis(!ki.verwachteStart && typeof ctx.startOngedaanFout === 'function' && fo === ctx.startOngedaanFout(B) && /^Deze kans heeft nog geen verwachte startdatum\. Vul die eerst in bij de kans/.test(fo) && fo.indexOf('"' + B + '"') >= 0 &&
+      ctx.vind('Kansen', ki.id).fase === VO && !wisselRij(wv.id).ongedaan,
+      'v7.9.3 r2 C-N2: een kans die zonder startdatum in 5b stond (import), naar VO en dan ongedaan maken: geweigerd met wat de adviseur moet doen ("' + fo + '")');
+    roep(LARS, 'apiKansOpslaan', { id: ki.id, verwachteStart: plusDagen(7), _oud: { verwachteStart: '' } }); ctx._LEES = {};
+    var ogd = roep(LARS, 'apiKansOpslaan', { id: ki.id, fase: B, _oud: { fase: VO }, wissel: { ongedaan: wv.id } });
+    eis(ogd.kans.fase === B && !!wisselRij(wv.id).ongedaan && String(ctx.vind('Kansen', ki.id).verwachteStart).slice(0, 10) === plusDagen(7),
+      'v7.9.3 r2 C-N2: met de startdatum ingevuld (Bewerken → Verwachte start) lukt ongedaan maken daarna wel');
+  } catch (e) { fout('C-N2', e); } finally { standTerug(st); }
 })();
 
 /* ---- bestaande schermen blijven werken ---- */

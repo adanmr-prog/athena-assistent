@@ -610,7 +610,7 @@ with sync_playwright() as p:
     # v7.9 (punt 4) "v7.9 winformulier met getekende waarde": eerst zonder getekende waarde (melding, venster blijft open), dan met; de akkoorddatum staat op vandaag
     assert page.input_value('#vf-akkoorddatum') == dag(0) and page.get_attribute('#vf-akkoorddatum', 'max') == dag(0), 'akkoorddatum: standaard vandaag, max vandaag'
     page.fill('#vf-aantal', '2'); page.fill('#vf-startdatum', '2026-11-16'); page.fill('#vf-rooster', 'di en do 9-13 uur'); page.click('#venster [data-cf-opslaan]')
-    page.wait_for_selector('#toast.aan:has-text("getekende contractwaarde")'); assert page.locator('#venster.aan #vf-contractwaarde').count() == 1, 'zonder getekende waarde blijft het winformulier open'
+    page.wait_for_selector('#vensterInhoud #vf-fout[role="alert"]:has-text("getekende contractwaarde")'); assert page.locator('#venster.aan #vf-contractwaarde[aria-invalid="true"]').count() == 1, 'zonder getekende waarde blijft het winformulier open, met de fout onder het veld (v7.9.3 r2, iOS-N1)'
     page.fill('#vf-contractwaarde', '8250'); n0 = len(API_LOG); page.click('#venster [data-cf-opslaan]')
     page.wait_for_selector('.t-item:has-text("→ gewonnen")'); page.wait_for_timeout(150)
     od = eerste_arg(api_vanaf(n0, 'apiKansOpslaan')[0]).get('overdracht') or {}; assert od.get('contractwaarde') == 8250 and od.get('akkoorddatum') == dag(0), 'het winformulier stuurt de getekende waarde en de akkoorddatum: %s' % od
@@ -628,7 +628,7 @@ with sync_playwright() as p:
     # v7.9 (punt 15) "v7.9 verlorenvenster": geen window.prompt meer, maar een venster met datum, een reden uit de keuzelijst (verplicht) en een toelichting
     page.select_option('[data-kansfase]', 'verloren'); page.wait_for_selector('#venster.aan #vf-verliesReden')
     assert 'opgeschoond' in page.inner_text('#vf-verliesReden') and page.input_value('#vf-datum') == dag(0), 'redenen uit de keuzelijst (met opgeschoond), datum standaard vandaag'
-    page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Kies een reden")'); page.select_option('#vf-verliesReden', 'te duur'); page.fill('#vf-verliesToelichting', 'Budget naar volgend jaar'); n0 = len(API_LOG)
+    page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#vensterInhoud #vf-fout[role="alert"]:has-text("Kies een reden")'); page.select_option('#vf-verliesReden', 'te duur'); page.fill('#vf-verliesToelichting', 'Budget naar volgend jaar'); n0 = len(API_LOG)
     page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("verloren")'); page.wait_for_selector('#toast.aan [data-toastactie="1"]')
     o = eerste_arg(api_vanaf(n0, 'apiKansOpslaan')[0]); assert o.get('verliesReden') == 'te duur' and o.get('verliesToelichting') == 'Budget naar volgend jaar' and (o.get('wissel') or {}).get('datum') == dag(0), 'verloren: reden, toelichting en datum: %s' % o
     assert 'prompt' not in DIALOGEN, 'geen window.prompt bij verloren'
