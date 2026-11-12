@@ -8,6 +8,7 @@
 # na een eerder uitgevoerde actie op de telefoon en het startdatumvenster op de iPad). v7.9.3 (review r2): + Kans met een trage aanroep (I-R1), de focus na het
 # venster op een touch-apparaat (I-R2), alle velden 44 px op de iPad (I-N1), bezig… tijdens het laden van de basis (I-N2), de fout in het venster (I-N3), de
 # legenda (I-N4) en de naam van het vinkje Vraagt startdatum (I-N5); in de stap fasen een hernoemde fase (staat zo) en twee mijlpalen voor één fase (C-R1).
+# Review r1: de proefdraai noemt wat verdwijnt en een eigen rij die 5b wordt; het vinkje heeft een eigen aria-label (`data-le-naam`, `data-le-label`).
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -540,6 +541,10 @@ with sync_playwright() as p:
         n0 = n_calls(); pg.select_option('#venster [data-v79fase][aria-label="Fase in Capsule voor onderhandeling"]', '5b'); pg.click('[data-v79="fasen:proef"]')
         pg.wait_for_function("(window.__calls || []).length > %d" % n0); pg.wait_for_selector('#venster [data-v79fase]'); pg.wait_for_timeout(300)
         ok('fasen (v7.9.3 C-R1): kiest de beheerder voor één ervan een andere fase, dan is het signaal weg', pg.locator('#v79-dubbel').count() == 0)
+        # v7.9.3 (review r1): de proefdraai noemt wat verdwijnt (5b staat er al, dus "onderhandeling" gaat op in "5b. bijna rond") en een eigen rij die een fase wordt
+        ok('fasen (v7.9.3 r1): de proefdraai noemt de rij die verdwijnt', pg.locator('#v79-nieuw').count() == 1 and 'Verdwijnt: onderhandeling' in pg.inner_text('#v79-nieuw'), pg.inner_text('#v79-nieuw') if pg.locator('#v79-nieuw').count() else '')
+        hv = pg.evaluate("fasenGewichtenHtml({ overgenomen: [{ fase: '5b', mijlpaal: 'mondeling akkoord', vraagtStart: true }], nieuw: [], weg: [], gewichten: [] })")
+        ok('fasen (v7.9.3 r1, C-R1-5b): een eigen rij die 5b wordt, staat als signaal met de startdatum', 'id="v79-overgenomen"' in hv and '"mondeling akkoord" wordt fase 5b en vraagt dan een startdatum' in hv.replace('&quot;', '"'), hv)
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_fasen', g5_fasen)
     c.close()
@@ -691,6 +696,9 @@ with sync_playwright() as p:
         ok('5b beheer (I-N5): elk vinkje heet "Vraagt startdatum" plus de mijlpaal', len(nm) == 6 and all('Vraagt startdatum' in l for l in nm) and any(B5 in l for l in nm) and any('1. nog niet gebeld' in l for l in nm), nm)
         pg.locator('#leMijlpalen .le-rij').nth(5).locator('[data-le="mijlpaal"]').fill('5b. bijna rond (golf5)'); nm2 = vink_namen()
         ok('5b beheer (I-N5): de naam volgt een hernoemde mijlpaal', any('5b. bijna rond (golf5)' in l for l in nm2), nm2)
+        # v7.9.3 (review r1): de naam staat als eigen aria-label op het vinkje (WebKit neemt bij aria-labelledby naar het invoerveld diens aria-label "Mijlpaal")
+        al = pg.evaluate("[].map.call(document.querySelectorAll('#leMijlpalen .le-rij'), function (r) { var x = r.querySelector('[data-le=\"vraagtStart\"]'); return [x.getAttribute('aria-label'), x.hasAttribute('aria-labelledby'), r.querySelector('[data-le=\"mijlpaal\"]').value]; })")
+        ok('5b beheer (I-N5, r1): elk vinkje heeft het aria-label "Vraagt startdatum: <mijlpaal>" (geen aria-labelledby), ook na hernoemen', len(al) == 6 and all(x[0] == 'Vraagt startdatum: ' + x[2] and not x[1] for x in al) and al[5][2] == '5b. bijna rond (golf5)', al)
         pg.locator('#leMijlpalen .le-rij').nth(5).locator('[data-le="mijlpaal"]').fill(B5)
         pg.locator('#leMijlpalen .le-rij').nth(3).locator('[data-le="vraagtStart"]').check(); n0 = n_calls()
         pg.click('#crmBeheer [data-cf-opslaan]'); toast('Mijlpalen opgeslagen'); a = calls('apiMijlpalenOpslaan', n0)

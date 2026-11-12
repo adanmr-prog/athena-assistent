@@ -5089,20 +5089,27 @@
     }).catch(function () {});
   }
   /* --- lijsteditor (mijlpalen, keuzelijsten): regels met invoervakken, omhoog en weghalen; 'oud' onthoudt de geladen waarde voor hernoemen --- */
-  var LE_KOLOMMEN = {}, LE_NR = 0;
+  var LE_KOLOMMEN = {};
   function lijstEditor(id, kolommen, rijen) {
     LE_KOLOMMEN[id] = kolommen;
     return '<div class="le" id="' + id + '">' + rijen.map(function (r) { return leRij(kolommen, r); }).join('') + '</div><div class="balk" style="margin-top:6px"><button class="knop licht klein" data-le-erbij="' + id + '">+ Regel</button></div>';
   }
   function leRij(kolommen, r) {
     var vinkjes = kolommen.filter(function (k) { return k.type === 'checkbox'; });  // v7.9.2: een vinkje (Vraagt startdatum) staat op een eigen regel onder de velden en knoppen
-    var nr = 'le' + (++LE_NR), naamK = (kolommen.filter(function (k) { return k.naam === 'mijlpaal'; })[0] || kolommen[0]).naam;  // v7.9.3 (I-N5): het vinkje heet naar zijn label plus de mijlpaal (het veld zelf, dus ook na hernoemen)
+    // v7.9.3 (I-N5, review r1): het vinkje heet naar zijn label plus de mijlpaal, als eigen aria-label (niet via de waarde van het invoerveld: WebKit neemt dan
+    // het aria-label "Mijlpaal" van dat veld); leVinkNaam houdt hem bij na hernoemen
+    var naamK = (kolommen.filter(function (k) { return k.naam === 'mijlpaal'; })[0] || kolommen[0]).naam;
     return '<div class="le-rij' + (vinkjes.length ? ' met-vink' : '') + '" data-oud="' + esc(JSON.stringify(r.oud || null)) + '">' + kolommen.filter(function (k) { return k.type !== 'checkbox'; }).map(function (k) {
       var v = r[k.naam] === undefined || r[k.naam] === null ? '' : r[k.naam];
-      return '<input data-le="' + k.naam + '"' + (vinkjes.length && k.naam === naamK ? ' id="' + nr + '-n"' : '') + ' value="' + esc(v) + '" placeholder="' + esc(k.label) + '" aria-label="' + esc(k.label) + '"' + (k.getal ? ' inputmode="decimal"' : '') + (k.type ? ' type="' + k.type + '"' : '') + (k.lijst ? ' list="' + k.lijst + '"' : '') + ' style="flex:' + (k.flex || 1) + '">';
+      return '<input data-le="' + k.naam + '"' + (vinkjes.length && k.naam === naamK ? ' data-le-naam="1"' : '') + ' value="' + esc(v) + '" placeholder="' + esc(k.label) + '" aria-label="' + esc(k.label) + '"' + (k.getal ? ' inputmode="decimal"' : '') + (k.type ? ' type="' + k.type + '"' : '') + (k.lijst ? ' list="' + k.lijst + '"' : '') + ' style="flex:' + (k.flex || 1) + '">';
     }).join('') + '<button class="le-k" data-le-op="1" aria-label="Omhoog">↑</button><button class="le-k" data-le-weg="1" aria-label="Weghalen">✕</button>' +
-      vinkjes.map(function (k, i) { return '<label class="le-vink"><input type="checkbox" data-le="' + k.naam + '"' + (r[k.naam] ? ' checked' : '') + ' aria-labelledby="' + nr + '-v' + i + ' ' + nr + '-n"><span id="' + nr + '-v' + i + '">' + esc(k.label) + '</span></label>'; }).join('') + '</div>';
+      vinkjes.map(function (k) { return '<label class="le-vink"><input type="checkbox" data-le="' + k.naam + '" data-le-label="' + esc(k.label) + '"' + (r[k.naam] ? ' checked' : '') + ' aria-label="' + esc(leVinkNaam(k.label, r[naamK])) + '"><span aria-hidden="true">' + esc(k.label) + '</span></label>'; }).join('') + '</div>';
   }
+  function leVinkNaam(label, naam) { naam = String(naam === undefined || naam === null ? '' : naam).trim(); return naam ? label + ': ' + naam : label; }
+  document.addEventListener('input', function (ev) {  // v7.9.3 (review r1): de naam van het vinkje volgt een hernoemde mijlpaal
+    var t = ev.target; if (!t.hasAttribute || !t.hasAttribute('data-le-naam')) return;
+    t.closest('.le-rij').querySelectorAll('[data-le-label]').forEach(function (x) { x.setAttribute('aria-label', leVinkNaam(x.getAttribute('data-le-label'), t.value)); });
+  });
   function leesLijst(id) {
     var rijen = el(id) ? el(id).querySelectorAll('.le-rij') : [];
     return [].map.call(rijen, function (r) {
@@ -5423,6 +5430,9 @@
   function fasenGewichtenHtml(p) {
     var g = (p && p.gewichten) || [], d = (p && p.dubbel) || [];  // v7.9.3 (C-R1): twee mijlpalen voor één fase (na een eerdere keer) nooit stil
     var h = d.length ? '<div class="hint" id="v79-dubbel">' + esc(d.map(function (x) { return 'fase ' + x.fase + ': ' + x.aantal + ' mijlpalen'; }).join(', ')) + '. Die fase krijgt naam, gewicht en norm uit het rekenmodel; kies hierboven voor één ervan een andere fase om dat te voorkomen.</div>' : '';
+    var o = (p && p.overgenomen) || [], nw = (p && p.nieuw) || [], wg = (p && p.weg) || [];  // v7.9.3 (review r1): een eigen rij die een fase wordt (startdatum), wat erbij komt en wat verdwijnt
+    h += (o.length ? '<div class="hint" id="v79-overgenomen">' + esc(o.map(function (x) { return '"' + x.mijlpaal + '" wordt fase ' + x.fase + (x.vraagtStart ? ' en vraagt dan een startdatum' : ''); }).join('; ')) + '.</div>' : '') +
+      (nw.length || wg.length ? '<div class="hint" id="v79-nieuw">' + esc((nw.length ? 'Komt erbij: ' + nw.join(', ') + '. ' : '') + (wg.length ? 'Verdwijnt: ' + wg.join(', ') + ' (de open kansen verhuizen mee).' : '')) + '</div>' : '');
     if (!g.length) return h;
     var l = g.map(function (x) { return x.mijlpaal + ' ' + x.nu + ' %' + (p.gewichtenBlijven ? ' (rekenmodel ' + x.rekenmodel + ' %)' : ' → ' + x.rekenmodel + ' %'); }).join(', ');
     return h + '<div class="hint">' + (p.gewichtenBlijven ? 'Na de vorige keer aangepaste gewichten blijven staan: ' : 'De gewichten van bestaande fasen worden die uit het rekenmodel: ') + esc(l) + '.</div>';

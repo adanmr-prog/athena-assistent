@@ -3740,8 +3740,9 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
       'v7.9.3 C-R1: daarna staat de stap zo (status, proefdraai, toepassen); een oude naam en de Capsule-naam van fase 5 wijzen via de koppeling naar de hernoemde rij (rol voorstel)');
   } catch (e) { fout('C-R1', e); } finally { standTerug(st); }
 
-  // --- C-R1: een hernoemde fase met een naam die de herkenner niet kent ("5. prijsvoorstel"): de proefdraai stelt niets voor, de beheerder kiest 5; daarna blijft
-  // de rij staan en zegt de stap "staat zo" (de koppeling wijst de naam naar zichzelf) ---
+  // --- C-R1: een hernoemde fase met een naam die de herkenner niet kent ("5. prijsvoorstel"): review r1: na een eerdere keer stelt de proefdraai de fase op die
+  // plek voor (5: de enige fase van de vorige keer die tussen 4 en het eind ontbreekt); zonder keuze weigert toepassen; met 5 blijft de rij staan en zegt de
+  // stap daarna "staat zo" (de koppeling wijst de naam naar zichzelf) ---
   vers79(); st = standBewaren();
   try {
     v791Hernoemd();
@@ -3749,8 +3750,9 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     lh[4].oud = { pipeline: 'Scholen', mijlpaal: '5. offerte' }; lh[4].mijlpaal = '5. prijsvoorstel';
     roep(SOPHIE, 'apiMijlpalenOpslaan', lh); ctx._LEES = {};
     var ph = roep(SOPHIE, 'apiMigratieV79', 'fasen'), kh = voorstelKop(ph), idH = scholenRijen()[4].id, nWh = aantalWissels();
-    eis(ph.mijlpalen.map(function (m) { return m.voorstel; }).join() === '1,2,3,4,' && /Kies voor elke mijlpaal/.test(faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kh })),
-      'v7.9.3 C-R1: een onbekende naam ("5. prijsvoorstel") krijgt geen voorstel; toepassen zonder keuze wordt geweigerd');
+    var khLeeg = voorstelKop(ph); khLeeg[idH] = '';
+    eis(ph.mijlpalen.map(function (m) { return m.voorstel; }).join() === '1,2,3,4,5' && ctx.faseVanNaam('5. prijsvoorstel') === '' && /Kies voor elke mijlpaal/.test(faalt(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: khLeeg })),
+      'v7.9.3 C-R1: een onbekende naam ("5. prijsvoorstel") krijgt na een eerdere keer de fase op zijn plek als voorstel (review r1: 5); toepassen zonder keuze wordt geweigerd');
     kh[idH] = '5';
     var ph2 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { koppeling: kh }), rh = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kh }), nah = scholenRijen();
     eis(ph2.gewichtenTerug === 0 && ph2.toegevoegd === 1 && rh.toegevoegd === 1 && rh.wissels === 0 && aantalWissels() === nWh && nah[4].id === idH && nah[4].mijlpaal === '5. prijsvoorstel' && nah[4].kans === 65 &&
@@ -3850,6 +3852,133 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     eis(ctx.VERSIE === '7.9.3' && mins.length > 0 && mins.every(function (v) { return !ctx.versieKleiner('7.9.2', v); }) && herlaad('7.9.2', '7.9.2') === '' && herlaad('7.9.2') === '' && roep(LARS, 'apiCrm').backendVersie === '7.9.3',
       'v7.9.3 versie: VERSIE 7.9.3 (ook in apiCrm.backendVersie); geen eisNieuweApp boven 7.9.2, dus een app van 7.9.2 blijft werken tegen deze backend');
   } catch (e) { fout('versie', e); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9.3, review ronde 1 (herstel). C-R1-5b: na stap fasen met v7.9.1 is een eigen mijlpaal achter VO ("mondeling akkoord", "bijna rond", "commit",
+   "5b. bijna rond (eigen)", of met de hand precies "5b. bijna rond") nooit "staat zo": fase 5b bestond toen niet, dus de stap maakte die rij nooit en
+   vraagtStart is nooit besloten. Opnieuw toepassen neemt zo'n rij over (id, naam, gewicht, norm, kansen) met vraagtStart uit het model en de proefdraai noemt
+   het (overgenomen); hetzelfde als de beheerder een dubbele fase oplost door één kandidaat 5b te geven. De stap legt zijn fasen vast (instelling fasenSleutels).
+   Risico's: na een eerdere keer gaat het voorstel op de plek voor ("2. eerste gesprek gepland" op de plek van 2 is 2, niet 3), herziet de stap geen app-wissel
+   van na de vorige keer, en noemt de proefdraai wat erbij komt en wat verdwijnt (nieuw, weg). Ongedaan maken zet een kans nooit zonder startdatum terug in
+   een mijlpaal die er een vraagt, ook niet in twee aanroepen (een verlopen datum mag: ongedaan maken is herstel). Alles op de verzonnen demo-seed. ---- */
+(function () {
+  var DOEL = ctx.CAPSULE_FASEN.map(function (f) { return f.mijlpaal; }), B = DOEL[5], VO = DOEL[4];
+  var voorstelKop = function (p) { var k = {}; p.mijlpalen.forEach(function (m) { k[m.id] = m.voorstel; }); return k; };
+  var scholenRijen = function () { ctx._LEES = {}; return ctx.mijlpalen().filter(function (m) { return m.pipeline === 'Scholen'; }); };
+  var fasenToepassen = function () { var p = roep(SOPHIE, 'apiMigratieV79', 'fasen'); return roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p) }); };
+  var nieuweKans = function (naam, fase, extra) { var o = { naam: naam, schoolId: 's7', fase: fase, schooljaar: sjNu(), klant: 'nieuw', waarde: 10000, verwachteSluiting: plusDagen(20) }; Object.keys(extra || {}).forEach(function (x) { o[x] = extra[x]; }); return roep(LARS, 'apiKansOpslaan', o).kans; };
+  var echtSchrijf = ctx.schrijfVeel, st;
+  var fout = function (naam, e) { eis(false, 'v7.9.3 r1 ' + naam + ': onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); };
+  var beheerLijst = function () { ctx._LEES = {}; return ctx.mijlpalen().map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol, vraagtStart: m.vraagtStart }; }); };
+  var beheerOpslaan = function (l) { roep(SOPHIE, 'apiMijlpalenOpslaan', l, { onderbouwing: 'Rooktest: besluit in Beheer (verzonnen)', besluitdatum: plusDagen(-3) }); ctx._LEES = {}; };
+  // stap fasen met v7.9.1: vijf rijen, de koppeling en de markering fasenToegepast (zonder fasenSleutels: die bestond toen niet)
+  var v791 = function () {
+    ctx.verwijderRijen('Mijlpalen', function () { return true; });
+    echtSchrijf('Mijlpalen', ctx.CAPSULE_FASEN.slice(0, 5).map(function (f, i) { return { id: 'v791-' + (i + 1), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: f.kans, dagenNorm: f.dagenNorm, rol: f.rol }; }));
+    var oud = { lead: DOEL[0], gesprek: DOEL[2], voorstel: VO, onderhandeling: VO };
+    echtSchrijf('Kansen', ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && oud[k.fase]; }).map(function (k) { return { id: k.id, fase: oud[k.fase], pipeline: 'Scholen' }; }));
+    ctx._demoProps.FASEN_KOPPELING = JSON.stringify(oud);
+    ctx.zetInstelling('fasenToegepast', plusDagen(-20)); ctx._LEES = {};
+  };
+  // daarna in Beheer → Mijlpalen een eigen mijlpaal achter VO (zonder vraagtStart, 85 %) met één open kans erin (via de app: die mijlpaal vraagt nog niets)
+  var eigenAchterVO = function (naam) {
+    var l = beheerLijst(); l.push({ pipeline: 'Scholen', mijlpaal: naam, kans: 85, dagenNorm: 10, rol: '', vraagtStart: false }); beheerOpslaan(l);
+    var rij = scholenRijen().filter(function (m) { return m.mijlpaal === naam; })[0], vo = scholenRijen()[4].mijlpaal, k = nieuweKans('Eigen 5b ' + naam, vo);
+    roep(LARS, 'apiKansOpslaan', { id: k.id, fase: rij.mijlpaal, _oud: { fase: vo } }); ctx._LEES = {};
+    return { rij: rij, kans: k };
+  };
+  var startNodig = function (mijlpaal) { var vo = scholenRijen()[4].mijlpaal, k = nieuweKans('Startproef', vo); return faalt(LARS, 'apiKansOpslaan', { id: k.id, fase: mijlpaal, _oud: { fase: vo } }) === ctx.START_FOUT; };
+
+  // --- C-R1-5b: v7.9.1 plus een eigen mijlpaal achter VO is nooit "staat zo"; toepassen neemt hem over als 5b met een verplichte startdatum ---
+  ['mondeling akkoord', 'bijna rond', 'commit', '5b. bijna rond (eigen)', B].forEach(function (naam) {
+    vers79(); st = standBewaren();
+    try {
+      v791();
+      var e = eigenAchterVO(naam), nW = aantalWissels();
+      var s = roep(SOPHIE, 'apiMigratieV79', 'status'), p = roep(SOPHIE, 'apiMigratieV79', 'fasen'), ov = (p.overgenomen || [])[0];
+      eis(!s.fasen.alGedaan && !ctx.fasenAlGedaan() && !p.alGedaan && voorstelKop(p)[e.rij.id] === '5b' && (p.overgenomen || []).length === 1 && ov.mijlpaal === naam && ov.fase === '5b' && ov.vraagtStart === true &&
+        p.toegevoegd === 0 && (p.nieuw || []).length === 0 && (p.weg || []).length === 0 && /startdatum verplicht/.test(p.onderbouwing) && !/^5b bijna rond toegevoegd/.test(p.onderbouwing),
+        'v7.9.3 r1 C-R1-5b proefdraai: na v7.9.1 met een eigen "' + naam + '" achter VO zeggen status en proefdraai niet "staat zo"; de rij wordt fase 5b (overgenomen, startdatum verplicht), niets erbij of weg');
+      var r = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p) }), na = scholenRijen();
+      eis(r.toegepast && r.gewijzigd === true && (r.overgenomen || []).length === 1 && new RegExp('"' + naam.replace(/[.()]/g, '\\$&') + '"').test(r.melding) && r.wissels === 0 && aantalWissels() === nW &&
+        na.length === 6 && na[5].id === e.rij.id && na[5].mijlpaal === naam && na[5].kans === 85 && na[5].dagenNorm === 10 && na[5].vraagtStart === true && ctx.mijlpaalVraagtStart(naam, 'Scholen') &&
+        ctx.vind('Kansen', e.kans.id).fase === naam && startNodig(naam) && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan && roep(SOPHIE, 'apiMigratieV79', 'fasen').alGedaan,
+        'v7.9.3 r1 C-R1-5b toepassen: "' + naam + '" houdt id, naam, 85 %, norm en zijn kans (geen wissel) en vraagt nu een startdatum (een kans zonder startdatum: START_FOUT); daarna staat de stap zo');
+    } catch (e) { fout('C-R1-5b ' + naam, e); } finally { standTerug(st); }
+  });
+
+  // --- C-R1-5b: een dubbele fase 5 ("5. offerte" en een eigen "onderhandeling") opgelost door "onderhandeling" fase 5b te geven ---
+  vers79(); st = standBewaren();
+  try {
+    v791();
+    var l = beheerLijst(); l[4].oud = { pipeline: 'Scholen', mijlpaal: VO }; l[4].mijlpaal = '5. offerte'; l[4].kans = 65; l[4].dagenNorm = 9; beheerOpslaan(l);
+    var e2 = eigenAchterVO('onderhandeling'), nW2 = aantalWissels(), idOff = scholenRijen()[4].id;
+    var pd = roep(SOPHIE, 'apiMigratieV79', 'fasen'), kd = voorstelKop(pd);
+    eis((pd.dubbel || []).length === 1 && pd.dubbel[0].fase === '5' && kd[e2.rij.id] === '5', 'v7.9.3 r1 dubbel: "5. offerte" en "onderhandeling" zijn samen fase 5 (signaal dubbel)');
+    kd[e2.rij.id] = '5b';
+    var p2 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { koppeling: kd }), o2 = (p2.overgenomen || [])[0];
+    eis(!p2.alGedaan && (p2.dubbel || []).length === 0 && p2.gewichtenTerug === 0 && p2.toegevoegd === 0 && (p2.weg || []).length === 0 && !!o2 && o2.mijlpaal === 'onderhandeling' && o2.fase === '5b' && o2.vraagtStart === true,
+      'v7.9.3 r1 dubbel → 5b proefdraai: met "onderhandeling" op 5b geen dubbel meer; de proefdraai noemt dat die rij fase 5b wordt met een verplichte startdatum');
+    var r2 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kd }), na2 = scholenRijen();
+    eis(r2.toegepast && (r2.overgenomen || []).length === 1 && r2.wissels === 0 && aantalWissels() === nW2 && na2.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.slice(0, 4).concat(['5. offerte', 'onderhandeling']).join('|') &&
+      na2[4].id === idOff && na2[4].kans === 65 && na2[4].vraagtStart === false && na2[5].id === e2.rij.id && na2[5].kans === 85 && na2[5].vraagtStart === true && na2[5].rol === '' &&
+      startNodig('onderhandeling') && ctx.fasenAlGedaan() && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan && ctx.instelling('fasenSleutels').join() === '1,2,3,4,5,5b',
+      'v7.9.3 r1 dubbel → 5b toepassen: "5. offerte" blijft fase 5 (65 %), "onderhandeling" wordt 5b en vraagt een startdatum (START_FOUT zonder); daarna staat de stap zo en ligt fasenSleutels vast');
+  } catch (e) { fout('dubbel → 5b', e); } finally { standTerug(st); }
+
+  // --- de markering: de stap legt zijn fasen vast; daarna is vraagtStart van 5b een later besluit (zoals bij 1 tot en met 5) ---
+  vers79(); st = standBewaren();
+  try {
+    fasenToepassen();
+    var sl = ctx.instelling('fasenSleutels'), lb = beheerLijst(); lb[5].vraagtStart = false; lb[5].oud = { pipeline: 'Scholen', mijlpaal: B }; lb[5].mijlpaal = 'bijna rond'; beheerOpslaan(lb);
+    var pm = roep(SOPHIE, 'apiMigratieV79', 'fasen');
+    eis(Array.isArray(sl) && sl.join() === '1,2,3,4,5,5b' && pm.alGedaan && ctx.fasenAlGedaan() && (pm.overgenomen || []).length === 0,
+      'v7.9.3 r1 markering: na toepassen staat fasenSleutels 1..5,5b vast; een daarna in Beheer hernoemde 5b zonder vraagtStart is een later besluit ("staat zo")');
+  } catch (e) { fout('markering', e); } finally { standTerug(st); }
+
+  // --- risico C-R1-herkenning: "2. pre-ap" na v7.9.1 hernoemd naar "2. eerste gesprek gepland" (norm 21) met twee kansen die er via de app in kwamen ---
+  vers79(); st = standBewaren();
+  try {
+    v791();
+    var l3 = beheerLijst(); l3[1].oud = { pipeline: 'Scholen', mijlpaal: DOEL[1] }; l3[1].mijlpaal = '2. eerste gesprek gepland'; l3[1].dagenNorm = 21; beheerOpslaan(l3);
+    var id2 = scholenRijen()[1].id, ks = [nieuweKans('Gesprek een', DOEL[0]), nieuweKans('Gesprek twee', DOEL[0])];
+    ks.forEach(function (k) { roep(LARS, 'apiKansOpslaan', { id: k.id, fase: '2. eerste gesprek gepland', _oud: { fase: DOEL[0] } }); }); ctx._LEES = {};
+    var nW3 = aantalWissels(), p3 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), k3 = voorstelKop(p3);
+    eis(k3[id2] === '2' && p3.herzien === 0 && (p3.nieuw || []).join('|') === B && (p3.weg || []).length === 0,
+      'v7.9.3 r1 herkenning: na een eerdere keer is het voorstel voor "2. eerste gesprek gepland" de fase op die plek (2, niet 3 op "gesprek gepland"); geen wissel herzien; alleen 5b komt erbij');
+    k3[id2] = '3';
+    var p4 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { koppeling: k3 });
+    eis(p4.herzien === 0 && JSON.stringify(p4.herzienVerschil) === '{}' && (p4.weg || []).join('|') === '2. eerste gesprek gepland' && (p4.nieuw || []).join('|') === DOEL[1] + '|' + B,
+      'v7.9.3 r1 herkenning: kiest de beheerder toch 3, dan noemt de proefdraai wat verdwijnt ("2. eerste gesprek gepland") en wat erbij komt ("2. pre-ap", 5b); app-wissels van na de vorige keer worden nooit herzien');
+    var r3 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(p3) }), na3 = scholenRijen();
+    eis(r3.toegepast && r3.herzien === 0 && r3.wissels === 0 && aantalWissels() === nW3 && na3[1].id === id2 && na3[1].mijlpaal === '2. eerste gesprek gepland' && na3[1].dagenNorm === 21 &&
+      ks.every(function (k) { return ctx.vind('Kansen', k.id).fase === '2. eerste gesprek gepland'; }) && ctx.fasenAlGedaan(),
+      'v7.9.3 r1 herkenning: toepassen met het voorstel houdt "2. eerste gesprek gepland" (id, norm 21) en zijn kansen; alleen 5b komt erbij en de stap staat daarna zo');
+  } catch (e) { fout('herkenning', e); } finally { standTerug(st); }
+
+  // --- risico C-R3a-omweg: ongedaan maken zet een kans nooit zonder startdatum terug in 5b, ook niet in twee aanroepen (via VO of via verloren) ---
+  vers79(); st = standBewaren();
+  try {
+    fasenToepassen();
+    var reden = ctx.keuzelijst('verliesRedenen')[0];
+    [['VO', function (k) { return roep(LARS, 'apiKansOpslaan', { id: k.id, fase: VO, _oud: { fase: B } }).fasewissel; }],
+      ['verloren', function (k) { return roep(LARS, 'apiKansOpslaan', { id: k.id, fase: 'verloren', verliesReden: reden, _oud: { fase: B } }).fasewissel; }]].forEach(function (pad) {
+      var k = nieuweKans('Omweg ' + pad[0], VO);
+      roep(LARS, 'apiKansOpslaan', { id: k.id, fase: B, verwachteStart: plusDagen(10), _oud: { fase: VO } });
+      var w = pad[1](k);
+      roep(LARS, 'apiKansOpslaan', { id: k.id, verwachteStart: '', _oud: { verwachteStart: plusDagen(10) } }); ctx._LEES = {};
+      var f = faalt(LARS, 'apiKansOpslaan', { id: k.id, fase: B, _oud: { fase: ctx.vind('Kansen', k.id).fase }, wissel: { ongedaan: w.id } }), kn = ctx.vind('Kansen', k.id);
+      eis(/startdatum/.test(f) && kn.fase !== B && !wisselRij(w.id).ongedaan,
+        'v7.9.3 r1 C-R3a-omweg (' + pad[0] + '): 5b → ' + pad[0] + ', startdatum leeg, dan ongedaan maken wordt geweigerd ("' + f + '"); de kans blijft en de wissel telt');
+    });
+    var k2 = nieuweKans('Verlopen herstel', VO);
+    roep(LARS, 'apiKansOpslaan', { id: k2.id, fase: B, verwachteStart: plusDagen(10), _oud: { fase: VO } });
+    var w2 = roep(LARS, 'apiKansOpslaan', { id: k2.id, fase: VO, _oud: { fase: B } }).fasewissel;
+    echtSchrijf('Kansen', [{ id: k2.id, verwachteStart: plusDagen(-3) }]); ctx._LEES = {};
+    var og = roep(LARS, 'apiKansOpslaan', { id: k2.id, fase: B, _oud: { fase: VO }, wissel: { ongedaan: w2.id } });
+    eis(og.kans.fase === B && String(ctx.vind('Kansen', k2.id).verwachteStart).slice(0, 10) === plusDagen(-3) && !!wisselRij(w2.id).ongedaan,
+      'v7.9.3 r1 C-R3a-omweg: een verlopen startdatum mag bij ongedaan maken blijven (herstel)');
+  } catch (e) { fout('C-R3a-omweg', e); } finally { standTerug(st); }
 })();
 
 /* ---- bestaande schermen blijven werken ---- */
