@@ -3961,6 +3961,7 @@
     else if (c.id === 'gewogenPijplijn') { e('kansen:', x.aantal); e('zonder waarde:', x.zonderWaarde); e('zonder schooljaar:', x.zonderSchooljaar); }
     else if (c.id === 'dekking') { if (x.nogTeVinden !== undefined) l.push('nog te vinden ' + euro(x.nogTeVinden)); e('noemer:', x.noemerLabel); }
     else if (c.id === 'gewonnenWaarde') { e('deals:', x.aantal); if (x.maand) l.push('deze maand ' + (x.maand.aantal || 0) + ' · ' + euro(x.maand.waarde || 0)); e('zonder werkelijke datum:', x.zonderDatum); }
+    else if (c.id === 'funnel') { e('leads (fase 1, telt niet als kans):', x.leads); e('zonder schooljaar:', x.zonderSchooljaar); }  // v7.9.1 (review r4, N3)
     else if (c.id === 'verwachteOpdrachten') { e('kansen:', x.aantal); if (x.verlopen) e('verlopen:', x.verlopen.aantal); e('zonder datum:', x.zonderDatum); }
     else if (c.id === 'ocActiviteit') { e('ingepland', (x.ingepland || 0) + ' (' + (x.ingeplandStatus || 'concept') + ')'); e('gedaan', x.gedaan); e('VO', x.vo); e('deals', x.deals); }
     else if (c.id === 'nogTeFactureren') e('achter:', typeof x.achter === 'object' ? (x.achter ? x.achter.aantal : '') : x.achter);
@@ -5344,7 +5345,8 @@
     openVenster('<div class="spinner" id="v79Laden">Overstap laden</div>' + LADEN_ANNULEER);
     run('apiMigratieV79', 'status', {}).then(function (r) { if (!el('v79Laden') && !el('v79Lijst')) return; V79.status = r; tekenOverstap(); }).catch(function () { sluitVenster(); });
   }
-  function tekenOverstap() {
+  // v7.9.1 (review r4, iOS N1): na een proefdraai of toepassen staat de stap die net draaide in beeld en krijgt zijn titel de focus (VoiceOver houdt zijn plek)
+  function tekenOverstap(inBeeld) {
     var S0 = V79.status;
     el('vensterInhoud').innerHTML = '<div class="kop" style="margin-top:14px">Overstap naar v7.9</div><div class="hint">Na de livegang, in deze volgorde. Elke stap eerst proefdraaien; toepassen schrijft pas na je keuze. Alleen tellingen, geen namen.</div><div id="v79Lijst">' +
       V79_STAPPEN.filter(function (st) { return st[0] !== 'fasen' || v791(); }).map(function (st) {
@@ -5357,6 +5359,7 @@
             return '<div class="v79-keuze"><span>' + esc(m.mijlpaal) + ' (' + esc(m.open) + ' open)</span><select data-v79fase="' + esc(m.id) + '" aria-label="Fase in Capsule voor ' + esc(m.mijlpaal) + '"><option value="">kies een fase</option>' +
               (p.doelen || []).map(function (d) { return '<option value="' + esc(d.fase) + '"' + (d.fase === gekozen ? ' selected' : '') + '>' + esc(d.label) + '</option>'; }).join('') + '</select></div>';
           }).join('') + '<div id="v79-deal">' + fasenDealHtml(p) + '</div>' +
+          (Number(p.verweesd) > 0 ? '<div class="hint">' + esc(p.verweesd) + (Number(p.verweesd) === 1 ? ' open kans staat' : ' open kansen staan') + ' nog in een oude naam: een eerdere keer Toepassen is onderbroken. Toepassen zet ' + (Number(p.verweesd) === 1 ? 'hem' : 'ze') + ' alsnog in de nieuwe fase.</div>' : '') +  // v7.9.1 (review r4, R1)
           (Number(p.herzien) > 0 ? '<div class="hint">Proefdraai: ' + esc(p.herzien) + (Number(p.herzien) === 1 ? ' wissel' : ' wissels') + ' uit de app ' + (Number(p.herzien) === 1 ? 'krijgt' : 'krijgen') + ' de rol van de nieuwe fase (alleen waar de rol uit v7.9 niet bij de naam van de mijlpaal paste).' + fasenVerschilHtml(p.herzienVerschil) + '</div>' : '') +
           fasenGewichtenHtml(p) +
           '<div class="veld"><label for="v79-onderbouwing">Onderbouwing van de gewichten</label><textarea id="v79-onderbouwing">' + esc(v79Keuze('onderbouwing', p.onderbouwing || '')) + '</textarea></div>' +
@@ -5365,10 +5368,12 @@
           ((p.afwijkend || []).length ? '<div class="hint" id="v79-rolafwijkend">De rol past niet bij de naam van de mijlpaal: ' + esc(p.afwijkend.map(function (m) { return m.pipeline + ' · ' + m.mijlpaal + ' heeft ' + (m.rol || 'geen rol') + ', op naam ' + (m.voorstel || 'geen rol'); }).join('; ')) + '. Zet het recht in Beheer → Mijlpalen; de overstap past dit niet aan.</div>' : '');  // v7.9.1 (review r3, R4): alleen een signaal
         else if (p && st[0] === 'redenen') keuzes = (p.redenen || []).map(function (x, i) { var gekozen = v79Keuze('reden:' + x.reden, x.voorstel); return '<div class="v79-keuze"><span>' + esc(x.reden) + ' (' + esc(x.aantal) + '×)</span><select data-v79reden="' + i + '" aria-label="Reden voor ' + esc(x.reden) + '"><option value="">kies een reden</option>' + (p.lijst || []).map(function (l) { return '<option' + (l === gekozen ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle redenen staan al in de lijst.</div>';
         else if (p) keuzes = '<div class="r-meta">Proefdraai: ' + esc(Object.keys(p).filter(function (k) { return typeof p[k] === 'number'; }).map(function (k) { return k + ' ' + p[k]; }).join(' · ')) + '</div>';
-        return '<div class="v79-stap"><div class="r-titel">' + esc(st[1]) + ' <small class="zacht">' + esc(v79Telling(st[0], S0)) + '</small></div><div class="hint" style="margin-top:2px">' + esc(st[2]) + '</div>' + keuzes +
+        return '<div class="v79-stap" id="v79stap-' + st[0] + '"><div class="r-titel" tabindex="-1">' + esc(st[1]) + ' <small class="zacht">' + esc(v79Telling(st[0], S0)) + '</small></div><div class="hint" style="margin-top:2px">' + esc(st[2]) + '</div>' + keuzes +
           '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p && !p.alGedaan && !(st[0] === 'fasen' && !(p.mijlpalen || []).length) ? '' : ' disabled') + '>Toepassen</button></div></div>';
       }).join('') + '</div><div class="balk"><button class="knop" data-cf-annuleer="1">Sluiten</button></div>';
     vensterNaam();
+    var stapEl = inBeeld && el('v79stap-' + inBeeld);
+    if (stapEl) { try { stapEl.scrollIntoView({ block: 'nearest' }); } catch (e) { stapEl.scrollIntoView(); } focusStil(stapEl.querySelector('.r-titel')); }
   }
   document.addEventListener('click', function (ev) {
     var x = ev.target.closest && ev.target.closest('[data-cijferversie], [data-cijferaf], [data-aanname], [data-fwimport], [data-v79]'); if (!x) return;
@@ -5408,9 +5413,9 @@
     if (toepassen && !window.confirm('Stap "' + stap + '" toepassen?')) return;
     x.disabled = true;
     run('apiMigratieV79', stap, opties).then(function (r) {
-      if (!toepassen) { V79.proef[stap] = r; tekenOverstap(); return; }
+      if (!toepassen) { V79.proef[stap] = r; tekenOverstap(stap); return; }
       toast(r && r.melding ? r.melding : 'Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; v79KeuzeWis(stap); crmVerouderd(); CRM.sturing = null;  // v7.9.1: de stap fasen geeft zijn eigen melding (ook: staat al zo)
-      return run('apiMigratieV79', 'status', {}).then(function (s0) { V79.status = s0; if (el('v79Lijst')) tekenOverstap(); });
+      return run('apiMigratieV79', 'status', {}).then(function (s0) { V79.status = s0; if (el('v79Lijst')) tekenOverstap(stap); });
     }).catch(function () { x.disabled = false; });
   });
   function hernoemTagVeld(soort, naam, weg) {
