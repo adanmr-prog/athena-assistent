@@ -296,7 +296,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
     # v7.9 "v7.9 labels" (punt 17): één definitie per naam — contractwaarde (niet omzet) en open waarde (niet "in de pijplijn"); runKern stuurt v mee
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
-    assert all(x.get('v') == '7.9.2' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.2
+    assert all(x.get('v') == '7.9.3' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.3
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
     assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
     # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is
@@ -706,8 +706,8 @@ with sync_playwright() as p:
     page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden'); page.wait_for_timeout(300)
     assert page.locator('[data-sleepdoel="kans:voorstel"] [data-sleep="kans:k3"]').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan'), 'startdatumvenster: Annuleren zet de kaart terug, geen aanroep'
     sleep_naar(page, '[data-sleep="kans:k3"]', '[data-sleepdoel="kans:contract"]'); page.wait_for_selector('#venster.aan #vf-verwachteStart')
-    page.fill('#vf-verwachteStart', dag(-1)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("verwachte startdatum")')
-    assert page.locator('#venster.aan').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan'), 'startdatumvenster: een datum in het verleden geeft een melding zonder aanroep'
+    page.fill('#vf-verwachteStart', dag(-1)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster [role="alert"]:has-text("verwachte startdatum")')  # v7.9.3 (I-N3): de fout onder het veld, geen melding
+    assert page.locator('#venster.aan').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan') and page.get_attribute('#vf-verwachteStart', 'aria-invalid') == 'true', 'startdatumvenster: een datum in het verleden geeft een fout in het venster zonder aanroep'
     page.fill('#vf-verwachteStart', dag(14)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("→ contract")'); page.wait_for_timeout(300); a = api_vanaf(n0, 'apiKansOpslaan')
     assert len(a) == 1 and eerste_arg(a[0]).get('verwachteStart') == dag(14) and eerste_arg(a[0]).get('wissel', {}).get('bron') == 'slepen' and eerste_arg(a[0]).get('_oud', {}).get('verwachteStart') == '', 'startdatumvenster: één aanroep met verwachteStart, _oud en bron slepen: %s' % a
     assert 'start ' in page.inner_text('[data-sleepdoel="kans:contract"] [data-sleep="kans:k3"]'), 'de kaart in een kolom die een startdatum vraagt toont de start'

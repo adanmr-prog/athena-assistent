@@ -143,7 +143,7 @@ var BASIS = {
     var k = eigenRij('Kansen', rol), v = (i || 0) % 4;
     if (v === 3) return [{ id: k.id, verwachteStart: plusDagen(7), _oud: { verwachteStart: k.verwachteStart || '' } }, false];  // v7.9.2: de verwachte startdatum bewerken
     if (v === 1) return [{ id: k.id, fase: k.fase === 'gesprek' ? 'voorstel' : 'gesprek', _oud: { fase: k.fase }, wissel: { bron: 'slepen', datum: plusDagen(-1) } }, false];
-    if (v === 2) return [{ id: k.id, volgendeActie: 'Fuzz nabellen', wissel: { ongedaan: 'bestaat-niet' } }, false];
+    if (v === 2) return [{ id: k.id, volgendeActie: 'Fuzz nabellen', pipeline: 'Fuzz-pipeline', verwachteStart: { x: 1 }, wissel: { ongedaan: 'bestaat-niet' } }, false];  // v7.9.3 (C-R3a): andere velden worden bij ongedaan genegeerd
     return [{ id: k.id, volgendeActie: 'Fuzz nabellen', _oud: { volgendeActie: k.volgendeActie } }, false];
   },
   // v7.9: fasewissels, de overstap, de eenmalige import en de weekdoelen

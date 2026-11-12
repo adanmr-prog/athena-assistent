@@ -5,7 +5,9 @@
 # winformulier en het verlorenvenster, een nieuwe kans (direct, klant- en schooljaarvoorstel, productsoort), BRIN, mijlpalen met rol, de overstap, de
 # keuzelijsten, weekdoelen, de weergaven Week en MT, datakwaliteit, het register, jaardoel en aannames, werkelijke datums importeren, de actiekaart van
 # de assistent, de definities op Home, Financiën en Rapporten, en de telefoon (390 px). v7.9.2: fase 5b bijna rond (secties 7 en 8; review r1: sectie 9, de assistent
-# na een eerder uitgevoerde actie op de telefoon en het startdatumvenster op de iPad).
+# na een eerder uitgevoerde actie op de telefoon en het startdatumvenster op de iPad). v7.9.3 (review r2): + Kans met een trage aanroep (I-R1), de focus na het
+# venster op een touch-apparaat (I-R2), alle velden 44 px op de iPad (I-N1), bezig… tijdens het laden van de basis (I-N2), de fout in het venster (I-N3), de
+# legenda (I-N4) en de naam van het vinkje Vraagt startdatum (I-N5); in de stap fasen een hernoemde fase (staat zo) en twee mijlpalen voor één fase (C-R1).
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -44,6 +46,13 @@ def dialoog(d):
     else: d.accept()
 VOLG = """(function () { if (window.__calls) return; window.__calls = []; var D = window.AthenaDemo, o = D.run;
   D.run = function (fn, args) { window.__calls.push({ fn: fn, args: JSON.parse(JSON.stringify(args || [])) }); return o.apply(D, arguments); }; })()"""
+# v7.9.3: een trage of mislukte aanroep in de demo nabootsen (buiten VOLG: de aanroep komt pas na de vertraging in __calls); __faal[fn] = n geeft n keer
+# het antwoord van een backendfout, __traag[fn] = ms vertraagt elke aanroep van fn
+TRAAG = """(function () { if (window.__traag) return; window.__traag = {}; window.__faal = {}; var D = window.AthenaDemo, o = D.run;
+  D.run = function (fn, args) { var self = this, a = arguments;
+    if (window.__faal[fn] > 0) { window.__faal[fn]--; return Promise.resolve({ ok: false, fout: 'Storing (golf5)' }); }
+    if (window.__traag[fn]) return new Promise(function (r) { setTimeout(r, window.__traag[fn]); }).then(function () { return o.apply(self, a); });
+    return o.apply(self, a); }; })()"""
 def nieuw(b, rol, tel=False):
     c = b.new_context(viewport={'width': 390, 'height': 844} if tel else {'width': 1440, 'height': 900}, is_mobile=tel, has_touch=tel)
     try: c.grant_permissions(['clipboard-read', 'clipboard-write'])
@@ -517,6 +526,21 @@ with sync_playwright() as p:
         ok('fasen: een tweede proefdraai zegt dat het al zo staat; Toepassen blijft uit', pg.locator('#venster [data-v79fase]').count() == 0 and pg.is_disabled('[data-v79="fasen:toepassen"]'))
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
         pipeline(); ok('fasen: het bord toont de kolommen van Capsule', pg.locator('.bord [data-sleepdoel="kans:2. pre-ap"]').count() == 1 and pg.locator('.bord [data-sleepdoel="kans:5. vo (voorstel / offerte)"]').count() == 1)
+        # v7.9.3 (C-R1): na een eerdere keer blijft een in Beheer hernoemde fase staan ("staat zo"); twee mijlpalen voor één fase zijn een signaal in de proefdraai
+        def scholen(): return [{'pipeline': m['pipeline'], 'mijlpaal': m['mijlpaal'], 'kans': m['kans'], 'dagenNorm': m['dagenNorm'], 'rol': m['rol'], 'vraagtStart': m['vraagtStart']} for m in api('apiCrm')['mijlpalen']]
+        ms = scholen(); vo = [m for m in ms if m['mijlpaal'] == '5. vo (voorstel / offerte)'][0]
+        vo['oud'] = {'pipeline': 'Scholen', 'mijlpaal': vo['mijlpaal']}; vo['mijlpaal'] = '5. offerte'; vo['kans'] = 65
+        api('apiMijlpalenOpslaan', ms, {'onderbouwing': 'golf5 C-R1 (verzonnen)', 'besluitdatum': dag(0)})
+        pg.evaluate("beheerOverstap()"); venster_open('[data-v79="fasen:proef"]'); pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#v79Lijst .hint:has-text("al")')
+        ok('fasen (v7.9.3 C-R1): na een hernoeming in Beheer ("5. offerte", 65 %) staat de stap nog zo; Toepassen blijft uit', 'staat zo' in pg.inner_text('#v79stap-fasen .r-titel') and pg.is_disabled('[data-v79="fasen:toepassen"]') and pg.locator('#v79-dubbel').count() == 0)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+        api('apiMijlpalenOpslaan', scholen() + [{'pipeline': 'Scholen', 'mijlpaal': 'onderhandeling', 'kans': 80, 'dagenNorm': 7, 'rol': '', 'vraagtStart': False}], {'onderbouwing': 'golf5 C-R1 dubbel (verzonnen)', 'besluitdatum': dag(0)})
+        pg.evaluate("beheerOverstap()"); venster_open('[data-v79="fasen:proef"]'); pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#v79-dubbel')
+        ok('fasen (v7.9.3 C-R1): twee mijlpalen voor fase 5 staan als signaal in de proefdraai', 'fase 5: 2 mijlpalen' in pg.inner_text('#v79-dubbel') and 'rekenmodel' in pg.inner_text('#v79-dubbel'), pg.inner_text('#v79-dubbel'))
+        n0 = n_calls(); pg.select_option('#venster [data-v79fase][aria-label="Fase in Capsule voor onderhandeling"]', '5b'); pg.click('[data-v79="fasen:proef"]')
+        pg.wait_for_function("(window.__calls || []).length > %d" % n0); pg.wait_for_selector('#venster [data-v79fase]'); pg.wait_for_timeout(300)
+        ok('fasen (v7.9.3 C-R1): kiest de beheerder voor één ervan een andere fase, dan is het signaal weg', pg.locator('#v79-dubbel').count() == 0)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_fasen', g5_fasen)
     c.close()
 
@@ -568,9 +592,14 @@ with sync_playwright() as p:
            pg.get_attribute('#vf-verwachteStart', 'min') == dag(0) and pg.input_value('#vf-verwachteStart') == '' and pg.locator('#venster [data-voorstelovers]').count() == 0, pg.inner_text('#vensterInhoud')[:200])
         pg.click('#venster [data-cf-annuleer]'); venster_dicht(); pg.wait_for_timeout(300)
         ok('5b detail: Annuleren zet de keuze terug zonder aanroep; de focus terug op de keuzelijst', pg.input_value('[data-kansfase="k6"]') == VO and not calls('apiKansOpslaan', n0) and pg.evaluate("document.activeElement && document.activeElement.getAttribute('data-kansfase')") == 'k6')
-        pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart'); pg.click('#venster [data-cf-opslaan]'); toast('verwachte startdatum')
-        pg.fill('#vf-verwachteStart', dag(-1)); pg.click('#venster [data-cf-opslaan]'); toast('verwachte startdatum')
-        ok('5b detail: leeg of in het verleden geeft een melding zonder aanroep', not calls('apiKansOpslaan', n0) and pg.locator('#venster.aan').count() == 1)
+        # v7.9.3 (I-N3): de fout staat in het venster onder het veld (role=alert, aria-invalid, aria-describedby), niet als melding over het veld
+        def fout_in_venster(): return pg.evaluate("""(function () { var i = document.getElementById('vf-verwachteStart'), d = (i && i.getAttribute('aria-describedby')) || '', a = d && document.getElementById(d.split(' ')[0]);
+          return { invalid: i && i.getAttribute('aria-invalid'), alert: !!(a && a.getAttribute('role') === 'alert' && /verwachte startdatum/.test(a.textContent) && document.getElementById('vensterInhoud').contains(a)),
+            onder: !!(a && i && a.getBoundingClientRect().top >= i.getBoundingClientRect().bottom - 1 && a.closest('.veld') === i.closest('.veld')), toast: !!document.querySelector('#toast.aan') && /verwachte startdatum/.test(document.getElementById('toast').textContent) }; })()""")
+        pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart'); pg.click('#venster [data-cf-opslaan]'); pg.wait_for_timeout(300); f1 = fout_in_venster()
+        pg.fill('#vf-verwachteStart', dag(-1)); pg.click('#venster [data-cf-opslaan]'); pg.wait_for_timeout(300); f2 = fout_in_venster()
+        ok('5b detail: leeg of in het verleden geeft geen aanroep', not calls('apiKansOpslaan', n0) and pg.locator('#venster.aan').count() == 1)
+        ok('5b detail (I-N3): de fout staat onder het veld in het venster (role=alert, aria-invalid, aria-describedby), geen melding over het veld', all(x['invalid'] == 'true' and x['alert'] and x['onder'] and not x['toast'] for x in (f1, f2)), [f1, f2])
         pg.fill('#vf-verwachteStart', dag(12)); pg.click('#venster [data-cf-opslaan]'); toast('Mijlpaal: ' + B5); pg.wait_for_timeout(600)
         a = calls('apiKansOpslaan', n0)
         ok('5b detail: één aanroep met fase, verwachteStart (met _oud) en de wissel (bron detail)', len(a) == 1 and a[0]['args'][0].get('fase') == B5 and a[0]['args'][0].get('verwachteStart') == dag(12) and (a[0]['args'][0].get('_oud') or {}).get('verwachteStart') == '' and (a[0]['args'][0].get('wissel') or {}).get('bron') == 'detail', a)
@@ -588,6 +617,7 @@ with sync_playwright() as p:
         pipeline(); n0 = n_calls()
         ok('5b bord: een kolom 5b bijna rond (90%)', pg.locator('.bord [data-sleepdoel="kans:%s"]' % B5).count() == 1 and '90%' in pg.inner_text('.bord [data-sleepdoel="kans:%s"] .k-som' % B5))
         ok('5b bord: de kaart in 5b toont de start', 'start ' in pg.inner_text('[data-sleep="kans:k6"]'), pg.inner_text('[data-sleep="kans:k6"]'))
+        ok('5b bord (I-N4): de legenda noemt ook de ontbrekende of verstreken startdatum', 'Rood = langer stil dan de norm van de mijlpaal, of de startdatum ontbreekt of is voorbij.' in pg.inner_text('#crmInhoud'))
         muis('[data-sleep="kans:k10"]', '[data-sleepdoel="kans:%s"]' % B5); venster_open('#vf-verwachteStart')
         ok('5b slepen: het venster vóór de aanroep, de kaart voorlopig in 5b', not calls('apiKansOpslaan', n0) and kol('[data-sleep="kans:k10"]') == 'kans:' + B5)
         pg.keyboard.press('Escape'); venster_dicht(); pg.wait_for_timeout(400)
@@ -623,6 +653,21 @@ with sync_playwright() as p:
         ok('5b + Kans: één aanroep met fase 5b en verwachteStart', len(a) == 1 and a[0]['args'][0].get('fase') == B5 and a[0]['args'][0].get('verwachteStart') == dag(5), a)
     stap('g5_5b_aanmaken', g5_5b_aanmaken)
 
+    def g5_5b_aanmaken_traag():  # v7.9.3 (I-R1): + Kans in 5b met een trage apiKansOpslaan: Opslaan staat uit tot de aanroep klaar is; een tweede tik geeft geen tweede kans
+        pg.evaluate(TRAAG); pipeline(); pg.click('#deskActies [data-crmnieuw="kans"]'); pg.wait_for_selector('#crmNieuw #cf-fase')
+        pg.fill('#cf-naam', 'Traag golf5'); pg.select_option('#cf-schoolId', 's1'); pg.select_option('#cf-fase', B5); n0 = n_calls()
+        pg.click('#crmNieuw [data-cf-opslaan]'); venster_open('#vf-verwachteStart'); pg.click('#venster [data-cf-annuleer]'); venster_dicht(); pg.wait_for_timeout(300)
+        ok('5b + Kans (I-R1): na Annuleren staat Opslaan weer aan en heeft hij de focus; geen aanroep', not pg.is_disabled('#crmNieuw [data-cf-opslaan]') and pg.evaluate("document.activeElement === document.querySelector('#crmNieuw [data-cf-opslaan]')") and not calls('apiKansOpslaan', n0))
+        pg.evaluate("window.__traag.apiKansOpslaan = 2500")
+        pg.click('#crmNieuw [data-cf-opslaan]'); venster_open('#vf-verwachteStart'); pg.fill('#vf-verwachteStart', dag(4)); pg.click('#venster [data-cf-opslaan]'); venster_dicht()
+        uit = pg.is_disabled('#crmNieuw [data-cf-opslaan]')
+        pg.evaluate("document.querySelector('#crmNieuw [data-cf-opslaan]').click()"); pg.wait_for_timeout(300)  # de tweede tik terwijl de aanroep loopt
+        if pg.locator('#venster.aan #vf-verwachteStart').count(): pg.fill('#vf-verwachteStart', dag(4)); pg.click('#venster [data-cf-opslaan]')  # vóór v7.9.3: een tweede venster en een tweede aanroep
+        pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("Traag golf5")', timeout=10000); pg.wait_for_timeout(3000); pg.evaluate("window.__traag = {}")
+        n = len([k for k in api('apiPipeline')['kansen'] if k['naam'] == 'Traag golf5'])
+        ok('5b + Kans (I-R1): tijdens de trage aanroep staat Opslaan uit; een tweede tik geeft één aanroep en één kans', uit and len(calls('apiKansOpslaan', n0)) == 1 and n == 1, [uit, len(calls('apiKansOpslaan', n0)), n])
+    stap('g5_5b_aanmaken_traag', g5_5b_aanmaken_traag)
+
     def g5_5b_assistent():
         pg.evaluate("""(function () { S.chat.push({ rol: 'bot', tekst: 'Voorstel', acties: [{ id: 'g5b', soort: 'wijzig_kans', titel: 'Kans bijwerken', invoer: { kansId: 'k16', fase: '%s' } }] }); saveChat(); })()""" % B5)
         desk('brein', '#breinBerichten .actiekaart'); kaart = pg.locator('.actiekaart').last; n0 = n_calls()
@@ -640,6 +685,13 @@ with sync_playwright() as p:
         desk('rapporten', '#crmInhoud [data-beheer="mijlpalen"]'); pg.click('[data-beheer="mijlpalen"]'); pg.wait_for_selector('#leMijlpalen .le-vink')
         v = pg.evaluate("[].map.call(document.querySelectorAll('#leMijlpalen .le-rij'), function (r) { var x = r.querySelector('[data-le=\"vraagtStart\"]'), l = r.querySelector('.le-vink'); return [r.querySelector('[data-le=\"mijlpaal\"]').value, !!(x && x.checked), l ? Math.round(l.getBoundingClientRect().height) : 0]; })")
         ok('5b beheer: per mijlpaal een vinkje Vraagt startdatum (44 px), alleen 5b aangevinkt', len(v) == 6 and [x[0] for x in v if x[1]] == [B5] and all(x[2] >= 44 for x in v), v)
+        # v7.9.3 (I-N5): het vinkje heeft de mijlpaal in zijn toegankelijke naam (VoiceOver las zes keer "Vraagt startdatum"), ook na hernoemen
+        def vink_namen(): return [l.strip() for l in pg.locator('#leMijlpalen').aria_snapshot().split('\n') if 'checkbox' in l]
+        nm = vink_namen()
+        ok('5b beheer (I-N5): elk vinkje heet "Vraagt startdatum" plus de mijlpaal', len(nm) == 6 and all('Vraagt startdatum' in l for l in nm) and any(B5 in l for l in nm) and any('1. nog niet gebeld' in l for l in nm), nm)
+        pg.locator('#leMijlpalen .le-rij').nth(5).locator('[data-le="mijlpaal"]').fill('5b. bijna rond (golf5)'); nm2 = vink_namen()
+        ok('5b beheer (I-N5): de naam volgt een hernoemde mijlpaal', any('5b. bijna rond (golf5)' in l for l in nm2), nm2)
+        pg.locator('#leMijlpalen .le-rij').nth(5).locator('[data-le="mijlpaal"]').fill(B5)
         pg.locator('#leMijlpalen .le-rij').nth(3).locator('[data-le="vraagtStart"]').check(); n0 = n_calls()
         pg.click('#crmBeheer [data-cf-opslaan]'); toast('Mijlpalen opgeslagen'); a = calls('apiMijlpalenOpslaan', n0)
         ok('5b beheer: Opslaan stuurt vraagtStart per mijlpaal (4. ad erbij); de backend bewaart het', a and [m.get('vraagtStart') for m in a[0]['args'][0]] == [False, False, False, True, False, True] and
@@ -654,11 +706,16 @@ with sync_playwright() as p:
         pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart')
         m = pg.evaluate("(function () { var i = document.getElementById('vf-verwachteStart'), r = i.getBoundingClientRect(), k = [].map.call(document.querySelectorAll('#venster .balk .knop'), function (b) { return Math.round(b.getBoundingClientRect().height); }); return { fs: parseFloat(getComputedStyle(i).fontSize), h: Math.round(r.height), k: k, x: document.getElementById('vensterInhoud').scrollWidth <= document.getElementById('vensterInhoud').clientWidth + 1 }; })()")
         ok('telefoon: het startdatumveld 16 px en minstens 44 px hoog, knoppen 44 px, geen horizontale scroll', m['fs'] >= 16 and m['h'] >= 44 and m['k'] and all(x >= 44 for x in m['k']) and m['x'], m)
+        pg.tap('#venster [data-cf-opslaan]'); pg.wait_for_timeout(400)
+        f = pg.evaluate("(function () { var a = document.querySelector('#vensterInhoud [role=alert]'), i = document.getElementById('vf-verwachteStart'), t = document.getElementById('toast'); return { alert: !!(a && /verwachte startdatum/.test(a.textContent) && a.getBoundingClientRect().height > 0), toast: !!(t && t.classList.contains('aan')) && /verwachte startdatum/.test(t.textContent), invalid: i.getAttribute('aria-invalid') }; })()")
+        ok('telefoon (I-N3): leeg Opslaan geeft de fout in de sheet onder het veld, geen melding over label en datumveld', f['alert'] and not f['toast'] and f['invalid'] == 'true', f)
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
         pg.click('nav button[data-view="relaties"]'); pg.wait_for_timeout(300); pg.click('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('[data-beheer="mijlpalen"]')
         pg.click('[data-beheer="mijlpalen"]'); pg.wait_for_selector('#leMijlpalen .le-vink')
         h = pg.evaluate("[].map.call(document.querySelectorAll('#leMijlpalen .le-vink'), function (l) { return Math.round(l.getBoundingClientRect().height); })")
         ok('telefoon: de vinkjes Vraagt startdatum zijn minstens 44 px hoog en de pagina scrolt niet horizontaal', len(h) == 6 and all(x >= 44 for x in h) and pg.evaluate("document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth + 1"), h)
+        sc = pg.evaluate("[].map.call(document.querySelectorAll('#leMijlpalen .le-rij.met-vink'), function (r) { var s = getComputedStyle(r); return [parseFloat(s.borderBottomWidth) || 0, parseFloat(s.paddingBottom) || 0]; })")
+        ok('telefoon (I-N5): elke regel met een vinkje heeft een zichtbare scheiding (onderrand en ruimte)', len(sc) == 6 and all(x[0] >= 1 and x[1] >= 4 for x in sc), sc)
     stap('g5_5b_telefoon', g5_5b_telefoon)
     c.close()
 
@@ -673,7 +730,14 @@ with sync_playwright() as p:
         pg.locator('.actiekaart').nth(-2).locator('[data-ak="uitvoeren"]').click(); pg.wait_for_selector('.actiekaart.uitgevoerd', timeout=8000); pg.wait_for_timeout(300)
         ok('5b assistent na een actie: de eerste actie is uitgevoerd en CRM.basis is leeg, zonder bord of kansdetail (de route uit de review)',
            pg.evaluate("CRM.basis === null && !(CRM.pipeline && CRM.pipeline.mijlpalen) && !(CRM.detail && CRM.detail.data && CRM.detail.data.mijlpalen)") and kans('k8')['kans']['waarde'] == 4321)
-        n0 = n_calls(); pg.locator('.actiekaart').last.locator('[data-ak="uitvoeren"]').click(); venster_open('#vf-verwachteStart')
+        # v7.9.3 (I-N2): tijdens het laden van de basis toont de kaart bezig… zonder knoppen (een tweede tik doet niet stil niets); na een fout weer het voorstel
+        pg.evaluate(TRAAG); pg.evaluate("window.__faal.apiCrm = 1"); pg.locator('.actiekaart').last.locator('[data-ak="uitvoeren"]').click(); toast('Storing (golf5)'); pg.wait_for_timeout(300)
+        k = pg.locator('.actiekaart').last
+        ok('5b assistent (I-N2): na een fout bij het laden van de basis staat het voorstel er weer, met Uitvoeren', k.locator('[data-ak="uitvoeren"]').count() == 1 and 'bezig' not in k.inner_text() and pg.locator('#venster.aan').count() == 0, k.inner_text()[:120])
+        pg.evaluate("window.__traag.apiCrm = 1500")
+        n0 = n_calls(); pg.locator('.actiekaart').last.locator('[data-ak="uitvoeren"]').click(); pg.wait_for_timeout(300); k = pg.locator('.actiekaart').last
+        ok('5b assistent (I-N2): tijdens het laden van de basis toont de kaart bezig… en staan de knoppen uit', 'bezig…' in k.inner_text() and k.locator('[data-ak="uitvoeren"]').count() == 0, k.inner_text()[:120])
+        venster_open('#vf-verwachteStart'); pg.evaluate("window.__traag = {}")
         ok('5b assistent na een actie: eerst apiCrm (de mijlpalen), dan het startdatumvenster; nog geen apiBreinUitvoeren', calls('apiCrm', n0) and not calls('apiBreinUitvoeren', n0), [x['fn'] for x in calls(None, n0)])
         pg.fill('#vf-verwachteStart', dag(6)); pg.click('#venster [data-cf-opslaan]'); pg.wait_for_selector('.actiekaart.uitgevoerd:has-text("Verwachte start")', timeout=8000)
         a = calls('apiBreinUitvoeren', n0)
@@ -688,6 +752,19 @@ with sync_playwright() as p:
         fasen_toepassen(); detail('kans:k6'); pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart')
         m = pg.evaluate("[].map.call(document.querySelectorAll('#vf-verwachteStart, #venster .balk .knop'), function (x) { return Math.round(x.getBoundingClientRect().height); })")
         ok('ipad: in het startdatumvenster het datumveld, Opslaan en Annuleren minstens 44 px (review r1, R2)', pg.evaluate("document.body.classList.contains('desk') && matchMedia('(hover: none)').matches") and len(m) == 3 and all(x >= 44 for x in m), m)
+        # v7.9.3 (I-R2): na het venster nooit de focus op de keuzelijst op een touch-apparaat (iOS opent hem dan opnieuw): de naam in de detailkop
+        def focus_na(): return pg.evaluate("(function () { var a = document.activeElement; return [a && a.tagName, !!(a && a.closest && a.closest('.d-naam'))]; })()")
+        pg.tap('#venster [data-cf-annuleer]'); venster_dicht(); pg.wait_for_timeout(300); f1 = focus_na()
+        ok('ipad (I-R2): na Annuleren (tik) staat de focus niet op de keuzelijst maar op de naam in de detailkop', f1[0] != 'SELECT' and f1[1] and pg.input_value('[data-kansfase="k6"]') == '5. vo (voorstel / offerte)', f1)
+        pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart'); pg.fill('#vf-verwachteStart', dag(3)); pg.tap('#venster [data-cf-opslaan]'); venster_dicht(); f2 = focus_na()
+        toast('Mijlpaal: ' + B5); pg.wait_for_timeout(900); f3 = focus_na()
+        ok('ipad (I-R2): na Opslaan (tik) ook niet, meteen en na het herladen van het detail', f2[0] != 'SELECT' and f3[0] != 'SELECT', [f2, f3])
+        pg.click('#toast.aan [data-toastactie="0"]'); pg.wait_for_timeout(900)
+        # v7.9.3 (I-N1): in het gecombineerde venster (tekendatum en startdatum) zijn alle velden 44 px op de iPad, niet alleen het startveld
+        k6 = kans('k6')['kans']; api('apiKansOpslaan', {'id': 'k6', 'verwachteSluiting': '', 'waarde': 0, '_oud': {'verwachteSluiting': k6.get('verwachteSluiting') or '', 'waarde': k6.get('waarde')}})
+        detail('kans:k6'); pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteSluiting')
+        m = pg.evaluate("[].map.call(document.querySelectorAll('#venster .veld input'), function (x) { return [x.id, Math.round(x.getBoundingClientRect().height)]; })")
+        ok('ipad (I-N1): in het venster met waarde, tekendatum en startdatum zijn alle velden minstens 44 px', len(m) == 3 and all(x[1] >= 44 for x in m), m)
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_5b_ipad', g5_5b_ipad)
     c.close()
