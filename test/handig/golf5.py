@@ -11,6 +11,8 @@
 # Review r1: de proefdraai noemt wat verdwijnt en een eigen rij die 5b wordt; het vinkje heeft een eigen aria-label (`data-le-naam`, `data-le-label`).
 # Review r2: de focus terug op Uitvoeren na het laden van de basis (iOS-R1), de melding niet over het venster (iOS-R2), win- en verlorenvenster 44 px op de iPad
 # met de fout onder het veld (iOS-N1) en een nieuwe proefdraai na een andere fasekeuze zolang de onderbouwing die van de proefdraai is (C-N3).
+# Review r3 (sectie 10): de melding met knoppen nooit over titel, veld of fout van het venster op telefoon en iPad (R1), een veldfout schuift in beeld (N1),
+# geen oude veldfout na een weigering van de backend (N2) en Toepassen uit tijdens de proefdraai van de stap fasen (R2).
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -840,6 +842,85 @@ with sync_playwright() as p:
         ok('ipad (I-N1): in het venster met waarde, tekendatum en startdatum zijn alle velden minstens 44 px', len(m) == 3 and all(x[1] >= 44 for x in m), m)
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_5b_ipad', g5_5b_ipad)
+    c.close()
+
+    # ===== 10. v7.9.3 (review r3) =====
+    # R1: met de melding van een wissel in beeld (Ongedaan maken, Andere datum) ligt hij op de telefoon en de iPad nooit over een titel, label, veld of fout in
+    # het venster, ook niet na scrollen in de sheet; Ongedaan maken blijft raakbaar. Per element: naar de bovenkant van de sheet scrollen en de bovenrand prikken.
+    BEDEKT = """(function () { var t = document.getElementById('toast'), b = document.getElementById('vensterInhoud'), uit = [];
+      [].forEach.call(b.querySelectorAll('#vf-formkop, .veld label, .veld input, .veld select, .veld textarea, #vf-fout'), function (e) {
+        try { e.scrollIntoView({ block: 'start' }); } catch (x) {}
+        var r = e.getBoundingClientRect(), rb = b.getBoundingClientRect(); if (!r.width || !r.height || r.bottom <= rb.top) return;
+        var y = Math.max(r.top, rb.top) + 3;
+        [r.left + 4, r.left + r.width / 2, r.right - 4].forEach(function (x) { var h = document.elementFromPoint(x, y); if (h && t.contains(h) && uit.indexOf(e.id || e.textContent) < 0) uit.push(e.id || e.textContent.slice(0, 24)); }); });
+      b.scrollTop = 0; var o = t.querySelector('[data-toastactie="0"]'), r0 = o && o.getBoundingClientRect(), h0 = o && document.elementFromPoint(r0.left + r0.width / 2, r0.top + r0.height / 2);
+      return { toast: t.classList.contains('aan'), bedekt: uit, ongedaan: !!(o && h0 && o.contains(h0)), hoogte: Math.round(t.getBoundingClientRect().height), breed: Math.round(t.getBoundingClientRect().width) }; })()"""
+    def melding_dan_win(k, naar):  # een wissel (melding met twee knoppen), dan meteen Gewonnen: het winformulier opent met de melding nog in beeld
+        detail('kans:' + k); pg.select_option('[data-kansfase="%s"]' % k, naar); pg.wait_for_selector('#toast.aan [data-toastactie="1"]'); pg.wait_for_timeout(500)
+        pg.select_option('[data-kansfase="%s"]' % k, 'gewonnen'); venster_open('#vf-contractwaarde'); pg.wait_for_timeout(300)
+    c, pg = nieuw(b, 'sophie', tel=True); pg.set_viewport_size({'width': 375, 'height': 667}); pg.wait_for_timeout(300)
+    def g5_r3_melding_telefoon():
+        melding_dan_win('k9', 'gesprek'); pg.tap('#venster [data-cf-opslaan]'); pg.wait_for_selector('#vf-fout'); m = pg.evaluate(BEDEKT)
+        ok('telefoon 375×667 (r3, R1): de melding met Ongedaan maken en Andere datum ligt over geen titel, label, veld of fout in het winformulier, ook na scrollen; Ongedaan maken raakbaar', m['toast'] and not m['bedekt'] and m['ongedaan'], m)
+        ok('telefoon (r3, R1): de knoppen van de melding staan naast elkaar (geen halve breedte)', m['hoogte'] <= 90, m)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_r3_melding_telefoon', g5_r3_melding_telefoon)
+    # N1: een fout onder een veld dat buiten de sheet ligt (toetsenbord open: 375×410) schuift in beeld; N2: slaagt de controle maar weigert de backend,
+    # dan staat er geen oude veldfout meer (geen aria-invalid onder een ingevuld veld)
+    def g5_r3_fout_in_beeld():
+        pg.set_viewport_size({'width': 375, 'height': 410}); pg.wait_for_timeout(300); pg.evaluate(TRAAG)
+        detail('kans:k7'); pg.select_option('[data-kansfase="k7"]', 'gewonnen'); venster_open('#vf-contractwaarde')
+        pg.evaluate("(function (b) { b.scrollTop = b.scrollHeight; })(document.getElementById('vensterInhoud'))"); pg.wait_for_timeout(200)
+        pg.evaluate("document.querySelector('#venster [data-cf-opslaan]').click()"); pg.wait_for_selector('#vf-fout'); pg.wait_for_timeout(400)
+        m = pg.evaluate("(function () { var f = document.getElementById('vf-fout').getBoundingClientRect(), b = document.getElementById('vensterInhoud').getBoundingClientRect(); return { f: [Math.round(f.top), Math.round(f.bottom)], b: [Math.round(b.top), Math.round(b.bottom)] }; })()")
+        ok('telefoon 375×410 (r3, N1): de fout onder de contractwaarde schuift in beeld in de sheet', m['f'][0] >= m['b'][0] and m['f'][1] <= m['b'][1], m)
+        pg.fill('#vf-contractwaarde', '1000'); pg.fill('#vf-aantal', '1'); pg.fill('#vf-startdatum', dag(10)); pg.evaluate("window.__faal.apiKansOpslaan = 1")
+        pg.evaluate("document.querySelector('#venster [data-cf-opslaan]').click()"); toast('Storing (golf5)'); pg.wait_for_timeout(200)
+        m = pg.evaluate("({ fout: !!document.getElementById('vf-fout'), invalid: document.querySelectorAll('#vensterInhoud [aria-invalid]').length, open: document.getElementById('venster').classList.contains('aan') })")
+        ok('telefoon (r3, N2): weigert de backend na een geslaagde controle, dan staat de oude veldfout er niet meer (geen aria-invalid)', m['open'] and not m['fout'] and m['invalid'] == 0, m)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_r3_fout_in_beeld', g5_r3_fout_in_beeld)
+    c.close()
+    c = b.new_context(viewport={'width': 1180, 'height': 820}, is_mobile=True, has_touch=True)
+    pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('ipad r3: ' + str(e))); pg.on('dialog', dialoog)
+    pg.goto(U + 'sophie'); pg.wait_for_selector('#zijbalk'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG)
+    def g5_r3_melding_ipad():
+        melding_dan_win('k9', 'gesprek'); m = pg.evaluate(BEDEKT)
+        ok('ipad landschap (r3, R1): de melding ligt niet over de titel of een veld van het winformulier; Ongedaan maken raakbaar', pg.evaluate("document.body.classList.contains('desk')") and m['toast'] and not m['bedekt'] and m['ongedaan'], m)
+        pg.tap('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_r3_melding_ipad', g5_r3_melding_ipad)
+    c.close()
+    # R2: tijdens de proefdraai die een andere fasekeuze start (Apps Script 1-3 s) staat Toepassen uit; meteen Toepassen stuurt dus nooit de nieuwe keuzes
+    # met de onderbouwing van de vorige proefdraai. Een keuze die tijdens de vlucht valt, draait daarna nog een proefdraai (niets verloren). Desktop: geen
+    # extra ruimte boven het venster (alleen telefoon en touch).
+    c, pg = nieuw(b, 'sophie')
+    def g5_r3_proef_race():
+        fasen_toepassen()
+        ms = [{'pipeline': m['pipeline'], 'mijlpaal': m['mijlpaal'], 'kans': m['kans'], 'dagenNorm': m['dagenNorm'], 'rol': m['rol'], 'vraagtStart': m['vraagtStart']} for m in api('apiCrm')['mijlpalen']]
+        vo = [m for m in ms if m['mijlpaal'] == VO][0]; vo['oud'] = {'pipeline': 'Scholen', 'mijlpaal': VO}; vo['mijlpaal'] = '5. offerte'; vo['kans'] = 65
+        api('apiMijlpalenOpslaan', ms + [{'pipeline': 'Scholen', 'mijlpaal': 'onderhandeling', 'kans': 80, 'dagenNorm': 7, 'rol': '', 'vraagtStart': False}], {'onderbouwing': 'golf5 r3 R2 (verzonnen)', 'besluitdatum': dag(0)})
+        pg.evaluate("beheerOverstap()"); venster_open('[data-v79="fasen:proef"]'); pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#v79-dubbel')
+        ok('desktop (r3, R1): geen extra ruimte boven het venster met een muis', pg.evaluate("getComputedStyle(document.getElementById('venster')).paddingTop") == '0px')
+        t0 = pg.input_value('#v79-onderbouwing'); pg.evaluate(TRAAG); pg.evaluate("window.__traag.apiMigratieV79 = 1500"); n0 = n_calls()
+        pg.select_option('#venster [data-v79fase][aria-label="Fase in Capsule voor onderhandeling"]', '5b')
+        uit = pg.evaluate("document.querySelector('[data-v79=\"fasen:toepassen\"]').disabled")
+        pg.evaluate("document.querySelector('[data-v79=\"fasen:toepassen\"]').click()")  # meteen Toepassen (ook als hij aan stond)
+        pg.select_option('#venster [data-v79fase][aria-label="Fase in Capsule voor 2. pre-ap"]', '1')  # een keuze tijdens de vlucht
+        pg.wait_for_function("(window.__calls || []).filter(function (c) { return c.fn === 'apiMigratieV79'; }).length >= %d" % (len(calls('apiMigratieV79')) + 2), timeout=10000)
+        pg.wait_for_selector('[data-v79="fasen:proef"]:not([disabled])', timeout=8000); pg.wait_for_timeout(2500); pg.evaluate("window.__traag = {}")
+        a = calls('apiMigratieV79', n0); tp = [x for x in a if x['args'][1].get('toepassen')]
+        ok('fasen (r3, R2): tijdens de proefdraai na een andere fasekeuze staat Toepassen meteen uit; meteen Toepassen stuurt niets', uit and not tp, [uit, tp])
+        laatste = [x for x in a if not x['args'][1].get('toepassen')][-1]['args'][1].get('koppeling') or {}
+        st = pg.evaluate("[document.querySelector('[data-v79=\"fasen:toepassen\"]').disabled, document.getElementById('v79-onderbouwing').value === (V79.proef.fasen.onderbouwing || ''), document.querySelector('#venster [data-v79fase][aria-label=\"Fase in Capsule voor 2. pre-ap\"]').value]")
+        ok('fasen (r3, R2): een keuze tijdens de vlucht geeft daarna nog een proefdraai met beide keuzes; dan staat Toepassen weer aan met de onderbouwing van die proefdraai',
+           sorted(laatste.values()) == ['1', '5b'] and st == [False, True, '1'], [laatste, st])
+        # ook via de knop Proefdraaien; mislukt de proefdraai, dan staat Toepassen weer zoals hij stond
+        pg.evaluate("window.__traag.apiMigratieV79 = 800"); pg.click('[data-v79="fasen:proef"]')
+        uit2 = pg.evaluate("document.querySelector('[data-v79=\"fasen:toepassen\"]').disabled"); pg.wait_for_selector('[data-v79="fasen:proef"]:not([disabled])', timeout=8000); pg.wait_for_timeout(300)
+        pg.evaluate("window.__traag = {}; window.__faal.apiMigratieV79 = 1"); pg.click('[data-v79="fasen:proef"]'); toast('Storing (golf5)'); pg.wait_for_timeout(200)
+        ok('fasen (r3, R2): ook Proefdraaien zet Toepassen uit; na een mislukte proefdraai staan Proefdraaien en Toepassen weer aan', uit2 and pg.evaluate("[document.querySelector('[data-v79=\"fasen:proef\"]').disabled, document.querySelector('[data-v79=\"fasen:toepassen\"]').disabled]") == [False, False])
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_r3_proef_race', g5_r3_proef_race)
     c.close()
     b.close()
 

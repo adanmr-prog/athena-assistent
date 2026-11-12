@@ -4,6 +4,7 @@ var CACHE = 'athena-assistent-v7.9.3';  // bump bij elke release (zie /release)
 // na een venster gaat de focus op een touch-apparaat niet terug naar een keuzelijst, de fout staat in het venster onder het veld. Review ronde 1 van 7.9.3 (nog
 // niet uitgerold, dus dezelfde CACHE): de stap fasen noemt een eigen rij die 5b wordt en wat erbij komt of verdwijnt, het vinkje in Beheer heeft een eigen naam.
 // Review ronde 2 (ook dezelfde CACHE): de melding staat bovenaan zolang een venster open is, win- en verlorenvenster 44 px op de iPad met de fout onder het veld.
+// Review ronde 3 (ook dezelfde CACHE): op telefoon en touch staat de sheet onder de melding, een veldfout schuift in beeld en Toepassen wacht op de proefdraai.
 // v7.3 (iOS-review R2): de app luistert op controllerchange en toont dan de vaste balk #updateBalk (Herladen / Later); deze worker neemt met
 // skipWaiting + clients.claim meteen over en herlaadt nooit zelf, zodat een open venster of composer niet verloren gaat.
 // v7.9: de app registreert deze worker bij een eerste bezoek pas na de eerste geslaagde aanroep (of na 5 s, ook op het koppelscherm) en probeert een

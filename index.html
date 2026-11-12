@@ -660,6 +660,7 @@
   .update-knop.later { color: #fff; opacity: .85; font-weight: 600; }
   body:has(#updateBalk:not([hidden])) #toast { bottom: calc(144px + env(safe-area-inset-bottom)); }
   body.venster-open #toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto !important; }  /* r2 (iOS-R2): met een venster open bovenaan, niet over de sheet */
+  @media (hover: none), (max-width: 1023px) { #toast { width: max-content; } #venster { padding-top: calc(104px + env(safe-area-inset-top)); } }  /* r3 (R1): telefoon en touch: knoppen naast elkaar, de sheet vast onder de melding */
   /* v4.5: wat de snelinvoer begrepen heeft */
   .p-chip { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 2px 0; min-height: 0; font-size: var(--fs-klein); }
   .p-chip:empty { display: none; }
@@ -1815,12 +1816,16 @@
   }
   // v7.9.3 (review r2, I-N3): een fout in het venster onder het veld (role=alert, aria-invalid, aria-describedby) in plaats van een melding, die op de
   // telefoon over label en veld viel. Elke keer een nieuw element, zodat een schermlezer dezelfde tekst opnieuw voorleest.
-  function vensterFout(naam, tekst) {
-    var v = el('vf-' + naam), f = el('vf-fout'); if (f) f.parentNode.removeChild(f);
-    if (!v) { toast(tekst); return; }
+  function vensterFoutWeg() {  // r3 (N2): ook vóór Opslaan (weigert de backend, dan geen oude veldfout)
+    var f = el('vf-fout'); if (f) f.parentNode.removeChild(f);
     [].forEach.call(el('vensterInhoud').querySelectorAll('[aria-invalid]'), function (x) { x.removeAttribute('aria-invalid'); x.removeAttribute('aria-describedby'); });
+  }
+  function vensterFout(naam, tekst) {
+    var v = el('vf-' + naam), f; vensterFoutWeg();
+    if (!v) { toast(tekst); return; }
     f = document.createElement('div'); f.id = 'vf-fout'; f.className = 'hint veld-fout'; f.setAttribute('role', 'alert'); f.textContent = tekst;
     v.parentNode.appendChild(f); v.setAttribute('aria-invalid', 'true'); v.setAttribute('aria-describedby', 'vf-fout');
+    try { v.parentNode.scrollIntoView({ block: 'nearest' }); } catch (e) {}  // r3 (N1): in beeld, zonder focus (toetsenbord)
   }
   document.addEventListener('click', function (ev) {
     if (!ev.target.closest || !ev.target.closest('[data-voorstelovers]')) return;
@@ -4641,6 +4646,7 @@
     if ((x = t.closest('[data-cf-opslaan]'))) {
       var actie = x.closest('#venster') ? VENSTER.actie : formActie;  // v3.7
       if (!actie) return;
+      if (x.closest('#venster')) vensterFoutWeg();  // r3 (N2)
       var knop = x, p = actie(leesForm(x.closest('.composer')));
       if (p && p.then) { knop.disabled = true; p.then(null, function () { knop.disabled = false; }); }
       return;
@@ -5532,7 +5538,8 @@
       if (leeg) { toast('Koppel elke reden aan een reden uit de lijst.'); return; }
     }
     if (toepassen && !window.confirm('Stap "' + stap + '" toepassen?')) return;
-    x.disabled = true;
+    var tp = !toepassen && stap === 'fasen' && el('vensterInhoud').querySelector('[data-v79="fasen:toepassen"]'), tpUit = tp && tp.disabled;  // r3 (R2): Toepassen uit tijdens de proefdraai; tekenOverstap zet hem terug
+    x.disabled = true; if (tp) tp.disabled = true;
     run('apiMigratieV79', stap, opties).then(function (r) {
       if (!toepassen) { if (!el('v79Lijst')) return; if (stap === 'fasen') r.kz = JSON.stringify(opties.koppeling || {}); V79.proef[stap] = r; tekenOverstap(stap); return; }  // v7.9.1 (review r5, A2): het venster kan intussen dicht zijn; r2: kz
       toast(r && r.melding ? r.melding : 'Stap ' + stap + ' toegepast.'); delete V79.proef[stap]; v79KeuzeWis(stap); crmVerouderd(); CRM.sturing = null;  // v7.9.1: de stap fasen geeft zijn eigen melding (ook: staat al zo)
@@ -5542,7 +5549,7 @@
         V79.status = s0; tekenOverstap(!a || a === document.body || a === x || (hier && hier.contains(a)) ? stap : null);
       });
     }).catch(function () {
-      x.disabled = false;
+      x.disabled = false; if (tp) tp.disabled = tpUit;
       // v7.9.1 (review r5, H6): een mislukte Toepassen van stap fasen kan de mijlpalen al vervangen hebben; status en proefdraai opnieuw, zodat het venster de
       // nieuwe rijen en de kansen in een oude naam toont (run toont zelf al de fout)
       if (!(toepassen && stap === 'fasen') || !el('v79Lijst')) return;

@@ -941,7 +941,10 @@ function rollenOpNaam(namen) {
 // v7.9.3 (C-N2): past de rol van een mijlpaal bij zijn naam? Een 5b-naam met de voorstelrol of zonder rol (erft) past; anders de rol op naam (plan).
 // Review r2 (C-N1): zonder rol alleen als het plan voor die rij geen voorstel is. In een pipeline zonder voorstelrol (lead, gesprek = ap, "mondeling akkoord"
 // zonder rol erft ap) geeft rollenOpNaam de 5b-naam voorstel: daar telt anders nooit een VO, dus is een lege rol een signaal
-function rolPastBijNaam(naam, rol, plan) { return String(rol || '') === String(plan || '') || (faseVanNaam(naam) === '5b' && (rol === 'voorstel' || (!rol && plan !== 'voorstel'))); }
+// Review r3 (R3-C1, C3-N1): het plan leest alleen herkende namen. Erft de rij al voorstel (erft = de laatste niet-lege rol vóór de rij in dezelfde pipeline, zoals
+// fasenEffectief erft: "kostenraming" of "5. prijsopgave" met de voorstelrol), dan past een 5b-naam zonder rol ook; anders gaf de stap rollen een vals signaal
+// en faalde zijn voorstel in Beheer ("De rol voorstel staat twee keer").
+function rolPastBijNaam(naam, rol, plan, erft) { return String(rol || '') === String(plan || '') || (faseVanNaam(naam) === '5b' && (rol === 'voorstel' || (!rol && (plan !== 'voorstel' || erft === 'voorstel')))); }
 // v7.9: keuzetabellen (objecten) altijd via uitMap(); lijsten via indexOf (N1). Zie docs/sturing-v7.9.md.
 var MIJLPAAL_ROLLEN = ['', 'lead', 'ap', 'ad', 'voorstel'];
 var ROL_ORDE = { '': 0, lead: 1, ap: 2, ad: 3, voorstel: 4, deal: 5, verloren: 5 };   // lezen met uitMap(ROL_ORDE, rol) || 0
@@ -2638,7 +2641,8 @@ function rollenAfwijkend() {
     if (zonder.indexOf(pl) >= 0) return;  // die stelt de stap rollen zelf voor
     var inPl = ms.filter(function (m) { return m.pipeline === pl; }), plan = rollenOpNaam(inPl.map(function (m) { return m.mijlpaal; }));
     if (!plan) return;
-    inPl.forEach(function (m, i) { if (faseVanNaam(m.mijlpaal) && !rolPastBijNaam(m.mijlpaal, m.rol, plan[i])) uit.push({ id: m.id, pipeline: pl, mijlpaal: m.mijlpaal, rol: m.rol, voorstel: plan[i] || '' }); });  // v7.9.3 (C-N2): een 5b-naam met voorstel of leeg past
+    var erft = '';  // review r3 (R3-C1): de laatste niet-lege rol vóór de rij (de huidige rollen, niet het plan)
+    inPl.forEach(function (m, i) { if (faseVanNaam(m.mijlpaal) && !rolPastBijNaam(m.mijlpaal, m.rol, plan[i], erft)) uit.push({ id: m.id, pipeline: pl, mijlpaal: m.mijlpaal, rol: m.rol, voorstel: plan[i] || '' }); erft = m.rol || erft; });  // v7.9.3 (C-N2): een 5b-naam met voorstel of leeg past
   });
   return uit;
 }
@@ -2698,6 +2702,11 @@ function fasenVanStap(m, f, kop) { var n = klein(m.mijlpaal), x = uitMap(kop, n)
 // "5b.", met of zonder spatie erna) dat in Scholen maar één keer voorkomt, krijgt die fase en is een anker, net als een rij met de naam van een fase. Dan de
 // plek: een reeks van k rijen zonder anker tussen twee ankers (of aan het begin of eind) waar precies k fasen van de vorige keer ontbreken, krijgt die fasen
 // op volgorde ("koud", "warm" vóór "3. ap (appointment planned)": 1 en 2); anders de herkenner (een eigen rij ertussen of een dubbel nummer: de beheerder kiest).
+// v7.9.3 (review r3, C3-R1): het voorvoegsel beslist alleen als de huidige rol van de rij die van de fase van dat nummer is (CAPSULE_FASE_ROL: 2 en 5b geen).
+// Een hernummerde pipeline ("2. pre-ap" weg, "2. afspraak gepland" met rol ap) of een ingevoegde eigen rij ("3. intake", dan "4. ap" tot en met "6. vo") gaf
+// anders fasen die de rollen verschoven (ap weg, ad → ap, voorstel → ad) of een dubbele fase 5; zo'n rij valt terug op de plek of de herkenner.
+// Ook de plek: een reeks krijgt zijn fasen alleen als geen rij erin een eigen rol heeft die niet bij zijn fase past ("kennismaking" met rol ap op 2 en een
+// eigen "tussenstap" op 3 schoof ap anders door); een rij zonder rol mag een fase met een rol krijgen ("koud" op 1) ⚠️.
 var FASE_VOORVOEGSEL = /^([0-9]+[a-z]?)\./;
 function fasenVoorstel(ms) {
   var uit = {}; ms.forEach(function (m) { uit[m.id] = faseVanNaam(m.mijlpaal); });
@@ -2705,7 +2714,7 @@ function fasenVoorstel(ms) {
   var vorige = fasenVorige(), namen = CAPSULE_FASEN.map(function (f) { return f.mijlpaal; }), telNr = {};
   var nr = ms.map(function (m) { var x = FASE_VOORVOEGSEL.exec(klein(m.mijlpaal)); if (x) telNr[x[1]] = (uitMap(telNr, x[1]) || 0) + 1; return x ? x[1] : ''; });
   var plek = ms.map(function (m, i) {
-    var p = namen.indexOf(klein(m.mijlpaal)), f = p < 0 && nr[i] && uitMap(telNr, nr[i]) === 1 && vorige.indexOf(nr[i]) >= 0 ? capsuleFaseRij(nr[i]) : null;
+    var p = namen.indexOf(klein(m.mijlpaal)), f = p < 0 && nr[i] && uitMap(telNr, nr[i]) === 1 && vorige.indexOf(nr[i]) >= 0 && rolIn(m.rol) === (uitMap(CAPSULE_FASE_ROL, nr[i]) || '') ? capsuleFaseRij(nr[i]) : null;  // C3-R1: rol past
     if (f) { uit[m.id] = f.fase; p = namen.indexOf(f.mijlpaal); }  // het voorvoegsel gaat voor de herkenner
     return p;
   });
@@ -2714,7 +2723,8 @@ function fasenVoorstel(ms) {
     for (j = i; j < ms.length && plek[j] < 0; j++) { /* de reeks i..j-1 zonder anker */ }
     var van = i > 0 ? plek[i - 1] : -1, tot = j < ms.length ? plek[j] : namen.length;
     var gat = CAPSULE_FASEN.slice(van + 1, Math.max(van + 1, tot)).filter(function (f) { return vorige.indexOf(f.fase) >= 0 && plek.indexOf(namen.indexOf(f.mijlpaal)) < 0; });
-    if (gat.length === j - i) for (var x = i; x < j; x++) uit[ms[x].id] = gat[x - i].fase;
+    var rolOk = gat.length === j - i && ms.slice(i, j).every(function (m, n) { var r = rolIn(m.rol); return !r || r === gat[n].rol; });  // C3-R1: een eigen rol moet passen
+    if (rolOk) for (var x = i; x < j; x++) uit[ms[x].id] = gat[x - i].fase;
   }
   return uit;
 }
