@@ -4,7 +4,8 @@
 # heropenen van een gewonnen kans, B2), bron toets en bulk, bulk met sturingVerplicht (één samenvatting), het voorstelvenster vóór de aanroep (R14), het
 # winformulier en het verlorenvenster, een nieuwe kans (direct, klant- en schooljaarvoorstel, productsoort), BRIN, mijlpalen met rol, de overstap, de
 # keuzelijsten, weekdoelen, de weergaven Week en MT, datakwaliteit, het register, jaardoel en aannames, werkelijke datums importeren, de actiekaart van
-# de assistent, de definities op Home, Financiën en Rapporten, en de telefoon (390 px). v7.9.2: fase 5b bijna rond (secties 7 en 8).
+# de assistent, de definities op Home, Financiën en Rapporten, en de telefoon (390 px). v7.9.2: fase 5b bijna rond (secties 7 en 8; review r1: sectie 9, de assistent
+# na een eerder uitgevoerde actie op de telefoon en het startdatumvenster op de iPad).
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -659,6 +660,36 @@ with sync_playwright() as p:
         h = pg.evaluate("[].map.call(document.querySelectorAll('#leMijlpalen .le-vink'), function (l) { return Math.round(l.getBoundingClientRect().height); })")
         ok('telefoon: de vinkjes Vraagt startdatum zijn minstens 44 px hoog en de pagina scrolt niet horizontaal', len(h) == 6 and all(x >= 44 for x in h) and pg.evaluate("document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth + 1"), h)
     stap('g5_5b_telefoon', g5_5b_telefoon)
+    c.close()
+
+    # ===== 9. v7.9.2 (review r1, R1): de assistent op de telefoon na een eerder uitgevoerde actie (CRM.basis leeg, geen bord of kansdetail geladen): eerst de
+    # basis, dan het startdatumvenster vóór apiBreinUitvoeren; (R2) het startdatumvenster op de iPad in landschap: datumveld en knoppen 44 px =====
+    c, pg = nieuw(b, 'sophie', tel=True)
+    def g5_5b_assistent_na_actie():
+        fasen_toepassen()
+        pg.evaluate("""(function () { S.chat.push({ rol: 'bot', tekst: 'Voorstel', acties: [{ id: 'g5w', soort: 'wijzig_kans', titel: 'Waarde bijwerken', invoer: { kansId: 'k8', waarde: 4321 } },
+          { id: 'g5s', soort: 'wijzig_kans', titel: 'Bijna rond', invoer: { kansId: 'k16', fase: '%s' } }] }); saveChat(); })()""" % B5)
+        pg.click('nav button[data-view="brein"]'); pg.wait_for_selector('#breinBerichten .actiekaart'); pg.wait_for_timeout(300)
+        pg.locator('.actiekaart').nth(-2).locator('[data-ak="uitvoeren"]').click(); pg.wait_for_selector('.actiekaart.uitgevoerd', timeout=8000); pg.wait_for_timeout(300)
+        ok('5b assistent na een actie: de eerste actie is uitgevoerd en CRM.basis is leeg, zonder bord of kansdetail (de route uit de review)',
+           pg.evaluate("CRM.basis === null && !(CRM.pipeline && CRM.pipeline.mijlpalen) && !(CRM.detail && CRM.detail.data && CRM.detail.data.mijlpalen)") and kans('k8')['kans']['waarde'] == 4321)
+        n0 = n_calls(); pg.locator('.actiekaart').last.locator('[data-ak="uitvoeren"]').click(); venster_open('#vf-verwachteStart')
+        ok('5b assistent na een actie: eerst apiCrm (de mijlpalen), dan het startdatumvenster; nog geen apiBreinUitvoeren', calls('apiCrm', n0) and not calls('apiBreinUitvoeren', n0), [x['fn'] for x in calls(None, n0)])
+        pg.fill('#vf-verwachteStart', dag(6)); pg.click('#venster [data-cf-opslaan]'); pg.wait_for_selector('.actiekaart.uitgevoerd:has-text("Verwachte start")', timeout=8000)
+        a = calls('apiBreinUitvoeren', n0)
+        ok('5b assistent na een actie: één aanroep met verwachteStart, geen foutmelding', len(a) == 1 and a[0]['args'][0]['invoer'].get('verwachteStart') == dag(6) and kans('k16')['kans']['verwachteStart'] == dag(6) and
+           pg.locator('#toast.aan:has-text("startdatum (vandaag of later)")').count() == 0, a)
+    stap('g5_5b_assistent_na_actie', g5_5b_assistent_na_actie)
+    c.close()
+    c = b.new_context(viewport={'width': 1180, 'height': 820}, is_mobile=True, has_touch=True)
+    pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('ipad 5b: ' + str(e))); pg.on('dialog', dialoog)
+    pg.goto(U + 'sophie'); pg.wait_for_selector('#zijbalk'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG)
+    def g5_5b_ipad():
+        fasen_toepassen(); detail('kans:k6'); pg.select_option('[data-kansfase="k6"]', B5); venster_open('#vf-verwachteStart')
+        m = pg.evaluate("[].map.call(document.querySelectorAll('#vf-verwachteStart, #venster .balk .knop'), function (x) { return Math.round(x.getBoundingClientRect().height); })")
+        ok('ipad: in het startdatumvenster het datumveld, Opslaan en Annuleren minstens 44 px (review r1, R2)', pg.evaluate("document.body.classList.contains('desk') && matchMedia('(hover: none)').matches") and len(m) == 3 and all(x >= 44 for x in m), m)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_5b_ipad', g5_5b_ipad)
     c.close()
     b.close()
 

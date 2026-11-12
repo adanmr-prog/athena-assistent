@@ -930,6 +930,7 @@
     body.desk .dq-regel[data-crm-open] { min-height: 44px; display: flex; align-items: center; }
     body.desk .v79-keuze select { min-height: 44px; }  /* v7.9.1: de keuzelijsten van de overstap (fasen, rollen, redenen) ook 44 px op de iPad */
     body.desk .v79-stap .veld input[type=date], body.desk #venster .v79-stap .balk .knop { min-height: 44px; }  /* v7.9.1 (review r2, R2): de besluitdatum en Proefdraaien/Toepassen ook 44 px op de iPad (#venster: gaat voor op body.desk #venster .knop) */
+    body.desk #venster #vf-verwachteStart, body.desk #venster .start-venster .balk .knop { min-height: 44px; }  /* v7.9.2 (review r1, R2): het startdatumvenster (het datumveld, Opslaan en Annuleren) ook 44 px op de iPad, zoals de keuzelijst die het opent */
   }
   /* De definitie naast elk getal: één schakelaar per scherm (body.defs-aan); in het MT-overzicht altijd zichtbaar */
   .t-def { display: none; font-size: var(--fs-klein); font-weight: 400; color: var(--gedempt); margin-top: 4px; line-height: 1.35; text-align: left; }
@@ -1798,6 +1799,7 @@
     }, '<div class="hint">' + (vn ? 'Vanaf de voorstelfase telt de kans mee in de gewogen pijplijn en de voorspelling. ' + (verplicht ? 'De waarde en de verwachte tekendatum zijn verplicht. ' : sn ? 'Waarde en tekendatum mogen leeg blijven; het blok Datakwaliteit signaleert ze. ' : 'Overslaan mag; het blok Datakwaliteit signaleert lege velden.') : '') +
       (sn ? 'Deze fase is voor een kans die zo goed als rond is: wanneer kan het traject starten? Vandaag of later.' : '') + '</div>');
     if (!verplicht && vn && !sn) html = html.replace('<button class="knop licht" data-cf-annuleer="1">', '<button class="knop licht" data-voorstelovers="1">Overslaan</button><button class="knop licht" data-cf-annuleer="1">');
+    if (sn) html = '<div class="start-venster">' + html + '</div>';  // v7.9.2 (review r1, R2): de klasse geeft op de iPad (hover: none) de knoppen 44 px
     openVenster(html);
     VENSTER.annuleer = terugzetten || null; VENSTER.overslaan = vn && !sn && !verplicht ? function () { return doorgaan({}); } : null;
   }
@@ -2028,6 +2030,7 @@
   el('vraagKnop').addEventListener('click', function () { vraag(); });
   el('vraagInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') vraag(); });
   el('nieuwGesprek').addEventListener('click', function () { if (S.bezig) return; zetOpslag('aa_chat', ''); S.chat = leesChat(); herrenderChat(); });
+  var BREIN_BASIS = { bezig: false };  // review r1 (R1): de basis (mijlpalen) wordt voor een actiekaart opgehaald; een tweede tik wacht niet dubbel
   el('breinBerichten').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-ak]'); if (!b) return;
     var kaart = b.closest('.actiekaart'), mi = Number(kaart.dataset.akmsg), m = S.chat[mi], a = m && m.acties && m.acties[Number(kaart.dataset.akidx)];
@@ -2053,7 +2056,15 @@
     // v7.9.2: zet het voorstel een kans in een mijlpaal die een startdatum vraagt, dan eerst het startdatumvenster (zoals in het kansdetail); Annuleren voert niets uit
     if (a.soort === 'wijzig_kans' && a.invoer.fase) {
       var naarFase = String(a.invoer.fase).trim().toLowerCase();
-      return metStartdatum({ naam: 'Kans', verwachteStart: a.invoer.verwachteStart || '' }, naarFase, function (extra) { if (extra.verwachteStart) a.invoer.verwachteStart = extra.verwachteStart; voerUit(); });
+      var startEerst = function () { return metStartdatum({ naam: 'Kans', verwachteStart: a.invoer.verwachteStart || '' }, naarFase, function (extra) { if (extra.verwachteStart) a.invoer.verwachteStart = extra.verwachteStart; voerUit(); }); };
+      // review r1 (R1): na een eerder uitgevoerde actie is CRM.basis leeg (voerUit) en op de telefoon het bord en het kansdetail vaak ook; zonder mijlpalen weet de app
+      // niet of de fase een startdatum vraagt. Dan eerst de basis opnieuw ophalen (één aanroep; niet bij een bekende backend van vóór 7.9.2), daarna het venster
+      if (!mijlpalenApp().length && (BACKEND.versie === null || v792())) {
+        if (BREIN_BASIS.bezig) return;
+        BREIN_BASIS.bezig = true;
+        return laadCrmBasis().then(function () { BREIN_BASIS.bezig = false; startEerst(); }, function () { BREIN_BASIS.bezig = false; });  // een fout toont run() al
+      }
+      return startEerst();
     }
     voerUit();
   });

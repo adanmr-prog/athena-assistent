@@ -2665,8 +2665,9 @@ function fasenEerderToegepast() { return !!instelling('fasenToegepast'); }
 // v7.9.1 (review r4, R1): klaar = de vijf namen en rollen staan zo én er staat geen open kans meer in een oude naam (fasenVerweesd: een onderbroken Toepassen)
 function fasenAlGedaan(kansen) {
   var ms = fasenScholen(), eerder = fasenEerderToegepast();
-  // v7.9.2: ook vraagtStart; een pipeline met de vijf fasen van v7.9.1 heeft één rij te weinig (5b), dus "nog niet": opnieuw toepassen voegt alleen 5b toe
-  return ms.length === CAPSULE_FASEN.length && CAPSULE_FASEN.every(function (f, i) { return ms[i].mijlpaal === f.mijlpaal && ms[i].rol === f.rol && !!ms[i].vraagtStart === !!f.vraagtStart && (eerder || Number(ms[i].kans) === f.kans); }) &&
+  // v7.9.2: ook vraagtStart; een pipeline met de vijf fasen van v7.9.1 heeft één rij te weinig (5b), dus "nog niet": opnieuw toepassen voegt alleen 5b toe.
+  // Review r1 (R2): na een eerdere keer is vraagtStart een later besluit (Beheer → Mijlpalen), net als het gewicht: dan telt alleen naam en rol
+  return ms.length === CAPSULE_FASEN.length && CAPSULE_FASEN.every(function (f, i) { return ms[i].mijlpaal === f.mijlpaal && ms[i].rol === f.rol && (eerder || !!ms[i].vraagtStart === !!f.vraagtStart) && (eerder || Number(ms[i].kans) === f.kans); }) &&
     !fasenVerweesd(kansen).length;
 }
 // v7.9.1 (review r4, R1): open kansen van Scholen (of zonder pipeline, in een naam die nergens meer bestaat) in een oude naam uit FASEN_KOPPELING die in Scholen
@@ -2809,10 +2810,12 @@ function migratieFasen(opties, toepassen) {
     if (!besluitdatum) throw new Error('Ongeldige besluitdatum.');
     var metDealDatum = opties.dealDatum === true, eerderToegepast = fasenEerderToegepast();
     // de vijf rijen; een bestaande mijlpaal met dezelfde naam houdt zijn id en zijn dagenNorm, en na een eerdere keer ook zijn gewicht (R2, r3: een later besluit)
+    // v7.9.2: vraagtStart uit het model (het gedrag hoort bij de fase); review r1 (R2): na een eerdere keer houdt een bestaande rij zijn vraagtStart (een later
+    // besluit in Beheer → Mijlpalen, zoals het gewicht); een nieuwe rij (na v7.9.1: 5b) krijgt die van het model
     var rijen = CAPSULE_FASEN.map(function (f, i) {
       var b = uitMap(A.perNaam, f.mijlpaal);
       return { id: b && b.id ? b.id : slug('Scholen-' + f.mijlpaal), pipeline: 'Scholen', mijlpaal: f.mijlpaal, volgorde: i + 1, kans: b && eerderToegepast ? Number(b.kans) || 0 : f.kans,
-        dagenNorm: b && Number(b.dagenNorm) > 0 ? Number(b.dagenNorm) : f.dagenNorm, rol: f.rol, vraagtStart: vraagtStartCel(f.vraagtStart) };  // v7.9.2: vraagtStart uit het model (het gedrag hoort bij de fase)
+        dagenNorm: b && Number(b.dagenNorm) > 0 ? Number(b.dagenNorm) : f.dagenNorm, rol: f.rol, vraagtStart: vraagtStartCel(b && eerderToegepast ? b.vraagtStart : f.vraagtStart) };
     });
     rollenControle(rijen);
     var gewTerug = eerderToegepast ? [] : fasenGewichten(A.perNaam);  // R2: wat de stap terugzet naar het rekenmodel (in de melding, nooit stil)
@@ -3118,7 +3121,9 @@ function capsulePagina(stap, pagina) {
     // Review r3 (R3): wijkt de naam in Capsule alleen in spaties of leestekens af van de naam die stap fasen schreef ("5. VO (Voorstel/Offerte)" tegen
     // "5. vo (voorstel / offerte)"), dan is de rij van stap fasen met dezelfde fase (faseVanNaam, 1–5) die rij: hij houdt zijn id, naam, rol, gewicht en
     // dagenNorm, en de kansen in die mijlpaal krijgen zijn naam (CAPSULE_MIJLPALEN). Een rij met de exacte naam gaat voor; elke rij hoogstens één keer.
-    var huidig = {}, opNaam = {}, geclaimd = {}; lees('Mijlpalen').forEach(function (m) { huidig[String(m.id)] = m; opNaam[(m.pipeline || 'Scholen') + '|' + klein(m.mijlpaal)] = m; });
+    // v7.9.2 (review r1, R1): na stap fasen (fasenNa) houdt een bestaande rij van Scholen zijn volgorde: 5b komt niet uit Capsule en staat op 6, en een
+    // displayOrder met een gat (een verwijderde mijlpaal), verschoven (3..8) of in stappen (10..60) zou 5b vóór VO (of vooraan) zetten, met de rol ad of geen
+    var huidig = {}, opNaam = {}, geclaimd = {}, fasenNa = fasenEerderToegepast(); lees('Mijlpalen').forEach(function (m) { huidig[String(m.id)] = m; opNaam[(m.pipeline || 'Scholen') + '|' + klein(m.mijlpaal)] = m; });
     var plVan = function (m) { return (m.pipeline && m.pipeline.name) || 'Scholen'; };
     var openM = function (m) { return !(m.complete || /^(won|lost|gewonnen|verloren)$/i.test(m.name) || capsuleDealNaam(m.name)); };  // v7.9.1: deal/lopend traject is de fase gewonnen (capsuleFase), geen mijlpaal
     (res.data.milestones || []).forEach(function (m) { var b = openM(m) ? uitMap(opNaam, plVan(m) + '|' + klein(m.name)) : null; if (b) geclaimd[String(b.id)] = true; });
@@ -3131,7 +3136,7 @@ function capsulePagina(stap, pagina) {
         var c = uitMap(opNaam, pl + '|' + capsuleFaseRij(f).mijlpaal);
         if (c && !uitMap(geclaimd, String(c.id))) { b = c; geclaimd[String(c.id)] = true; mijl[m.id].naam = String(c.mijlpaal); }
       }
-      rijen.push({ id: b && String(b.id) ? String(b.id) : 'cap-m' + m.id, pipeline: pl, mijlpaal: b ? klein(b.mijlpaal) : klein(m.name), volgorde: Number(m.displayOrder) || rijen.length + 1,
+      rijen.push({ id: b && String(b.id) ? String(b.id) : 'cap-m' + m.id, pipeline: pl, mijlpaal: b ? klein(b.mijlpaal) : klein(m.name), volgorde: b && pl === 'Scholen' && fasenNa && Number(b.volgorde) > 0 ? Number(b.volgorde) : Number(m.displayOrder) || rijen.length + 1,
         kans: b ? Number(b.kans) || 0 : Number(m.probability) || 0, dagenNorm: b && Number(b.dagenNorm) > 0 ? Number(b.dagenNorm) : Number(m.daysUntilStale) || 0 });
     });
     P.setProperty('CAPSULE_MIJLPALEN', JSON.stringify(mijl));

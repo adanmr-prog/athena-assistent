@@ -2969,6 +2969,16 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     eis(nA1 === nA + 1 && c1.map(function (m) { return m.id; }).join() === 'cap-m901,cap-m902,cap-m903,cap-m904,cap-m905,' + ctx.slug('Scholen-' + DOEL[5]) && c1.map(function (m) { return m.kans; }).join() === '0,0,25,40,70,90' && c1[2].dagenNorm === 12 && c1[0].dagenNorm === 30 &&
       c1.map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && ctx.fasenAlGedaan() && ctx.aannameVersies('fasegewichten').length === nA1 && ctx.fasegewichtVan({ fase: DOEL[2], pipeline: 'Scholen' }) === 25,
       'review r2 F4: een Capsule-herrun na stap fasen houdt bij de ids cap-m… de gewichten 0, 0, 25, 40, 70 (en 5b 90, v7.9.2) en een aangepaste dagenNorm; alGedaan blijft waar, geen nieuwe versie van fasegewichten');
+    // v7.9.2 (review r1, R1): 5b komt niet uit Capsule en staat op volgorde 6. Een displayOrder met een gat (een verwijderde mijlpaal), verschoven of in
+    // stappen mag een bestaande rij van Scholen na stap fasen niet hernummeren: anders komt 5b vóór VO (of vooraan) en erft hij ad of niets
+    [[1, 2, 3, 5, 7, 8], [3, 4, 5, 6, 7, 8], [10, 20, 30, 40, 50, 60]].forEach(function (orde) {
+      mijl.forEach(function (m, i) { m.displayOrder = orde[i]; });
+      ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.capsulePagina('mijlpalen', 1); ctx._LEES = {};
+      var c2 = scholenRijen();
+      eis(c2.map(function (m) { return m.mijlpaal; }).join('|') === DOEL.join('|') && c2.map(function (m) { return m.volgorde; }).join() === '1,2,3,4,5,6' && ctx.effectieveRol(DOEL[5], 'Scholen') === 'voorstel' &&
+        ctx.effectieveRol(DOEL[3], 'Scholen') === 'ad' && ctx.vanafVoorstel(DOEL[5], 'Scholen') && ctx.fasenAlGedaan(),
+        'review r1 (R1): een Capsule-herrun na stap fasen met displayOrder ' + orde.join(',') + ' houdt de volgorde van Scholen (1–6): 5b blijft na VO, erft voorstel en de stap staat zo');
+    });
   } catch (e) { eis(false, 'v7.9.1 review r2 (F4): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { ctx.capsule = echtCapsule; standTerug(st); }
 
   // --- F6: de pipeline van Capsule heet anders dan Scholen ---
@@ -3603,6 +3613,49 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     var r4 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(roep(SOPHIE, 'apiMigratieV79', 'fasen')) });
     eis(r4.alGedaan && r4.gewijzigd === false && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.alGedaan && roep(SOPHIE, 'apiMigratieV79', 'status').fasen.mijlpalen === 6, 'daarna staat de stap zo: een derde keer verandert niets');
   } catch (e) { eis(false, 'v7.9.2 na v7.9.1: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- review r1 (B1): een v7.9-installatie met een eigen mijlpaal "mondeling akkoord" zonder rol (erft voorstel) en een app-wissel "gesprek gevoerd" →
+  // "mondeling akkoord" (vanRol ad, naarRol voorstel, rolBron mijlpaal: telt als VO). Stap fasen koppelt 1/3/4/5/5b; 5b erft de voorstelrol (fasenEffectief),
+  // dus de wissel is geen v7.9-volgordefout: de proefdraai herziet niets en na toepassen telt hij nog altijd als VO (nooit stil uit de historische tellingen) ---
+  vers79(); st = standBewaren();
+  try {
+    var NB = ['lead', 'gesprek gepland', 'gesprek gevoerd', 'offerte', 'mondeling akkoord'];
+    ctx.verwijderRijen('Mijlpalen', function () { return true; });
+    echtSchrijf('Mijlpalen', NB.map(function (n, i) { return { id: 'mp' + i, pipeline: 'Scholen', mijlpaal: n, volgorde: i + 1, kans: [5, 20, 40, 60, 80][i], dagenNorm: 14, rol: ['lead', 'ap', 'ad', 'voorstel', ''][i] }; }));
+    var openB = ctx.lees('Kansen').filter(function (k) { return ctx.kansOpen(k) && (!k.pipeline || k.pipeline === 'Scholen'); });
+    echtSchrijf('Kansen', openB.map(function (k) { return { id: k.id, fase: 'lead', pipeline: 'Scholen' }; })); ctx._LEES = {};
+    var kB = openB[0].id; echtSchrijf('Kansen', [{ id: kB, fase: 'gesprek gevoerd' }]); ctx._LEES = {};
+    var wB = roep(SOPHIE, 'apiKansOpslaan', { id: kB, fase: 'mondeling akkoord', _oud: { fase: 'gesprek gevoerd' } }).fasewissel, rB0 = wisselRij(wB.id);
+    var pB = roep(SOPHIE, 'apiMigratieV79', 'fasen'), kopB = voorstelKop(pB);
+    eis(ctx.fasenEffectief()['5b'] === 'voorstel' && rB0.vanRol === 'ad' && rB0.naarRol === 'voorstel' && rB0.rolBron === 'mijlpaal' && ctx.telRol(rB0) === 'voorstel' &&
+      NB.map(function (n, i) { return kopB['mp' + i]; }).join() === '1,3,4,5,5b' && pB.herzien === 0 && JSON.stringify(pB.herzienVerschil) === '{}',
+      'review r1 (B1): fasenEffectief geeft 5b de voorstelrol; een app-wissel AD → "mondeling akkoord" (eigen mijlpaal zonder rol, telt als VO) wordt bij koppeling 1/3/4/5/5b niet herzien (herzien 0, herzienVerschil {})');
+    var tB = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: kopB }); ctx._LEES = {};
+    var rB1 = wisselRij(wB.id);
+    eis(tB.toegepast && tB.herzien === 0 && JSON.stringify(tB.herzienVerschil) === '{}' && ctx.vind('Kansen', kB).fase === B && rB1.vanRol === 'ad' && rB1.naarRol === 'voorstel' && ctx.telRol(rB1) === 'voorstel' &&
+      ctx.effectieveRol(B, 'Scholen') === 'voorstel',
+      'review r1 (B1): na toepassen staat de kans in 5b en blijft de historische wissel naarRol voorstel (telRol voorstel): geen VO verdwijnt stil uit de tellingen');
+  } catch (e) { eis(false, 'v7.9.2 review r1 (B1): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
+
+  // --- review r1 (R2): na stap fasen is vraagtStart een later besluit van de beheerder (Beheer → Mijlpalen), net als een gewicht: status en proefdraai
+  // zeggen niet blijvend "nog niet" en opnieuw toepassen zet de keuze niet stil terug ---
+  vers79(); st = standBewaren();
+  try {
+    fasenToepassen();
+    var vsR = function () { ctx._LEES = {}; return scholenRijen().map(function (m) { return m.vraagtStart ? 'ja' : ''; }).join(); };
+    var rijR = function (wijzig) { return scholenRijen().map(function (m, i) { var o = { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol, vraagtStart: m.vraagtStart }; if (wijzig) wijzig(o, i); return o; })
+      .concat(ctx.mijlpalen().filter(function (m) { return m.pipeline !== 'Scholen'; }).map(function (m) { return { pipeline: m.pipeline, mijlpaal: m.mijlpaal, kans: m.kans, dagenNorm: m.dagenNorm, rol: m.rol, vraagtStart: m.vraagtStart }; })); };
+    roep(SOPHIE, 'apiMijlpalenOpslaan', rijR(function (o, i) { if (i === 4) o.vraagtStart = true; if (i === 5) o.vraagtStart = false; })); ctx._LEES = {};
+    var sR = roep(SOPHIE, 'apiMigratieV79', 'status'), pR = roep(SOPHIE, 'apiMigratieV79', 'fasen'), nWR = aantalWissels();
+    var tR = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(pR) });
+    eis(vsR() === ',,,,ja,' && sR.fasen.alGedaan && ctx.fasenAlGedaan() && pR.alGedaan && tR.alGedaan && tR.gewijzigd === false && aantalWissels() === nWR,
+      'review r1 (R2): vraagtStart in Beheer omgezet (VO aan, 5b uit) na stap fasen: status, proefdraai en toepassen zeggen "staat al zo"; de keuze blijft');
+    // een rol die afwijkt dwingt de stap opnieuw: de rijen worden herschreven, vraagtStart van een bestaande rij blijft (een later besluit), zoals het gewicht
+    echtSchrijf('Mijlpalen', [{ id: scholenRijen()[3].id, rol: '' }]); ctx._LEES = {};
+    var pR2 = roep(SOPHIE, 'apiMigratieV79', 'fasen'), tR2 = roep(SOPHIE, 'apiMigratieV79', 'fasen', { toepassen: true, koppeling: voorstelKop(pR2) });
+    eis(!pR2.alGedaan && tR2.toegepast && tR2.gewijzigd === true && scholenRijen().map(function (m) { return m.rol; }).join() === 'lead,,ap,ad,voorstel,' && vsR() === ',,,,ja,' && ctx.fasenAlGedaan(),
+      'review r1 (R2): opnieuw toepassen (een rol week af) herstelt de rol en houdt vraagtStart bij VO aan en bij 5b uit; daarna staat de stap zo');
+  } catch (e) { eis(false, 'v7.9.2 review r1 (R2): onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
 })();
 
 /* ---- bestaande schermen blijven werken ---- */
