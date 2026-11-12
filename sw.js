@@ -1,5 +1,9 @@
 /* Athena Assistent — service worker: HTML cache-first met verversen op de achtergrond (v7.6, stale-while-revalidate), statische shell cache-first, API altijd via netwerk */
-var CACHE = 'athena-assistent-v7.9';  // bump bij elke release (zie /release)
+var CACHE = 'athena-assistent-v7.9.1';  // bump bij elke release (zie /release)
+// v7.9.1 (review, ronde 2): de release blijft 7.9.1 (nog niet live), dus CACHE ook; deze regel verandert sw.js zelf, zodat een browser met een eerdere
+// build van deze release de worker opnieuw installeert en install de nieuwe index.html vers ophaalt (cache: 'no-cache') in dezelfde cache.
+// v7.9.1 (review, ronde 3): idem; de overstap toont eerder gewonnen kansen, afwijkende gewichten en rollen en het verschil in de historische telling.
+// v7.9.1 (review, ronde 4 en 5): idem; herstel na een onderbroken Toepassen, focus op de stap, de funnel zonder leads.
 // v7.3 (iOS-review R2): de app luistert op controllerchange en toont dan de vaste balk #updateBalk (Herladen / Later); deze worker neemt met
 // skipWaiting + clients.claim meteen over en herlaadt nooit zelf, zodat een open venster of composer niet verloren gaat.
 // v7.9: de app registreert deze worker bij een eerste bezoek pas na de eerste geslaagde aanroep (of na 5 s, ook op het koppelscherm) en probeert een

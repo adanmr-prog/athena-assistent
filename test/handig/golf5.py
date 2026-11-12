@@ -461,7 +461,95 @@ with sync_playwright() as p:
         pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok', timeout=8000); pg.evaluate("document.querySelectorAll('#crmInhoud .dq-eigenaar').forEach(function (d) { d.open = true; })"); pg.wait_for_timeout(200)
         hd = pg.evaluate("[].map.call(document.querySelectorAll('#crmInhoud .dq-eigenaar summary, #crmInhoud .legenda-defs summary, #crmInhoud .dq-regel[data-crm-open]'), function (x) { return x.getBoundingClientRect().height; })")
         ok('ipad: uitklapregels en doorklikregels in Datakwaliteit minstens 44 px (iOS-review)', hd and all(x >= 44 for x in hd), hd)
+        # v7.9.1 (review r2, R2): de stap fasen van de overstap: keuzelijsten, besluitdatum en Proefdraaien/Toepassen minstens 44 px
+        pg.evaluate("beheerOverstap()"); venster_open('[data-v79="fasen:proef"]'); pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#venster [data-v79fase]')
+        hv = pg.evaluate("[].map.call(document.querySelectorAll('#venster [data-v79fase], #v79-besluitdatum, #v79Lijst .v79-stap .balk .knop'), function (x) { return Math.round(x.getBoundingClientRect().height); })")
+        ok('ipad: in de stap fasen zijn keuzelijsten, besluitdatum en de knoppen Proefdraaien en Toepassen minstens 44 px (review r2, R2)', len(hv) >= 4 + 1 + 2 and all(x >= 44 for x in hv), hv)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_ipad', g5_ipad)
+    c.close()
+
+    # ===== 5. v7.9.1: Fasen zoals Capsule (Sophie, verse demo): proefdraai met een keuze per mijlpaal, toepassen met koppeling, onderbouwing en besluitdatum =====
+    c, pg = nieuw(b, 'sophie')
+    def g5_fasen():
+        desk('rapporten', '#crmInhoud [data-beheer="v79"]'); pg.click('[data-beheer="v79"]'); venster_open('[data-v79="fasen:proef"]')
+        ok('fasen: de stap Fasen zoals Capsule staat bovenaan, vóór de rollen', pg.evaluate("(function () { var f = document.querySelector('[data-v79=\"fasen:proef\"]'), r = document.querySelector('[data-v79=\"rollen:proef\"]'); return !!(f && r && (f.compareDocumentPosition(r) & 4)); })()") and 'nog niet overgenomen' in pg.inner_text('#v79Lijst'))
+        ok('fasen: Toepassen kan pas na de proefdraai', pg.is_disabled('[data-v79="fasen:toepassen"]'))
+        pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#venster [data-v79fase]')
+        v = pg.evaluate("[].map.call(document.querySelectorAll('#venster [data-v79fase]'), function (s) { return [s.getAttribute('data-v79fase'), s.value, s.getAttribute('aria-label'), s.options.length]; })")
+        ok('fasen: per mijlpaal een keuzelijst met label en zes fasen, voorgevuld (lead 1, gesprek 3, voorstel 5, onderhandeling 5)', [x[0] + '=' + x[1] for x in v] == ['scholen-lead=1', 'scholen-gesprek=3', 'scholen-voorstel=5', 'scholen-onderhandeling=5'] and all(x[2] and 'Fase in Capsule' in x[2] and x[3] == 7 for x in v), v)
+        ok('fasen: fase 6 is deal/lopend traject (gewonnen)', 'deal/lopend traject (gewonnen)' in pg.inner_text('#venster [data-v79fase="scholen-lead"]'))
+        # v7.9.1 (review r5, A1): na de proefdraai staat de focus op de titel van de stap; Tab en Shift+Tab blijven daarvandaan binnen het venster
+        ok('fasen: na Proefdraaien heeft de titel van de stap de focus (review r4/r5)', pg.evaluate("(function () { var a = document.activeElement; return !!(a && a.classList.contains('r-titel') && a.closest('#v79stap-fasen')); })()"))
+        pg.keyboard.press('Shift+Tab')
+        ok('fasen: Shift+Tab vanaf de titel blijft in het venster (review r5, A1)', pg.evaluate("(function () { var a = document.activeElement; return !!(a && document.getElementById('venster').contains(a) && a !== document.getElementById('vensterInhoud')); })()"))
+        pg.evaluate("document.querySelector('#v79stap-fasen .r-titel').focus()"); pg.keyboard.press('Tab')
+        ok('fasen: Tab vanaf de titel gaat naar het eerste veld van de stap (review r5, A1)', pg.evaluate("(function () { var a = document.activeElement; return !!(a && a.matches('[data-v79fase]') && a.closest('#v79stap-fasen')); })()"))
+        ok('fasen: onderbouwing en besluitdatum voorgevuld', 'Capsule' in pg.input_value('#v79-onderbouwing') and pg.input_value('#v79-besluitdatum') == dag(0))
+        # v7.9.1 (review r2, F8): fase 6 voor onderhandeling: de melding wat er met de open kans gebeurt, en het vinkje voor de deal die in Athena naar die fase is gezet
+        pg.select_option('#venster [data-v79fase="scholen-onderhandeling"]', '6'); pg.wait_for_selector('#v79-deal #v79-dealdatum')
+        ok('fasen: bij fase 6 zegt de stap dat de open kans gewonnen wordt en biedt hij het vinkje "vastleggen als deal op die datum" (F8)', '1 open kans wordt gewonnen' in pg.inner_text('#v79-deal') and 'vast als deal' in pg.inner_text('#v79-deal') and not pg.is_checked('#v79-dealdatum'), pg.inner_text('#v79-deal'))
+        # R1: keuzes overleven het hertekenen door de proefdraai van een andere stap
+        pg.check('#v79-dealdatum'); pg.fill('#v79-onderbouwing', 'Eigen onderbouwing (golf5 R1)'); pg.fill('#v79-besluitdatum', dag(-1))
+        pg.click('[data-v79="kansen:proef"]'); pg.wait_for_selector('#v79Lijst .r-meta:has-text("Proefdraai")')
+        ok('fasen: na de proefdraai van een andere stap staan de gekozen fase, het vinkje, de onderbouwing en de besluitdatum er nog (review r2, R1)',
+           pg.input_value('#venster [data-v79fase="scholen-onderhandeling"]') == '6' and pg.is_checked('#v79-dealdatum') and pg.input_value('#v79-onderbouwing') == 'Eigen onderbouwing (golf5 R1)' and pg.input_value('#v79-besluitdatum') == dag(-1),
+           [pg.input_value('#venster [data-v79fase="scholen-onderhandeling"]'), pg.input_value('#v79-onderbouwing'), pg.input_value('#v79-besluitdatum')])
+        n0 = n_calls(); pg.click('[data-v79="fasen:proef"]'); pg.wait_for_function("(window.__calls || []).length > %d" % n0); pg.wait_for_selector('#venster [data-v79fase]'); pg.wait_for_timeout(300)
+        a = (calls('apiMigratieV79', n0) or [{'args': ['', {}]}])[0]['args']
+        ok('fasen: een nieuwe proefdraai stuurt de gekozen fasen mee (herzien telt met de keuze) en houdt de keuzes', a[0] == 'fasen' and (a[1].get('koppeling') or {}).get('scholen-onderhandeling') == '6' and not a[1].get('toepassen') and pg.input_value('#venster [data-v79fase="scholen-onderhandeling"]') == '6', a)
+        pg.select_option('#venster [data-v79fase="scholen-onderhandeling"]', ''); pg.click('[data-v79="kansen:proef"]'); pg.wait_for_timeout(600)
+        ok('fasen: een bewust lege keuze blijft leeg na hertekenen (geen voorstel terug)', pg.input_value('#venster [data-v79fase="scholen-onderhandeling"]') == '')
+        pg.fill('#v79-besluitdatum', dag(0))
+        n0 = n_calls(); pg.click('[data-v79="fasen:toepassen"]'); toast('Kies voor elke mijlpaal')
+        ok('fasen: een mijlpaal zonder fase geeft een melding en geen aanroep', not calls('apiMigratieV79', n0))
+        pg.select_option('#venster [data-v79fase="scholen-onderhandeling"]', '5'); pg.fill('#v79-onderbouwing', 'Rekenmodel van het MT-rapport (golf5)')
+        n0 = n_calls(); pg.click('[data-v79="fasen:toepassen"]'); toast('fasen van Capsule'); pg.wait_for_selector('#v79Lijst:has-text("staat zo")')
+        a = (calls('apiMigratieV79', n0) or [{'args': ['', {}]}])[0]['args']
+        ok('fasen: Toepassen stuurt de koppeling, de onderbouwing en de besluitdatum (zonder fase 6 geen dealDatum)', a[0] == 'fasen' and a[1].get('toepassen') is True and a[1].get('koppeling') == {'scholen-lead': '1', 'scholen-gesprek': '3', 'scholen-voorstel': '5', 'scholen-onderhandeling': '5'} and a[1].get('onderbouwing') == 'Rekenmodel van het MT-rapport (golf5)' and a[1].get('besluitdatum') == dag(0) and 'dealDatum' not in a[1], a)
+        ok('fasen: daarna laadt de status opnieuw (staat zo)', any(x['args'][0] == 'status' for x in calls('apiMigratieV79', n0)))
+        ms = [m for m in api('apiCrm')['mijlpalen'] if m['pipeline'] == 'Scholen']
+        ok('fasen: de pipeline Scholen heeft de vijf fasen van Capsule met rollen', [m['mijlpaal'] for m in ms] == ['1. nog niet gebeld', '2. pre-ap', '3. ap (appointment planned)', '4. ad (appointment done)', '5. vo (voorstel / offerte)'] and [m['rol'] for m in ms] == ['lead', '', 'ap', 'ad', 'voorstel'], ms)
+        ok('fasen: een open kans in gesprek staat nu in 3. ap', kans('k8')['kans']['fase'] == '3. ap (appointment planned)')
+        f = [x for x in api('apiAannames')['aannames'] if x['naam'] == 'fasegewichten'][0]; ok('fasen: de gewichten zijn een versie van fasegewichten met de onderbouwing', f['huidig'] and 'golf5' in f['huidig']['onderbouwing'], f['huidig'])
+        pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#v79Lijst .hint:has-text("al")')
+        ok('fasen: een tweede proefdraai zegt dat het al zo staat; Toepassen blijft uit', pg.locator('#venster [data-v79fase]').count() == 0 and pg.is_disabled('[data-v79="fasen:toepassen"]'))
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+        pipeline(); ok('fasen: het bord toont de kolommen van Capsule', pg.locator('.bord [data-sleepdoel="kans:2. pre-ap"]').count() == 1 and pg.locator('.bord [data-sleepdoel="kans:5. vo (voorstel / offerte)"]').count() == 1)
+    stap('g5_fasen', g5_fasen)
+    c.close()
+
+    # ===== 5b. v7.9.1 (review r3): de signalen in de overstap: een eerder gewonnen kans in fase 6 (F1), een rol die niet bij de naam past (R4) =====
+    c, pg = nieuw(b, 'sophie')
+    def g5_fasen_r3():
+        g1 = kans('k1')['kans']['gesloten']
+        api('apiKansOpslaan', {'id': 'k1', 'fase': 'onderhandeling', '_oud': {'fase': 'gewonnen'}})
+        ms = [{'pipeline': m['pipeline'], 'mijlpaal': m['mijlpaal'], 'kans': m['kans'], 'dagenNorm': m['dagenNorm'], 'rol': m['rol']} for m in api('apiCrm')['mijlpalen']]
+        ms += [{'pipeline': 'Besturen', 'mijlpaal': 'intake', 'kans': 10, 'dagenNorm': 14, 'rol': 'lead'}, {'pipeline': 'Besturen', 'mijlpaal': 'gesprek', 'kans': 30, 'dagenNorm': 10, 'rol': 'ap'}, {'pipeline': 'Besturen', 'mijlpaal': 'voorstel', 'kans': 50, 'dagenNorm': 10, 'rol': 'ad'}]
+        api('apiMijlpalenOpslaan', ms, {'onderbouwing': 'golf5 r3 (verzonnen)', 'besluitdatum': dag(0)})
+        desk('rapporten', '#crmInhoud [data-beheer="v79"]'); pg.click('[data-beheer="v79"]'); venster_open('[data-v79="fasen:proef"]')
+        ok('r3: de status van Rollen noemt een rol die niet bij de naam past (R4)', '1 rol past niet bij de naam' in pg.inner_text('#v79Lijst'), pg.inner_text('#v79Lijst')[:300])
+        pg.click('[data-v79="rollen:proef"]'); pg.wait_for_selector('#v79-rolafwijkend')
+        ok('r3: de proefdraai van Rollen toont het signaal met het voorstel (Besturen · voorstel heeft ad, op naam voorstel) en laat Beheer → Mijlpalen het rechtzetten', 'Besturen · voorstel heeft ad, op naam voorstel' in pg.inner_text('#v79-rolafwijkend') and 'Beheer → Mijlpalen' in pg.inner_text('#v79-rolafwijkend'))
+        pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#venster [data-v79fase]')
+        pg.select_option('#venster [data-v79fase="scholen-onderhandeling"]', '6'); pg.wait_for_selector('#v79-deal .hint')
+        ok('r3: bij fase 6 noemt de stap de kans die eerder gewonnen was (telt weer als deal, F1)', '1 daarvan was eerder gewonnen en telt weer als deal' in pg.inner_text('#v79-deal') and 'Datakwaliteit' in pg.inner_text('#v79-deal'), pg.inner_text('#v79-deal'))
+        n0 = n_calls(); pg.click('[data-v79="fasen:toepassen"]'); toast('eerder gewonnen'); pg.wait_for_selector('#v79Lijst:has-text("staat zo")')
+        k1 = kans('k1')['kans']
+        ok('r3: na toepassen is k1 gewonnen met gesloten = de datum van de eerdere winst (N8), en de melding noemt hem', k1['fase'] == 'gewonnen' and g1 and k1['gesloten'] == g1, [k1['fase'], k1['gesloten'], g1])
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_fasen_r3', g5_fasen_r3)
+    c.close()
+
+    # ===== 6. v7.9.1: de stap fasen op de telefoon (390 px): keuzelijsten 44 px en 16 px, geen horizontale scroll in het venster =====
+    c, pg = nieuw(b, 'sophie', tel=True)
+    def g5_fasen_telefoon():
+        pg.evaluate("beheerOverstap()"); venster_open('[data-v79="fasen:proef"]'); pg.click('[data-v79="fasen:proef"]'); pg.wait_for_selector('#venster [data-v79fase]')
+        m = pg.evaluate("[].map.call(document.querySelectorAll('#venster [data-v79fase], #v79-onderbouwing, #v79-besluitdatum'), function (x) { var r = x.getBoundingClientRect(); return [Math.round(r.height), parseFloat(getComputedStyle(x).fontSize)]; })")
+        ok('telefoon: keuzelijsten minstens 44 px, alle velden 16 px', len(m) == 6 and all(x[1] >= 16 for x in m) and all(x[0] >= 44 for x in m[:4]), m)
+        ok('telefoon: het venster scrolt niet horizontaal', pg.evaluate("(function () { var v = document.getElementById('vensterInhoud'); return v.scrollWidth <= v.clientWidth + 1 && document.documentElement.scrollWidth <= window.innerWidth + 1; })()"))
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_fasen_telefoon', g5_fasen_telefoon)
     c.close()
     b.close()
 
