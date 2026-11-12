@@ -296,7 +296,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
     # v7.9 "v7.9 labels" (punt 17): één definitie per naam — contractwaarde (niet omzet) en open waarde (niet "in de pijplijn"); runKern stuurt v mee
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
-    assert all(x.get('v') == '7.9.1' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.1
+    assert all(x.get('v') == '7.9.2' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.2
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
     assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
     # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is
@@ -580,9 +580,14 @@ with sync_playwright() as p:
     page.click('[data-beheer="mijlpalen"]'); page.wait_for_selector('#leMijlpalen .le-rij'); page.click('[data-le-erbij="leMijlpalen"]'); inp = page.locator('#leMijlpalen .le-rij').last.locator('input')
     inp.nth(0).fill('Scholen'); inp.nth(1).fill('contract'); inp.nth(2).fill('90'); inp.nth(3).fill('5'); page.screenshot(path=OUT + '/17b_beheer_mijlpalen.png', full_page=True)
     assert page.locator('#leMijlpalen [data-le="rol"]').count() >= 5 and page.locator('#crmBeheer datalist#dl-rollen option').count() == 4, 'v7.9 (punt 3): een kolom Rol met de keuzes lead, ap, ad, voorstel'
+    # v7.9.2: per mijlpaal een vinkje "Vraagt startdatum" (44 px, op een eigen regel); de nieuwe mijlpaal contract vraagt hem
+    vinkjes = page.locator('#leMijlpalen .le-vink'); bv = vinkjes.first.bounding_box()
+    assert vinkjes.count() == page.locator('#leMijlpalen .le-rij').count() == 5 and bv['height'] >= 44 and 'Vraagt startdatum' in vinkjes.first.inner_text() and page.locator('#leMijlpalen [data-le="vraagtStart"]:checked').count() == 0, 'v7.9.2: een vinkje Vraagt startdatum per mijlpaal, 44 px: %s' % bv
+    page.locator('#leMijlpalen .le-rij').last.locator('[data-le="vraagtStart"]').check()
     page.click('#crmBeheer [data-cf-opslaan]'); page.wait_for_selector('#venster.aan #vf-onderbouwing')  # v7.9 (N6): een nieuw gewicht vraagt eerst onderbouwing en besluitdatum
     page.fill('#vf-onderbouwing', 'Testgewicht voor de mijlpaal contract'); n0 = len(API_LOG); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Mijlpalen opgeslagen")')
     a = api_vanaf(n0, 'apiMijlpalenOpslaan'); assert a and a[0]['args'][1].get('onderbouwing') and a[0]['args'][1].get('besluitdatum') == dag(0) and all('rol' in m for m in a[0]['args'][0]), 'mijlpalen met rol, onderbouwing en besluitdatum: %s' % a[0]['args'][1]
+    assert [m.get('vraagtStart') for m in a[0]['args'][0]] == [False, False, False, False, True], 'v7.9.2: vraagtStart gaat per mijlpaal mee (alleen contract): %s' % [m.get('vraagtStart') for m in a[0]['args'][0]]
     page.click('[data-beheer="tags"]'); page.wait_for_selector('#crmBeheer [data-hernoem]')
     page.click('[data-beheer="talentrun"]'); page.wait_for_selector('#toast.aan:has-text("Talentrun klaar")')  # v5.0
     # v7.7: Talenten importeren uit XPS (management via de Beheer-kaart: de uitkomst in een venster)
@@ -693,6 +698,19 @@ with sync_playwright() as p:
     page.wait_for_selector('#toast.aan:has-text("→ voorstel")'); page.wait_for_timeout(300); a = api_vanaf(n0, 'apiKansOpslaan')
     assert len(a) == 1 and eerste_arg(a[0]).get('wissel', {}).get('bron') == 'slepen' and 'verwachteSluiting' not in eerste_arg(a[0]), 'Overslaan: één aanroep met fase en bron slepen: %s' % a
     assert page.evaluate("document.activeElement && document.activeElement.getAttribute('data-sleep')") == 'kans:k3', 'na het venster de focus op de kaart in het nieuwe bord'
+    # v7.9.2 "startdatumvenster (mock)": contract vraagt een startdatum (Beheer hierboven). k3 (voorstel, zonder tekendatum) erheen: één venster met de tekendatum en de
+    # verplichte startdatum (geen Overslaan); Annuleren zet de kaart terug zonder aanroep; leeg of in het verleden geeft een melding zonder aanroep; met een datum één aanroep
+    page.wait_for_timeout(600); n0 = len(API_LOG)
+    sleep_naar(page, '[data-sleep="kans:k3"]', '[data-sleepdoel="kans:contract"]'); page.wait_for_selector('#venster.aan #vf-verwachteStart')
+    assert page.locator('#venster #vf-verwachteSluiting').count() == 1 and page.locator('#venster [data-voorstelovers]').count() == 0 and page.get_attribute('#vf-verwachteStart', 'min') == dag(0) and not api_vanaf(n0, 'apiKansOpslaan'), 'startdatumvenster: tekendatum en startdatum (min vandaag), geen Overslaan, nog geen aanroep'
+    page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden'); page.wait_for_timeout(300)
+    assert page.locator('[data-sleepdoel="kans:voorstel"] [data-sleep="kans:k3"]').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan'), 'startdatumvenster: Annuleren zet de kaart terug, geen aanroep'
+    sleep_naar(page, '[data-sleep="kans:k3"]', '[data-sleepdoel="kans:contract"]'); page.wait_for_selector('#venster.aan #vf-verwachteStart')
+    page.fill('#vf-verwachteStart', dag(-1)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("verwachte startdatum")')
+    assert page.locator('#venster.aan').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan'), 'startdatumvenster: een datum in het verleden geeft een melding zonder aanroep'
+    page.fill('#vf-verwachteStart', dag(14)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("→ contract")'); page.wait_for_timeout(300); a = api_vanaf(n0, 'apiKansOpslaan')
+    assert len(a) == 1 and eerste_arg(a[0]).get('verwachteStart') == dag(14) and eerste_arg(a[0]).get('wissel', {}).get('bron') == 'slepen' and eerste_arg(a[0]).get('_oud', {}).get('verwachteStart') == '', 'startdatumvenster: één aanroep met verwachteStart, _oud en bron slepen: %s' % a
+    assert 'start ' in page.inner_text('[data-sleepdoel="kans:contract"] [data-sleep="kans:k3"]'), 'de kaart in een kolom die een startdatum vraagt toont de start'
     page.click('.zb-item[data-desk="projecten"]'); page.wait_for_selector('.ftabel [data-crm-open="project:t1"]'); page.wait_for_timeout(150)  # v4.0: bord per accountmanager
     page.select_option('.ftabel [data-pveld="verlenging"][data-pid="t2"]', 'verlengd'); page.wait_for_selector('.ftabel select.pill.p-verlengd[data-pid="t2"]')
     assert page.locator('.ftabel a.p-link[href^="https://docs.google.com"]').count() >= 1, 'link naar samenwerkingsvoorstel'
@@ -905,7 +923,16 @@ with sync_playwright() as p:
     assert p9.locator('#v79Lijst .v79-stap').first.locator('[data-v79="fasen:proef"]').count() == 1, 'backend 7.9.1: de stap fasen staat bovenaan'
     p9.click('[data-v79="fasen:proef"]'); p9.wait_for_selector('#venster [data-v79fase]')
     assert p9.locator('#venster [data-v79fase]').count() == 4 and p9.input_value('#venster [data-v79fase="scholen-gesprek"]') == '3' and p9.input_value('#v79-besluitdatum'), 'stap fasen: per mijlpaal een voorgevulde keuze en een besluitdatum'
+    assert p9.locator('#venster [data-v79fase="scholen-gesprek"] option').count() == 8 and p9.locator('#venster [data-v79fase="scholen-gesprek"] option[value="5b"]').count() == 1 and 'bijna rond' in p9.inner_text('#v79stap-fasen .hint'), 'v7.9.2: zeven fasen plus "kies een fase" (met 5b bijna rond) en de tekst noemt 5b'
     p9.click('[data-v79="fasen:toepassen"]'); p9.wait_for_selector('#toast.aan:has-text("fasen van Capsule")')
+    c9.close(); mock_post({'fn': '_reset'})
+    # v7.9.2 "7.9.1-backend": een backend van 7.9.1 kent vraagtStart niet: geen vinkje in Beheer → Mijlpalen en geen 5b in de tekst van de overstap
+    assert mock_post({'fn': '_backendVersie', 'args': ['7.9.1']}).get('ok')
+    c9 = b.new_context(viewport={'width': 1280, 'height': 800}); p9 = c9.new_page(); p9.on('pageerror', lambda e: meldingen.append(('pageerror 7.9.1-backend', str(e))))
+    overstap(p9)
+    assert p9.locator('[data-v79="fasen:proef"]').count() == 1 and 'bijna rond' not in p9.inner_text('#v79stap-fasen .hint'), '7.9.1-backend: de stap fasen zonder 5b in de tekst'
+    p9.click('#venster [data-cf-annuleer]'); p9.click('[data-beheer="mijlpalen"]'); p9.wait_for_selector('#leMijlpalen .le-rij')
+    assert p9.locator('#leMijlpalen [data-le="vraagtStart"]').count() == 0 and p9.locator('#leMijlpalen [data-le="rol"]').count() == 4, '7.9.1-backend: geen vinkje Vraagt startdatum'
     c9.close(); mock_post({'fn': '_reset'})
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht

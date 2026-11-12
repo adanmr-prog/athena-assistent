@@ -101,6 +101,7 @@ create table if not exists "kansen" (
   "schooljaar" text,
   "productsoort" text,
   "verlies_toelichting" text,
+  "verwachte_start" text,
   rij bigserial
 );
 create table if not exists "acties" (
@@ -243,6 +244,7 @@ create table if not exists "mijlpalen" (
   "kans" numeric,
   "dagen_norm" numeric,
   "rol" text,
+  "vraagt_start" text,
   rij bigserial
 );
 create table if not exists "tracks" (

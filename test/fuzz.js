@@ -131,7 +131,7 @@ var BASIS = {
   apiTrajectOpslaan: function (rol) { var t = eigenRij('Trajecten', rol); return [{ id: t.id, samenvatting: 'Fuzz-samenvatting', _oud: { samenvatting: t.samenvatting } }]; },
   apiExportAlles: function () { return ['Scholen', 0, 50]; },
   apiGebruikerOpslaan: function () { var g = kopie(SEEDRIJEN.Gebruikers[1]); return [{ id: g.id, naam: g.naam, email: g.email, team: g.team, rol: g.rol, actief: 'ja' }, false]; },
-  apiMijlpalenOpslaan: function () { return [[{ pipeline: 'Scholen', mijlpaal: 'gesprek', volgorde: 1, kans: 20, dagenNorm: 14 }, { pipeline: 'Scholen', mijlpaal: 'voorstel', volgorde: 2, kans: 50, dagenNorm: 14 }]]; },
+  apiMijlpalenOpslaan: function () { return [[{ pipeline: 'Scholen', mijlpaal: 'gesprek', volgorde: 1, kans: 20, dagenNorm: 14 }, { pipeline: 'Scholen', mijlpaal: 'voorstel', volgorde: 2, kans: 50, dagenNorm: 14, vraagtStart: true }]]; },  // v7.9.2: vraagtStart
   apiSchool: function (rol) { return [eigenId('Scholen', rol)]; },
   apiPersoon: function (rol) { return [eigenId('Personen', rol)]; },
   apiSchoolOpslaan: function (rol) { var s = eigenRij('Scholen', rol); return [{ id: s.id, notities: 'Fuzz', _oud: { notities: s.notities } }]; },
@@ -140,7 +140,8 @@ var BASIS = {
   apiActiviteitToevoegen: function (rol) { return [{ vorm: 'call', schoolId: eigenId('Scholen', rol), onderwerp: 'Fuzz-gesprek', tekst: 'x' }]; },
   apiKans: function (rol) { return [eigenId('Kansen', rol)]; },
   apiKansOpslaan: function (rol, i) {  // v7.9: om en om ook een fasewissel met wissel.datum en een "ongedaan maken" zonder faseverandering (moet een Nederlandse fout geven, B2)
-    var k = eigenRij('Kansen', rol), v = (i || 0) % 3;
+    var k = eigenRij('Kansen', rol), v = (i || 0) % 4;
+    if (v === 3) return [{ id: k.id, verwachteStart: plusDagen(7), _oud: { verwachteStart: k.verwachteStart || '' } }, false];  // v7.9.2: de verwachte startdatum bewerken
     if (v === 1) return [{ id: k.id, fase: k.fase === 'gesprek' ? 'voorstel' : 'gesprek', _oud: { fase: k.fase }, wissel: { bron: 'slepen', datum: plusDagen(-1) } }, false];
     if (v === 2) return [{ id: k.id, volgendeActie: 'Fuzz nabellen', wissel: { ongedaan: 'bestaat-niet' } }, false];
     return [{ id: k.id, volgendeActie: 'Fuzz nabellen', _oud: { volgendeActie: k.volgendeActie } }, false];

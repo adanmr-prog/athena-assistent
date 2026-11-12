@@ -99,11 +99,14 @@ NOTITIES = {'t1': [{'id': 'n1', 'datum': '2026-09-10 09:12', 'tekst': 'Tweede on
 GEBRUIKERS_NAMEN = ['Menno', 'Mees']
 MIJLPALEN = [{'pipeline': 'Scholen', 'mijlpaal': 'lead', 'volgorde': 1, 'kans': 10, 'dagenNorm': 14, 'rol': 'lead'}, {'pipeline': 'Scholen', 'mijlpaal': 'gesprek', 'volgorde': 2, 'kans': 25, 'dagenNorm': 10, 'rol': 'ap'},
              {'pipeline': 'Scholen', 'mijlpaal': 'voorstel', 'volgorde': 3, 'kans': 50, 'dagenNorm': 7, 'rol': 'voorstel'}, {'pipeline': 'Scholen', 'mijlpaal': 'onderhandeling', 'volgorde': 4, 'kans': 75, 'dagenNorm': 7, 'rol': ''}]  # v7.9: rol
+for _m in MIJLPALEN: _m['vraagtStart'] = False  # v7.9.2: een mijlpaal met vraagtStart (zoals 5b bijna rond) eist een verwachte startdatum (apiKansOpslaan)
 # v7.9.1: de doelfasen van de overstapstap fasen (zoals CAPSULE_FASEN in Code.gs; 6 = gewonnen)
 FASEN_ONDERBOUWING = 'Fasen en gewichten overgenomen uit Capsule (rekenmodel van het MT-rapport)'
 FASEN_DOELEN = [{'fase': '1', 'mijlpaal': '1. nog niet gebeld', 'label': '1. nog niet gebeld', 'rol': 'lead', 'kans': 0}, {'fase': '2', 'mijlpaal': '2. pre-ap', 'label': '2. pre-ap', 'rol': '', 'kans': 0},
                 {'fase': '3', 'mijlpaal': '3. ap (appointment planned)', 'label': '3. ap (appointment planned)', 'rol': 'ap', 'kans': 25}, {'fase': '4', 'mijlpaal': '4. ad (appointment done)', 'label': '4. ad (appointment done)', 'rol': 'ad', 'kans': 40},
-                {'fase': '5', 'mijlpaal': '5. vo (voorstel / offerte)', 'label': '5. vo (voorstel / offerte)', 'rol': 'voorstel', 'kans': 70}, {'fase': '6', 'mijlpaal': 'gewonnen', 'label': '6. deal/lopend traject (gewonnen)', 'rol': 'deal', 'kans': 100}]
+                {'fase': '5', 'mijlpaal': '5. vo (voorstel / offerte)', 'label': '5. vo (voorstel / offerte)', 'rol': 'voorstel', 'kans': 70},
+                {'fase': '5b', 'mijlpaal': '5b. bijna rond', 'label': '5b. bijna rond (90 %, startdatum verplicht)', 'rol': '', 'kans': 90, 'vraagtStart': True},  # v7.9.2
+                {'fase': '6', 'mijlpaal': 'gewonnen', 'label': '6. deal/lopend traject (gewonnen)', 'rol': 'deal', 'kans': 100}]
 TRACKS = [{'id': 'std-lead', 'naam': 'Nieuwe lead opvolgen', 'omschrijving': '', 'stappen': [{'tekst': 'Kennismakingsmail sturen', 'categorie': 'mailen', 'dagenNaStart': 0, 'prio': 'hoog'}, {'tekst': 'Nabellen', 'categorie': 'bellen', 'dagenNaStart': 3, 'prio': 'midden'}]},
           {'id': 'std-voorstel', 'naam': 'Voorstel opvolgen', 'omschrijving': '', 'stappen': [{'tekst': 'Voorstel nabellen', 'categorie': 'bellen', 'dagenNaStart': 3, 'prio': 'hoog'}, {'tekst': 'Beslismoment vastleggen', 'categorie': 'opvolgen', 'dagenNaStart': 14, 'prio': 'hoog'}]}]
 SCHOLEN = [
@@ -125,7 +128,7 @@ CRMKANSEN = [
 ]
 # v7.9: klant (nieuw/bestaand), schooljaar van de opdracht en productsoort; BRIN en vestiging (s4 zonder); de fasewissels als gebeurtenis
 for _k, _x in zip(CRMKANSEN, [('nieuw', 'nt2-ondersteuning'), ('bestaand', 'examentraining'), ('nieuw', 'huiswerkbegeleiding'), ('bestaand', 'surveillance')]):
-    _k.update({'klant': _x[0], 'schooljaar': '2026-2027', 'productsoort': _x[1], 'verliesToelichting': ''})
+    _k.update({'klant': _x[0], 'schooljaar': '2026-2027', 'productsoort': _x[1], 'verliesToelichting': '', 'verwachteStart': ''})  # v7.9.2: verwachteStart
 for _s, _b in zip(SCHOLEN, ['99ZA', '99ZB', '99ZC', '']): _s.update({'brin': _b, 'vestiging': '00' if _b else ''})
 FASEWISSELS = [
     {'id': 'fw1', 'kansId': 'k1', 'van': '', 'naar': 'lead', 'werkelijkeDatum': d(-40), 'ingevoerdOp': d(-40) + ' 10:00', 'door': 'Menno', 'bron': 'aanmaken', 'zekerheid': 'vastgelegd', 'naarRol': 'lead', 'ongedaan': False, 'label': ''},
@@ -514,6 +517,8 @@ def basis_versie():  # v7.9 (R13): een oudere backend (via _backendVersie) kent 
     if [int(x) for x in BACKEND_VERSIE[0].split('.')] < [7, 9]:
         for k in ('backendVersie', 'klantIn', 'schooljaren', 'sturingVerplicht', 'rollenIngesteld'): b.pop(k, None)
         b['mijlpalen'] = [{x: m[x] for x in m if x != 'rol'} for m in b['mijlpalen']]
+    if [int(x) for x in BACKEND_VERSIE[0].split('.')] < [7, 9, 2]:  # v7.9.2: een backend van 7.9.1 kent vraagtStart niet
+        b['mijlpalen'] = [{x: m[x] for x in m if x != 'vraagtStart'} for m in b['mijlpalen']]
     return b
 def tijdlijn(f): return [act_uit(a) for a in sorted([a for a in ACTIVITEITEN if f(a)], key=lambda a: a['datum'], reverse=True)]
 def opslaan(lijst, o, prefix):
@@ -615,13 +620,23 @@ def handle_crm(fn, args):
             o['verliesReden'] = str(o['verliesReden']).lower()
         if o.get('productsoort') and str(o['productsoort']).lower() not in PRODUCTSOORTEN: raise ValueError('Onbekende productsoort.')
         if o.get('klant') and o['klant'] not in ('nieuw', 'bestaand'): raise ValueError('Kies nieuw of bestaand.')
+        if 'verwachteStart' in o:  # v7.9.2: een datum (yyyy-MM-dd) of leeg; in een mijlpaal met vraagtStart verplicht, vandaag of later (zoals kansOpslaan in Code.gs)
+            vs = o['verwachteStart']
+            if not isinstance(vs, str): raise ValueError('Dit veld verwacht tekst.')
+            vs = vs.strip()
+            if vs and not re.match(r'^\d{4}-\d{2}-\d{2}$', vs): raise ValueError('Ongeldige verwachte startdatum.')
+            o['verwachteStart'] = vs
+        naar_fase = o.get('fase') or (oud['fase'] if oud else 'lead')
+        if (not oud or (o.get('fase') and o['fase'] != oud['fase']) or 'verwachteStart' in o) and any(m['mijlpaal'] == naar_fase and m.get('vraagtStart') for m in MIJLPALEN):
+            start_na = o['verwachteStart'] if 'verwachteStart' in o else ((oud or {}).get('verwachteStart') or '')
+            if not start_na or start_na < d(0): raise ValueError('Deze fase vraagt een verwachte startdatum (vandaag of later).')
         if o.get('schoolId'): o['school'] = per_id(SCHOLEN)[o['schoolId']]['naam']
         for k in ('waarde', 'kans'):
             if o.get(k) not in (None, ''): o[k] = float(o[k])
         if not oud:
             o.update({'fase': o.get('fase') or 'lead', 'aangemaakt': nu(), 'dagenStil': 0, 'gesloten': '', 'verliesReden': o.get('verliesReden', ''), 'pipeline': 'Scholen', 'tags': [], 'velden': {}, 'notities': '', 'volgendeActie': '', 'deadline': ''})
             o.setdefault('klant', 'nieuw'); o.setdefault('schooljaar', '2026-2027'); o.setdefault('productsoort', ''); o.setdefault('verliesToelichting', '')  # v7.9
-            o.setdefault('persoonId', ''); o.setdefault('verwachteSluiting', ''); o['kans'] = next((m['kans'] for m in MIJLPALEN if m['mijlpaal'] == o['fase']), 10)
+            o.setdefault('persoonId', ''); o.setdefault('verwachteSluiting', ''); o.setdefault('verwachteStart', ''); o['kans'] = next((m['kans'] for m in MIJLPALEN if m['mijlpaal'] == o['fase']), 10)
         wissel = oud and o.get('fase') and o['fase'] != oud['fase']
         od = args[0].get('overdracht') if (wissel or not oud) and o.get('fase') == 'gewonnen' else None  # v6.4: winformulier; v7.9: getekende waarde en akkoorddatum verplicht
         if (wissel or not oud) and o.get('fase') == 'gewonnen':
@@ -674,8 +689,8 @@ def handle_crm(fn, args):
                                 'mijlpalen': [{'id': 'scholen-' + m['mijlpaal'], 'mijlpaal': m['mijlpaal'], 'open': len([k for k in CRMKANSEN if k['fase'] == m['mijlpaal']]), 'metDatum': 0, 'eerderGewonnen': 0, 'voorstel': {'lead': '1', 'gesprek': '3', 'voorstel': '5', 'onderhandeling': '5'}.get(m['mijlpaal'], '')} for m in MIJLPALEN if m['pipeline'] == 'Scholen'],
                                 'herzien': 0, 'herzienVerschil': {}, 'gewichten': [], 'gewichtenBlijven': False, 'anderePipelines': []}  # v7.9.1 (review r2): metDatum (F8), herzien (F2), anderePipelines (F6); r3: eerderGewonnen (F1), herzienVerschil (R5), gewichten (R2)
             kop = opt.get('koppeling') if isinstance(opt.get('koppeling'), dict) else {}
-            if any(str(kop.get('scholen-' + m['mijlpaal'], '')) not in ('1', '2', '3', '4', '5', '6') for m in MIJLPALEN if m['pipeline'] == 'Scholen'): raise ValueError('Kies voor elke mijlpaal van Scholen een fase uit Capsule (1 tot en met 6).')
-            return {'stap': 'fasen', 'toegepast': True, 'alGedaan': False, 'gewijzigd': True, 'mijlpalen': 5, 'verhuisd': {'1': 2, '2': 0, '3': 3, '4': 0, '5': 3}, 'gewonnen': 0, 'dealDatum': 0, 'eerderGewonnen': 0, 'ongewijzigd': 0, 'wissels': 8, 'herzien': 0, 'herzienVerschil': {}, 'gewichtenTerug': 0, 'aanname': 1,
+            if any(str(kop.get('scholen-' + m['mijlpaal'], '')) not in ('1', '2', '3', '4', '5', '5b', '6') for m in MIJLPALEN if m['pipeline'] == 'Scholen'): raise ValueError('Kies voor elke mijlpaal van Scholen een fase uit Capsule (1 tot en met 6, of 5b).')  # v7.9.2: 5b
+            return {'stap': 'fasen', 'toegepast': True, 'alGedaan': False, 'gewijzigd': True, 'mijlpalen': 6, 'toegevoegd': 6, 'verhuisd': {'1': 2, '2': 0, '3': 3, '4': 0, '5': 3, '5b': 0}, 'gewonnen': 0, 'dealDatum': 0, 'eerderGewonnen': 0, 'ongewijzigd': 0, 'wissels': 8, 'herzien': 0, 'herzienVerschil': {}, 'gewichtenTerug': 0, 'aanname': 1,
                     'rollen': {'ingesteld': True, 'pipelinesZonder': []}, 'melding': 'De pipeline Scholen heeft nu de fasen van Capsule: 8 open kansen verhuisd.'}
         if stap == 'status': return {'stap': 'status', 'fasen': {'alGedaan': False, 'mijlpalen': len([m for m in MIJLPALEN if m['pipeline'] == 'Scholen'])}, 'rollen': {'ingesteld': True, 'pipelinesZonder': [], 'afwijkend': 0}, 'tijdlijn': {'teOmzetten': 0, 'alOmgezet': 1}, 'wissels': {'teHerzien': 0}, 'kansen': {'zonderSchooljaar': 0, 'zonderKlant': 0}, 'redenen': {'gekoppeld': True, 'buitenLijst': 0}}
         if stap == 'rollen': return {'stap': 'rollen', 'toegepast': True, 'gewijzigd': 0, 'rollen': {'ingesteld': True, 'pipelinesZonder': []}} if toe else {'stap': 'rollen', 'toegepast': False, 'pipelines': [], 'mijlpalen': [], 'afwijkend': []}  # r3 (R4): afwijkend
@@ -895,8 +910,11 @@ def handle_crm(fn, args):
         o = args[0]; DOELEN[:] = [x for x in DOELEN if x['id'] != o['eigenaar'] + o['periode'] + o['metric'] and x['id'] != o.get('id')] + [dict(o, id=o['eigenaar'] + o['periode'] + o['metric'], doel=float(o.get('doel') or 0))]; return handle_crm('apiDoelen', [])
     if fn == 'apiMijlpalenOpslaan':
         oude_rol = {m['mijlpaal']: m.get('rol', '') for m in MIJLPALEN}  # v7.9 (R13): zonder veld rol blijft de rol staan
+        oude_start = {m['mijlpaal']: bool(m.get('vraagtStart')) for m in MIJLPALEN}  # v7.9.2: zonder veld vraagtStart blijft hij staan
+        oud_naam = lambda m: ((m.get('oud') or {}).get('mijlpaal') or m['mijlpaal']).lower()
         MIJLPALEN[:] = [{'pipeline': m.get('pipeline') or 'Scholen', 'mijlpaal': m['mijlpaal'].lower(), 'volgorde': i + 1, 'kans': m['kans'], 'dagenNorm': m['dagenNorm'],
-                         'rol': m['rol'] if 'rol' in m else oude_rol.get(((m.get('oud') or {}).get('mijlpaal') or m['mijlpaal']).lower(), '')} for i, m in enumerate(args[0])]; return MIJLPALEN
+                         'rol': m['rol'] if 'rol' in m else oude_rol.get(oud_naam(m), ''),
+                         'vraagtStart': (m['vraagtStart'] is True or str(m['vraagtStart']).lower() == 'ja') if 'vraagtStart' in m else oude_start.get(oud_naam(m), False)} for i, m in enumerate(args[0])]; return MIJLPALEN
     if fn == 'apiGebruikers': return {'gebruikers': GEBRUIKERS, 'rollen': ['medewerker', 'teamlead', 'management'], 'teams': ['management', 'consultancy', 'accountmanagement', 'talent']}
     if fn == 'apiGebruikerOpslaan':
         o = dict(args[0]); g = opslaan(GEBRUIKERS, dict(o, team=o.get('team') or 'accountmanagement', rol=o.get('rol') or 'medewerker', actief=o.get('actief', 'ja') != 'nee', heeftCode=True), 'g')
@@ -957,7 +975,7 @@ BREIN_UITGEVOERD = []
 INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt']}
 FAAL = {}  # v7.3 (H2): api-naam -> hoeveel aanroepen nog moeten mislukken (gezet met {"fn":"_faal","args":[naam, n]})
 FAAL_FOUT = {}  # v7.9 (iOS-review): api-naam -> eigen melding van die storing (derde argument van _faal, bijv. "Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.")
-BACKEND_VERSIE = ['7.9.1']  # v7.9.1: release; v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
+BACKEND_VERSIE = ['7.9.2']  # v7.9.2: release (fase 5b); v7.9.1: release; v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
 # v7.3 (FL-1): de seed bevriezen zodra alle tabellen gevuld zijn. reset() zet elke lijst en dict in place terug (de handlers houden de modulevariabelen
 # bij naam vast), dus een draaiende mock begint daarna weer bij dezelfde uitgangsstand; ook HUIDIG (de ingelogde code) en FAAL gaan terug.
 _SEED = {k: copy.deepcopy(v) for k, v in list(globals().items()) if k.isupper() and isinstance(v, (list, dict))}
@@ -1184,7 +1202,7 @@ class H(SimpleHTTPRequestHandler):
         body = json.loads(ruw)
         if body.get('fn') == '_reset': return self.json(reset())  # v7.3 (FL-1): testhulp, zonder koppelcode
         if body.get('fn') == '_backendVersie':  # v7.9 (R13): testhulp: de versie die apiCrm noemt (een oudere = zonder backendVersie)
-            v = str((body.get('args') or ['7.9.1'])[0] or '7.9.1'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
+            v = str((body.get('args') or ['7.9.2'])[0] or '7.9.2'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
         if body.get('fn') == '_faal':  # v7.3 (H2): testhulp: de volgende n aanroepen van een api mislukken
             try: return self.json(faal_zetten(body.get('args') or []))
             except Exception as e: return self.json({'ok': False, 'fout': str(e)})
