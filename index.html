@@ -5591,7 +5591,7 @@
   }
 
   /* --- events --- */
-  el('venster').addEventListener('click', function (ev) { if (ev.target === el('venster')) sluitVenster(); });
+  el('venster').addEventListener('click', function (ev) { var v = el('venster'); if (ev.target === v && ev.clientY - v.getBoundingClientRect().top >= (parseFloat(getComputedStyle(v).paddingTop) || 0)) sluitVenster(); });  // r5 (IOS5-R1): een tik in de reserve (op de melding) sluit niet
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape' && el('venster').classList.contains('aan')) { sluitVenster(); return; }
     if (ev.key === 'Tab' && el('venster').classList.contains('aan')) { vensterTab(ev); return; }  // v7.3 (TB-8): focus-trap

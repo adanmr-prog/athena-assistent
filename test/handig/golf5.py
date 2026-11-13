@@ -14,6 +14,7 @@
 # Review r3 (sectie 10): de melding met knoppen nooit over titel, veld of fout van het venster op telefoon en iPad (R1), een veldfout schuift in beeld (N1),
 # geen oude veldfout na een weigering van de backend (N2) en Toepassen uit tijdens de proefdraai van de stap fasen (R2).
 # Review r4 (sectie 10, `g5_r4_liggend`): liggend met het toetsenbord open geen reserve boven de sheet, zodat label en veld in beeld blijven (IOS4-R1).
+# Review r5 (sectie 10, `g5_r5_tik_melding`, `g5_r5_tik_ipad`): een tik op de melding in de reserve boven de sheet sluit het venster niet (IOS5-R1).
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -899,6 +900,32 @@ with sync_playwright() as p:
         ok('telefoon liggend 844×390 zonder toetsenbord (r4, IOS4-R1): de reserve boven de sheet blijft, ook na het sluiten van het toetsenbord', m0['pad'] == '104px' and m3['pad'] == '104px' and m3['zichtbaar'], [m0, m3])
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_r4_liggend', g5_r4_liggend)
+    # r5 (IOS5-R1): de reserve boven de sheet is geen achtergrond. Een tik op de melding (zonder knop: pointer-events none; of met knoppen tijdens het vervagen
+    # na 8 s) laat het venster met de ingevulde waarde open; een tik tussen de reserve en de sheet sluit het venster nog zoals voorheen.
+    PUNT = "(function (s) { var r = document.querySelector(s).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })(%s)"
+    RESERVE = "(function () { var v = document.getElementById('venster'); return [v.getBoundingClientRect().top + (parseFloat(getComputedStyle(v).paddingTop) || 0), document.getElementById('vensterInhoud').getBoundingClientRect().top]; })()"
+    def nog_open(): return pg.evaluate("[document.getElementById('venster').classList.contains('aan'), (document.getElementById('vf-contractwaarde') || {}).value || null]")
+    def tik_na_vervagen():  # de melding met knoppen verdwijnt na 8 s; tik meteen daarna (hij vervaagt nog) waar Ongedaan maken stond
+        xy = pg.evaluate(PUNT % json.dumps('#toast [data-toastactie="0"]'))
+        pg.wait_for_function("!document.getElementById('toast').classList.contains('knop')", timeout=10000, polling=10)
+        o = pg.evaluate("getComputedStyle(document.getElementById('toast')).opacity"); pg.touchscreen.tap(xy[0], xy[1]); pg.wait_for_timeout(400)
+        return [round(xy[1]), o]
+    def g5_r5_tik_melding():
+        pg.set_viewport_size({'width': 375, 'height': 667}); pg.wait_for_timeout(300)
+        detail('kans:k7'); pg.select_option('[data-kansfase="k7"]', 'gewonnen'); venster_open('#vf-contractwaarde')
+        pg.fill('#vf-contractwaarde', '12500'); pg.fill('#vf-aantal', '1'); pg.fill('#vf-startdatum', dag(10)); pg.evaluate("window.__faal.apiKansOpslaan = 1")
+        pg.evaluate("document.querySelector('#venster [data-cf-opslaan]').click()"); toast('Storing (golf5)'); pg.wait_for_timeout(400)
+        xy = pg.evaluate(PUNT % json.dumps('#toast')); res = pg.evaluate(RESERVE); pg.touchscreen.tap(xy[0], xy[1]); pg.wait_for_timeout(400); m = nog_open()
+        ok('telefoon 375×667 (r5, IOS5-R1): een tik op de foutmelding boven het winformulier sluit het venster niet; de contractwaarde staat er nog', xy[1] < res[0] and m == [True, '12500'], [xy, res, m])
+        if m[0]: pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+        melding_dan_win('k9', 'lead'); pg.fill('#vf-contractwaarde', '12500'); t = tik_na_vervagen(); m = nog_open()
+        ok('telefoon 375×667 (r5, IOS5-R1): een tik op Ongedaan maken terwijl de melding vervaagt sluit het venster niet; de contractwaarde staat er nog', m == [True, '12500'], [t, m])
+        if m[0]: pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+        detail('kans:k7'); pg.select_option('[data-kansfase="k7"]', 'gewonnen'); venster_open('#vf-contractwaarde'); pg.wait_for_timeout(300); res = pg.evaluate(RESERVE)
+        pg.touchscreen.tap(20, (res[0] + res[1]) / 2); pg.wait_for_timeout(400)
+        ok('telefoon 375×667 (r5, IOS5-R1): een tik op de achtergrond tussen de reserve en de sheet sluit het venster nog', res[1] - res[0] > 8 and not nog_open()[0], res)
+        if nog_open()[0]: pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_r5_tik_melding', g5_r5_tik_melding)
     c.close()
     c = b.new_context(viewport={'width': 1180, 'height': 820}, is_mobile=True, has_touch=True)
     pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('ipad r3: ' + str(e))); pg.on('dialog', dialoog)
@@ -908,6 +935,11 @@ with sync_playwright() as p:
         ok('ipad landschap (r3, R1): de melding ligt niet over de titel of een veld van het winformulier; Ongedaan maken raakbaar', pg.evaluate("document.body.classList.contains('desk')") and m['toast'] and not m['bedekt'] and m['ongedaan'], m)
         pg.tap('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_r3_melding_ipad', g5_r3_melding_ipad)
+    def g5_r5_tik_ipad():  # r5 (IOS5-R1): ook op de iPad liggend (body.desk, reserve) sluit een tik op de vervagende melding het venster niet
+        melding_dan_win('k9', 'lead'); pg.fill('#vf-contractwaarde', '12500'); t = tik_na_vervagen(); m = nog_open()
+        ok('ipad landschap (r5, IOS5-R1): een tik op Ongedaan maken terwijl de melding vervaagt sluit het venster niet; de contractwaarde staat er nog', m == [True, '12500'], [t, m])
+        if m[0]: pg.tap('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_r5_tik_ipad', g5_r5_tik_ipad)
     c.close()
     # R2: tijdens de proefdraai die een andere fasekeuze start (Apps Script 1-3 s) staat Toepassen uit; meteen Toepassen stuurt dus nooit de nieuwe keuzes
     # met de onderbouwing van de vorige proefdraai. Een keuze die tijdens de vlucht valt, draait daarna nog een proefdraai (niets verloren). Desktop: geen
