@@ -627,7 +627,8 @@ def handle_crm(fn, args):
             if vs and not re.match(r'^\d{4}-\d{2}-\d{2}$', vs): raise ValueError('Ongeldige verwachte startdatum.')
             o['verwachteStart'] = vs
         naar_fase = o.get('fase') or (oud['fase'] if oud else 'lead')
-        if (not oud or (o.get('fase') and o['fase'] != oud['fase']) or 'verwachteStart' in o) and any(m['mijlpaal'] == naar_fase and m.get('vraagtStart') for m in MIJLPALEN):
+        pl_wissel = bool(oud and o.get('pipeline') and o['pipeline'] != (oud.get('pipeline') or 'Scholen'))  # v7.9.3 (C-R3b): ook bij een pipelinewissel
+        if (not oud or (o.get('fase') and o['fase'] != oud['fase']) or pl_wissel or 'verwachteStart' in o) and any(m['mijlpaal'] == naar_fase and m.get('vraagtStart') for m in MIJLPALEN):
             start_na = o['verwachteStart'] if 'verwachteStart' in o else ((oud or {}).get('verwachteStart') or '')
             if not start_na or start_na < d(0): raise ValueError('Deze fase vraagt een verwachte startdatum (vandaag of later).')
         if o.get('schoolId'): o['school'] = per_id(SCHOLEN)[o['schoolId']]['naam']
@@ -687,10 +688,11 @@ def handle_crm(fn, args):
         if stap == 'fasen':  # v7.9.1: de zes fasen van Capsule; een plausibele vorm (de rekenregels test test/node_rooktest.js tegen Code.gs); de mock verandert de mijlpalen niet
             if not toe: return {'stap': 'fasen', 'toegepast': False, 'alGedaan': False, 'pipeline': 'Scholen', 'onderbouwing': FASEN_ONDERBOUWING, 'doelen': FASEN_DOELEN,
                                 'mijlpalen': [{'id': 'scholen-' + m['mijlpaal'], 'mijlpaal': m['mijlpaal'], 'open': len([k for k in CRMKANSEN if k['fase'] == m['mijlpaal']]), 'metDatum': 0, 'eerderGewonnen': 0, 'voorstel': {'lead': '1', 'gesprek': '3', 'voorstel': '5', 'onderhandeling': '5'}.get(m['mijlpaal'], '')} for m in MIJLPALEN if m['pipeline'] == 'Scholen'],
-                                'herzien': 0, 'herzienVerschil': {}, 'gewichten': [], 'gewichtenBlijven': False, 'anderePipelines': []}  # v7.9.1 (review r2): metDatum (F8), herzien (F2), anderePipelines (F6); r3: eerderGewonnen (F1), herzienVerschil (R5), gewichten (R2)
+                                'herzien': 0, 'herzienVerschil': {}, 'gewichten': [], 'gewichtenBlijven': False, 'anderePipelines': [],  # v7.9.1 (review r2): metDatum (F8), herzien (F2), anderePipelines (F6); r3: eerderGewonnen (F1), herzienVerschil (R5), gewichten (R2)
+                                'gewichtenTerug': 0, 'toegevoegd': 6, 'dubbel': []}  # v7.9.3 (C-R1): wat toepassen zal doen (dubbel = twee mijlpalen voor één fase na een eerdere keer)
             kop = opt.get('koppeling') if isinstance(opt.get('koppeling'), dict) else {}
             if any(str(kop.get('scholen-' + m['mijlpaal'], '')) not in ('1', '2', '3', '4', '5', '5b', '6') for m in MIJLPALEN if m['pipeline'] == 'Scholen'): raise ValueError('Kies voor elke mijlpaal van Scholen een fase uit Capsule (1 tot en met 6, of 5b).')  # v7.9.2: 5b
-            return {'stap': 'fasen', 'toegepast': True, 'alGedaan': False, 'gewijzigd': True, 'mijlpalen': 6, 'toegevoegd': 6, 'verhuisd': {'1': 2, '2': 0, '3': 3, '4': 0, '5': 3, '5b': 0}, 'gewonnen': 0, 'dealDatum': 0, 'eerderGewonnen': 0, 'ongewijzigd': 0, 'wissels': 8, 'herzien': 0, 'herzienVerschil': {}, 'gewichtenTerug': 0, 'aanname': 1,
+            return {'stap': 'fasen', 'toegepast': True, 'alGedaan': False, 'gewijzigd': True, 'mijlpalen': 6, 'toegevoegd': 6, 'verhuisd': {'1': 2, '2': 0, '3': 3, '4': 0, '5': 3, '5b': 0}, 'gewonnen': 0, 'dealDatum': 0, 'eerderGewonnen': 0, 'ongewijzigd': 0, 'wissels': 8, 'herzien': 0, 'herzienVerschil': {}, 'dubbel': [], 'gewichtenTerug': 0, 'aanname': 1,
                     'rollen': {'ingesteld': True, 'pipelinesZonder': []}, 'melding': 'De pipeline Scholen heeft nu de fasen van Capsule: 8 open kansen verhuisd.'}
         if stap == 'status': return {'stap': 'status', 'fasen': {'alGedaan': False, 'mijlpalen': len([m for m in MIJLPALEN if m['pipeline'] == 'Scholen'])}, 'rollen': {'ingesteld': True, 'pipelinesZonder': [], 'afwijkend': 0}, 'tijdlijn': {'teOmzetten': 0, 'alOmgezet': 1}, 'wissels': {'teHerzien': 0}, 'kansen': {'zonderSchooljaar': 0, 'zonderKlant': 0}, 'redenen': {'gekoppeld': True, 'buitenLijst': 0}}
         if stap == 'rollen': return {'stap': 'rollen', 'toegepast': True, 'gewijzigd': 0, 'rollen': {'ingesteld': True, 'pipelinesZonder': []}} if toe else {'stap': 'rollen', 'toegepast': False, 'pipelines': [], 'mijlpalen': [], 'afwijkend': []}  # r3 (R4): afwijkend
@@ -975,7 +977,7 @@ BREIN_UITGEVOERD = []
 INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt']}
 FAAL = {}  # v7.3 (H2): api-naam -> hoeveel aanroepen nog moeten mislukken (gezet met {"fn":"_faal","args":[naam, n]})
 FAAL_FOUT = {}  # v7.9 (iOS-review): api-naam -> eigen melding van die storing (derde argument van _faal, bijv. "Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.")
-BACKEND_VERSIE = ['7.9.2']  # v7.9.2: release (fase 5b); v7.9.1: release; v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
+BACKEND_VERSIE = ['7.9.3']  # v7.9.3: herstel (schrijfcontract gelijk aan 7.9.2); v7.9.2: release (fase 5b); v7.9.1: release; v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
 # v7.3 (FL-1): de seed bevriezen zodra alle tabellen gevuld zijn. reset() zet elke lijst en dict in place terug (de handlers houden de modulevariabelen
 # bij naam vast), dus een draaiende mock begint daarna weer bij dezelfde uitgangsstand; ook HUIDIG (de ingelogde code) en FAAL gaan terug.
 _SEED = {k: copy.deepcopy(v) for k, v in list(globals().items()) if k.isupper() and isinstance(v, (list, dict))}
@@ -1202,7 +1204,7 @@ class H(SimpleHTTPRequestHandler):
         body = json.loads(ruw)
         if body.get('fn') == '_reset': return self.json(reset())  # v7.3 (FL-1): testhulp, zonder koppelcode
         if body.get('fn') == '_backendVersie':  # v7.9 (R13): testhulp: de versie die apiCrm noemt (een oudere = zonder backendVersie)
-            v = str((body.get('args') or ['7.9.2'])[0] or '7.9.2'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
+            v = str((body.get('args') or ['7.9.3'])[0] or '7.9.3'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
         if body.get('fn') == '_faal':  # v7.3 (H2): testhulp: de volgende n aanroepen van een api mislukken
             try: return self.json(faal_zetten(body.get('args') or []))
             except Exception as e: return self.json({'ok': False, 'fout': str(e)})

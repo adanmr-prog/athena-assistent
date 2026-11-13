@@ -1,15 +1,20 @@
-// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
+// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien; v7.9.3: eenentwintig) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
 // onaangeraakt); per mutant draait `CODE_GS=<kopie> node test/node_rooktest.js`. Een mutant is "gedood" als de rooktest faalt
 // (exitcode ≠ 0, crash of timeout) en "OVERLEEFD" als hij ALLES GOED geeft: dan mist de rooktest een eis(...) voor die invariant.
-// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 16 van 17 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
+// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 20 van 21 gedood (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
 // v7.9 (review T3, T5): de noemerregel zonder waarde en zonder schooljaarcontrole, en het venster van de voorspelling één week opgeschoven.
 // v7.9.2: vraagtStart_niet_verplicht (een kans gaat zonder verwachte startdatum naar fase 5b bijna rond) en (review r1) fasenEffectief_5b_leeg (5b erft de
-// voorstelrol niet meer, zodat stap fasen een historische VO-wissel stil herziet).
+// voorstelrol niet meer, zodat stap fasen een historische VO-wissel stil herziet). v7.9.3: fasen_herhaal_op_naam (opnieuw toepassen zoekt een fase alleen op
+// naam, zodat een in Beheer hernoemde fase met een later besluit van het MT stil naar het rekenmodel teruggaat) en (review r1) fasen_5b_altijd_bekend (een eigen
+// mijlpaal achter VO na v7.9.1 telt als 5b van de stap, zodat de verplichte startdatum stil nooit actief wordt) en (review r2) fasen_voorvoegsel_negeren (het
+// voorstel van stap fasen negeert na een eerdere keer het nummer vóór de naam, zodat "2. eerste gesprek gepland" naast een eigen rij fase 3 wordt) en (review r3)
+// fasen_voorvoegsel_geen_anker (het nummer geeft de fase, maar de rij telt niet als anker voor de plek, zodat een eigen rij ervóór en de genummerde rij samen een
+// reeks worden en "2. eerste contact" stil fase 3 krijgt).
 // Resultaat als json in test/shots/robuust/mutatie.json (staat in .gitignore).
 var fs = require('fs'), path = require('path'), cp = require('child_process');
 var R = path.join(__dirname, '..'), BRON = path.join(R, 'backend/Code.gs'), ROOKTEST = path.join(__dirname, 'node_rooktest.js');
 var UIT_MAP = path.join(R, 'test/shots/robuust'), UIT = path.join(UIT_MAP, 'mutatie.json');
-var TIMEOUT_MS = 120000, MIN_GEDOOD = 16;  // v7.9 (review): vijftien mutanten, norm ≥ 14; v7.9.2: zestien, norm ≥ 15; review r1: zeventien, norm ≥ 16
+var TIMEOUT_MS = 120000, MIN_GEDOOD = 20;  // v7.9 (review): vijftien mutanten, norm ≥ 14; v7.9.2: zestien, norm ≥ 15; review r1: zeventien, norm ≥ 16; v7.9.3: achttien, norm ≥ 17; v7.9.3 review r1: negentien, norm ≥ 18; review r2: twintig, norm ≥ 19; review r3: eenentwintig, norm ≥ 20
 
 // De kopieën staan buiten de repo: standaard in de scratchpad van de sessie (--map overschrijft), nooit naast het origineel.
 var argMap = process.argv.indexOf('--map');
@@ -93,7 +98,32 @@ var MUTANTEN = [
   { id: 'fasenEffectief_5b_leeg', gebied: 'fase 5b (v7.9.2)', invariant: 'fasenEffectief geeft 5b de geërfde voorstelrol (stap fasen herziet een VO-wissel naar 5b niet)',
     zoek: "uit['6'] = 'deal'; return uit; }",
     vervang: "uit['5b'] = ''; uit['6'] = 'deal'; return uit; }  // MUTANT",
-    voorstel: "eis(ctx.fasenEffectief()['5b'] === 'voorstel' && pB.herzien === 0 && ctx.telRol(wisselRij(wB.id)) === 'voorstel', 'een VO-wissel naar mondeling akkoord blijft na stap fasen een VO');" }
+    voorstel: "eis(ctx.fasenEffectief()['5b'] === 'voorstel' && pB.herzien === 0 && ctx.telRol(wisselRij(wB.id)) === 'voorstel', 'een VO-wissel naar mondeling akkoord blijft na stap fasen een VO');" },
+  // v7.9.3 (C-R1): na een eerdere keer houdt opnieuw toepassen een fase die de beheerder in Beheer → Mijlpalen hernoemde ("5. offerte", 65 %), via de koppeling.
+  // Zoekt de stap alleen op naam, dan komt de Capsule-naam terug met 70 % en een nieuw id en verhuizen de kansen met een hernoemd-wissel: een MT-besluit stil terug
+  { id: 'fasen_herhaal_op_naam', gebied: 'fase 5b (v7.9.3)', invariant: 'fasenPlan zoekt na een eerdere keer een hernoemde fase ook op de koppeling, niet alleen op naam',
+    zoek: "  if (eerder) CAPSULE_FASEN.forEach(function (f) {\n    if (perFase[f.fase]) return;",
+    vervang: "  if (false) CAPSULE_FASEN.forEach(function (f) {  // MUTANT\n    if (perFase[f.fase]) return;",
+    voorstel: "eis(r.wissels === 0 && na[4].mijlpaal === '5. offerte' && na[4].kans === 65, 'opnieuw toepassen na v7.9.1 houdt de hernoemde fase 5 (naam, gewicht, kansen)');" },
+  // v7.9.3 (review r1, C-R1-5b): na stap fasen met v7.9.1 bestond fase 5b niet; een eigen mijlpaal achter VO ("mondeling akkoord") is dan geen rij van de stap. Telt
+  // de stap 5b toch als fase van de vorige keer, dan zegt hij "staat zo" en wordt de verplichte startdatum stil nooit actief
+  { id: 'fasen_5b_altijd_bekend', gebied: 'fase 5b (v7.9.3)', invariant: 'fasenVorige geeft zonder de instelling fasenSleutels alleen de fasen van v7.9.1 (1 tot en met 5)',
+    zoek: "function fasenVorige() { var s = instelling('fasenSleutels'); return s instanceof Array ? s.map(String) : FASEN_V791.slice(); }",
+    vervang: "function fasenVorige() { return CAPSULE_FASEN.map(function (f) { return f.fase; }); }  // MUTANT",
+    voorstel: "eis(!roep(SOPHIE, 'apiMigratieV79', 'fasen').alGedaan, 'na v7.9.1 met een eigen mondeling akkoord achter VO staat de stap niet zo');" },
+  // v7.9.3 (review r2, C-R1b): na een eerdere keer beslist eerst het nummer vóór de naam ("2." van "2. eerste gesprek gepland") als dat een fase van de vorige keer
+  // is en in Scholen uniek. Negeert het voorstel dat, dan leest de herkenner "gesprek gepland" als 3 zodra de plek niet beslist (een eigen rij ertussen): de rij
+  // verdwijnt bij toepassen, "2. pre-ap" komt terug en de kansen gaan stil van 0 % naar 25 %
+  { id: 'fasen_voorvoegsel_negeren', gebied: 'fase 5b (v7.9.3)', invariant: 'fasenVoorstel geeft na een eerdere keer een uniek voorvoegsel van een fase van de vorige keer die fase',
+    zoek: "    if (f) { uit[m.id] = f.fase; p = namen.indexOf(f.mijlpaal); }  // het voorvoegsel gaat voor de herkenner",
+    vervang: "    if (false && f) { uit[m.id] = f.fase; p = namen.indexOf(f.mijlpaal); }  // MUTANT",
+    voorstel: "eis(vs3 === '1,,2,3,4,5', 'met een eigen rij ertussen beslist het voorvoegsel: 2. eerste gesprek gepland is 2');" },
+  // v7.9.3 (review r3, R3-T1 V3): een rij met een uniek voorvoegsel van een fase van de vorige keer (en een passende rol) is een anker voor de plek. Telt hij niet
+  // als anker, dan vormt hij met een eigen rij ervóór een reeks waar precies twee fasen ontbreken: "eigen stap" wordt 2 en "2. eerste contact" stil 3 (ap)
+  { id: 'fasen_voorvoegsel_geen_anker', gebied: 'fase 5b (v7.9.3)', invariant: 'fasenVoorstel telt een rij die zijn fase aan het voorvoegsel dankt als anker voor de plek',
+    zoek: "    if (f) { uit[m.id] = f.fase; p = namen.indexOf(f.mijlpaal); }  // het voorvoegsel gaat voor de herkenner",
+    vervang: "    if (f) { uit[m.id] = f.fase; }  // MUTANT",
+    voorstel: "eis(anker2 === '1,,2,4,5', 'het voorvoegsel is een anker: 2. eerste contact blijft 2, de eigen rij ervoor kiest de beheerder');" }
 ];
 
 var fouten = 0, overleefd = 0, gedood = 0, t0 = Date.now();
@@ -160,7 +190,7 @@ resultaat.gedood = gedood; resultaat.overleefd = overleefd; resultaat.looptijdS 
 resultaat.geslaagd = gedood >= MIN_GEDOOD && resultaat.mutanten.every(function (r) { return r.toegepast; });
 fs.writeFileSync(UIT, JSON.stringify(resultaat, null, 2));
 console.log('     ' + gedood + ' van ' + MUTANTEN.length + ' gedood, ' + overleefd + ' overleefd; json: ' + path.relative(R, UIT) + '; looptijd ' + looptijdS + ' s');
-// Oordeel: ≥ 16 van 17 gedood (v7.9.2 na review r1; daarvoor ≥ 15 van 16; v7.9 na de review ≥ 14 van 15; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
+// Oordeel: ≥ 20 van 21 gedood (v7.9.3 na review r3; na review r2 ≥ 19 van 20; na review r1 ≥ 18 van 19; v7.9.3 ≥ 17 van 18; v7.9.2 na review r1 ≥ 16 van 17; daarvoor ≥ 15 van 16; v7.9 na de review ≥ 14 van 15; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
 if (resultaat.geslaagd) console.log('ALLES GOED' + (overleefd ? ' (met ' + overleefd + ' overlevende mutant: zie de FOUT-regel hierboven)' : ''));
 else console.log('FOUTEN: ' + fouten);
 process.exit(resultaat.geslaagd ? 0 : 1);
