@@ -388,6 +388,14 @@ log(!!toon.ok, 'portaal: het eigen profiel blijft via het portaal gewoon bereikb
   var r4 = roepRuw(LARS, 'apiKansOpslaan', [{ id: k4.id, fase: 'voorstel', _oud: { fase: 'gesprek' }, wissel: { bron: 'import' } }, false, { bron: 'import' }]); aantalAanroepen++;
   noteer('fase 5b (v7.9.2): naar vraagtStart zonder startdatum, met { bron: import }', LARS, 'apiKansOpslaan', r4, !r4.ok && r4.fout === ctx.START_FOUT && lees('Kansen').filter(function (x) { return x.id === k4.id; })[0].fase === 'gesprek' && lees('Fasewissels').length === nW4,
     'geweigerd met de Nederlandse melding; er verandert niets'); herstel(); aantalHerstel++;
+  // v7.9.3 (C-R3a): ongedaan maken schrijft alleen de fase; een meegestuurde eigenaar, pipeline, waarde of startdatum wordt genegeerd (zo omzeilt niemand de
+  // controles van de gewone tak, zoals de eigenaarsregel of de startdatum van 5b)
+  var k5 = lees('Kansen').filter(function (x) { return x.eigenaar === 'Lars Visser' && x.fase === 'gesprek'; })[0];
+  var r5a = roepRuw(LARS, 'apiKansOpslaan', [{ id: k5.id, fase: 'voorstel', _oud: { fase: 'gesprek' } }]); aantalAanroepen++;
+  var r5 = r5a.ok ? roepRuw(LARS, 'apiKansOpslaan', [{ id: k5.id, fase: 'gesprek', eigenaar: 'Femke de Wit', pipeline: 'Elders', waarde: 1, verwachteStart: '', _oud: { fase: 'voorstel' }, wissel: { ongedaan: r5a.result.fasewissel.id } }]) : r5a; aantalAanroepen++;
+  var k5n = lees('Kansen').filter(function (x) { return x.id === k5.id; })[0];
+  noteer('ongedaan maken (v7.9.3) met een andere eigenaar, pipeline en waarde', LARS, 'apiKansOpslaan', r5, r5.ok && k5n.fase === 'gesprek' && k5n.eigenaar === 'Lars Visser' && String(k5n.pipeline || '') === String(k5.pipeline || '') && Number(k5n.waarde) === Number(k5.waarde),
+    'alleen de fase teruggezet; eigenaar, pipeline en waarde ongewijzigd'); herstel(); aantalHerstel++;
   // weekdoelen: een medewerker, een teamlead buiten zijn team en een teamlead van een ander team worden geweigerd
   var wk = ctx.isoWeekStr(ctx.plusDagen(0));
   [[LARS, 'Lars Visser', 'een medewerker voor zichzelf'], [YARA, 'Femke de Wit', 'de teamlead consultancy voor een accountmanager'], [BAS, 'Lars Visser', 'de teamlead accountmanagement voor een OC']].forEach(function (x) {

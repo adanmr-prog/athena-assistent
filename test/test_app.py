@@ -296,7 +296,7 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
     # v7.9 "v7.9 labels" (punt 17): één definitie per naam — contractwaarde (niet omzet) en open waarde (niet "in de pijplijn"); runKern stuurt v mee
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
-    assert all(x.get('v') == '7.9.2' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.2
+    assert all(x.get('v') == '7.9.3' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.3
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
     assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
     # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is
@@ -610,7 +610,7 @@ with sync_playwright() as p:
     # v7.9 (punt 4) "v7.9 winformulier met getekende waarde": eerst zonder getekende waarde (melding, venster blijft open), dan met; de akkoorddatum staat op vandaag
     assert page.input_value('#vf-akkoorddatum') == dag(0) and page.get_attribute('#vf-akkoorddatum', 'max') == dag(0), 'akkoorddatum: standaard vandaag, max vandaag'
     page.fill('#vf-aantal', '2'); page.fill('#vf-startdatum', '2026-11-16'); page.fill('#vf-rooster', 'di en do 9-13 uur'); page.click('#venster [data-cf-opslaan]')
-    page.wait_for_selector('#toast.aan:has-text("getekende contractwaarde")'); assert page.locator('#venster.aan #vf-contractwaarde').count() == 1, 'zonder getekende waarde blijft het winformulier open'
+    page.wait_for_selector('#vensterInhoud #vf-fout[role="alert"]:has-text("getekende contractwaarde")'); assert page.locator('#venster.aan #vf-contractwaarde[aria-invalid="true"]').count() == 1, 'zonder getekende waarde blijft het winformulier open, met de fout onder het veld (v7.9.3 r2, iOS-N1)'
     page.fill('#vf-contractwaarde', '8250'); n0 = len(API_LOG); page.click('#venster [data-cf-opslaan]')
     page.wait_for_selector('.t-item:has-text("→ gewonnen")'); page.wait_for_timeout(150)
     od = eerste_arg(api_vanaf(n0, 'apiKansOpslaan')[0]).get('overdracht') or {}; assert od.get('contractwaarde') == 8250 and od.get('akkoorddatum') == dag(0), 'het winformulier stuurt de getekende waarde en de akkoorddatum: %s' % od
@@ -628,7 +628,7 @@ with sync_playwright() as p:
     # v7.9 (punt 15) "v7.9 verlorenvenster": geen window.prompt meer, maar een venster met datum, een reden uit de keuzelijst (verplicht) en een toelichting
     page.select_option('[data-kansfase]', 'verloren'); page.wait_for_selector('#venster.aan #vf-verliesReden')
     assert 'opgeschoond' in page.inner_text('#vf-verliesReden') and page.input_value('#vf-datum') == dag(0), 'redenen uit de keuzelijst (met opgeschoond), datum standaard vandaag'
-    page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("Kies een reden")'); page.select_option('#vf-verliesReden', 'te duur'); page.fill('#vf-verliesToelichting', 'Budget naar volgend jaar'); n0 = len(API_LOG)
+    page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#vensterInhoud #vf-fout[role="alert"]:has-text("Kies een reden")'); page.select_option('#vf-verliesReden', 'te duur'); page.fill('#vf-verliesToelichting', 'Budget naar volgend jaar'); n0 = len(API_LOG)
     page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("verloren")'); page.wait_for_selector('#toast.aan [data-toastactie="1"]')
     o = eerste_arg(api_vanaf(n0, 'apiKansOpslaan')[0]); assert o.get('verliesReden') == 'te duur' and o.get('verliesToelichting') == 'Budget naar volgend jaar' and (o.get('wissel') or {}).get('datum') == dag(0), 'verloren: reden, toelichting en datum: %s' % o
     assert 'prompt' not in DIALOGEN, 'geen window.prompt bij verloren'
@@ -706,8 +706,8 @@ with sync_playwright() as p:
     page.click('#venster [data-cf-annuleer]'); page.wait_for_selector('#venster.aan', state='hidden'); page.wait_for_timeout(300)
     assert page.locator('[data-sleepdoel="kans:voorstel"] [data-sleep="kans:k3"]').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan'), 'startdatumvenster: Annuleren zet de kaart terug, geen aanroep'
     sleep_naar(page, '[data-sleep="kans:k3"]', '[data-sleepdoel="kans:contract"]'); page.wait_for_selector('#venster.aan #vf-verwachteStart')
-    page.fill('#vf-verwachteStart', dag(-1)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("verwachte startdatum")')
-    assert page.locator('#venster.aan').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan'), 'startdatumvenster: een datum in het verleden geeft een melding zonder aanroep'
+    page.fill('#vf-verwachteStart', dag(-1)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#venster [role="alert"]:has-text("verwachte startdatum")')  # v7.9.3 (I-N3): de fout onder het veld, geen melding
+    assert page.locator('#venster.aan').count() == 1 and not api_vanaf(n0, 'apiKansOpslaan') and page.get_attribute('#vf-verwachteStart', 'aria-invalid') == 'true', 'startdatumvenster: een datum in het verleden geeft een fout in het venster zonder aanroep'
     page.fill('#vf-verwachteStart', dag(14)); page.click('#venster [data-cf-opslaan]'); page.wait_for_selector('#toast.aan:has-text("→ contract")'); page.wait_for_timeout(300); a = api_vanaf(n0, 'apiKansOpslaan')
     assert len(a) == 1 and eerste_arg(a[0]).get('verwachteStart') == dag(14) and eerste_arg(a[0]).get('wissel', {}).get('bron') == 'slepen' and eerste_arg(a[0]).get('_oud', {}).get('verwachteStart') == '', 'startdatumvenster: één aanroep met verwachteStart, _oud en bron slepen: %s' % a
     assert 'start ' in page.inner_text('[data-sleepdoel="kans:contract"] [data-sleep="kans:k3"]'), 'de kaart in een kolom die een startdatum vraagt toont de start'
