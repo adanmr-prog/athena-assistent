@@ -15,6 +15,9 @@
 # geen oude veldfout na een weigering van de backend (N2) en Toepassen uit tijdens de proefdraai van de stap fasen (R2).
 # Review r4 (sectie 10, `g5_r4_liggend`): liggend met het toetsenbord open geen reserve boven de sheet, zodat label en veld in beeld blijven (IOS4-R1).
 # Review r5 (sectie 10, `g5_r5_tik_melding`, `g5_r5_tik_ipad`): een tik op de melding in de reserve boven de sheet sluit het venster niet (IOS5-R1).
+# v7.9.4 (sectie 12, docs/sturing-v7.9.md §3c): datakwaliteit met de stand leeg, de afdruk van de week en #rapport:week:<jjjj-Www> (`data-weekprint`,
+# `data-weeklink`), de stap kansen met gewonnen kansen, de soort per facturatievorm (`data-factsoort`), contractwaarde met projecten zonder, een team zonder leden.
+# v7.9.4 herstel r2 (`g5_794_weeklink_koud`): een koude start met #rapport:week:<jjjj-Www> zonder cache, de afdruktabel bij body.desk zonder hertekenen en de uitleg bij leeg.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -502,6 +505,19 @@ with sync_playwright() as p:
         pg.tap('#venster [data-cf-opslaan]'); ok('ipad (r2, iOS-N1): zonder reden de fout onder de keuzelijst', vfout('Kies een reden', 'verliesReden'))
         pg.tap('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_ipad_win_verloren', g5_ipad_win_verloren)
+    def g5_794_ipad():  # herstel r1 (N1, R1): op de iPad liggend Soort kiezen 44 px; op de iPad staand (geen body.desk) Afdrukken in Rapporten → Week
+        api('apiKeuzelijstOpslaan', 'soortFacturatie', [{'waarde': 'vooraf', 'oud': 'vooraf'}, {'waarde': 'achteraf', 'oud': 'achteraf'}, {'waarde': 'stukprijs', 'oud': ''}])
+        desk('rapporten', '#crmInhoud [data-beheer="keuzelijsten"]'); pg.click('[data-beheer="keuzelijsten"]'); pg.wait_for_selector('[data-factsoort]')
+        h = pg.evaluate("document.querySelector('[data-factsoort]').getBoundingClientRect().height")
+        ok('ipad (herstel r1, N1): Soort kiezen in Beheer → Keuzelijsten minstens 44 px', h >= 44, h)
+        pg.click('#crmBeheer [data-cf-annuleer]')
+        pg.set_viewport_size({'width': 820, 'height': 1180}); pg.wait_for_timeout(400)
+        pg.click('nav button[data-view="relaties"]'); pg.wait_for_timeout(300); pg.click('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('#crmBalk [data-rweergave="week"]')
+        pg.click('#crmBalk [data-rweergave="week"]'); pg.wait_for_selector('#crmInhoud .week-kop')
+        st = pg.evaluate("[document.body.classList.contains('desk'), document.querySelectorAll('[data-weekprint]').length, (document.querySelector('[data-weekprint]') || { getBoundingClientRect: function () { return { height: 0 }; } }).getBoundingClientRect().height]")
+        ok('ipad staand (herstel r1, R1): zonder desktopweergave staat Afdrukken in Rapporten → Week, minstens 44 px', st[0] is False and st[1] == 1 and st[2] >= 44, st)
+        pg.set_viewport_size({'width': 1180, 'height': 820}); pg.wait_for_timeout(400)
+    stap('g5_794_ipad', g5_794_ipad)
     c.close()
 
     # ===== 5. v7.9.1: Fasen zoals Capsule (Sophie, verse demo): proefdraai met een keuze per mijlpaal, toepassen met koppeling, onderbouwing en besluitdatum =====
@@ -972,6 +988,153 @@ with sync_playwright() as p:
         ok('fasen (r3, R2): ook Proefdraaien zet Toepassen uit; na een mislukte proefdraai staan Proefdraaien en Toepassen weer aan', uit2 and pg.evaluate("[document.querySelector('[data-v79=\"fasen:proef\"]').disabled, document.querySelector('[data-v79=\"fasen:toepassen\"]').disabled]") == [False, False])
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_r3_proef_race', g5_r3_proef_race)
+    c.close()
+
+    # ===== 12. v7.9.4: deel B op de echte stand (docs/sturing-v7.9.md §3c, bouwpunten 1, 3, 5, 9, 16 en 19 in de app) =====
+    WK_NU = '%d-W%02d' % datetime.date.today().isocalendar()[:2]
+    WK_VORIG = '%d-W%02d' % (datetime.date.today() - datetime.timedelta(days=7)).isocalendar()[:2]
+    c, pg = nieuw(b, 'sophie')
+    def g5_794_dq_leeg():  # bouwpunt 1: leeg (niets te toetsen) als eigen stand, niet groen en niet rood, met de statusKlasse-tag en de uitleg
+        desk('rapporten', '#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok'); pg.click('[data-dqvers]'); toast('opnieuw gerekend'); pg.wait_for_timeout(300)
+        t = pg.evaluate("""(function () { var x = document.querySelector('#dqWrap .dq-telling .tag.leeg'); if (!x) return null; var c = getComputedStyle(x), g = getComputedStyle(document.querySelector('#dqWrap .dq-telling .tag.geslaagd') || x), r = getComputedStyle(document.querySelector('#dqWrap .dq-telling .tag.gezakt') || x);
+          var hg = document.querySelector('#dqWrap .dq-telling .tag.geslaagd') || document.querySelector('#dqWrap .dq-telling .tag:not(.leeg)');
+          return { tekst: x.textContent, uitleg: (x.nextElementSibling || {}).textContent || '', bg: c.backgroundColor, rand: c.borderTopStyle, groen: g.backgroundColor, rood: r.backgroundColor, h: Math.round(x.getBoundingClientRect().height * 10) / 10, hTag: hg ? Math.round(hg.getBoundingClientRect().height * 10) / 10 : -1, fs: c.fontSize, fsTag: getComputedStyle(document.querySelector('#dqWrap .dq-telling .tag')).fontSize }; })()""")
+        ok('datakwaliteit (bouwpunt 1): de telling noemt leeg apart, met een eigen tag (gestippeld, niet groen of rood) en de uitleg "niets te toetsen"', bool(t) and t['tekst'] == '1 leeg' and 'niets te toetsen' in t['uitleg'] and t['rand'] == 'dashed' and t['bg'] not in (t['groen'], t['rood']) and t['fs'] == t['fsTag'], t)
+        ok('datakwaliteit (herstel r1, N2): de tag leeg is op desktop even hoog als de tags ernaast (de rand zit binnen dezelfde maat)', bool(t) and t['h'] == t['hTag'], t)
+        pg.click('#dqWrap .legenda-defs summary'); dd = pg.evaluate("(function () { var x = document.querySelector('#dqWrap .legenda-defs dt .tag.leeg'); return x ? x.parentNode.nextElementSibling.textContent : ''; })()")
+        ok('datakwaliteit (bouwpunt 1): onder Alle contracten heeft het lege contract de tag leeg en de reden uit het register ("niets te toetsen: geen …")', dd.startswith('niets te toetsen: geen'), dd)
+        desk('rapporten', '#crmBalk [data-rweergave="mt"]'); pg.click('#crmBalk [data-rweergave="mt"]'); pg.wait_for_selector('.mt .mt-blok')
+        m = pg.evaluate("(function () { var r = [].filter.call(document.querySelectorAll('.mt .mt-regel'), function (x) { return x.querySelector('.mt-m') && x.querySelector('.mt-m').textContent === 'M36'; })[0]; return r ? [r.querySelectorAll('.dq-telling .tag.leeg').length, r.textContent] : null; })()")
+        ok('MT (bouwpunt 1): bij M36 de stand per contract als tags, leeg apart, met het contract dat niets te toetsen had', bool(m) and m[0] == 1 and 'Leeg, niets te toetsen: Geen doelpad op het factuurpatroon' in m[1], m and m[1][:300])
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok')
+    stap('g5_794_dq_leeg', g5_794_dq_leeg)
+
+    def g5_794_week_afdruk():  # bouwpunt 16: Afdrukken in een vaste opzet (kop met de week, tabel, definities) en de link #rapport:week:<jjjj-Www>
+        pg.click('#crmBalk [data-rweergave="week"]'); pg.wait_for_selector('#crmInhoud .week-tabel'); pg.wait_for_selector('[data-weekprint]')
+        pg.evaluate("window.print = function () { window.__geprint = (window.__geprint || 0) + 1; }"); n0 = n_calls(); pg.click('[data-weekprint]')
+        ok('week (bouwpunt 16): Afdrukken roept print aan, zonder nieuwe aanroep', (pg.evaluate("window.__geprint") or 0) >= 1 and not calls(None, n0))
+        pg.emulate_media(media='print')
+        v = pg.evaluate("""(function () { var z = function (s) { var x = document.querySelector(s); return !!(x && x.getClientRects().length && getComputedStyle(x).visibility !== 'hidden'); };
+          return { kop: z('.week-print-kop'), kopTekst: (document.querySelector('.week-print-kop') || {}).textContent || '', tabel: z('.week .week-tabel'), defs: z('.week-print-defs'), knoppen: z('.week-kop'), zijbalk: z('#zijbalk'), balk: z('#crmBalk'), info: z('.week .week-info'), legenda: z('.week .legenda-defs'),
+            breed: document.querySelector('.week .week-tabel').getBoundingClientRect().width <= document.querySelector('main').getBoundingClientRect().width + 1 }; })()""")
+        ok('week (bouwpunt 16): print toont de vaste kop met de week, de uitleg, de tabel en de definities; zonder zijbalk, knoppen en uitklapregel', v['kop'] and 'Weekrapport commercie' in v['kopTekst'] and WK_NU in v['kopTekst'] and v['tabel'] and v['defs'] and v['info'] and not v['knoppen'] and not v['zijbalk'] and not v['balk'] and not v['legenda'] and v['breed'], v)
+        pdf = pg.pdf(format='A4'); tekst = pdf_tekst(pdf); pg.emulate_media(media='screen')
+        ok('week (bouwpunt 16): de pdf heeft de kop met de week, de kolommen en de definities', tekst is not None and 'Weekrapport commercie' in tekst and WK_NU in tekst and 'Contact' in tekst and 'Deals' in tekst, (tekst or '')[:200])
+        pg.click('[data-weeklink]'); pg.wait_for_timeout(400)
+        try: kl = pg.evaluate("navigator.clipboard.readText()")
+        except Exception: kl = ''
+        ok('week (bouwpunt 16): Link kopiëren zet #rapport:week:<jjjj-Www> op het klembord (geen naam)', kl.endswith('#rapport:week:' + WK_NU), kl)
+        n0 = n_calls(); pg.evaluate("routeHash('rapport:week:%s')" % WK_VORIG); pg.wait_for_selector('.periode-nav [data-rstap="nu"]'); pg.wait_for_timeout(300)
+        a = [x for x in calls('apiSturing', n0) if x['args'] and x['args'][0] == 'week']
+        ok('week (bouwpunt 16): #rapport:week:<vorige week> opent die week (stap -1) met het hele team', bool(a) and a[-1]['args'][1].get('stap') == -1 and not a[-1]['args'][1].get('eigenaar') and pg.evaluate("CRM.sturing && CRM.sturing.week") == WK_VORIG and WK_VORIG in pg.inner_text('.week-print-kop') if pg.locator('.week-print-kop').count() else False, a[-1:] if a else 'geen aanroep')
+        n0 = n_calls(); pg.evaluate("routeHash('rapport:week:2099-W10')"); pg.wait_for_selector('.periode-nav [data-rstap="nu"]', state='detached'); pg.wait_for_timeout(300)
+        a = [x for x in calls('apiSturing', n0) if x['args'] and x['args'][0] == 'week']
+        ok('week (bouwpunt 16): een week in de toekomst wordt deze week (stap 0); een week 53 die niet bestaat (2025) geeft null, 2026 heeft er wel een', bool(a) and a[-1]['args'][1].get('stap') == 0 and pg.evaluate("weekStapVan('2025-W53')") is None and pg.evaluate("weekStapVan('2026-W53')") is not None and pg.evaluate("weekStapVan('%s')" % WK_VORIG) == -1, a[-1:] if a else 'geen aanroep')
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok')
+    stap('g5_794_week_afdruk', g5_794_week_afdruk)
+
+    def g5_794_overstap_kansen():  # bouwpunt 3: stap kansen vult ook gewonnen kansen aan (schooljaar en klant), in proefdraai en toepassen
+        api('apiImporteer', 'kansen', [{'id': 'k1', 'schooljaar': '', 'klant': ''}])  # een winst zonder schooljaar en klant (zoals de echte stand)
+        desk('rapporten', '#crmInhoud [data-beheer="v79"]'); pg.click('[data-beheer="v79"]'); venster_open('[data-v79="kansen:proef"]')
+        ok('overstap (bouwpunt 3): de stap heet Kansen aanvullen (open en gewonnen) en de status telt ook de winst', 'open en gewonnen' in pg.inner_text('#v79stap-kansen .r-titel') and '1 aan te vullen' in pg.inner_text('#v79stap-kansen .r-titel'), pg.inner_text('#v79stap-kansen .r-titel'))
+        pg.click('[data-v79="kansen:proef"]'); pg.wait_for_selector('#v79-kansen')
+        ok('overstap (bouwpunt 3): de proefdraai noemt open en gewonnen apart, met schooljaar en klant', '0 open en 1 gewonnen kans aan te vullen' in pg.inner_text('#v79-kansen') and '2026-2027' in pg.inner_text('#v79-kansen') and 'bestaand' in pg.inner_text('#v79-kansen'), pg.inner_text('#v79-kansen'))
+        pg.click('[data-v79="kansen:toepassen"]'); toast('0 open en 1 gewonnen kans aangevuld')
+        k = kans('k1')['kans']; ok('overstap (bouwpunt 3): toegepast: de winst heeft weer schooljaar en klant', k['schooljaar'] == '2026-2027' and k['klant'] == 'bestaand', [k['schooljaar'], k['klant']])
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_794_overstap_kansen', g5_794_overstap_kansen)
+
+    def g5_794_overstap_wis():  # herstel r1 (R794-1, B1): na Toepassen zijn de keuzes van de stap gewist en de caches (basis, pipeline, rapport, sturing) verouderd
+        desk('rapporten', '#crmInhoud [data-beheer="v79"]'); pg.click('[data-beheer="v79"]'); venster_open('[data-v79="rollen:proef"]')
+        pg.click('[data-v79="rollen:proef"]'); pg.wait_for_selector('[data-v79="rollen:toepassen"]')
+        pg.evaluate("V79.keuze['rol:x'] = 'ap'; CRM.sturing = { merk: 'oud' }; CRM.basis = CRM.basis || { merk: 'oud' }; CRM.rapport = CRM.rapport || { merk: 'oud' }")
+        pg.click('[data-v79="rollen:toepassen"]'); toast('Stap rollen toegepast')
+        st = pg.evaluate("[Object.keys(V79.keuze).filter(function (k) { return k.indexOf('rol:') === 0; }).length, CRM.sturing === null, CRM.basis === null, CRM.rapport === null]")
+        ok('overstap (herstel r1, R794-1): na Toepassen van stap rollen is de keuze van die stap gewist en zijn basis, rapport en sturing verouderd', st == [0, True, True, True], st)
+        pg.evaluate("CRM.sturing = { merk: 'oud' }; CRM.basis = CRM.basis || { merk: 'oud' }")
+        pg.click('[data-v79="kansen:proef"]'); pg.wait_for_selector('#v79-kansen'); pg.click('[data-v79="kansen:toepassen"]'); toast('Stap kansen toegepast')
+        st2 = pg.evaluate("[CRM.sturing === null, CRM.basis === null]")
+        ok('overstap (herstel r1, B1): ook na Toepassen van stap kansen zijn basis en sturing verouderd (geen oude stand in Rapporten of het kansvenster)', st2 == [True, True], st2)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_794_overstap_wis', g5_794_overstap_wis)
+
+    def g5_794_facturatiesoort():  # bouwpunt 9: een eigen facturatievorm krijgt in Beheer → Keuzelijsten een soort, via het bewerkvenster en apiKeuzelijstOpslaan
+        desk('rapporten', '#crmInhoud [data-beheer="keuzelijsten"]'); pg.click('[data-beheer="keuzelijsten"]'); pg.wait_for_selector('#le-soortFacturatie .le-rij')
+        ok('keuzelijsten (bouwpunt 9): de lijst soort facturatie met de soort per vorm; zonder eigen vorm geen knop', pg.locator('#le-soortFacturatie .le-rij').count() == 2 and 'één factuur aan het begin' in pg.inner_text('#factSoortRijen') and pg.locator('[data-factsoort]').count() == 0)
+        pg.click('[data-le-erbij="le-soortFacturatie"]'); pg.locator('#le-soortFacturatie .le-rij').last.locator('[data-le="waarde"]').fill('per toetsweek')
+        pg.click('#crmBeheer [data-cf-opslaan]'); toast('Keuzelijsten opgeslagen')
+        pg.click('[data-beheer="keuzelijsten"]'); pg.wait_for_selector('[data-factsoort]')
+        ok('keuzelijsten (bouwpunt 9): een eigen vorm zonder soort volgt de veilige standaard (over de maanden, nooit achter)', 'per toetsweek' in pg.inner_text('#factSoortRijen') and 'geen soort: over de maanden, nooit achter' in pg.inner_text('#factSoortRijen'))
+        pg.click('[data-le-erbij="le-soortFacturatie"]'); pg.locator('#le-soortFacturatie .le-rij').last.locator('[data-le="waarde"]').fill('stukprijs'); n0 = n_calls(); pg.click('[data-factsoort]'); toast('Sla eerst de keuzelijsten op')
+        ok('keuzelijsten (bouwpunt 9): met een niet opgeslagen lijst opent het venster niet en volgt geen aanroep', not calls('apiKeuzelijstOpslaan', n0) and pg.locator('#venster.aan').count() == 0)
+        pg.locator('#le-soortFacturatie .le-rij').last.locator('[data-le-weg]').click()
+        pg.click('[data-factsoort]'); venster_open('#vf-soort0')
+        ok('keuzelijsten (bouwpunt 9): in het bewerkvenster per eigen vorm een keuzelijst met een label (geen soort, vooraf, achteraf)', pg.locator('#venster label[for="vf-soort0"]:has-text("per toetsweek")').count() == 1 and pg.locator('#vf-soort0 option').count() == 3 and pg.input_value('#vf-soort0') == '')
+        pg.select_option('#vf-soort0', 'vooraf'); n0 = n_calls(); pg.click('#venster [data-cf-opslaan]'); toast('Soort per facturatievorm opgeslagen'); venster_dicht()
+        a = calls('apiKeuzelijstOpslaan', n0); r = api('apiInstellingen')
+        ok('keuzelijsten (bouwpunt 9): één aanroep met de soort per eigen vorm; vooraf en achteraf zonder soortveld', len(a) == 1 and a[0]['args'][0] == 'soortFacturatie' and {'waarde': 'per toetsweek', 'oud': 'per toetsweek', 'soort': 'vooraf'} in a[0]['args'][1] and {'waarde': 'vooraf', 'oud': 'vooraf'} in a[0]['args'][1], a)
+        ok('keuzelijsten (bouwpunt 9): de backend bewaart de soort, het overzicht toont hem en de focus staat terug op Soort kiezen', r['soortFacturatieSoorten'].get('per toetsweek') == 'vooraf' and 'één factuur aan het begin' in pg.inner_text('#factSoortRijen .k-rij:has-text("per toetsweek")') and pg.evaluate("document.activeElement && document.activeElement.hasAttribute('data-factsoort')"), r['soortFacturatieSoorten'])
+        pg.click('#crmBeheer [data-cf-annuleer]')
+    stap('g5_794_facturatiesoort', g5_794_facturatiesoort)
+
+    def g5_794_contractwaarde():  # bouwpunt 19: het label uit het register (Verlengd per project) en bij contractwaarde het aantal projecten zonder
+        desk('home', '#homeInhoud .doel-rij'); h = api('apiHome')['bedrijf']
+        rij = pg.locator('#homeInhoud .doel-rij:has(.doel-signaal)')
+        ok('Home (bouwpunt 19): bij contractwaarde het signaal over projecten zonder contractwaarde; het label Verlengd per project', h['zonderContractwaarde'] == 2 and rij.count() == 1 and 'Contractwaarde' in rij.inner_text() and rij.locator('.doel-signaal').inner_text() == '2 projecten zonder contractwaarde tellen niet mee' and pg.locator('#homeInhoud .doel-rij:has-text("Verlengd per project")').count() == 1, [h['zonderContractwaarde'], [x[:80] for x in pg.locator('#homeInhoud .doel-rij').all_inner_texts()]])
+        desk('rapporten', '#crmInhoud .doel-kaart'); ok('Rapporten (bouwpunt 19): ook in de bedrijfsdoelen', pg.locator('#crmInhoud .doel-kaart .doel-signaal:has-text("zonder contractwaarde")').count() == 1)
+    stap('g5_794_contractwaarde', g5_794_contractwaarde)
+
+    def g5_794_team_leeg():  # bouwpunt 5: een team zonder leden: de weekweergave, het teamtotaal en M23 geven "geblokkeerd: geen leden in het team", nooit 0
+        for g in ('g-yara', 'g-lars', 'g-noor'): api('apiGebruikerOpslaan', {'id': g, 'actief': False})
+        desk('rapporten', '#crmBalk [data-rweergave="week"]'); pg.evaluate("CRM.sturing = null"); pg.click('#crmBalk [data-rweergave="week"]'); pg.wait_for_selector('#crmInhoud .week-tabel')
+        t = pg.evaluate("[].map.call(document.querySelectorAll('.week-tabel tr.r-team td'), function (x) { return [x.textContent, x.className, x.getAttribute('title') || '']; })")
+        ok('week (bouwpunt 5): het teamtotaal is per cijfer geblokkeerd ("—", met de reden), nooit 0', len(t) == 11 and all(x[0] == '—' and x[1] == 'geblokkeerd' and 'geen leden in het team' in x[2] for x in t[1:]), t)
+        ok('week (bouwpunt 5): de uitleg "geblokkeerd: geen leden in het team" zoals bij de rollen; de regel beheerder blijft', 'geblokkeerd: geen leden in het team' in pg.inner_text('.week-teamblok') and pg.locator('.week-tabel td:has-text("niet in het teamtotaal")').count() == 1)
+        pg.click('#crmBalk [data-rweergave="mt"]'); pg.wait_for_selector('.mt .mt-blok')
+        ok('MT (bouwpunt 5): M23 geblokkeerd: geen leden in het team, zonder getal', pg.locator('.mt .mt-regel:has(.mt-m:text-is("M23")) .mt-geblokkeerd:has-text("geen leden in het team")').count() == 1 and pg.locator('.mt .mt-regel:has(.mt-m:text-is("M23")) .mt-waarde').count() == 0)
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok')
+    stap('g5_794_team_leeg', g5_794_team_leeg)
+    c.close()
+
+    # telefoon (390 px): de week als kaarten, de tabel alleen in de afdruk; geen Afdrukken-knop, wel de link (44 px); een kaart zonder leden zegt waarom
+    c, pg = nieuw(b, 'sophie', tel=True)
+    def g5_794_telefoon():
+        for g in ('g-yara', 'g-lars', 'g-noor'): api('apiGebruikerOpslaan', {'id': g, 'actief': False})
+        pg.click('nav button[data-view="relaties"]'); pg.wait_for_timeout(300); pg.click('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('#crmBalk [data-rweergave="week"]')
+        pg.click('#crmBalk [data-rweergave="week"]'); pg.wait_for_selector('#crmInhoud .week-kaart')
+        m = pg.evaluate("(function () { var l = document.querySelector('[data-weeklink]'), t = document.querySelector('.week-print-tabel'); return { print: document.querySelectorAll('[data-weekprint]').length, link: l ? l.getBoundingClientRect().height : 0, tabel: t ? t.getClientRects().length : -1, scroll: document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth, blok: (document.querySelector('.week-kaart.team .week-blok') || {}).textContent || '' }; })()")
+        m['printH'] = pg.evaluate("(function () { var p = document.querySelector('[data-weekprint]'); return p ? p.getBoundingClientRect().height : 0; })()")
+        ok('telefoon (bouwpunten 5 en 16; herstel r1, R1): Afdrukken en de link 44 px (als app vanaf het beginscherm is er geen browsermenu), de afdruktabel verborgen, geen horizontale scroll, de teamkaart zegt "geblokkeerd: geen leden"', m['print'] == 1 and m['printH'] >= 44 and m['link'] >= 44 and m['tabel'] == 0 and m['scroll'] and 'geblokkeerd: geen leden in het team' in m['blok'], m)
+        pg.evaluate("window.__geprint = 0; window.print = function () { window.__geprint = (window.__geprint || 0) + 1; }"); pg.click('[data-weekprint]'); pg.wait_for_timeout(200)
+        gp = pg.evaluate("window.__geprint"); ok('telefoon (herstel r1, R1): Afdrukken opent het afdrukvenster (window.print)', (gp or 0) >= 1, gp)
+        pg.emulate_media(media='print')
+        v = pg.evaluate("(function () { var z = function (s) { var x = document.querySelector(s); return !!(x && x.getClientRects().length); }; return [z('.week-print-kop'), z('.week-print-tabel .week-tabel'), z('.week-kaart')]; })()")
+        pg.emulate_media(media='screen')
+        ok('telefoon (bouwpunt 16): de afdruk heeft dezelfde opzet als op desktop: kop en tabel, geen kaarten', v == [True, True, False], v)
+        api('apiKeuzelijstOpslaan', 'soortFacturatie', [{'waarde': 'vooraf', 'oud': 'vooraf'}, {'waarde': 'achteraf', 'oud': 'achteraf'}, {'waarde': 'stukprijs', 'oud': ''}])
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#crmInhoud [data-beheer="keuzelijsten"]'); pg.click('[data-beheer="keuzelijsten"]'); pg.wait_for_selector('[data-factsoort]')
+        pg.click('[data-factsoort]'); venster_open('#vf-soort0')
+        h = pg.evaluate("[document.getElementById('vf-soort0').getBoundingClientRect().height, parseFloat(getComputedStyle(document.getElementById('vf-soort0')).fontSize), document.querySelector('[data-factsoort]').getBoundingClientRect().height]")
+        ok('telefoon (bouwpunt 9): de keuzelijst in het venster 44 px en 16 px', h[0] >= 44 and h[1] >= 16, h)
+        pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+    stap('g5_794_telefoon', g5_794_telefoon)
+    c.close()
+
+    # herstel r2 (R1, N1, N2): een koude start met #rapport:week:<vorige week> zonder cache (zoals een link uit de mail in Safari op iOS) toont die week, niet "Laden";
+    # de afdruktabel blijft verborgen als body.desk aangaat zonder opnieuw te tekenen; de uitleg bij leeg staat op de telefoon op een eigen regel
+    c = b.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+    pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('koud: ' + str(e))); pg.on('dialog', dialoog)
+    def g5_794_weeklink_koud():
+        pg.goto(U + 'sophie#rapport:week:' + WK_VORIG)
+        try: pg.wait_for_selector('#crmInhoud .week-kaart', timeout=10000); w = pg.evaluate("CRM.sturing && CRM.sturing.week")
+        except Exception: w = 'Laden: ' + pg.inner_text('#crmInhoud')[:40]
+        ok('week (herstel r2, R1): een koude start zonder cache met #rapport:week:<vorige week> toont die week (geen "Laden")', w == WK_VORIG, w)
+        pg.evaluate("document.body.classList.add('desk')"); t = pg.evaluate("(function () { var t = document.querySelector('.week-print-tabel'); return t ? t.getClientRects().length : -1; })()"); pg.evaluate("document.body.classList.remove('desk')")
+        ok('week (herstel r2, N1): gaat body.desk aan zonder opnieuw te tekenen (iPad draaien met een venster open), dan blijft de afdruktabel verborgen', t == 0, t)
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#dqBlok'); pg.click('[data-dqvers]'); toast('opnieuw gerekend'); pg.wait_for_timeout(300)
+        u = pg.evaluate("(function () { var x = document.querySelector('#dqWrap .dq-telling .dq-uitleg'); if (!x) return null; var r = x.getBoundingClientRect(), tags = [].map.call(document.querySelectorAll('#dqWrap .dq-telling .tag'), function (t) { return t.getBoundingClientRect().bottom; }); return [Math.round(r.top), Math.round(Math.max.apply(null, tags))]; })()")
+        ok('datakwaliteit (herstel r2, N2): op de telefoon staat de uitleg bij leeg onder alle tags (eigen regel), niet naast een andere tag', bool(u) and u[0] >= u[1] - 1, u)
+    stap('g5_794_weeklink_koud', g5_794_weeklink_koud)
     c.close()
     b.close()
 

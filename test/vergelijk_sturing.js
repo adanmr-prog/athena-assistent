@@ -3,28 +3,47 @@
  * en verklaart elk verschil. Gebruik:
  *
  *   node test/vergelijk_sturing.js --export <export-jjjj-mm-dd.json> --referentie <referentie.csv>
- *        [--exact <facturatie-export.csv>] [--xps <dienstenexport.csv>] [--peildatum jjjj-mm-dd] [--code <pad naar Code.gs>]
+ *        [--exact-verkoop <verkoopboek.csv>] [--exact-open <export met Open of betaaldatum.csv>] [--exact <facturatie-export.csv>]
+ *        [--xps <dienstenexport.csv>] [--peildatum jjjj-mm-dd] [--code <pad naar Code.gs>]
  *
- * --export      de export van server/migratie.js --bewaar ({ tabellen: { Tab: [rij], … }, eigenschappen }); de echte Athena-stand
- * --referentie  csv (; of ,) met de kolommen metriek, periode, waarde en optioneel uitsplitsing; regels die met # beginnen zijn commentaar
- *               metriek = een M-code (M04) of een sleutel uit het register (gecontracteerd, contactmomenten)
- *               periode = jjjj-mm-dd (stand op die dag), jjjj-mm (stand op de laatste dag van de maand), jjjj-Www (week) of jjjj-jjjj (schooljaar)
- *               uitsplitsing = nieuw, bestaand, onbekend (M04, M06, M08, M09) of zonder (M04, M06, M08, M18, M19)
- * --exact       de facturatie-export van Exact (M26, M27, M28: categorie bron)
- * --xps         de dienstenexport van XPS (M09, M25: categorie bron)
- * --peildatum   standaard vandaag; geen periode mag erna liggen
- * --code        een andere kopie van Code.gs (standaard backend/Code.gs)
+ * --export        de export van server/migratie.js --bewaar ({ tabellen: { Tab: [rij], … }, eigenschappen }); de echte Athena-stand
+ * --referentie    csv (; of ,) met de kolommen metriek, periode, waarde en optioneel uitsplitsing; regels die met # beginnen zijn commentaar
+ *                 metriek = een M-code (M04) of een sleutel uit het register (gecontracteerd, contactmomenten)
+ *                 periode = jjjj-mm-dd (stand op die dag), jjjj-mm (stand op de laatste dag van de maand), jjjj-Www (week) of jjjj-jjjj (schooljaar)
+ *                 uitsplitsing = nieuw, bestaand, onbekend (M04, M06, M08, M09) of zonder (M04, M06, M08, M18, M19)
+ * --exact-verkoop v7.9.4 (bouwpunt 15): het verkoopboek van Exact (alleen scholen), de bron voor M26 en M27; een kolom Open is niet nodig
+ * --exact-open    v7.9.4 (bouwpunt 15): een Exact-export met de kolom Open of een betaaldatum, de bron voor M28; zonder die kolom een invoerfout
+ * --exact         het oude gedrag: één facturatie-export voor M26, M27 en M28. Heeft die geen kolom Open en geen betaaldatum (het verkoopboek), dan geeft
+ *                 M28 "geblokkeerd (export zonder Open)" in plaats van elke factuur als open te tellen. Niet samen met --exact-verkoop of --exact-open.
+ * --xps           de dienstenexport van XPS (M09, M25: categorie bron)
+ * --peildatum     standaard vandaag; geen periode mag erna liggen
+ * --code          een andere kopie van Code.gs (standaard backend/Code.gs)
  *
  * Elk invoerbestand moet buiten de repo staan; een pad binnen de repo wordt geweigerd (echte gegevens komen nooit in de repo).
  * Uitvoer: per referentieregel precies één regel "<metriek> <periode>[/<uitsplitsing>] <uitkomst>" met als uitkomst
- *   geslaagd               binnen de tolerantie uit het register
- *   geblokkeerd            het cijfer is in Athena geblokkeerd (besluit, extern, rollen of redenen); telt niet als onverklaard
- *   gezakt (definitie)     de referentie klopt met een oude definitie die het harnas ook rekent
- *   gezakt (invoer)        een datacontract dat het cijfer raakt is gezakt, of een overstapstap is niet gedaan
- *   gezakt (bron)          de Exact- of XPS-export wijkt in dezelfde periode af van wat in de Athena-stand staat
- *   gezakt (onverklaard)   geen van drieën
+ *   geslaagd                          binnen de tolerantie uit het register
+ *   geblokkeerd (<soort>)             het cijfer is in Athena geblokkeerd; telt niet als onverklaard. v7.9.4: de soort komt uit de blokkade van Code.gs:
+ *                                     besluit, extern, rollen, redenen of geen leden (een team zonder leden, bouwpunt 11: de weekcijfers, M23 en M35);
+ *                                     een blokkade die in geen soort past, staat er zonder soort ("geblokkeerd")
+ *   geblokkeerd (stand)               v7.9.4 herstel r1 (K7): "stand alleen voor vandaag" (bouwpunt 7): de fase van een kans op die peildatum is niet te
+ *                                     reconstrueren (een wissel zonder werkelijke datum, zoals elke open Capsule-kans na stap 3). Niet vergeleken, dus niet
+ *                                     geslaagd: exitcode 3 en een melding zonder aantal
+ *   geblokkeerd (export zonder Open)  v7.9.4 (bouwpunt 15): M28 wijkt af en de Exact-export voor M28 heeft geen kolom Open en geen betaaldatum
+ *   geblokkeerd (export zonder betaaldatum)  herstel r1 (K12): M28 op een peildatum vóór vandaag wijkt af en de export heeft alleen de kolom Open (de stand op
+ *                                     de exportdag): voor een eerdere peildatum telt alleen een betaaldatum
+ *   leeg (geen basis)                 v7.9.4 (bouwpunt 13): Athena heeft voor dit cijfer geen waarde (geen basis of geen populatie); nooit een vergelijking met 0
+ *   gezakt (definitie)                de referentie klopt met een oude definitie die het harnas ook rekent
+ *   gezakt (invoer)                   een datacontract dat het cijfer raakt is gezakt of leeg (niets te toetsen), of een overstapstap is niet gedaan:
+ *                                     tijdlijn, redenen (ook "gekoppeld" zonder verloren kansen), fasen, de Capsule-stand of de accounts van het team
+ *                                     (v7.9.4, bouwpunt 12)
+ *   gezakt (bron)                     de Exact- of XPS-export wijkt in dezelfde periode af van wat in de Athena-stand staat. v7.9.4 (bouwpunt 14): het
+ *                                     XPS-totaal per maand telt ook diensten zonder gekoppeld talent of project
+ *   gezakt (onverklaard)              geen van drieën
  * Nooit waarden, namen, bedragen of tellingen. Een invoerfout noemt alleen het bestand, het regelnummer en de kolomnaam (op stderr).
- * Exitcode 1 bij minstens één onverklaarde regel of een invoerfout, anders 0 (ook met gezakte regels die een verklaring hebben). */
+ * v7.9.4 (bouwpunt 14): op stderr ook een "melding: …" als gewerkte diensten in de XPS-export niet aan een talent of project in Athena koppelen; zonder aantal.
+ * Exitcode (v7.9.4, bouwpunt 13): 1 bij minstens één onverklaarde regel of een invoerfout; 2 bij een onverwachte fout in het harnas zelf; 3 (herstel r1, K7)
+ * als niets onverklaard is maar minstens één regel "geblokkeerd (stand)" is (niet vergeleken: het harnas slaagt dan niet); anders 0, ook met regels die
+ * geblokkeerd (een andere soort) of leeg zijn of gezakt met een verklaring (definitie, invoer, bron). */
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 var REPO = path.resolve(__dirname, '..');
@@ -47,14 +66,19 @@ function leesBestand(soort, p) {
   if (binnenRepo(String(p))) throw fout(soort + ': Zet echte bestanden buiten de repo.');
   try { return fs.readFileSync(String(p), 'utf8').replace(/^﻿/, ''); } catch (e) { throw fout(soort + ': het bestand is niet te lezen.'); }
 }
-function argumenten(argv) {
-  var opt = {}, bekend = ['export', 'referentie', 'exact', 'xps', 'peildatum', 'code'];
+// v7.9.4: ook voor test/urenbasislijn.js (bekend = de opties, vlaggen = opties zonder waarde)
+function argumentenUit(argv, bekend, vlaggen) {
+  var opt = {};
   for (var i = 0; i < argv.length; i++) {
     if (argv[i].indexOf('--') !== 0) throw fout('argumenten: onbekend argument op plaats ' + (i + 1) + '.');
     var k = argv[i].slice(2); if (bekend.indexOf(k) < 0) throw fout('argumenten: onbekende optie --' + k + '.');
-    opt[k] = argv[i + 1] && argv[i + 1].indexOf('--') !== 0 ? argv[++i] : true;
+    opt[k] = (vlaggen || []).indexOf(k) >= 0 ? true : argv[i + 1] && argv[i + 1].indexOf('--') !== 0 ? argv[++i] : true;
   }
-  if (!opt.export || !opt.referentie) throw fout('Gebruik: node test/vergelijk_sturing.js --export <export.json> --referentie <referentie.csv> [--exact <csv>] [--xps <csv>] [--peildatum jjjj-mm-dd] [--code <Code.gs>]');
+  return opt;
+}
+function argumenten(argv) {
+  var opt = argumentenUit(argv, ['export', 'referentie', 'exact', 'exact-verkoop', 'exact-open', 'xps', 'peildatum', 'code']);  // v7.9.4: exact-verkoop en exact-open
+  if (!opt.export || !opt.referentie) throw fout('Gebruik: node test/vergelijk_sturing.js --export <export.json> --referentie <referentie.csv> [--exact-verkoop <csv>] [--exact-open <csv>] [--exact <csv>] [--xps <csv>] [--peildatum jjjj-mm-dd] [--code <Code.gs>]');
   return opt;
 }
 function scheidingsteken(tekst) { var r = (tekst.split('\n')[0] || ''); return r.indexOf(';') >= 0 ? ';' : ','; }
@@ -174,22 +198,37 @@ function standOp(L, d) { return eenmaal(L, 'stand|' + d, function () { var S = L
 function weekVan(L, per) {
   return eenmaal(L, 'week|' + per.van, function () { return L.ctx.weekCijfers({ van: per.van, tot: per.tot, eind: per.eind }, [{ naam: '__team', leden: L.ctx.teamNamen('consultancy') }]).__team; });
 }
-// { geblokkeerd, waarde } van één referentieregel; een leeg Athena-cijfer telt als 0
+// v7.9.4 (bouwpunt 11): de blokkade van Code.gs voor een team zonder (actieve) leden ('' als het team leden heeft); een oudere Code.gs (--code) zonder
+// teamBlokkade: dezelfde regel op teamNamen
+function teamBlok(L) { var ctx = L.ctx; return typeof ctx.teamBlokkade === 'function' ? String(ctx.teamBlokkade('consultancy') || '') : ctx.teamNamen('consultancy').length ? '' : 'geen leden in het team'; }
+function zonderWaarde(v) { return v === null || v === undefined || v === '' || (typeof v === 'number' && !isFinite(v)); }
+// { geblokkeerd, reden, leeg, waarde } van één referentieregel.
+// v7.9.4: een team zonder leden is voor elk weekcijfer geblokkeerd, ook contactmomenten, afsprakenGehouden en gewonnen (bouwpunt 11; de standcijfers M23 en
+// M35 blokkeert Code.gs zelf); een cijfer of deel zonder waarde is leeg, nooit 0 (bouwpunt 13). Een deel nieuw/bestaand/onbekend dat ontbreekt naast een
+// cijfer met een waarde is 0: delenUit laat een deel van 0 weg.
 function athenaWaarde(L, r) {
-  var ctx = L.ctx;
+  var ctx = L.ctx, blok = function (reden) { return { geblokkeerd: true, reden: String(reden || ''), leeg: false, waarde: null }; };
+  var uit = function (v) { return zonderWaarde(v) ? { geblokkeerd: false, reden: '', leeg: true, waarde: null } : { geblokkeerd: false, reden: '', leeg: false, waarde: Number(v) }; };
   if (r.per.soort === 'week') {
-    if (ctx.METRIEKEN[r.id].rol && ctx.rolBlokkade()) return { geblokkeerd: true, waarde: null };
-    var x = weekVan(L, r.per), v = r.id === 'registratievertraging' ? x.registratievertraging : x[r.id];
-    return { geblokkeerd: false, waarde: v === null || v === undefined || v === '' ? 0 : Number(v) };
+    var tb = teamBlok(L); if (tb) return blok(tb);
+    var rb = ctx.METRIEKEN[r.id].rol ? ctx.rolBlokkade() : ''; if (rb) return blok(rb);
+    var x = weekVan(L, r.per); if (x.blokkade) return blok(x.blokkade);
+    return uit(x[r.id]);
   }
   var c = standOp(L, r.per.peildatum)[r.id];
-  if (!c || c.geblokkeerd) return { geblokkeerd: true, waarde: null };
-  var w;
-  if (!r.uitsplitsing) w = c.waarde;
-  else if (r.uitsplitsing === 'zonder') w = c.extra ? c.extra[ZONDER[r.id]] : 0;
-  else w = (Array.prototype.filter.call(c.uitsplitsing || [], function (u) { return u.label === r.uitsplitsing; })[0] || { waarde: 0 }).waarde;
-  return { geblokkeerd: false, waarde: w === '' || w === null || w === undefined ? 0 : Number(w) };
+  if (!c) return blok('');
+  if (c.geblokkeerd) return blok(c.geblokkeerd);
+  if (zonderWaarde(c.waarde)) return uit(null);
+  if (!r.uitsplitsing) return uit(c.waarde);
+  if (r.uitsplitsing === 'zonder') return uit(c.extra ? c.extra[ZONDER[r.id]] : null);
+  return uit((Array.prototype.filter.call(c.uitsplitsing || [], function (u) { return u.label === r.uitsplitsing; })[0] || { waarde: 0 }).waarde);
 }
+// v7.9.4: de soort van een blokkade uit Code.gs voor de uitvoer (vaste woorden, nooit de tekst zelf); '' als hij in geen soort past.
+// Herstel r1 (K7): stand = "stand alleen voor vandaag" (bouwpunt 7: de fase op een eerdere peildatum is niet te reconstrueren); telt niet als geslaagd (exitcode 3)
+var BLOK_SOORTEN = [['geen leden', /^geen leden in het team/], ['stand', /^stand alleen voor vandaag/], ['rollen', /rollen niet ingesteld/], ['redenen', /verliesredenen/], ['extern', /^extern\b|§6/], ['besluit', /besluit/]];
+var NIETS_MELDING = 'melding: geen enkele regel is vergeleken (alles geblokkeerd of leeg); het harnas slaagt dan niet.';  // herstel r2 (B-B7)
+var STAND_MELDING = 'melding: een of meer regels zijn niet vergeleken: de stand op die peildatum is niet te reconstrueren (fasewissels zonder werkelijke datum: importeer de werkelijke datums in Beheer), of vergelijk de stand van vandaag.';  // geen getal (geen aantal)
+function blokSoort(reden) { var s = String(reden || ''); for (var i = 0; i < BLOK_SOORTEN.length; i++) if (BLOK_SOORTEN[i][1].test(s)) return BLOK_SOORTEN[i][0]; return ''; }
 // De tolerantie uit het register: '0' en '1' absoluut (aantallen, procentpunten), '1%' relatief tegen de referentie
 function tolerantieVan(L, id) {
   var t = String((L.ctx.registerVan(id) || {}).tolerantie || '0').replace(',', '.'), m = /^(\d+(?:\.\d+)?)(%?)$/.exec(t);
@@ -268,67 +307,91 @@ var OUDE_DEFINITIES = {
 
 /* ----- categorie invoer: welk datacontract of welke overstapstap raakt welk cijfer ----- */
 
+// v7.9.4 (bouwpunt 12): ook de overstapstappen fasen (Capsule-fasen, pre-AP en 5b; de rol per fase en de deals uit fase 6), capsule (de Capsule-stand: open,
+// verloren en gewonnen kansen met hun wissels) en accounts (de OC's in het team consultancy; zonder hen logt en wisselt geen OC in Athena)
+// herstel r2 (A-B2): en projecten (stap 5 van §7.6: geen enkel project in het schooljaar van de peildatum; M04, M08 en M25–M28 rusten op Trajecten, en
+// tarief_echt blijft zonder standaardtarief "niet getoetst", dus zonder deze stap was M25 op de echte stand onverklaard)
 var RAAKT = {
   jaardoel: ['noemerbewaking'], doelpad: ['noemerbewaking', 'geen_target_op_facturatie'], benodigdeActiviteit: ['noemerbewaking'],
-  gecontracteerd: ['gewonnen_is_getekend', 'kans_heeft_schooljaar_en_klant', 'lopend_project_heeft_contract'],
-  gewogenPijplijn: ['waarde_vanaf_voorstel', 'kans_heeft_schooljaar_en_klant', 'dekking_robuust'],
-  dekking: ['gewonnen_is_getekend', 'waarde_vanaf_voorstel', 'kans_heeft_schooljaar_en_klant', 'noemerbewaking'],
-  gewonnenWaarde: ['fasewissel_heeft_werkelijke_datum', 'gewonnen_is_getekend', 'overstap:tijdlijn'],
-  conversie: ['fasewissel_heeft_werkelijke_datum', 'verliesdiscipline', 'overstap:redenen', 'overstap:tijdlijn'],
-  voorspellingDeals: ['fasewissel_heeft_werkelijke_datum', 'overstap:tijdlijn'],
-  funnel: ['kans_heeft_schooljaar_en_klant', 'geen_dubbele_open_kansen', 'waarde_vanaf_voorstel'],
-  verwachteOpdrachten: ['sluitdatum_vanaf_voorstel', 'waarde_vanaf_voorstel'],
-  stilstand: ['actieve_eigenaar'],
-  verloren: ['verliesdiscipline', 'fasewissel_heeft_werkelijke_datum', 'overstap:redenen', 'overstap:tijdlijn'],
-  ocActiviteit: ['fasewissel_heeft_werkelijke_datum', 'overstap:tijdlijn'],
+  gecontracteerd: ['gewonnen_is_getekend', 'kans_heeft_schooljaar_en_klant', 'lopend_project_heeft_contract', 'overstap:fasen', 'overstap:capsule', 'overstap:projecten'],
+  gewogenPijplijn: ['waarde_vanaf_voorstel', 'kans_heeft_schooljaar_en_klant', 'dekking_robuust', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts'],
+  dekking: ['gewonnen_is_getekend', 'waarde_vanaf_voorstel', 'kans_heeft_schooljaar_en_klant', 'noemerbewaking', 'overstap:fasen', 'overstap:capsule'],
+  gewonnenWaarde: ['fasewissel_heeft_werkelijke_datum', 'gewonnen_is_getekend', 'overstap:tijdlijn', 'overstap:fasen', 'overstap:capsule', 'overstap:projecten'],
+  conversie: ['fasewissel_heeft_werkelijke_datum', 'verliesdiscipline', 'overstap:redenen', 'overstap:tijdlijn', 'overstap:capsule', 'overstap:accounts'],
+  voorspellingDeals: ['fasewissel_heeft_werkelijke_datum', 'overstap:tijdlijn', 'overstap:capsule'],
+  funnel: ['kans_heeft_schooljaar_en_klant', 'geen_dubbele_open_kansen', 'waarde_vanaf_voorstel', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts'],
+  verwachteOpdrachten: ['sluitdatum_vanaf_voorstel', 'waarde_vanaf_voorstel', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts'],
+  stilstand: ['actieve_eigenaar', 'overstap:capsule', 'overstap:accounts'],
+  verloren: ['verliesdiscipline', 'fasewissel_heeft_werkelijke_datum', 'overstap:redenen', 'overstap:tijdlijn', 'overstap:capsule', 'overstap:accounts'],
+  ocActiviteit: ['fasewissel_heeft_werkelijke_datum', 'overstap:tijdlijn', 'overstap:accounts'],
   verlengingsstand: ['verlenging_bekend', 'school_heeft_brin', 'lopend_project_heeft_contract'],
-  geleverd: ['tarief_echt'],
-  gefactureerd: ['termijn_verzonden_heeft_factuurnummer'],
-  nogTeFactureren: ['lopend_project_heeft_contract', 'termijn_verzonden_heeft_factuurnummer'],
-  openstaand: ['termijn_verzonden_heeft_factuurnummer'],
-  registratievertraging: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum'],
-  ap: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn'],
-  ad: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn'],
-  voorstellen: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn'],
-  gewonnen: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn']
+  geleverd: ['tarief_echt', 'overstap:projecten'],
+  gefactureerd: ['termijn_verzonden_heeft_factuurnummer', 'overstap:projecten'],
+  nogTeFactureren: ['lopend_project_heeft_contract', 'termijn_verzonden_heeft_factuurnummer', 'overstap:projecten'],
+  openstaand: ['termijn_verzonden_heeft_factuurnummer', 'overstap:projecten'],
+  registratievertraging: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:accounts'],
+  contactmomenten: ['overstap:accounts'], afsprakenGehouden: ['overstap:accounts'], afsprakenGepland: ['overstap:accounts'],
+  ap: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts'],
+  ad: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts'],
+  voorstellen: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts'],
+  gewonnen: ['fasewissel_heeft_werkelijke_datum', 'geen_bulk_op_werkelijke_datum', 'overstap:tijdlijn', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts']
 };
-function gezakteContracten(L, d) {
-  return eenmaal(L, 'contracten|' + d, function () { var u = {}; L.ctx.datacontracten(L.ctx.standVoorContracten(d)).forEach(function (c) { if (c.stand === 'gezakt') u[c.id] = true; }); return u; });
+// v7.9.4 (bouwpunt 12): invoer ziet een gezakt contract en een contract met de stand leeg (niets te toetsen, bouwpunt 1); niet getoetst en geblokkeerd niet
+var INVOER_STANDEN = ['gezakt', 'leeg'];
+function contractStanden(L, d) {
+  return eenmaal(L, 'contracten|' + d, function () { var u = {}; L.ctx.datacontracten(L.ctx.standVoorContracten(d)).forEach(function (c) { u[c.id] = c.stand; }); return u; });
 }
+// De open overstapstappen. Proefdraai: schrijft niets. v7.9.4 (bouwpunt 12): redenen ook open als er geen enkele verloren kans of wissel naar verloren is
+// (de stap meldt dan "gekoppeld" omdat er niets te koppelen is); fasen zolang stap fasen niet gedaan is; capsule zolang de Capsule-migratie niet klaar is
+// (geen eigenschap CAPSULE_MIGRATIE en geen kans met een capsuleId); accounts als het team consultancy geen leden heeft.
 function openOverstap(L) {
-  return eenmaal(L, 'overstap', function () { var s = L.ctx.apiMigratieV79('status', {}); return { tijdlijn: s.tijdlijn.teOmzetten > 0, redenen: !s.redenen.gekoppeld }; });  // proefdraai: schrijft niets
+  return eenmaal(L, 'overstap', function () {
+    var ctx = L.ctx, s = ctx.apiMigratieV79('status', {}), kansen = ctx.lees('Kansen');
+    var verloren = kansen.some(function (k) { return k.fase === 'verloren'; }) || ctx.lees('Fasewissels').some(function (w) { return w.naar === 'verloren' && !w.ongedaan && !w.verwijderd; });
+    var capsule = !!ctx.PropertiesService.getScriptProperties().getProperty('CAPSULE_MIGRATIE') || kansen.some(function (k) { return !!k.capsuleId; });
+    var metProject = {}; ctx.lees('Trajecten').forEach(function (t) { if (t.schooljaar) metProject[String(t.schooljaar)] = true; });
+    return { tijdlijn: s.tijdlijn.teOmzetten > 0, redenen: !s.redenen.gekoppeld || !verloren, fasen: !(s.fasen && s.fasen.alGedaan), capsule: !capsule, accounts: !!teamBlok(L),
+      projecten: !Object.keys(metProject).length, metProject: metProject };
+  });
 }
 function invoerRaakt(L, r) {
-  var g = gezakteContracten(L, r.per.peildatum), o = openOverstap(L);
-  return (RAAKT[r.id] || []).some(function (x) { return x.indexOf('overstap:') === 0 ? o[x.slice(9)] : !!g[x]; });
+  var c = contractStanden(L, r.per.peildatum), o = openOverstap(L);
+  var open = function (stap) { return stap === 'projecten' ? !o.metProject[sjVan(L, r.per.peildatum)] : !!o[stap]; };  // herstel r2 (A-B2): per schooljaar van de peildatum
+  return (RAAKT[r.id] || []).some(function (x) { return x.indexOf('overstap:') === 0 ? open(x.slice(9)) : INVOER_STANDEN.indexOf(c[x]) >= 0; });
 }
 
 /* ----- categorie bron: de Exact- en XPS-export tegen wat in de Athena-stand staat ----- */
 
 // De facturatie-export met de bouwstenen van apiExactImport (Utilities.parseCsv, de kolomnamen uit EXACT_ANDERE_NAMEN, bedragIn, datumUitExport)
-function leesExact(ctx, tekst) {
-  if (!tekst.trim()) throw fout('exact: het bestand is leeg.');
-  if (ctx.isOpenstaandePosten(tekst)) throw fout('exact, regel 1: dit is het rapport Openstaande posten; gebruik de export per factuur.');
+// v7.9.4 (bouwpunt 15): soort = de naam van de invoer in een foutmelding (exact, exact-verkoop, exact-open); geeft { rijen, metOpen } met metOpen = de export
+// heeft de kolom Open of een betaaldatum. eisOpen (--exact-open): zonder die kolom een invoerfout.
+function leesExact(ctx, tekst, soort, eisOpen) {
+  soort = soort || 'exact';
+  if (!tekst.trim()) throw fout(soort + ': het bestand is leeg.');
+  if (ctx.isOpenstaandePosten(tekst)) throw fout(soort + ', regel 1: dit is het rapport Openstaande posten; gebruik de export per factuur.');
   var rijen = ctx.Utilities.parseCsv(tekst, scheidingsteken(tekst)), kop = Array.prototype.slice.call(rijen[0] || []).map(function (h) { return String(h).trim(); });
-  var kk = kop.map(function (h) { return h.toLowerCase(); }), ingesteld = ctx.instelling('exactKolommen'), idx = {};
+  var kk = kop.map(function (h) { return h.toLowerCase(); }), ingesteld = ctx.instelling('exactKolommen'), idx = {}, naam = {};
   if (!ingesteld || typeof ingesteld !== 'object') ingesteld = {};
   Object.keys(ctx.EXACT_ANDERE_NAMEN).forEach(function (x) {
     var namen = [ctx.uitMap(ingesteld, x), ctx.uitMap(ctx.EXACT_KOLOMMEN, x)].concat(Array.prototype.slice.call(ctx.EXACT_ANDERE_NAMEN[x])).filter(function (n) { return typeof n === 'string' && n.trim(); });
+    naam[x] = namen[0] || x;
     idx[x] = -1; for (var i = 0; i < namen.length && idx[x] < 0; i++) idx[x] = kk.indexOf(namen[i].toLowerCase());
-    if (idx[x] < 0 && ['factuurnummer', 'datum', 'bedrag'].indexOf(x) >= 0) throw fout('exact, regel 1, kolom ' + (namen[0] || x) + ': niet gevonden');
+    if (idx[x] < 0 && ['factuurnummer', 'datum', 'bedrag'].indexOf(x) >= 0) throw fout(soort + ', regel 1, kolom ' + naam[x] + ': niet gevonden');
   });
+  var metOpen = idx.open >= 0 || idx.betaald >= 0;
+  if (eisOpen && !metOpen) throw fout(soort + ', regel 1, kolom ' + naam.open + ': niet gevonden (ook geen betaaldatum)');
   var uit = [];
   for (var i = 1; i < rijen.length; i++) {
     var r = rijen[i], cel = function (x) { return idx[x] >= 0 && r[idx[x]] != null ? String(r[idx[x]]).trim() : ''; };
     if (!cel('factuurnummer')) continue;
     var datum = ctx.datumUitExport(cel('datum')), bedrag = ctx.bedragIn(cel('bedrag'));
-    if (!datum) throw fout('exact, regel ' + (i + 1) + ', kolom ' + kop[idx.datum] + ': geen datum');
-    if (bedrag === null) throw fout('exact, regel ' + (i + 1) + ', kolom ' + kop[idx.bedrag] + ': geen bedrag');
+    if (!datum) throw fout(soort + ', regel ' + (i + 1) + ', kolom ' + kop[idx.datum] + ': geen datum');
+    if (bedrag === null) throw fout(soort + ', regel ' + (i + 1) + ', kolom ' + kop[idx.bedrag] + ': geen bedrag');
     var open = idx.open >= 0 && cel('open') !== '' ? ctx.bedragIn(cel('open')) : null;
-    if (idx.open >= 0 && cel('open') !== '' && open === null) throw fout('exact, regel ' + (i + 1) + ', kolom ' + kop[idx.open] + ': geen bedrag');
+    if (idx.open >= 0 && cel('open') !== '' && open === null) throw fout(soort + ', regel ' + (i + 1) + ', kolom ' + kop[idx.open] + ': geen bedrag');
     uit.push({ datum: datum, bedrag: bedrag, open: open, betaald: idx.betaald >= 0 ? ctx.datumUitExport(cel('betaald')) : '' });
   }
-  return uit;
+  return { rijen: uit, metOpen: metOpen, metBetaald: idx.betaald >= 0 };  // herstel r1 (K12): een betaaldatum zegt ook iets over een eerdere peildatum
 }
 function leesXps(ctx, tekst) {
   if (!tekst.trim()) throw fout('xps: het bestand is leeg.');
@@ -338,62 +401,124 @@ function leesXps(ctx, tekst) {
 }
 function eindeMaand(d) { return laatsteDag(+d.slice(0, 4), +d.slice(5, 7)); }
 // Gefactureerd in centen tussen van en tot: Exact op factuurdatum, Athena op de verzenddatum van de termijnen (alle projecten)
+// v7.9.4 (bouwpunt 15): '' (geen oordeel: geen export voor dit cijfer), 'wijkt', of 'zonder open' (M28 met een export zonder kolom Open en zonder betaaldatum:
+// dan telt het harnas niet elke factuur als open, maar is de bron geblokkeerd). M26 en M27 lezen het verkoopboek, M28 de export met Open.
 function exactWijkt(L, r) {
-  var ctx = L.ctx, d = r.per.peildatum, tol = tolerantieVan(L, r.id), vergelijk = function (e, a) { return !binnen(a, e, tol.pct ? tol : { pct: 0, abs: tol.abs * 100 }); };
+  var ctx = L.ctx, d = r.per.peildatum, tol = tolerantieVan(L, r.id), vergelijk = function (e, a) { return !binnen(a, e, tol.pct ? tol : { pct: 0, abs: tol.abs * 100 }) ? 'wijkt' : ''; };
   if (r.id === 'openstaand') {
+    if (!L.exactOpen) return '';
+    if (!L.exactOpen.metOpen) return 'zonder open';
+    // herstel r1 (K12): de kolom Open is de stand op de exportdag, niet op een eerdere peildatum; daar telt alleen een betaaldatum, en zonder die kolom geen oordeel
+    var vroeger = d < L.vandaag;
+    if (vroeger && !L.exactOpen.metBetaald) return 'zonder betaaldatum';
     var eO = 0, aO = 0;
-    L.exact.forEach(function (x) { if (x.datum > d) return; eO += x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
+    L.exactOpen.rijen.forEach(function (x) { if (x.datum > d) return; eO += !vroeger && x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
     ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (v && v.datum <= d && !(b && b.datum <= d)) aO += ctx.centen(f.bedrag); });
     return vergelijk(eO, aO);
   }
-  var van = sjVan(L, d).slice(0, 4) + '-08-01', tot = eindeMaand(d), e = 0, a = 0;
-  L.exact.forEach(function (x) { if (x.datum >= van && x.datum <= tot) e += x.bedrag; });
+  if (!L.exactVerkoop) return '';
+  // herstel r2 (A-B1, B-B2): dezelfde periode als M26 (bouwpunt 7, K10): in een stand op een eerdere peildatum t/m die dag, aan beide kanten; vandaag de hele maand
+  var van = sjVan(L, d).slice(0, 4) + '-08-01', tot = d < L.vandaag ? d : eindeMaand(d), e = 0, a = 0;
+  L.exactVerkoop.rijen.forEach(function (x) { if (x.datum >= van && x.datum <= tot) e += x.bedrag; });
   ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f); if (v && v.datum >= van && v.datum <= tot) a += ctx.centen(f.bedrag); });
   return vergelijk(e, a);
 }
-// Gewerkte uren per maand (en per project): XPS via urenUitRijen (dezelfde koppeling en statussen als de urenimport), Athena uit TalentUren en het archief
+// v7.9.4 (bouwpunt 14): de rijen van een dienstenexport met één vast accountnummer, zodat urenUitRijen elke dienst aan één verzonnen talent koppelt. Zo telt
+// het totaal per maand ook de diensten zonder talent in Athena, met verder precies de regels van urenUitRijen (datum t/m vandaag, archiefvenster, status
+// niet afwezig/ziek/geannuleerd/reserve, geen no-show of late afmelding, uren > 0). Een export zonder accountnummerkolom krijgt er een (de eerste naam uit
+// xpsKolommen); een lege rij blijft leeg. Alleen in het geheugen. Ook voor test/urenbasislijn.js.
+var ALLE_ID = 'harnas-alle-diensten', ALLE_TALENT = { id: ALLE_ID, xpsId: ALLE_ID };
+function alleDiensten(ctx, rijen) {
+  var kop = Array.prototype.slice.call(rijen[0] || []).map(function (h) { return String(h == null ? '' : h); }), M = ctx.xpsKolommen(), c = ctx.xpsKolomIndexen(kop, M);
+  var plek = c.xpsId >= 0 ? c.xpsId : kop.length, uit = [plek === kop.length ? kop.concat([M.xpsId[0] || 'accountnummer']) : kop];
+  for (var i = 1; i < rijen.length; i++) {
+    var r = Array.prototype.slice.call(rijen[i] || []);
+    if (r.some(function (x) { return x !== '' && x != null; })) { while (r.length < plek) r.push(''); r[plek] = ALLE_ID; }
+    uit.push(r);
+  }
+  return uit;
+}
+// tot en met de zondag van de laatste week die in maand m (jjjj-mm) begint (zo telt elke week van de maand helemaal mee), nooit na tot
+function maandTot(ctx, m, tot) { return kleinste(ctx.plusDagenVan(ctx.datumStr(ctx.maandagVan(eindeMaand(m + '-01'))), 6), tot); }
+var XPS_TOLERANTIE = 0.05;  // uren; afronding op twee decimalen per weekregel telt bij veel regels op
+// Gewerkte uren per maand en per project van het schooljaar t/m peildatum d: Athena uit TalentUren en het archief, XPS via urenUitRijen. Per project de diensten
+// die aan een talent koppelen (zoals de urenimport); v7.9.4 (bouwpunt 14) het totaal per maand (m|*) over alle gewerkte diensten (alleDiensten), en of er
+// gewerkte diensten zijn zonder gekoppeld talent of zonder gekoppeld project (voor de melding, zonder aantal).
+function xpsStand(L, d) {
+  return eenmaal(L, 'xps|' + d, function () {
+    var ctx = L.ctx, sj = sjVan(L, d), wkTot = ctx.isoWeekStr(ctx.parseDatum(d)), maanden = Array.prototype.filter.call(ctx.schooljaarMaanden(sj), function (m) { return m <= d.slice(0, 7); });
+    var inSj = {}; ctx.lees('Trajecten').forEach(function (t) { if (t.schooljaar === sj) inSj[t.id] = true; });
+    var A = {}, X = {}, bij = function (o, k, u) { o[k] = (o[k] || 0) + u; }, uit = { A: A, X: X, zonderTalent: false, zonderProject: false };
+    ctx.lees('TalentUren').concat(ctx.lees('TalentUren_archief')).forEach(function (u) {
+      var w = String(u.week || ''); if (!w || w > wkTot) return; var m = ctx.maandVan(ctx.maandagVanWeek(w)); if (maanden.indexOf(m) < 0) return;
+      var t = String(u.trajectId || ''), n = Number(u.uren) || 0; bij(A, m + '|*', n); if (inSj[t]) bij(A, m + '|' + t, n);
+    });
+    var talenten = ctx.lees('Talenten'), trajecten = ctx.lees('Trajecten'), statussen = ctx.xpsStatussen(), alle = L.xpsAlle || (L.xpsAlle = alleDiensten(ctx, L.xps));
+    maanden.forEach(function (m) {
+      var vandaag = maandTot(ctx, m, d), opties = { vandaag: vandaag, trajecten: trajecten, statussen: statussen }, heel, echt;
+      try { heel = eenmaal(L, 'xps-alle|' + vandaag, function () { return ctx.urenUitRijen(alle, [ALLE_TALENT], opties); }); }
+      catch (e) { throw fout('xps, regel 1: ' + (e && e.xpsExport ? e.message : 'de export is niet te lezen.')); }
+      // zonder kolom om aan talenten te koppelen koppelt geen dienst (het totaal hierboven telt ze wel)
+      try { echt = eenmaal(L, 'xps-echt|' + vandaag, function () { return ctx.urenUitRijen(L.xps, talenten, opties); }); }
+      catch (e) { if (!(e && e.xpsExport)) throw fout('xps, regel 1: de export is niet te lezen.'); echt = { regels: [] }; }
+      var inM = function (g) { return g.week <= wkTot && ctx.maandVan(ctx.maandagVanWeek(g.week)) === m; }, dEcht = 0, dAlle = 0;
+      echt.regels.forEach(function (g) { if (!inM(g)) return; dEcht += Number(g.diensten) || 0; var t = String(g.trajectId || ''); if (inSj[t]) bij(X, m + '|' + t, Number(g.uren) || 0); });
+      heel.regels.forEach(function (g) { if (!inM(g)) return; dAlle += Number(g.diensten) || 0; bij(X, m + '|*', Number(g.uren) || 0); if (Number(g.diensten) > 0 && !g.trajectId) uit.zonderProject = true; });
+      if (dAlle > dEcht) uit.zonderTalent = true;
+    });
+    return uit;
+  });
+}
+// M25 per project en per maand, M09 per maand (het niveau van de referentie); v7.9.4: M25 ook per maand, zodat diensten zonder talent of project meetellen
 function xpsWijkt(L, r) {
-  var ctx = L.ctx, d = r.per.peildatum, sj = sjVan(L, d), wkTot = ctx.isoWeekStr(ctx.parseDatum(d)), maanden = Array.prototype.filter.call(ctx.schooljaarMaanden(sj), function (m) { return m <= d.slice(0, 7); });
-  var inSj = {}; ctx.lees('Trajecten').forEach(function (t) { if (t.schooljaar === sj) inSj[t.id] = true; });
-  var A = {}, X = {}, bij = function (o, m, t, u) { o[m + '|*'] = (o[m + '|*'] || 0) + u; if (inSj[t]) o[m + '|' + t] = (o[m + '|' + t] || 0) + u; };
-  ctx.lees('TalentUren').concat(ctx.lees('TalentUren_archief')).forEach(function (u) {
-    var w = String(u.week || ''); if (!w || w > wkTot) return; var m = ctx.maandVan(ctx.maandagVanWeek(w)); if (maanden.indexOf(m) >= 0) bij(A, m, String(u.trajectId || ''), Number(u.uren) || 0);
-  });
-  var talenten = ctx.lees('Talenten'), trajecten = ctx.lees('Trajecten'), statussen = ctx.xpsStatussen();
-  maanden.forEach(function (m) {
-    // tot en met de zondag van de laatste week die in deze maand begint (zo telt elke week van de maand helemaal mee), nooit na de peildatum
-    var vandaag = kleinste(ctx.plusDagenVan(ctx.datumStr(ctx.maandagVan(eindeMaand(m + '-01'))), 6), d), uit;
-    try { uit = eenmaal(L, 'xps|' + vandaag, function () { return ctx.urenUitRijen(L.xps, talenten, { vandaag: vandaag, trajecten: trajecten, statussen: statussen }); }); }
-    catch (e) { throw fout('xps, regel 1: ' + (e && e.xpsExport ? e.message : 'de export is niet te lezen.')); }
-    uit.regels.forEach(function (g) { if (g.week <= wkTot && ctx.maandVan(ctx.maandagVanWeek(g.week)) === m) bij(X, m, String(g.trajectId || ''), Number(g.uren) || 0); });
-  });
-  var sleutels = {}; Object.keys(A).concat(Object.keys(X)).forEach(function (k) { if (r.id === 'geleverd' ? !/\|\*$/.test(k) : /\|\*$/.test(k)) sleutels[k] = true; });
-  return Object.keys(sleutels).some(function (k) { return Math.abs((A[k] || 0) - (X[k] || 0)) > 0.01; });
+  var s = xpsStand(L, r.per.peildatum), perProject = r.id === 'geleverd', sleutels = {};
+  Object.keys(s.A).concat(Object.keys(s.X)).forEach(function (k) { if (perProject || /\|\*$/.test(k)) sleutels[k] = true; });
+  return Object.keys(sleutels).some(function (k) { return Math.abs((s.A[k] || 0) - (s.X[k] || 0)) > XPS_TOLERANTIE; });
 }
 var BRON = { gefactureerd: 'exact', nogTeFactureren: 'exact', openstaand: 'exact', geleverd: 'xps', urenVorigeJaren: 'xps' };
-function bronWijkt(L, r) {
-  var b = BRON[r.id]; if (!b || r.per.soort !== 'stand') return false;
-  if (b === 'exact') return !!L.exact && exactWijkt(L, r);
-  return !!L.xps && xpsWijkt(L, r);
+// '' (geen oordeel), 'wijkt' of 'zonder open'
+function bronOordeel(L, r) {
+  var b = BRON[r.id]; if (!b || r.per.soort !== 'stand') return '';
+  if (b === 'exact') return exactWijkt(L, r);
+  return L.xps && xpsWijkt(L, r) ? 'wijkt' : '';
+}
+// v7.9.4 (bouwpunt 14): de meldingen over de XPS-koppeling voor de XPS-regels in de referentie (vaste zinnen, zonder aantal)
+var XPS_MELDING = {
+  zonderTalent: 'melding: xps: niet elke gewerkte dienst koppelt aan een talent in Athena; het totaal per maand telt ze wel mee (Beheer → XPS-uren importeren noemt welke).',
+  zonderProject: 'melding: xps: niet elke gewerkte dienst koppelt aan een project in Athena (Trajecten.xpsProject); het totaal per maand telt ze wel mee.'
+};
+function xpsMeldingen(L, regels) {
+  if (!L.xps) return [];
+  var m = {};
+  regels.forEach(function (r) { if (BRON[r.id] !== 'xps' || r.per.soort !== 'stand') return; var s = xpsStand(L, r.per.peildatum); if (s.zonderTalent) m.zonderTalent = true; if (s.zonderProject) m.zonderProject = true; });
+  return ['zonderTalent', 'zonderProject'].filter(function (k) { return m[k]; }).map(function (k) { return XPS_MELDING[k]; });
 }
 
 /* ----- de vergelijking ----- */
 
+// v7.9.4: geblokkeerd met de soort van de blokkade (bouwpunt 11), leeg zonder waarde (bouwpunt 13), geblokkeerd als M28 een export zonder Open heeft (bouwpunt 15)
 function beoordeel(L, r) {
   var a = athenaWaarde(L, r);
-  if (a.geblokkeerd) return 'geblokkeerd';
+  if (a.geblokkeerd) { var soort = blokSoort(a.reden); return 'geblokkeerd' + (soort ? ' (' + soort + ')' : ''); }
+  if (a.leeg) return 'leeg (geen basis)';
   var tol = tolerantieVan(L, r.id);
   if (binnen(a.waarde, r.waarde, tol)) return 'geslaagd';
   var oud = OUDE_DEFINITIES[r.id] ? OUDE_DEFINITIES[r.id](L, r) : [];
   if (oud.some(function (v) { return binnen(v, r.waarde, tol); })) return 'gezakt (definitie)';
   if (invoerRaakt(L, r)) return 'gezakt (invoer)';
-  if (bronWijkt(L, r)) return 'gezakt (bron)';
+  var b = bronOordeel(L, r);
+  if (b === 'wijkt') return 'gezakt (bron)';
+  if (b === 'zonder open') return 'geblokkeerd (export zonder Open)';
+  if (b === 'zonder betaaldatum') return 'geblokkeerd (export zonder betaaldatum)';  // herstel r1 (K12)
   return 'gezakt (onverklaard)';
 }
-// Laadt de stand en de exports; geeft L = { ctx, peildatum, cache, exact, xps }
+// Laadt de stand en de exports; geeft L = { ctx, peildatum, cache, exactVerkoop, exactOpen, xps }
+// v7.9.4 (bouwpunt 15): --exact vult beide Exact-invoeren (het oude gedrag), --exact-verkoop alleen M26 en M27, --exact-open alleen M28
 function laad(opt) {
+  if (opt.exact && (opt['exact-verkoop'] || opt['exact-open'])) throw fout('argumenten: gebruik --exact of --exact-verkoop en --exact-open, niet allebei.');
   var exportTekst = leesBestand('export', opt.export), refTekst = opt.referentie ? leesBestand('referentie', opt.referentie) : '';
-  var exactTekst = opt.exact ? leesBestand('exact', opt.exact) : null, xpsTekst = opt.xps ? leesBestand('xps', opt.xps) : null;
+  var exactTekst = opt.exact ? leesBestand('exact', opt.exact) : null, verkoopTekst = opt['exact-verkoop'] ? leesBestand('exact-verkoop', opt['exact-verkoop']) : null;
+  var openTekst = opt['exact-open'] ? leesBestand('exact-open', opt['exact-open']) : null, xpsTekst = opt.xps ? leesBestand('xps', opt.xps) : null;
   var codePad = opt.code && opt.code !== true ? String(opt.code) : '';
   if (codePad && !fs.existsSync(codePad)) throw fout('code: het bestand bestaat niet.');
   var ctx = laadContext(codePad);
@@ -404,38 +529,53 @@ function laad(opt) {
     if (String(opt.peildatum) > vandaag) throw fout('peildatum: ligt in de toekomst.');
     P = String(opt.peildatum);
   }
-  var L = { ctx: ctx, peildatum: P, cache: {}, exact: exactTekst === null ? null : leesExact(ctx, exactTekst), xps: xpsTekst === null ? null : leesXps(ctx, xpsTekst), refTekst: refTekst };
+  var L = { ctx: ctx, peildatum: P, vandaag: vandaag, cache: {}, exactVerkoop: null, exactOpen: null, xps: xpsTekst === null ? null : leesXps(ctx, xpsTekst), refTekst: refTekst };
+  if (exactTekst !== null) L.exactVerkoop = L.exactOpen = leesExact(ctx, exactTekst, 'exact', false);
+  if (verkoopTekst !== null) L.exactVerkoop = leesExact(ctx, verkoopTekst, 'exact-verkoop', false);
+  if (openTekst !== null) L.exactOpen = leesExact(ctx, openTekst, 'exact-open', true);
   return L;
 }
-// Geeft { uit: [regel], fouten: [tekst], exit }
+// Geeft { uit: [regel], fouten: [tekst], meldingen: [tekst], exit }
 function vergelijk(opt) {
-  var L;
-  try { L = laad(opt); } catch (e) { if (e instanceof Invoerfout) return { uit: [], fouten: [e.message], exit: 1 }; throw e; }
+  var L, mis = function (e) { if (e instanceof Invoerfout) return { uit: [], fouten: [e.message], meldingen: [], exit: 1 }; throw e; };
+  try { L = laad(opt); } catch (e) { return mis(e); }
   var ref;
-  try { ref = leesReferentie(L.ctx, L.refTekst, L.peildatum); } catch (e) { if (e instanceof Invoerfout) return { uit: [], fouten: [e.message], exit: 1 }; throw e; }
-  if (ref.fouten.length) return { uit: [], fouten: ref.fouten, exit: 1 };
-  var uit = [], onverklaard = 0;
+  try { ref = leesReferentie(L.ctx, L.refTekst, L.peildatum); } catch (e) { return mis(e); }
+  if (ref.fouten.length) return { uit: [], fouten: ref.fouten, meldingen: [], exit: 1 };
+  var uit = [], onverklaard = 0, nietVergeleken = 0, vergeleken = 0, meldingen;
   try {
     ref.regels.forEach(function (r) {
-      var c = beoordeel(L, r); if (c === 'gezakt (onverklaard)') onverklaard++;
+      var c = beoordeel(L, r); if (c === 'gezakt (onverklaard)') onverklaard++; if (c === 'geblokkeerd (stand)') nietVergeleken++; if (/^(geslaagd|gezakt)/.test(c)) vergeleken++;
       uit.push(r.token + ' ' + r.periode + (r.uitsplitsing ? '/' + r.uitsplitsing : '') + ' ' + c);
     });
-  } catch (e) { if (e instanceof Invoerfout) return { uit: [], fouten: [e.message], exit: 1 }; throw e; }
-  return { uit: uit, fouten: [], exit: onverklaard ? 1 : 0 };
+    meldingen = xpsMeldingen(L, ref.regels);
+    if (nietVergeleken) meldingen.push(STAND_MELDING);
+    if (!vergeleken && ref.regels.length) meldingen.push(NIETS_MELDING);
+  } catch (e) { return mis(e); }
+  // herstel r1 (K7): 1 gaat voor 3 (onverklaard of invoerfout); 3 = niets onverklaard, maar een regel is niet vergeleken (stand): het harnas slaagt dan niet.
+  // herstel r2 (B-B7): ook 3 als geen enkele regel vergeleken is (alles geblokkeerd of leeg, zoals zonder OC-accounts): exitcode 0 vraagt minstens één regel
+  // geslaagd of gezakt (verklaard)
+  return { uit: uit, fouten: [], meldingen: meldingen, exit: onverklaard ? 1 : nietVergeleken || (!vergeleken && ref.regels.length) ? 3 : 0 };
+}
+// v7.9.4 (bouwpunt 13): een onverwachte fout in het harnas zelf is exitcode 2 (niet 1: dat is alleen onverklaard of een invoerfout); geen melding met inhoud,
+// alleen de soort fout en de plek in de code
+function onverwacht(e, wie) {
+  var plek = String((e && e.stack) || '').split('\n').filter(function (l) { return /\.js:\d+/.test(l); })[0] || '';
+  return 'Onverwachte fout in ' + wie + ' (' + ((e && e.name) || 'fout') + ')' + (plek ? ' ' + plek.trim().replace(/^at\s+/, 'bij ').replace(/\(.*[\\\/]/, '(') : '') + '.';
 }
 function main() {
   var u;
   try { u = vergelijk(argumenten(process.argv.slice(2))); }
-  catch (e) {
-    if (e instanceof Invoerfout) u = { uit: [], fouten: [e.message], exit: 1 };
-    else {  // geen melding met inhoud: alleen de soort fout en de plek in de code
-      var plek = String((e && e.stack) || '').split('\n').filter(function (l) { return /\.js:\d+/.test(l); })[0] || '';
-      u = { uit: [], fouten: ['Onverwachte fout in het harnas (' + ((e && e.name) || 'fout') + ')' + (plek ? ' ' + plek.trim().replace(/^at\s+/, 'bij ').replace(/\(.*[\\\/]/, '(') : '') + '.'], exit: 1 };
-    }
-  }
+  catch (e) { u = e instanceof Invoerfout ? { uit: [], fouten: [e.message], meldingen: [], exit: 1 } : { uit: [], fouten: [onverwacht(e, 'het harnas')], meldingen: [], exit: 2 }; }
   u.uit.forEach(function (l) { process.stdout.write(l + '\n'); });
-  u.fouten.forEach(function (l) { process.stderr.write(l + '\n'); });
+  u.fouten.concat(u.meldingen || []).forEach(function (l) { process.stderr.write(l + '\n'); });
   process.exitCode = u.exit;
 }
-module.exports = { vergelijk: vergelijk, laad: laad, leesReferentie: leesReferentie, athenaWaarde: athenaWaarde, periodeUit: periodeUit, binnenRepo: binnenRepo, OUDE_DEFINITIES: OUDE_DEFINITIES, RAAKT: RAAKT };
+module.exports = {
+  vergelijk: vergelijk, laad: laad, leesReferentie: leesReferentie, athenaWaarde: athenaWaarde, periodeUit: periodeUit, binnenRepo: binnenRepo, OUDE_DEFINITIES: OUDE_DEFINITIES, RAAKT: RAAKT,
+  // v7.9.4: voor de test en voor test/urenbasislijn.js
+  blokSoort: blokSoort, openOverstap: openOverstap, invoerRaakt: invoerRaakt, beoordeel: beoordeel, alleDiensten: alleDiensten, ALLE_TALENT: ALLE_TALENT, maandTot: maandTot,
+  Invoerfout: Invoerfout, fout: fout, echtPad: echtPad, leesBestand: leesBestand, argumentenUit: argumentenUit, laadContext: laadContext, startMetExport: startMetExport,
+  leesXps: leesXps, dagGeldig: dagGeldig, onverwacht: onverwacht, HOOFDLETTERS_ZIJN_GELIJK: HOOFDLETTERS_ZIJN_GELIJK
+};
 if (require.main === module) main();

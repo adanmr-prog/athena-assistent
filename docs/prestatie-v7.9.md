@@ -75,7 +75,24 @@ Verder rekent `teamCijfers` per verzoek één keer per activiteit of ze een cont
 
 `test/demo_groot_test.js` draait `sturingTrigger` nu ook op een vaste klok, met lege tabbladen `Datakwaliteit`, `Voorspellingen` en `Standen`: op de laatste donderdag van de maand bevriest hij een maandstand (124 ms, bevroren rijen > 0) en op maandag schrijft hij twee voorspellingen (55 ms). De bovengrens blijft 2 s; de test bewijst dat nu op elke dag, niet alleen op de dagen waarop het zware pad toevallig draait.
 
-## 5. Open
+## 5. v7.9.4: het favicon buiten de koude start (herstel r2)
 
-- Het eigen script voor de managementschermen (§1), zodra een release `index.html` weer laat groeien.
+v7.9.4 liet `index.html` met ±18 kB groeien (gezipt ±5 kB) en de suiterun van ronde 2 kwam op "Vandaag koud" op de rand (mediaan 2 202 ms tegen de grens van 2 200; drie van vijf runs rood). Een waterval van de koude start (telefoon, 4G-model, 4× CPU, dezelfde mock) liet zien dat `icon-192.png` (11 kB) tijdens het laden van `index.html` over dezelfde gedeelde pijp ging: via `<link rel="icon">` in de head en via de `<img>` van het logo in de zijbalk, die ook in een verborgen container geladen wordt.
+
+**Wijziging.** Het favicon zet het hoofdscript aan het eind (nog vóór het einde van het laden, dus geen aanvraag voor `favicon.ico`), en de twee logo's (zijbalk en Studio) laden `loading="lazy"`; ze hebben een vaste maat in de CSS, dus geen verschuiving. `apple-touch-icon` (iOS-beginscherm) en het manifest blijven ongewijzigd.
+
+**Meting** (`test/prestatie.py --deel 1`, vijf runs per segment, A/B/A/B kort na elkaar, load 0,8–1,1; A = de werkkopie zonder deze wijziging, B = met):
+
+| Segment | Koud (ms, vijf runs) | Mediaan |
+|---|---|---|
+| A (1) | 2 220, 2 163, 2 165, 2 163, 2 159 | 2 164 |
+| B (1) | 2 143, 2 148, 2 104, 2 107, 2 148 | 2 143 |
+| A (2) | 2 191, 2 154, 2 164, 2 159, 2 151 | 2 159 |
+| B (2) | 2 180, 2 121, 2 115, 2 127, 2 161 | 2 127 |
+
+Warm en hangend ongewijzigd (B: 192 en 257 ms). **Besluit: behouden, expliciet**, zoals T2 (§2): de winst is −1,2 % en dus kleiner dan 10 %, maar ze haalt een overbodige aanvraag van het kritieke pad en geeft de koude start weer marge onder de grens van 2 200 ms, die door de groei van v7.9.4 op is (A haalt de grens nu, maar zat in ronde 2 op 2 202–2 229). Het eigen script voor de managementschermen (§1) blijft de echte volgende stap.
+
+## 6. Open
+
+- Het eigen script voor de managementschermen (§1), zodra een release `index.html` weer laat groeien; na v7.9.4 is de marge op koud ±60 ms.
 - De beoordeling van de eerste sessie op iOS door `ios-pwa-reviewer` (§2) ⚠️.
