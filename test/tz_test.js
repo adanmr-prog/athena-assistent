@@ -54,7 +54,8 @@ var KLOKKEN = [{ naam: 'echt', vast: '' },
   { naam: '2026-12-31T10:00', vast: '2026-12-31T10:00', reden: 'jaareinde' }, { naam: '2027-01-01T10:00', vast: '2027-01-01T10:00', reden: 'nieuwjaar (ISO-week 53/1)' }];
 var EXTRA = [{ naam: '2026-03-28T23:30', vast: '2026-03-28T23:30', reden: 'uur vóór de dag van de EU-wissel' }, { naam: '2026-03-29T00:30', vast: '2026-03-29T00:30', reden: 'uur na middernacht op de EU-wisseldag' },
   { naam: '2026-10-24T23:30', vast: '2026-10-24T23:30', reden: 'uur vóór de dag van de EU-wissel (einde)' }, { naam: '2026-10-25T00:30', vast: '2026-10-25T00:30', reden: 'uur na middernacht op de EU-wisseldag (einde)' },
-  { naam: '2026-11-01T10:00', vast: '2026-11-01T10:00', reden: 'einde zomertijd Los Angeles' }, { naam: '2026-04-05T10:00', vast: '2026-04-05T10:00', reden: 'einde zomertijd Auckland' }];
+  { naam: '2026-11-01T10:00', vast: '2026-11-01T10:00', reden: 'einde zomertijd Los Angeles' }, { naam: '2026-04-05T10:00', vast: '2026-04-05T10:00', reden: 'einde zomertijd Auckland' },
+  { naam: '2026-11-17T23:55', vast: '2026-11-17T23:55', reden: 'laatste tien minuten vóór middernacht (v7.9.4 r5: de seedtaak over tien minuten)' }];
 if (!SNEL) KLOKKEN = KLOKKEN.concat(EXTRA);
 else info('--snel: de randen om middernacht en de wisseldagen van Los Angeles/Auckland worden overgeslagen');
 

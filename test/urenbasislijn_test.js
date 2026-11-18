@@ -4,8 +4,10 @@
  * binnen de looptijd van de export. Herstel r1 (K8, R794-5): alleen diensten die aan een talent in de (verzonnen) export koppelen (accountnummer, e-mail of
  * naam), zoals de urenimport en dus M09; de export is verplicht en een dienst zonder talent geeft een melding zonder aantal. Het voorbeeld zelf (via --voorbeeld; de uitkomst hangt af van de datum van vandaag),
  * een kopie met datums 104 weken terug (een voorbij schooljaar), een grotere verzonnen export, de vorm regels, --uit, --schooljaren, de weigering van
- * paden binnen de repo, geen namen of uren op stderr, en de waarde als aanname urenBasislijn in een demostand (M09 niet meer geblokkeerd). Alleen in een
- * tijdelijke map buiten de repo; die is aan het eind weg.
+ * paden binnen de repo, geen namen of uren op stderr, en de waarde als aanname urenBasislijn in een demostand (M09 niet meer geblokkeerd). Herstel r3 (R3-D3):
+ * --accounts met een verzonnen accountexport (ook inactief en uit dienst; privé- en loonkolommen nooit gelezen) en de vaste melding zonder --accounts. Herstel r5
+ * (R5-C3, R5-2): zonder --accounts en --zonder-accounts een invoerfout; met --accounts alleen accounts die niet actief zijn (een actief account zonder profiel: een
+ * melding), en een accountexport zonder statuskolom is een invoerfout. Alleen in een tijdelijke map buiten de repo; die is aan het eind weg.
  *   node test/urenbasislijn_test.js   → ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1) */
 'use strict';
 var fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), cp = require('child_process');
@@ -64,7 +66,9 @@ function exportMet(naam, talenten, instellingen) {
   return p;
 }
 var EXPORT_VB = exportMet('export-talenten.json', TAL_VB);
-function draai(args, cwd) {
+// herstel r5 (R5-C3): het script eist een keuze (--accounts of --zonder-accounts); zonder een van beide voegt draai --zonder-accounts toe, behalve met kaal
+function draai(args, cwd, kaal) {
+  if (!kaal && args.indexOf('--accounts') < 0 && args.indexOf('--zonder-accounts') < 0) args = args.concat(['--zonder-accounts']);
   var p = cp.spawnSync(process.execPath, [SCRIPT].concat(args), { encoding: 'utf8', cwd: cwd || TMP });
   uitvoer.push(p.stdout, p.stderr);
   var err = p.stderr.split('\n').filter(Boolean), json = null;
@@ -98,13 +102,68 @@ eis(vsOrakel.zonderTalent && somVan(vsOrakel.waarde) < somVan(vsAlle.waarde) && 
   'herstel r1 (K8, R794-5): een gewerkte dienst zonder talent in de export telt niet (dezelfde populatie als M09: minder dan het totaal van de export), met een melding zonder aantal');
 var maanden = Object.keys(runS.json[sjVs]);
 eis(maanden[0] === vsOrakel.van && maanden[maanden.length - 1] === vsOrakel.tot && maanden.length < 12, 'alleen de maanden binnen de looptijd van de export; daarbuiten geen 0 (geen basis)');
-eis(runS.melding.length === 3 && runS.melding[0] === 'urenbasislijn: de export loopt van ' + vsOrakel.van + ' tot ' + vsOrakel.tot + '; ' + sjVs + ' (' + maanden.length + ' maanden).' && /^melding: .*looptijd/.test(runS.melding[1]),
-  'stderr: de looptijd, het schooljaar met het aantal maanden, een melding over de maanden buiten de looptijd en een over diensten zonder talent (' + runS.melding.join(' | ') + ')');
+var ZONDER_ACC = 'melding: zonder --accounts koppelt de basislijn alleen aan de talenten die nu in de Athena-export staan: flexkrachten die sindsdien vertrokken zijn (uit dienst of inactief, zonder profiel) ontbreken en de basislijn is te laag. Geef de XPS-accountexport met --accounts (alle accounts, ook inactief of uit dienst).';
+eis(runS.melding.length === 4 && runS.melding[0] === 'urenbasislijn: de export loopt van ' + vsOrakel.van + ' tot ' + vsOrakel.tot + '; ' + sjVs + ' (' + maanden.length + ' maanden).' && /^melding: .*looptijd/.test(runS.melding[1]) && runS.melding[3] === ZONDER_ACC,
+  'stderr: de looptijd, het schooljaar met het aantal maanden, een melding over de maanden buiten de looptijd, een over diensten zonder talent en (herstel r3, R3-D3) de vaste melding dat zonder --accounts vertrokken flexkrachten ontbreken (' + runS.melding.join(' | ') + ')');
 // herstel r1 (K8): zonder --export of zonder talenten geen basislijn (exitcode 1)
 var runZe = draai(['--xps', VERSCHOVEN]);
 eis(runZe.code === 1 && !runZe.stdout && runZe.fout.join() === 'export: geef de export van server/migratie.js --bewaar; M09 telt alleen diensten die aan een talent in Athena koppelen, en de basislijn dus ook.', 'herstel r1 (K8): zonder --export geen basislijn (' + runZe.fout.join(' | ') + ')');
 var runZt = draai(['--xps', VERSCHOVEN, '--export', exportMet('export-zonder-talenten.json', [])]);
 eis(runZt.code === 1 && runZt.fout.join() === 'export: geen talenten (tabblad Talenten); zonder talenten koppelt geen dienst, net als in M09.', 'herstel r1 (K8): een export zonder talenten geeft een fout, geen basislijn van 0 (' + runZt.fout.join(' | ') + ')');
+
+// herstel r3 (R3-D3): --accounts. Een verzonnen XPS-accountexport (buiten de repo) met accounts die geen profiel in de export hebben: Ali (inactief), Jasmijn
+// (uit dienst, naam als 'Achternaam, Voornaam'), Ruben (zonder accountnummer en status; koppelt op e-mail), Nina (heeft al een profiel op naam: overgeslagen, anders
+// vindt haar dienst zonder accountnummer twee kandidaten) en Sanne Anders (alleen een naam; het e-mailadres van Sanne Voorbeeld staat in een kolom
+// "E-mail noodcontact", een privékolom die nooit gelezen wordt: haar dienst koppelt dus niet). Geboortedatum, IBAN en salaris staan erin en komen nergens uit.
+var ACC_CSV = ['Accountnummer;Naam;E-mail;Telefoon;Status;Geboortedatum;IBAN;Salaris (uur);E-mail noodcontact',
+  'X5002;Ali Yilmaz;ali.yilmaz@mail.example;06-31000002;Inactief;02-02-2001;NL00BANK0000000091;15,10;',
+  'X5003;Kok, Jasmijn;;06-31000003;Uit dienst;03-03-2002;NL00BANK0000000092;16,20;',
+  ';Ruben Claes;ruben.claes@mail.example;;;04-04-2003;;;',
+  'X5005;Nina Jacobs;nina.jacobs@mail.example;;Actief;05-05-2004;NL00BANK0000000093;17,30;',
+  ';Sanne Anders;;06-31000099;Actief;06-06-2005;NL00BANK0000000094;18,40;sanne.voorbeeld@mail.example'].join('\n') + '\n';
+var ACCOUNTS = path.join(TMP, 'accounts.csv'); fs.writeFileSync(ACCOUNTS, ACC_CSV);
+var TAL_ACC = TAL_VB.concat([{ xps: 'X5002', email: 'ali.yilmaz@mail.example', naam: 'Ali Yilmaz' }, { xps: 'X5003', email: '', naam: 'Jasmijn Kok' }, { xps: '', email: 'ruben.claes@mail.example', naam: 'Ruben Claes' }, { xps: '', email: '', naam: 'Sanne Anders' }]);
+var accOrakel = orakel(vsTekst, null, TAL_ACC), runAc = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB, '--accounts', ACCOUNTS]);
+eis(runAc.code === 0 && gelijk(runAc.json, accOrakel.waarde) && somVan(accOrakel.waarde) > somVan(vsOrakel.waarde),
+  'herstel r3 (R3-D3): met --accounts koppelt de basislijn ook aan accounts zonder profiel (inactief, uit dienst, lege status): hoger dan zonder, precies zoals het orakel (' + JSON.stringify(runAc.json) + ')');
+eis(runAc.melding.indexOf(ZONDER_ACC) < 0 && runAc.melding.indexOf('melding: niet elke gewerkte dienst koppelt aan een talent in Athena; die tellen niet mee, net als in M09 (de urenimport). Beheer → XPS-uren importeren noemt welke.') >= 0 && accOrakel.zonderTalent,
+  'herstel r3 (R3-D3): met --accounts geen melding over vertrokken flexkrachten; de dienst van Sanne koppelt niet (het e-mailadres in "E-mail noodcontact" wordt nooit gelezen), dus wel de melding zonder talent');
+var accTekst = runAc.stdout + runAc.melding.join('\n') + runAc.fout.join('\n');
+eis(['NL00BANK', '02-02-2001', '06-31000002', '15,10', 'sanne.voorbeeld', 'Yilmaz', 'Jasmijn'].every(function (x) { return accTekst.indexOf(x) < 0; }), 'herstel r3 (R3-D3): geen IBAN, geboortedatum, telefoon, salaris, naam of e-mailadres uit de accountexport in de uitvoer');
+var ACTIEF_ZONDER = 'melding: een actief account in de accountexport heeft geen profiel in Athena: zijn diensten tellen niet mee, net als in M09 (de urenimport koppelt alleen aan een profiel). Importeer eerst de talenten (Beheer → Talenten importeren uit XPS).';
+var EXPORT_LEEG_T = exportMet('export-zonder-talenten-acc.json', []), runAt = draai(['--xps', VERSCHOVEN, '--export', EXPORT_LEEG_T, '--accounts', ACCOUNTS]);
+eis(runAt.code === 0 && gelijk(runAt.json, orakel(vsTekst, null, TAL_ACC.slice(TAL_VB.length, TAL_VB.length + 3)).waarde) && runAt.melding.indexOf(ACTIEF_ZONDER) >= 0,
+  'herstel r3 (R3-D3), r5 (R5-2): een export zonder talenten met --accounts koppelt aan de accounts die niet actief zijn (Ali, Jasmijn, Ruben); Nina en Sanne zijn actief zonder profiel: niet geteld, met een vaste melding (' + runAt.fout.concat(runAt.melding).join(' | ') + ')');
+// herstel r5 (R5-2, het scenario van rev5r/s1): een actief account zonder profiel (begon na de laatste talentimport) telt niet in de basislijn, want de teller
+// (de urenimport) telt hem ook niet; een account uit dienst wel. Verzonnen, buiten de repo.
+var sjV2 = sjVanMaand(vandaag.slice(0, 7)), vj = (+sjV2.slice(0, 4) - 1) + '-' + sjV2.slice(0, 4), okt = vj.slice(0, 4) + '-10-07';
+var D5 = path.join(TMP, 'diensten_r5.csv'); fs.writeFileSync(D5, ['Datum;Gewerkte tijd;Uitgevoerd door;Status;Project;Accountnummer;E-mail',
+  okt + ';6;Verzonnen Actief;Ingeroosterd;Verzonnen School | Ondersteuning;X9001;actief@voorbeeld.example',
+  okt + ';6;Nieuw Zonderprofiel;Ingeroosterd;Verzonnen School | Ondersteuning;X9004;nieuw@voorbeeld.example',
+  okt + ';6;Oud Vertrokken;Ingeroosterd;Verzonnen School | Ondersteuning;X9005;oud@voorbeeld.example'].join('\n') + '\n');
+var A5 = path.join(TMP, 'accounts_r5.csv'); fs.writeFileSync(A5, ['Accountnummer;Naam;E-mail;Status', 'X9001;Verzonnen Actief;actief@voorbeeld.example;Actief', 'X9004;Zonderprofiel, Nieuw;nieuw@voorbeeld.example;Actief', 'X9005;Vertrokken, Oud;oud@voorbeeld.example;Uit dienst'].join('\n') + '\n');
+var E5 = exportMet('export-r5.json', [{ xps: 'X9001', email: 'actief@voorbeeld.example', naam: 'Verzonnen Actief' }]);
+var r5a = draai(['--xps', D5, '--export', E5, '--accounts', A5, '--schooljaren', vj]), r5z = draai(['--xps', D5, '--export', E5, '--zonder-accounts', '--schooljaren', vj]);
+eis(r5a.code === 0 && r5a.json && r5a.json[vj] && r5a.json[vj][vj.slice(0, 4) + '-10'] === 12 && r5a.melding.indexOf(ACTIEF_ZONDER) >= 0 && r5z.code === 0 && r5z.json[vj][vj.slice(0, 4) + '-10'] === 6,
+  'herstel r5 (R5-2): met --accounts telt de basislijn het account uit dienst (12, niet 18): het actieve account zonder profiel telt niet, met de vaste melding; met --zonder-accounts 6 (' + JSON.stringify([r5a.json, r5z.json, r5a.fout]) + ')');
+var A5s = path.join(TMP, 'accounts_r5_zonder_status.csv'); fs.writeFileSync(A5s, ['Accountnummer;Naam;E-mail', 'X9005;Vertrokken, Oud;oud@voorbeeld.example'].join('\n') + '\n');
+var r5s = draai(['--xps', D5, '--export', E5, '--accounts', A5s, '--schooljaren', vj]);
+eis(r5s.code === 1 && !r5s.stdout && r5s.fout.join() === 'accounts, regel 1: geen statuskolom (Status of Accountstatus); zonder status is niet te zien wie vertrokken is.',
+  'herstel r5 (R5-2): een accountexport zonder statuskolom is een invoerfout, geen gok (' + r5s.fout.join(' | ') + ')');
+// herstel r5 (R5-C3): zonder keuze (--accounts of --zonder-accounts) geen basislijn: de te lage basislijn is nooit meer de stille standaard
+var r5k = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB], null, true), r5b = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB, '--accounts', ACCOUNTS, '--zonder-accounts']);
+eis(r5k.code === 1 && !r5k.stdout && r5k.fout.join() === 'accounts: geef de XPS-accountexport met --accounts (alle accounts, ook inactief of uit dienst), of kies bewust --zonder-accounts: dan ontbreken flexkrachten die sindsdien vertrokken zijn en is de basislijn te laag.',
+  'herstel r5 (R5-C3): zonder --accounts en zonder --zonder-accounts een invoerfout en niets op stdout (' + r5k.fout.join(' | ') + ')');
+eis(r5b.code === 1 && r5b.fout.join() === 'accounts: kies --accounts of --zonder-accounts, niet allebei.', 'herstel r5 (R5-C3): --accounts en --zonder-accounts samen is een invoerfout');
+var runAd = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB, '--accounts', VERSCHOVEN]);
+eis(runAd.code === 1 && runAd.fout.join() === 'accounts, regel 1: dit is een dienstenexport (datum, week of uren), geen accountexport.', 'herstel r3 (R3-D3): een dienstenexport als --accounts is een invoerfout (' + runAd.fout.join(' | ') + ')');
+var runAr = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB, '--accounts', path.join(R, 'test/voorbeelden/xps_accounts.csv')]);
+eis(runAr.code === 1 && runAr.fout.join() === 'accounts: Zet echte bestanden buiten de repo.', 'herstel r3 (R3-D3): --accounts binnen de repo wordt geweigerd');
+var ZONDER_NAAM = path.join(TMP, 'accounts_zonder_naam.csv'); fs.writeFileSync(ZONDER_NAAM, 'Accountnummer;E-mail\nX5002;ali.yilmaz@mail.example\n');
+var runAn = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB, '--accounts', ZONDER_NAAM]);
+eis(runAn.code === 1 && /^accounts, regel 1: Dit bestand heeft geen naamkolom/.test(runAn.fout.join()), 'herstel r3 (R3-D3): een accountexport zonder naamkolom geeft de Nederlandse fout van Code.gs (' + runAn.fout.join(' | ') + ')');
+var runAu = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB, '--accounts', ACCOUNTS, '--uit', ACCOUNTS]);
+eis(runAu.code === 1 && runAu.fout.join() === 'uit: niet hetzelfde bestand als een invoerbestand.' && fs.readFileSync(ACCOUNTS, 'utf8') === ACC_CSV, 'herstel r3 (R3-D3): --uit mag de accountexport niet overschrijven');
 
 // de vorm regels: schooljaar;maand;uren, dezelfde waarden
 var runRg = draai(['--xps', VERSCHOVEN, '--export', EXPORT_VB, '--vorm', 'regels']), terug = {};
@@ -186,7 +245,8 @@ ctx.demoStart('');
 var dVandaag = vm.runInContext('datumStr(new Date())', ctx), voor = ctx.sturingCijfers(dVandaag), m09 = function (S) { var c = null; S.blokken.forEach(function (b) { b.cijfers.forEach(function (x) { if (x.id === 'urenVorigeJaren') c = x; }); }); return c; };
 var opslaan = JSON.parse(ctx.demoRun('apiAannameOpslaan', JSON.stringify(['urenBasislijn', { waarde: runS.json, onderbouwing: 'verzonnen test (urenbasislijn.js)', besluitdatum: dVandaag }]), 'demo-sophie'));
 var na = m09(ctx.sturingCijfers(dVandaag));
-eis(!!m09(voor).geblokkeerd && opslaan.ok && !na.geblokkeerd && na.extra && na.extra.basislijn && Object.prototype.hasOwnProperty.call(na.extra.basislijn, sjVs),
+var heelMaand = dVandaag.slice(5, 7) !== '08';  // herstel r3 (R4): in augustus heeft M09 nog geen hele maand en dus geen basislijn per schooljaar
+eis(!!m09(voor).geblokkeerd && opslaan.ok && !na.geblokkeerd && na.extra && (heelMaand ? na.extra.basislijn && Object.prototype.hasOwnProperty.call(na.extra.basislijn, sjVs) : /nog geen hele maand/.test(na.extra.reden || '')),
   'de uitvoer past als aanname urenBasislijn (apiAannameOpslaan): M09 is daarna niet meer geblokkeerd en kent het schooljaar ' + sjVs);
 
 /* ---- 7. opruimen ---- */

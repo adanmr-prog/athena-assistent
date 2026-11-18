@@ -31,19 +31,26 @@
  *   geblokkeerd (export zonder Open)  v7.9.4 (bouwpunt 15): M28 wijkt af en de Exact-export voor M28 heeft geen kolom Open en geen betaaldatum
  *   geblokkeerd (export zonder betaaldatum)  herstel r1 (K12): M28 op een peildatum vóór vandaag wijkt af en de export heeft alleen de kolom Open (de stand op
  *                                     de exportdag): voor een eerdere peildatum telt alleen een betaaldatum
- *   leeg (geen basis)                 v7.9.4 (bouwpunt 13): Athena heeft voor dit cijfer geen waarde (geen basis of geen populatie); nooit een vergelijking met 0
+ *   leeg (geen basis)                 v7.9.4 (bouwpunt 13): Athena heeft voor dit cijfer geen waarde (geen basis of geen populatie); nooit een vergelijking met 0.
+ *                                     Herstel r4 (R4-1): raakt invoer het cijfer (zie hieronder), dan is een lege waarde gezakt (invoer)
  *   gezakt (definitie)                de referentie klopt met een oude definitie die het harnas ook rekent
  *   gezakt (invoer)                   een datacontract dat het cijfer raakt is gezakt of leeg (niets te toetsen), of een overstapstap is niet gedaan:
  *                                     tijdlijn, redenen (ook "gekoppeld" zonder verloren kansen), fasen, de Capsule-stand of de accounts van het team
- *                                     (v7.9.4, bouwpunt 12)
+ *                                     (v7.9.4, bouwpunt 12). Herstel r3 (R3-D2): Athena mist dan de gegevens; zo'n regel is niet vergeleken en toont niets aan
+ *                                     (een vaste "melding: …" op stderr, zonder aantal)
  *   gezakt (bron)                     de Exact- of XPS-export wijkt in dezelfde periode af van wat in de Athena-stand staat. v7.9.4 (bouwpunt 14): het
  *                                     XPS-totaal per maand telt ook diensten zonder gekoppeld talent of project
  *   gezakt (onverklaard)              geen van drieën
  * Nooit waarden, namen, bedragen of tellingen. Een invoerfout noemt alleen het bestand, het regelnummer en de kolomnaam (op stderr).
  * v7.9.4 (bouwpunt 14): op stderr ook een "melding: …" als gewerkte diensten in de XPS-export niet aan een talent of project in Athena koppelen; zonder aantal.
- * Exitcode (v7.9.4, bouwpunt 13): 1 bij minstens één onverklaarde regel of een invoerfout; 2 bij een onverwachte fout in het harnas zelf; 3 (herstel r1, K7)
- * als niets onverklaard is maar minstens één regel "geblokkeerd (stand)" is (niet vergeleken: het harnas slaagt dan niet); anders 0, ook met regels die
- * geblokkeerd (een andere soort) of leeg zijn of gezakt met een verklaring (definitie, invoer, bron). */
+ * Vergeleken (herstel r3, R3-D2) is alleen een regel die geslaagd, gezakt (definitie) of gezakt (bron) is: dan staat de waarde van Athena tegen de referentie of
+ * de bron. Invoer, leeg en geblokkeerd zijn niet vergeleken.
+ * Exitcode (v7.9.4, bouwpunt 13): 1 bij minstens één onverklaarde regel of een invoerfout; 2 bij een onverwachte fout in het harnas zelf; 3 als niets
+ * onverklaard is maar minstens één regel "geblokkeerd (stand)" is (herstel r1, K7), of als geen enkele regel vergeleken is (herstel r2, B-B7; herstel r3,
+ * R3-D2: ook als de overige regels alleen invoer, leeg of geblokkeerd zijn), met een vaste melding zonder aantal: het harnas slaagt dan niet; anders 0, ook
+ * met regels die geblokkeerd (een andere soort), leeg of gezakt (invoer) zijn naast minstens één vergeleken regel. Staat er een regel gezakt (invoer) bij,
+ * dan zegt een vaste "melding: …" op stderr dat die regels niet vergeleken zijn. Een exitcriterium (U1, U2, U13) vraagt dus exitcode 0 én geen regel
+ * gezakt (invoer) voor de cijfers van dat rapport. */
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 var REPO = path.resolve(__dirname, '..');
@@ -205,7 +212,8 @@ function zonderWaarde(v) { return v === null || v === undefined || v === '' || (
 // { geblokkeerd, reden, leeg, waarde } van één referentieregel.
 // v7.9.4: een team zonder leden is voor elk weekcijfer geblokkeerd, ook contactmomenten, afsprakenGehouden en gewonnen (bouwpunt 11; de standcijfers M23 en
 // M35 blokkeert Code.gs zelf); een cijfer of deel zonder waarde is leeg, nooit 0 (bouwpunt 13). Een deel nieuw/bestaand/onbekend dat ontbreekt naast een
-// cijfer met een waarde is 0: delenUit laat een deel van 0 weg.
+// cijfer met een waarde is 0: delenUit laat een deel van 0 weg; herstel r4 (R4-2b): een deel met alleen winsten zonder getekende waarde staat er leeg (null).
+// Herstel r4 (R4-2): het deel zonder is een eigen telling in extra, dus ook bij een lege hoofdwaarde
 function athenaWaarde(L, r) {
   var ctx = L.ctx, blok = function (reden) { return { geblokkeerd: true, reden: String(reden || ''), leeg: false, waarde: null }; };
   var uit = function (v) { return zonderWaarde(v) ? { geblokkeerd: false, reden: '', leeg: true, waarde: null } : { geblokkeerd: false, reden: '', leeg: false, waarde: Number(v) }; };
@@ -218,15 +226,19 @@ function athenaWaarde(L, r) {
   var c = standOp(L, r.per.peildatum)[r.id];
   if (!c) return blok('');
   if (c.geblokkeerd) return blok(c.geblokkeerd);
+  if (r.uitsplitsing === 'zonder') return uit(c.extra ? c.extra[ZONDER[r.id]] : null);
   if (zonderWaarde(c.waarde)) return uit(null);
   if (!r.uitsplitsing) return uit(c.waarde);
-  if (r.uitsplitsing === 'zonder') return uit(c.extra ? c.extra[ZONDER[r.id]] : null);
   return uit((Array.prototype.filter.call(c.uitsplitsing || [], function (u) { return u.label === r.uitsplitsing; })[0] || { waarde: 0 }).waarde);
 }
 // v7.9.4: de soort van een blokkade uit Code.gs voor de uitvoer (vaste woorden, nooit de tekst zelf); '' als hij in geen soort past.
 // Herstel r1 (K7): stand = "stand alleen voor vandaag" (bouwpunt 7: de fase op een eerdere peildatum is niet te reconstrueren); telt niet als geslaagd (exitcode 3)
 var BLOK_SOORTEN = [['geen leden', /^geen leden in het team/], ['stand', /^stand alleen voor vandaag/], ['rollen', /rollen niet ingesteld/], ['redenen', /verliesredenen/], ['extern', /^extern\b|§6/], ['besluit', /besluit/]];
-var NIETS_MELDING = 'melding: geen enkele regel is vergeleken (alles geblokkeerd of leeg); het harnas slaagt dan niet.';  // herstel r2 (B-B7)
+var NIETS_MELDING = 'melding: geen enkele regel is vergeleken (alles invoer, geblokkeerd of leeg); het harnas slaagt dan niet.';  // herstel r2 (B-B7); herstel r3 (R3-D2): ook invoer
+// herstel r3 (R3-D2): gezakt (invoer) is niet vergeleken (Athena mist de gegevens, er is niets aangetoond); een vaste zin, zonder aantal
+var INVOER_MELDING = 'melding: een of meer regels zijn niet vergeleken omdat Athena de invoer mist (gezakt (invoer): een gezakt of leeg datacontract of een open overstapstap); die regels tonen niets aan.';
+// herstel r3 (R3-D2): alleen deze uitkomsten zijn een vergelijking (de waarde van Athena is tegen de referentie of de bron gezet); onverklaard telt apart (exitcode 1)
+var VERGELEKEN = ['geslaagd', 'gezakt (definitie)', 'gezakt (bron)'];
 var STAND_MELDING = 'melding: een of meer regels zijn niet vergeleken: de stand op die peildatum is niet te reconstrueren (fasewissels zonder werkelijke datum: importeer de werkelijke datums in Beheer), of vergelijk de stand van vandaag.';  // geen getal (geen aantal)
 function blokSoort(reden) { var s = String(reden || ''); for (var i = 0; i < BLOK_SOORTEN.length; i++) if (BLOK_SOORTEN[i][1].test(s)) return BLOK_SOORTEN[i][0]; return ''; }
 // De tolerantie uit het register: '0' en '1' absoluut (aantallen, procentpunten), '1%' relatief tegen de referentie
@@ -315,7 +327,7 @@ var RAAKT = {
   jaardoel: ['noemerbewaking'], doelpad: ['noemerbewaking', 'geen_target_op_facturatie'], benodigdeActiviteit: ['noemerbewaking'],
   gecontracteerd: ['gewonnen_is_getekend', 'kans_heeft_schooljaar_en_klant', 'lopend_project_heeft_contract', 'overstap:fasen', 'overstap:capsule', 'overstap:projecten'],
   gewogenPijplijn: ['waarde_vanaf_voorstel', 'kans_heeft_schooljaar_en_klant', 'dekking_robuust', 'overstap:fasen', 'overstap:capsule', 'overstap:accounts'],
-  dekking: ['gewonnen_is_getekend', 'waarde_vanaf_voorstel', 'kans_heeft_schooljaar_en_klant', 'noemerbewaking', 'overstap:fasen', 'overstap:capsule'],
+  dekking: ['gewonnen_is_getekend', 'waarde_vanaf_voorstel', 'kans_heeft_schooljaar_en_klant', 'lopend_project_heeft_contract', 'noemerbewaking', 'overstap:fasen', 'overstap:capsule', 'overstap:projecten'],  // herstel r5 (R5-C2): M07 = M04 ÷ noemer
   gewonnenWaarde: ['fasewissel_heeft_werkelijke_datum', 'gewonnen_is_getekend', 'overstap:tijdlijn', 'overstap:fasen', 'overstap:capsule', 'overstap:projecten'],
   conversie: ['fasewissel_heeft_werkelijke_datum', 'verliesdiscipline', 'overstap:redenen', 'overstap:tijdlijn', 'overstap:capsule', 'overstap:accounts'],
   voorspellingDeals: ['fasewissel_heeft_werkelijke_datum', 'overstap:tijdlijn', 'overstap:capsule'],
@@ -500,7 +512,7 @@ function xpsMeldingen(L, regels) {
 function beoordeel(L, r) {
   var a = athenaWaarde(L, r);
   if (a.geblokkeerd) { var soort = blokSoort(a.reden); return 'geblokkeerd' + (soort ? ' (' + soort + ')' : ''); }
-  if (a.leeg) return 'leeg (geen basis)';
+  if (a.leeg) return invoerRaakt(L, r) ? 'gezakt (invoer)' : 'leeg (geen basis)';  // herstel r4 (R4-1): leeg door ontbrekende invoer is invoer
   var tol = tolerantieVan(L, r.id);
   if (binnen(a.waarde, r.waarde, tol)) return 'geslaagd';
   var oud = OUDE_DEFINITIES[r.id] ? OUDE_DEFINITIES[r.id](L, r) : [];
@@ -542,19 +554,21 @@ function vergelijk(opt) {
   var ref;
   try { ref = leesReferentie(L.ctx, L.refTekst, L.peildatum); } catch (e) { return mis(e); }
   if (ref.fouten.length) return { uit: [], fouten: ref.fouten, meldingen: [], exit: 1 };
-  var uit = [], onverklaard = 0, nietVergeleken = 0, vergeleken = 0, meldingen;
+  var uit = [], onverklaard = 0, nietVergeleken = 0, vergeleken = 0, invoer = 0, meldingen;
   try {
     ref.regels.forEach(function (r) {
-      var c = beoordeel(L, r); if (c === 'gezakt (onverklaard)') onverklaard++; if (c === 'geblokkeerd (stand)') nietVergeleken++; if (/^(geslaagd|gezakt)/.test(c)) vergeleken++;
+      var c = beoordeel(L, r); if (c === 'gezakt (onverklaard)') onverklaard++; if (c === 'geblokkeerd (stand)') nietVergeleken++; if (c === 'gezakt (invoer)') invoer++;
+      if (VERGELEKEN.indexOf(c) >= 0) vergeleken++;  // herstel r3 (R3-D2): invoer is geen vergelijking
       uit.push(r.token + ' ' + r.periode + (r.uitsplitsing ? '/' + r.uitsplitsing : '') + ' ' + c);
     });
     meldingen = xpsMeldingen(L, ref.regels);
     if (nietVergeleken) meldingen.push(STAND_MELDING);
+    if (invoer) meldingen.push(INVOER_MELDING);  // herstel r3 (R3-D2): ook naast een geslaagde regel (exitcode 0), zonder aantal
     if (!vergeleken && ref.regels.length) meldingen.push(NIETS_MELDING);
   } catch (e) { return mis(e); }
   // herstel r1 (K7): 1 gaat voor 3 (onverklaard of invoerfout); 3 = niets onverklaard, maar een regel is niet vergeleken (stand): het harnas slaagt dan niet.
-  // herstel r2 (B-B7): ook 3 als geen enkele regel vergeleken is (alles geblokkeerd of leeg, zoals zonder OC-accounts): exitcode 0 vraagt minstens één regel
-  // geslaagd of gezakt (verklaard)
+  // herstel r2 (B-B7): ook 3 als geen enkele regel vergeleken is (alles geblokkeerd of leeg, zoals zonder OC-accounts). Herstel r3 (R3-D2): vergeleken is alleen
+  // geslaagd, gezakt (definitie) of gezakt (bron); een run met alleen invoer (en leeg of geblokkeerd) eindigt dus ook met 3, nooit 0
   return { uit: uit, fouten: [], meldingen: meldingen, exit: onverklaard ? 1 : nietVergeleken || (!vergeleken && ref.regels.length) ? 3 : 0 };
 }
 // v7.9.4 (bouwpunt 13): een onverwachte fout in het harnas zelf is exitcode 2 (niet 1: dat is alleen onverklaard of een invoerfout); geen melding met inhoud,

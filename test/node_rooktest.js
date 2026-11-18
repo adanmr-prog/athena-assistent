@@ -2681,7 +2681,8 @@ function rollenWeg() { ctx.schrijfVeel('Mijlpalen', ctx.mijlpalen().map(function
     eis(/basislijn vorige jaren ontbreekt/.test(M9.geblokkeerd) && M9.extra.maanden.length === 12, 'M09 zonder urenbasislijn: geblokkeerd, met de maanden van dit schooljaar als toelichting');
     var vsj = ctx.vorigSchooljaar(sj), bl = {}; bl[vsj] = {}; ctx.schooljaarMaanden(vsj).forEach(function (m) { bl[vsj][m] = 100; });
     aannameZet('urenBasislijn', bl); var M9b = mtCijfers().M09, heel = M9b.extra.maanden.filter(function (x) { return x.maand < plusDagen(0).slice(0, 7); }).length;
-    eis(!M9b.geblokkeerd && typeof M9b.waarde === 'number' && M9b.extra.basislijn[vsj] === 100 * heel, 'M09 met urenbasislijn: de uren t/m de laatste hele maand naast dezelfde maanden van vorig jaar (' + heel + ' maanden)');
+    eis(!M9b.geblokkeerd && (heel ? typeof M9b.waarde === 'number' && M9b.extra.basislijn[vsj] === 100 * heel : M9b.waarde === '' && /nog geen hele maand in dit schooljaar/.test(M9b.extra.reden || '') && !M9b.extra.basislijn),  // v7.9.4 herstel r5 (R5-C4): in augustus leeg (herstel r3, R4)
+      'M09 met urenbasislijn: de uren t/m de laatste hele maand naast dezelfde maanden van vorig jaar; zonder hele maand (augustus) leeg met de reden (' + heel + ' maanden)');
     var S2 = require(path.join(R, 'server/schema.js'));
     eis(S2.NUMERIEK.Voorspellingen.indexOf('versie') >= 0 && S2.NUMERIEK.Aannames.indexOf('versie') >= 0 && S2.NUMERIEK.Standen.indexOf('waarde') >= 0 && S2.NUMERIEK.Cijferdefinities.indexOf('versie') >= 0, 'N4: versie en waarde zijn getalkolommen in Postgres (Voorspellingen, Aannames, Standen, Cijferdefinities)');
   } catch (e) { eis(false, 'v7.9 aannames en jaardoel: onverwachte fout ' + e.message + ' ' + String(e.stack).split('\n')[1]); } finally { standTerug(st); }
@@ -4896,6 +4897,195 @@ function fout794(naam, e) { eis(false, 'v7.9.4 ' + naam + ': onverwachte fout ' 
     eis(ctx.overstapStand().zonderSchooljaar === os0 + 1 && kn9.onbekend === 0 && !kn9.kansen.length,
       'v7.9.4 herstel r2 (B-B9): het datakwaliteitsblok (overstapStand) telt ook een winst zonder schooljaar; een kans zonder wissels die na de peildatum is aangemaakt, bestond op de peildatum niet');
   } catch (e) { fout794('herstel r2', e); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9.4 herstel r3 (review ronde 3): R3-D1/R1 (zijn er winsten maar heeft geen enkele een getekende waarde, dan is M04 leeg, net als M08; zonder M04
+   geen achterstand bij M05 en geen dekking bij M07), R3-N1/R2 (de maand van M08), R3 (apiRapport: gewonnen waarde = de getekende contractwaarde),
+   R4 (M09 zonder hele maand), N1 (M20: een kans zonder laatste contact is ook op een eerdere peildatum niet stil) en N2 (het bedrijfscijfer contractwaarde
+   leeg als geen project een contractwaarde heeft). Verzonnen gegevens. ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var sj = sjNu(), vandaag = plusDagen(0), sjStart = sj.slice(0, 4) + '-08-01', maandStart = vandaag.slice(0, 8) + '01', d1 = plusDagen(-20) >= sjStart ? plusDagen(-20) : vandaag;
+    var leeg = function (t) { ctx.verwijderRijen(t, function () { return true; }); };
+    ['Trajecten', 'Kansen', 'Fasewissels', 'Facturen'].forEach(leeg); ctx._LEES = {};
+    var winst = function (id, klant, waarde, dag) { return { id: id, naam: 'Verzonnen winst ' + id, school: 'Verzonnen School ' + id, schoolId: '', fase: 'gewonnen', waarde: waarde, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: klant, gesloten: dag, aangemaakt: plusDagen(-60) + ' 09:00' }; };
+    var wissel = function (id, dag, waarde) { return { id: id + '-fw', kansId: id, schoolId: '', van: '', naar: 'gewonnen', werkelijkeDatum: dag, ingevoerdOp: dag + ' 10:00', door: 'Lars Visser', eigenaar: 'Lars Visser', zekerheid: 'laag', bron: 'tijdlijn', waarde: waarde }; };
+    ctx.schrijfVeel('Kansen', cx([winst('rk3-w1', 'nieuw', 12000, d1), winst('rk3-w2', 'bestaand', 8000, vandaag)]));
+    ctx.schrijfVeel('Fasewissels', cx([wissel('rk3-w1', d1, 12000), wissel('rk3-w2', vandaag, 8000)]));
+    ctx._LEES = {};
+    aannameZet('scope', ['particulier']); aannameZet('doelpadCurve', { totaal: [[0, 0], [365, 1]], bron: 'reconstructie' });
+    aannameZet('jaardoel', { soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000 });
+    // R3-D1, R1: twee winsten, geen project met een getekende waarde (de echte stand vóór stap 5): M04 leeg, zonder achterstand en zonder dekking
+    var M = mtCijfers();
+    eis(M.M04.waarde === '' && !M.M04.geblokkeerd && M.M04.extra.zonderGetekend === 2 && /geen basis/.test(M.M04.extra.reden || '') && !M.M04.uitsplitsing.length,
+      'v7.9.4 herstel r3 (R3-D1, R1): zijn er winsten in het schooljaar maar heeft geen enkele een getekende contractwaarde, dan is M04 leeg (geen 0) met zonderGetekend en een reden, zoals M08');
+    eis(typeof M.M05.waarde === 'number' && M.M05.extra.achter === '' && /geen basis/.test(M.M05.extra.achterReden || ''),
+      'v7.9.4 herstel r3 (R3-D1): zonder waarde van M04 rekent M05 geen achterstand (leeg met een reden); het doelpad zelf blijft');
+    eis(M.M07.waarde === '' && !M.M07.geblokkeerd && M.M07.extra.nogTeVinden === undefined && /geen basis/.test(M.M07.extra.reden || ''),
+      'v7.9.4 herstel r3 (R3-D1): zonder waarde van M04 is M07 leeg met een reden: geen "0 % dekking" en geen "nog te vinden = het hele jaardoel"');
+    // R3-N1, R2: de maand van M08 heeft een deal (rk3-w2, vandaag) zonder getekende waarde: leeg, geen € 0
+    var inMaand1 = d1 >= maandStart;
+    eis(M.M08.waarde === '' && M.M08.extra.maand.aantal === (inMaand1 ? 2 : 1) && M.M08.extra.maand.waarde === null && M.M08.extra.maand.zonderGetekend === (inMaand1 ? 2 : 1),
+      'v7.9.4 herstel r3 (R3-N1, R2): heeft geen deal van de maand een getekende waarde, dan is extra.maand.waarde leeg (null) met zonderGetekend, geen 0 (' + JSON.stringify(M.M08.extra.maand) + ')');
+    // de bevroren stand: een tussenstand bewaart M04 leeg, geen 0
+    leeg('Standen'); ctx._LEES = {}; ctx.GEBRUIKER = null; ctx.sturingBevriezen(vandaag, 'tussenstand');
+    var rij04 = ctx.lees('Standen').filter(function (r) { return r.metriek === 'gecontracteerd' && !r.uitsplitsing; })[0], vast04 = roep(SOPHIE, 'apiSturing', 'mt', { stand: vandaag }).blokken[0].cijfers.filter(function (c) { return c.id === 'gecontracteerd'; })[0];
+    eis(!!rij04 && rij04.waarde === '' && vast04.waarde === '', 'v7.9.4 herstel r3 (R3-D1): een bevroren stand (Standen, apiSturingBevriezen) bewaart M04 leeg, geen 0');
+    // deels getekend: zoals nu (de som van de getekende waarden, zonderGetekend als signaal); M05 en M07 rekenen weer
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk3-t1', kansId: 'rk3-w1', schoolId: '', school: 'Verzonnen School rk3-w1', traject: 'Verzonnen', schooljaar: sj, status: 'opstart', contractwaarde: 1000, omzet: 4321 }])); ctx._LEES = {};
+    var M2 = mtCijfers(), dp = M2.M05.waarde;
+    eis(M2.M04.waarde === 1000 && M2.M04.extra.zonderGetekend === 1 && !M2.M04.extra.reden && M2.M05.extra.achter === Math.round(1000 - dp) && !M2.M05.extra.achterReden &&
+      M2.M07.waarde === Math.round(1000 * (1000 + M2.M06.waarde) / 500000) / 10 && M2.M07.extra.nogTeVinden === Math.round(500000 - 1000 - M2.M06.waarde),
+      'v7.9.4 herstel r3 (R3-D1): deels getekend telt de getekende waarde (1000) met zonderGetekend 1; M05 rekent de achterstand en M07 de dekking weer');
+    eis(M2.M08.extra.maand.waarde === (inMaand1 ? 1000 : null) && M2.M08.extra.maand.zonderGetekend === 1,
+      'v7.9.4 herstel r3 (R2): de maand van M08 telt de getekende waarde als er één is, anders leeg (' + JSON.stringify(M2.M08.extra.maand) + ')');
+    // zonder enige winst is 0 een echte 0
+    leeg('Kansen'); leeg('Fasewissels'); leeg('Trajecten'); ctx._LEES = {};
+    var M3 = mtCijfers();
+    eis(M3.M04.waarde === 0 && M3.M04.extra.zonderGetekend === 0 && typeof M3.M07.waarde === 'number' && M3.M07.extra.nogTeVinden === 500000 - Math.round(M3.M06.waarde) && typeof M3.M05.extra.achter === 'number' &&
+      M3.M08.waarde === 0 && M3.M08.extra.maand.aantal === 0 && M3.M08.extra.maand.waarde === 0,
+      'v7.9.4 herstel r3 (R3-D1): zonder enige winst is M04 een echte 0 en rekenen M05 en M07 gewoon; M08 en zijn maand zijn 0');
+    eis(/geen enkele[^.]*getekende[^.]*leeg/.test(ctx.METRIEKEN.gecontracteerd.definitie) && /leeg/.test(ctx.METRIEKEN.dekking.definitie) && /achterstand/.test(ctx.METRIEKEN.doelpad.definitie) && /maand/.test(ctx.METRIEKEN.gewonnenWaarde.definitie.split('leeg')[1] || ''),
+      'v7.9.4 herstel r3 (R3-D1, R2): de definities van M04, M05, M07 en M08 zeggen wanneer het cijfer (of de achterstand, of de maand) leeg is');
+    vers79();
+    // R3: apiRapport (Rapporten → Teams, tegel "Gewonnen · €") telt de getekende contractwaarde, niet de geschatte Kansen.waarde
+    ['Trajecten', 'Kansen', 'Fasewissels'].forEach(leeg); ctx._LEES = {};
+    var R0 = roep(SOPHIE, 'apiRapport', 'maand', '', 0);
+    ctx.schrijfVeel('Kansen', cx([winst('rk3-r1', 'nieuw', 10000, vandaag), winst('rk3-r2', 'nieuw', 20000, vandaag)]));
+    ctx.schrijfVeel('Fasewissels', cx([wissel('rk3-r1', vandaag, 10000), wissel('rk3-r2', vandaag, 20000)])); ctx._LEES = {};
+    var R1 = roep(SOPHIE, 'apiRapport', 'maand', '', 0), lars1 = R1.perPersoon.filter(function (p) { return p.naam === 'Lars Visser'; })[0];
+    eis(R0.winst.gewonnen === 0 && R0.winst.gewonnenWaarde === 0 && R0.winst.zonderGetekend === 0 && R1.winst.gewonnen === 2 && R1.winst.gewonnenWaarde === null && R1.winst.zonderGetekend === 2 &&
+      !!lars1 && lars1.cijfers.gewonnenWaarde === null && R1.team.gewonnenWaarde === null,
+      'v7.9.4 herstel r3 (R3): apiRapport geeft bij winsten zonder getekende waarde gewonnenWaarde leeg (null) met zonderGetekend, niet de geschatte kanswaarde (30000); zonder winsten 0 (ook per persoon en het team)');
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk3-rt', kansId: 'rk3-r1', schoolId: '', school: 'Verzonnen School rk3-r1', traject: 'Verzonnen', schooljaar: sj, status: 'opstart', contractwaarde: 1234, omzet: 4321 }])); ctx._LEES = {};
+    var R2 = roep(SOPHIE, 'apiRapport', 'maand', '', 0), lars2 = R2.perPersoon.filter(function (p) { return p.naam === 'Lars Visser'; })[0];
+    var T2 = roep(SOPHIE, 'apiTeamRapport', 'maand', 'consultancy', '', 0), tl2 = T2.perPersoon.filter(function (p) { return p.naam === 'Lars Visser'; })[0];
+    eis(R2.winst.gewonnenWaarde === 1234 && R2.winst.zonderGetekend === 1 && lars2.cijfers.gewonnenWaarde === 1234 && R2.team.gewonnenWaarde === 1234 && !!tl2 && tl2.cijfers.gewonnenWaarde === R2.winst.gewonnenWaarde,
+      'v7.9.4 herstel r3 (R3): met één project telt apiRapport de getekende contractwaarde (1234, niet 10000 of de omzet), gelijk aan het teamcijfer gewonnen waarde (bouwpunt 4)');
+    vers79();
+    // R4: M09 op een peildatum in de eerste maand van het schooljaar (augustus): geen hele maand, dus leeg met een reden en geen basislijn per schooljaar
+    var vorig = ctx.vorigSchooljaar(sj), bl = {}; bl[vorig] = {}; ctx.schooljaarMaanden(vorig).forEach(function (m) { bl[vorig][m] = 100; });
+    aannameZet('urenBasislijn', bl, { ingang: vorig.slice(0, 4) + '-08-01' });
+    var op = function (p) { ctx._LEES = {}; ctx.GEBRUIKER = null; var u = {}; ctx.sturingCijfers(p).blokken.forEach(function (b) { b.cijfers.forEach(function (c) { u[c.id] = c; }); }); return u; };
+    var U0 = op(sjStart).urenVorigeJaren;
+    eis(U0.waarde === '' && !U0.geblokkeerd && /nog geen hele maand in dit schooljaar/.test(U0.extra.reden || '') && !U0.extra.basislijn && !U0.uitsplitsing.length,
+      'v7.9.4 herstel r3 (R4): zonder hele maand in het schooljaar is M09 leeg ("nog geen hele maand in dit schooljaar") en is er geen basislijn per schooljaar, nooit 0 (' + JSON.stringify(U0.waarde) + ')');
+    var p9 = sj.slice(0, 4) + '-09-15';
+    if (p9 <= vandaag) { var U1 = op(p9).urenVorigeJaren; eis(typeof U1.waarde === 'number' && U1.extra.basislijn[vorig] === 100 && !U1.extra.reden, 'v7.9.4 herstel r3 (R4): met één hele maand (augustus) blijft M09 zoals het was (basislijn ' + JSON.stringify(U1.extra.basislijn) + ')'); }
+    var def9 = ctx.METRIEKEN.urenVorigeJaren.definitie;
+    eis(!/dezelfde diensten|dezelfde populatie/.test(def9) && /--accounts/.test(def9) && /vertrokken/.test(def9) && /hele maand/.test(def9),
+      'v7.9.4 herstel r3 (R3-D3, R4): de definitie van M09 belooft niet meer "dezelfde diensten", zegt wat teller en basislijn tellen (vertrokken flexkrachten, --accounts) en wat zonder hele maand gebeurt');
+    vers79();
+    // N1: een open kans zonder Kansen.laatsteContact is vandaag niet stil, en op een eerdere peildatum ook niet (geen terugval op de aanmaak)
+    var gist = plusDagen(-1), V0 = op(vandaag).stilstand, G0 = op(gist).stilstand;
+    ctx.schrijfVeel('Scholen', cx([{ id: 'rk3-sc', naam: 'Verzonnen School Stil', type: 'VO', eigenaar: 'Lars Visser' }]));
+    ctx.schrijfVeel('Kansen', cx([{ id: 'rk3-s1', naam: 'Verzonnen stil', school: 'Verzonnen School Stil', schoolId: 'rk3-sc', fase: 'gesprek', waarde: 1000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', aangemaakt: plusDagen(-40) + ' 09:00', laatsteContact: '' }]));
+    ctx.schrijfVeel('Fasewissels', cx([{ id: 'rk3-s1-fw', kansId: 'rk3-s1', schoolId: 'rk3-sc', van: '', naar: 'gesprek', werkelijkeDatum: plusDagen(-40), ingevoerdOp: plusDagen(-40) + ' 10:00', door: 'Lars Visser', eigenaar: 'Lars Visser', zekerheid: 'vastgelegd', bron: 'aanmaken' }]));
+    var V1 = op(vandaag).stilstand, G1 = op(gist).stilstand, kp = ctx.kansenOpPeildatum(ctx.lees('Kansen').filter(function (k) { return k.id === 'rk3-s1'; }), gist, []);
+    eis(V1.waarde === V0.waarde && G1.waarde === G0.waarde && kp.contactOnbekend === 0 && kp.kansen.length === 1 && kp.kansen[0].laatsteContact === '',
+      'v7.9.4 herstel r3 (N1): een open kans zonder laatste contact telt vandaag en op een eerdere peildatum niet als stil (vandaag ' + V0.waarde + ' → ' + V1.waarde + ', gisteren ' + G0.waarde + ' → ' + G1.waarde + ')');
+    eis(/zonder laatste contact[^.]*niet als stil[^.]*eerdere peildatum|eerdere peildatum[^.]*zonder laatste contact[^.]*niet als stil/.test(ctx.METRIEKEN.stilstand.definitie), 'v7.9.4 herstel r3 (N1): de definitie van M20 zegt dat een kans zonder laatste contact ook op een eerdere peildatum niet stil is');
+    vers79();
+    // N2: projecten in het schooljaar, geen enkele met een contractwaarde: het bedrijfscijfer contractwaarde en Vandaag (kpi.omzet) leeg, niet 0
+    var proj = ctx.projectenVanSchooljaar(ctx.lees('Trajecten'), sj);
+    ctx.schrijfVeel('Trajecten', cx(proj.map(function (t) { return { id: t.id, contractwaarde: '' }; }))); ctx._LEES = {}; ctx.GEBRUIKER = null;
+    var bc = ctx.bedrijfCijfers(), ov = roep(SOPHIE, 'apiOverzicht'), hm = roep(LARS, 'apiHome').bedrijf, tr = roep(SOPHIE, 'apiTeamRapport', 'maand', 'consultancy', '', 0).bedrijf;
+    eis(proj.length > 0 && bc.cijfers.contractwaarde === null && bc.zonderContractwaarde === proj.length && ov.kpi.omzet === null && ov.kpi.zonderContractwaarde === proj.length && hm.cijfers.contractwaarde === null && tr.cijfers.contractwaarde === null,
+      'v7.9.4 herstel r3 (N2): zijn er projecten in het schooljaar maar heeft geen enkele een contractwaarde, dan is het bedrijfscijfer contractwaarde (Home, Rapporten) en kpi.omzet (Vandaag) leeg (null) met zonderContractwaarde, geen 0 (' + proj.length + ')');
+    ctx.verwijderRijen('Trajecten', function (t) { return proj.some(function (p) { return p.id === t.id; }); }); ctx._LEES = {}; ctx.GEBRUIKER = null;
+    var bc0 = ctx.bedrijfCijfers(), ov0 = roep(SOPHIE, 'apiOverzicht');
+    eis(bc0.cijfers.contractwaarde === 0 && bc0.zonderContractwaarde === 0 && ov0.kpi.omzet === 0 && /leeg/.test(ctx.METRIEKEN.contractwaarde.definitie),
+      'v7.9.4 herstel r3 (N2): zonder projecten in het schooljaar is de contractwaarde een echte 0; de definitie zegt wanneer hij leeg is');
+  } catch (e) { fout794('herstel r3', e); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9.4 herstel r4 (review ronde 4): R4-3 (deels getekend: M05 en M07 noemen het aantal winsten zonder getekende waarde, dat niet meetelt) en R4-2b (een deel
+   nieuw/bestaand waarvan geen winst een getekende waarde heeft, is in de uitsplitsing van M04 en M08 leeg, geen stille 0 of een deel dat ontbreekt). Verzonnen. ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var sj = sjNu(), vandaag = plusDagen(0), sjStart = sj.slice(0, 4) + '-08-01', d1 = plusDagen(-3) >= sjStart ? plusDagen(-3) : vandaag;
+    var leeg = function (t) { ctx.verwijderRijen(t, function () { return true; }); };
+    ['Trajecten', 'Kansen', 'Fasewissels', 'Facturen', 'Standen'].forEach(leeg); ctx._LEES = {};
+    var winst = function (id, klant, waarde) { return { id: id, naam: 'Verzonnen winst ' + id, school: 'Verzonnen School ' + id, schoolId: '', fase: 'gewonnen', waarde: waarde, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: klant, gesloten: d1, aangemaakt: plusDagen(-60) + ' 09:00' }; };
+    var wissel = function (id, waarde) { return { id: id + '-fw', kansId: id, schoolId: '', van: '', naar: 'gewonnen', werkelijkeDatum: d1, ingevoerdOp: d1 + ' 10:00', door: 'Lars Visser', eigenaar: 'Lars Visser', zekerheid: 'laag', bron: 'tijdlijn', waarde: waarde }; };
+    ctx.schrijfVeel('Kansen', cx([winst('rk4-n', 'nieuw', 120000), winst('rk4-b', 'bestaand', 80000)]));
+    ctx.schrijfVeel('Fasewissels', cx([wissel('rk4-n', 120000), wissel('rk4-b', 80000)]));
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk4-t', kansId: 'rk4-b', schoolId: '', school: 'Verzonnen School rk4-b', traject: 'Verzonnen', schooljaar: sj, status: 'opstart', contractwaarde: 1000, omzet: 1000 }]));
+    ctx._LEES = {};
+    aannameZet('scope', ['particulier']); aannameZet('doelpadCurve', { totaal: [[0, 0], [365, 1]], bron: 'reconstructie' });
+    aannameZet('jaardoel', { soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000 });
+    var M = mtCijfers(), deel = function (c, d) { return (c.uitsplitsing || []).filter(function (u) { return u.label === d; })[0]; };
+    eis(M.M04.waarde === 1000 && M.M04.extra.zonderGetekend === 1 && M.M05.extra.zonderGetekend === 1 && typeof M.M05.extra.achter === 'number' && M.M07.extra.zonderGetekend === 1 && typeof M.M07.waarde === 'number',
+      'v7.9.4 herstel r4 (R4-3): deels getekend: M05 (achterstand) en M07 (dekking, nog te vinden) rekenen met de getekende waarde en noemen het aantal winsten zonder getekende waarde (' + JSON.stringify([M.M05.extra.zonderGetekend, M.M07.extra.zonderGetekend]) + ')');
+    eis(!!deel(M.M04, 'bestaand') && deel(M.M04, 'bestaand').waarde === 1000 && !!deel(M.M04, 'nieuw') && deel(M.M04, 'nieuw').waarde === null &&
+      !!deel(M.M08, 'nieuw') && deel(M.M08, 'nieuw').waarde === null && deel(M.M08, 'bestaand').waarde === 1000 && !deel(M.M04, 'onbekend'),
+      'v7.9.4 herstel r4 (R4-2b): heeft geen winst van het deel nieuw een getekende waarde, dan staat nieuw in de uitsplitsing van M04 en M08 leeg (null), niet weg en geen 0; een deel zonder winsten blijft weg (' + JSON.stringify([M.M04.uitsplitsing, M.M08.uitsplitsing]) + ')');
+    ctx.GEBRUIKER = null; ctx.sturingBevriezen(vandaag, 'tussenstand'); ctx._LEES = {};
+    var rijN = ctx.lees('Standen').filter(function (r) { return r.metriek === 'gecontracteerd' && r.uitsplitsing === 'nieuw'; })[0];
+    eis(!!rijN && rijN.waarde === '', 'v7.9.4 herstel r4 (R4-2b): een bevroren stand bewaart het lege deel als leeg, geen 0 (' + JSON.stringify(rijN && rijN.waarde) + ')');
+    var H = roep(SOPHIE, 'apiSturing', 'mt', { stand: vandaag }).blokken[0].cijfers.filter(function (c) { return c.id === 'gecontracteerd'; })[0];
+    eis(!!deel(H, 'nieuw') && (deel(H, 'nieuw').waarde === '' || deel(H, 'nieuw').waarde === null), 'v7.9.4 herstel r4 (R4-2b): de bevroren stand toont het deel nieuw leeg');
+    // alles getekend: geen leeg deel en geen aantal zonder getekende waarde bij M05 en M07
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk4-t2', kansId: 'rk4-n', schoolId: '', school: 'Verzonnen School rk4-n', traject: 'Verzonnen', schooljaar: sj, status: 'opstart', contractwaarde: 2000, omzet: 2000 }])); ctx._LEES = {};
+    var M2 = mtCijfers();
+    eis(M2.M04.waarde === 3000 && deel(M2.M04, 'nieuw').waarde === 2000 && !M2.M05.extra.zonderGetekend && !M2.M07.extra.zonderGetekend,
+      'v7.9.4 herstel r4: alles getekend: de delen hebben hun waarde en M05 en M07 noemen geen winsten zonder getekende waarde');
+    // niets getekend: het totaal is leeg (herstel r3) en de uitsplitsing blijft leeg
+    leeg('Trajecten'); ctx._LEES = {};
+    var M3 = mtCijfers();
+    eis(M3.M04.waarde === '' && !M3.M04.uitsplitsing.length && M3.M08.waarde === '' && !M3.M08.uitsplitsing.length, 'v7.9.4 herstel r4: niets getekend: M04 en M08 leeg zonder uitsplitsing (herstel r3)');
+    eis(/telt niet mee/.test(ctx.METRIEKEN.doelpad.definitie) && /telt niet mee/.test(ctx.METRIEKEN.dekking.definitie) && /een deel \(nieuw, bestaand\)[^.]*leeg/i.test(ctx.METRIEKEN.gecontracteerd.definitie) && /een deel \(nieuw, bestaand\)[^.]*leeg/i.test(ctx.METRIEKEN.gewonnenWaarde.definitie),
+      'v7.9.4 herstel r4 (R4-3, R4-2b): de definities van M05 en M07 zeggen dat winsten zonder getekende waarde niet meetellen, die van M04 en M08 dat een deel zonder getekende waarde leeg is');
+    vers79();
+  } catch (e) { fout794('herstel r4', e); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9.4 herstel r5 (review ronde 5): R5-C1 (M20: een open kans zonder laatste contact is niet stil, maar het aantal staat ernaast; heeft geen enkele
+   open kans een laatste contact, dan is M20 leeg, geen 0, op elke peildatum) en R5-C2 (contract gewonnen_is_getekend toetst ook de winsten van dit schooljaar
+   volgens winstSchooljaar, zoals M04: een leeg M04 heeft altijd een gezakt contract en een melding). Verzonnen gegevens. ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var sj = sjNu(), vandaag = plusDagen(0), sjStart = sj.slice(0, 4) + '-08-01';
+    var leeg = function (t) { ctx.verwijderRijen(t, function () { return true; }); };
+    var op = function (p) { ctx._LEES = {}; ctx.GEBRUIKER = null; var u = {}; ctx.sturingCijfers(p).blokken.forEach(function (b) { b.cijfers.forEach(function (c) { u[c.id] = c; }); }); return u; };
+    ['Kansen', 'Fasewissels', 'Activiteiten', 'Trajecten', 'Facturen'].forEach(leeg); ctx._LEES = {};
+    // R5-C1: drie Capsule-kansen in gesprek, 120 dagen oud, zonder laatste contact en zonder activiteit (het scenario van rev5-r3review/s3_m20)
+    var kans = function (id, lc, dagen) { return { id: id, capsuleId: id, naam: 'Verzonnen ' + id, school: 'Verzonnen School ' + id, schoolId: '', fase: 'gesprek', waarde: 5000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', aangemaakt: plusDagen(-dagen) + ' 09:00', laatsteContact: lc }; };
+    var aanmaak = function (id, dagen) { return { id: id + '-fw', kansId: id, van: '', naar: 'gesprek', werkelijkeDatum: plusDagen(-dagen), ingevoerdOp: plusDagen(-1) + ' 10:00', door: 'Capsule', eigenaar: 'Lars Visser', zekerheid: 'laag', bron: 'capsule' }; };
+    ctx.schrijfVeel('Kansen', cx(['rk5-c1', 'rk5-c2', 'rk5-c3'].map(function (id) { return kans(id, '', 120); })));
+    ctx.schrijfVeel('Fasewissels', cx(['rk5-c1', 'rk5-c2', 'rk5-c3'].map(function (id) { return aanmaak(id, 120); }))); ctx._LEES = {};
+    var dagen = [vandaag, plusDagen(-1), plusDagen(-30)], m20 = function (p) { return op(p).stilstand; };
+    var L0 = dagen.map(m20);
+    eis(L0.every(function (c) { return c.waarde === '' && !c.geblokkeerd && c.extra.zonderContact === 3 && /geen basis/.test(c.extra.reden || '') && !c.uitsplitsing.length; }),
+      'v7.9.4 herstel r5 (R5-C1): heeft geen enkele open kans een laatste contact, dan is M20 leeg (geen basis) met het aantal zonder laatste contact, vandaag, gisteren en 30 dagen terug; nooit 0 (' + JSON.stringify(L0.map(function (c) { return [c.waarde, c.extra]; })) + ')');
+    // één kans met een recent contact: de telling heeft een basis (0 stil), het aantal zonder contact staat ernaast
+    ctx.schrijfVeel('Kansen', cx([kans('rk5-c4', plusDagen(-2), 40)])); ctx.schrijfVeel('Fasewissels', cx([aanmaak('rk5-c4', 40)])); ctx._LEES = {};
+    var L1 = dagen.slice(0, 2).map(m20);
+    eis(L1.every(function (c) { return c.waarde === 0 && c.extra.zonderContact === 3 && !c.extra.reden; }),
+      'v7.9.4 herstel r5 (R5-C1): met één open kans met een laatste contact telt M20 (0 stil) en noemt het aantal open kansen zonder laatste contact (' + JSON.stringify(L1.map(function (c) { return [c.waarde, c.extra]; })) + ')');
+    ctx.schrijfVeel('Kansen', cx([{ id: 'rk5-c4', laatsteContact: plusDagen(-60) }])); ctx._LEES = {};
+    var L2 = m20(vandaag);
+    eis(L2.waarde === 1 && L2.extra.zonderContact === 3, 'v7.9.4 herstel r5 (R5-C1): een stille kans met contact telt (1), de kansen zonder contact staan ernaast (' + JSON.stringify([L2.waarde, L2.extra]) + ')');
+    leeg('Kansen'); leeg('Fasewissels'); ctx._LEES = {};
+    var L3 = m20(vandaag);
+    eis(L3.waarde === 0 && !L3.extra.zonderContact && !L3.extra.reden, 'v7.9.4 herstel r5 (R5-C1): zonder open kansen is M20 een echte 0 (' + JSON.stringify([L3.waarde, L3.extra]) + ')');
+    var def20 = ctx.METRIEKEN.stilstand.definitie;
+    eis(/zonder laatste contact[^.]*niet als stil[^.]*eerdere peildatum/.test(def20) && /aantal[^.]*zonder laatste contact|zonder laatste contact[^.]*aantal/.test(def20) && /geen enkele open kans[^.]*leeg/.test(def20),
+      'v7.9.4 herstel r5 (R5-C1): de definitie van M20 zegt dat het aantal zonder laatste contact ernaast staat en wanneer M20 leeg is');
+    // R5-C2: een winst van dit schooljaar (Kansen.schooljaar) die vóór 1 augustus getekend is, zonder project (het scenario van rev5-r3review/s5)
+    var dA = ctx.plusDagenVan(sjStart, -40);
+    ctx.schrijfVeel('Kansen', cx([{ id: 'rk5-w', naam: 'Verzonnen winst', school: 'Verzonnen School W', schoolId: '', fase: 'gewonnen', waarde: 40000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', gesloten: dA, aangemaakt: ctx.plusDagenVan(dA, -60) + ' 09:00' }]));
+    ctx.schrijfVeel('Fasewissels', cx([{ id: 'rk5-w-fw', kansId: 'rk5-w', van: 'voorstel', naar: 'gewonnen', werkelijkeDatum: dA, ingevoerdOp: dA + ' 10:00', door: 'Lars Visser', eigenaar: 'Lars Visser', zekerheid: 'hoog', bron: 'app', waarde: 40000 }])); ctx._LEES = {};
+    var C14 = contractenOp().gewonnen_is_getekend, M04 = op(vandaag).gecontracteerd;
+    eis(M04.waarde === '' && C14.stand === 'gezakt' && C14.afwijkingen.some(function (a) { return a.id === 'rk5-w' && a.eigenaar === 'Lars Visser'; }),
+      'v7.9.4 herstel r5 (R5-C2): een winst van dit schooljaar (winstSchooljaar) met een akkoord vóór 1 augustus en zonder getekende waarde: M04 is leeg en contract gewonnen_is_getekend zakt met de kans bij zijn eigenaar (' + C14.stand + ', ' + JSON.stringify(C14.afwijkingen) + ')');
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk5-wt', kansId: 'rk5-w', schoolId: '', school: 'Verzonnen School W', traject: 'Verzonnen', schooljaar: sj, status: 'bezig', contractwaarde: 40000, omzet: 40000 }])); ctx._LEES = {};
+    var C14b = contractenOp().gewonnen_is_getekend, M04b = op(vandaag).gecontracteerd;
+    eis(M04b.waarde === 40000 && C14b.stand === 'geslaagd' && C14b.populatie >= 1, 'v7.9.4 herstel r5 (R5-C2): met een project met contractwaarde telt M04 de winst en slaagt het contract, met de winst in de populatie (' + C14b.stand + ', ' + C14b.populatie + ')');
+  } catch (e) { fout794('herstel r5', e); } finally { standTerug(st); }
 })();
 
 /* ---- v7.9.4 herstel r2 (B-B3): §4 van docs/sturing-v7.9.md (de tekst die het MT aftekent) is per M-code gelijk aan de definitie in het register (METRIEKEN),

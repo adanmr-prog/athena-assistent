@@ -298,7 +298,7 @@ with sync_playwright() as p:
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
     assert all(x.get('v') == '7.9.4' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.4
     # v7.9.4 (bouwpunt 19): contractwaarde zonder terugval op de omzet; het aantal projecten zonder contractwaarde staat als signaal op de tegel
-    assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027") .t-signaal:text-is("1 zonder contractwaarde")').count() == 1, 'v7.9.4: het signaal projecten zonder contractwaarde (herstel r2, N3: kort op de tegel)'
+    assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027") .t-signaal:text-is("1 zonder waarde")').count() == 1, 'v7.9.4: het signaal projecten zonder contractwaarde (herstel r2 N3, r3 N2: kort op de tegel)'
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
     assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
     # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is

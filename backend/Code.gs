@@ -403,11 +403,12 @@ function apiOverzicht() {
   if (!isBeheerder()) kansen = kansen.filter(function (k) { return mag('pipeline', 'zien', k) && (k.eigenaar || k.am) === ikNaam(); });  // v4.0
   var actief = trajecten.filter(function (t) { return t.status === 'bezig' || t.status === 'actief'; });  // v4.0: monday-statussen
   var sj = huidigSchooljaar();
-  var omzet = contractwaardeSchooljaar(trajecten, sj);  // v7.9 (punt 17): de contractwaarde van het schooljaar, één definitie met de bedrijfsmetriek (de sleutel kpi.omzet blijft); v7.9.4: zonder terugval op de omzet; v4.2: opstart is gewonnen
+  var omzet = contractwaardeSchooljaar(trajecten, sj), zonderCw = zonderContractwaardeSchooljaar(trajecten, sj);  // v7.9 (punt 17): de contractwaarde van het schooljaar, één definitie met de bedrijfsmetriek (de sleutel kpi.omzet blijft); v7.9.4: zonder terugval op de omzet; v4.2: opstart is gewonnen
+  if (zonderCw && !omzet) omzet = null;  // v7.9.4 herstel r3 (N2): projecten maar geen enkele contractwaarde: leeg, geen 0
   var open = kansen.filter(kansOpen).sort(function (a, b) { return String(a.deadline || '9999').localeCompare(String(b.deadline || '9999')); });
   return {
     datum: datumLang(new Date()), groet: groet(),
-    kpi: { trajecten: actief.length, kansen: open.length, scholen: uniek(actief.map(function (t) { return t.school; })).length, omzet: omzet, schooljaar: sj, zonderContractwaarde: zonderContractwaardeSchooljaar(trajecten, sj),  // v7.9.4 (bouwpunt 19)
+    kpi: { trajecten: actief.length, kansen: open.length, scholen: uniek(actief.map(function (t) { return t.school; })).length, omzet: omzet, schooljaar: sj, zonderContractwaarde: zonderCw,  // v7.9.4 (bouwpunt 19)
            pijplijn: open.reduce(function (s, k) { return s + (Number(k.waarde) || 0); }, 0) },
     focus: acties.slice(0, 6).map(function (a) { return taakUit(a); }), aandacht: acties.slice(6).map(function (a) { return taakUit(a); }),  // v3.7: alle velden, zodat de app ze kan bewerken
     mails: mailsOnbeantwoord(5), agenda: agendaVoorDag(new Date()), gekoppeld: mijnMailbox(),
@@ -2328,6 +2329,9 @@ function apiRapport(preset, eigenaar, stap) {
   var per = {}, p = function (n) { n = n || 'Onbekend'; return per[n] || (per[n] = leeg()); };
   mensen.forEach(p);
   var mp = mijlpaalMap(), kansen = lees('Kansen').filter(function (k) { return mag('pipeline', 'zien', k); });
+  // v7.9.4 herstel r3 (R3): gewonnen waarde = de getekende contractwaarde van het project (getekendPerKans), zoals het teamcijfer (bouwpunt 4), nooit Kansen.waarde;
+  // zonderG telt per persoon de winsten zonder getekende waarde: zijn er winsten maar geen enkele getekende waarde, dan leeg (null), geen 0
+  var cwK = getekendPerKans(lees('Trajecten')), zonderG = {};
   lees('Activiteiten').forEach(function (a) {
     if (!a.door || !inPeriode(a.datum)) return;  // inkomende mail heeft geen 'door' en telt niet als activiteit
     var x = p(a.door);
@@ -2342,12 +2346,15 @@ function apiRapport(preset, eigenaar, stap) {
   tellendeWissels().forEach(function (w) { if (zichtK[String(w.kansId)] && inPeriode(w.werkelijkeDatum) && telRol(w) === 'voorstel') p(w.eigenaar).voorstellen++; });
   kansen.forEach(function (k) {
     if (inPeriode(k.aangemaakt)) p(k.eigenaar).nieuweKansen++;
-    if (k.fase === 'gewonnen' && inPeriode(k.gesloten)) { p(k.eigenaar).gewonnen++; p(k.eigenaar).gewonnenWaarde += Number(k.waarde) || 0; }
+    if (k.fase === 'gewonnen' && inPeriode(k.gesloten)) { var gw = uitMap(cwK, String(k.id)) || 0, x0 = p(k.eigenaar); x0.gewonnen++; x0.gewonnenWaarde += gw; if (!(gw > 0)) zonderG[k.eigenaar || 'Onbekend'] = (zonderG[k.eigenaar || 'Onbekend'] || 0) + 1; }  // herstel r3 (R3)
     if (k.fase === 'verloren' && inPeriode(k.gesloten)) p(k.eigenaar).verloren++;
   });
   var namen = eigenaar ? [eigenaar] : Object.keys(per).filter(function (n) { var c = per[n]; return magPersoon(n) && (n !== 'Onbekend' || Object.keys(c).some(function (k) { return c[k]; })); });
-  var team = leeg();
-  namen.forEach(function (n) { var c = per[n] || leeg(); Object.keys(team).forEach(function (k) { team[k] += c[k]; }); });
+  var team = leeg(), zonderT = 0;
+  namen.forEach(function (n) { var c = per[n] || leeg(); Object.keys(team).forEach(function (k) { team[k] += c[k]; }); zonderT += zonderG[n] || 0; });
+  // herstel r3 (R3): alleen winsten zonder getekende waarde → leeg, per persoon en voor het team (na het optellen)
+  Object.keys(per).forEach(function (n) { if (per[n].gewonnen && per[n].gewonnen === (zonderG[n] || 0)) per[n].gewonnenWaarde = null; });
+  if (team.gewonnen && team.gewonnen === zonderT) team.gewonnenWaarde = null;
   if (blokVo) { team.voorstellen = null; Object.keys(per).forEach(function (n) { per[n].voorstellen = null; }); }  // v7.9 (B1): zonder rollen geen 0
   var doelen = doelenVan(preset, periodeSleutelVan(preset, van));  // v7.9: standaard plus de doelen van precies deze periode
   var open = kansen.filter(kansOpen).filter(function (k) { return eigenaar ? k.eigenaar === eigenaar : magPersoon(k.eigenaar) || isBeheerder(); }).map(function (k) { return kansUit(k, mp); });
@@ -2366,10 +2373,19 @@ function apiRapport(preset, eigenaar, stap) {
     totaal: { open: open.length, waarde: som(open, 'waarde'), gewogen: som(open, 'gewogen') },
     forecast: Object.keys(maanden).sort().map(function (m) { return maanden[m]; }),
     trechter: mijlpalen().map(function (m) { var ks = open.filter(function (k) { return k.fase === m.mijlpaal; }); return { mijlpaal: m.mijlpaal, pipeline: m.pipeline, aantal: ks.length, waarde: som(ks, 'waarde'), gewogen: som(ks, 'gewogen') }; }),
-    winst: { gewonnen: gew.length, gewonnenWaarde: som(gew, 'waarde'), verloren: verl.length, verlorenWaarde: som(verl, 'waarde'), ratio: gesloten.length ? Math.round(100 * gew.length / gesloten.length) : null },
+    winst: winstGetekend(gew, cwK, { verloren: verl.length, verlorenWaarde: som(verl, 'waarde'), ratio: gesloten.length ? Math.round(100 * gew.length / gesloten.length) : null }),  // herstel r3 (R3)
     redenen: Object.keys(redenen).map(function (r) { return { reden: r, aantal: redenen[r] }; }).sort(function (a, b) { return b.aantal - a.aantal; }),
     stil: open.filter(function (k) { return k.stil; }).sort(function (a, b) { return b.dagenStil - a.dagenStil; }).slice(0, 15)
   };
+}
+// v7.9.4 herstel r3 (R3): de tegel "Gewonnen · €" van Rapporten → Teams: het aantal winsten, de getekende contractwaarde (getekendPerKans) en het aantal zonder
+// getekende waarde; zijn er winsten maar heeft geen enkele een getekende waarde, dan is gewonnenWaarde leeg (null); zonder winsten 0. De verloren waarde blijft de
+// kanswaarde (een verloren kans heeft geen contract).
+function winstGetekend(gew, cwK, rest) {
+  var w = 0, zonder = 0; gew.forEach(function (k) { var v = uitMap(cwK, String(k.id)) || 0; if (v > 0) w += v; else zonder++; });
+  var u = { gewonnen: gew.length, gewonnenWaarde: gew.length && zonder === gew.length ? null : Math.round(w * 100) / 100, zonderGetekend: zonder };
+  Object.keys(rest).forEach(function (k) { u[k] = rest[k]; });
+  return u;
 }
 // v3.3: activiteit per gebruiker. De beheerder kiest iemand; anderen zien alleen hun eigen activiteit.
 function apiActiviteiten(door, van, tot, team) {
@@ -4475,7 +4491,7 @@ var METRIEKEN = {
   gewonnen:              { team: 'consultancy', label: 'Gewonnen', kort: 'Won', soort: 'aantal', m: 'M16', besluit: 'B4', eigenaar: 'beheerder', tolerantie: '0',  // M08/M16 deal: elke tellende wissel naar gewonnen
     definitie: 'Het aantal fasewissels naar gewonnen (deals) per eigenaar op werkelijke datum (de akkoorddatum). Elke tellende wissel naar gewonnen in de periode telt.' },
   gewonnenWaarde:        { team: 'consultancy', label: 'Gewonnen waarde', kort: 'Won €', soort: 'euro', m: 'M08', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',  // M08: de getekende waarde, per kans één deal (N8)
-    definitie: 'Het aantal en de getekende waarde van de kansen waarvan de wissel naar gewonnen een werkelijke datum (akkoorddatum) in de periode heeft, per eigenaar van de kans op dat moment. Achteraf ingevoerd met een eerdere akkoorddatum telt in de periode van de akkoorddatum; zonder werkelijke datum staat apart. De waarde is de getekende contractwaarde van het project (Trajecten.contractwaarde), nooit de geschatte waarde op de wissel; een winst zonder project met een getekende waarde staat apart als "zonder getekende waarde". Het aantal telt alle deals; heeft geen enkele deal een getekende waarde, dan is de waarde leeg, geen 0.' },  // v7.9.4 (bouwpunt 4; herstel r1, K4)
+    definitie: 'Het aantal en de getekende waarde van de kansen waarvan de wissel naar gewonnen een werkelijke datum (akkoorddatum) in de periode heeft, per eigenaar van de kans op dat moment. Achteraf ingevoerd met een eerdere akkoorddatum telt in de periode van de akkoorddatum; zonder werkelijke datum staat apart. De waarde is de getekende contractwaarde van het project (Trajecten.contractwaarde), nooit de geschatte waarde op de wissel; een winst zonder project met een getekende waarde staat apart als "zonder getekende waarde". Het aantal telt alle deals; heeft geen enkele deal een getekende waarde, dan is de waarde leeg, geen 0, en zo ook de waarde van de maand apart. Een deel (nieuw, bestaand) waarvan geen deal een getekende waarde heeft, is leeg; een deel zonder deals is 0.' },  // v7.9.4 (bouwpunt 4; herstel r1, K4; herstel r3, R2: de maand)
   conversie:             { team: 'consultancy', label: 'Conversie (voorstel → gewonnen, per cohort)', kort: 'Conv.', soort: 'procent', rol: true, m: 'M12', besluit: 'B3', eigenaar: 'beheerder', tolerantie: '1',  // M12: zonder opgeschoond
     definitie: 'Per cohort (de maand waarin de kans de fase bereikte): gewonnen ÷ (gewonnen + verloren), en per stap AP naar voorstel en voorstel naar gewonnen uit de fasewissels. Verloren met de reden "opgeschoond" telt niet. De win-rate nieuwe scholen is dezelfde maat voor kansen met klant = nieuw, gesloten vanaf de afgesproken startmaand.' },
   // --- accountmanagement ---
@@ -4512,7 +4528,7 @@ var METRIEKEN = {
     definitie: 'Gemiddelde beoordeling in de periode: niet geschikt 1, goed 2, favoriet 3.' },
   // --- bedrijf (bedrijfsdoelen; iedereen ziet ze) ---
   contractwaarde:        { team: 'bedrijf', label: 'Contractwaarde schooljaar', kort: 'Contract', soort: 'euro', m: '', besluit: '', eigenaar: 'beheerder', tolerantie: '1%',  // v7.9: was omzet (METRIEK_ALIAS); v7.9.4 (bouwpunt 19): zonder terugval op de omzet
-    definitie: 'De som van de getekende contractwaarde (Trajecten.contractwaarde) van de projecten van het schooljaar die niet gestopt, offerte of onduidelijk zijn, zonder terugval op de omzet (een schatting). Projecten zonder contractwaarde tellen niet mee en staan als aantal ernaast. Voor een project met een contractwaarde gelijk aan het contract in Financiën.' },
+    definitie: 'De som van de getekende contractwaarde (Trajecten.contractwaarde) van de projecten van het schooljaar die niet gestopt, offerte of onduidelijk zijn, zonder terugval op de omzet (een schatting). Projecten zonder contractwaarde tellen niet mee en staan als aantal ernaast. Voor een project met een contractwaarde gelijk aan het contract in Financiën. Heeft geen enkel project van het schooljaar een contractwaarde, dan is de waarde leeg (geen 0); zonder projecten is 0 een echte 0.' },  // v7.9.4 herstel r3 (N2)
   scholen:               { team: 'bedrijf', label: 'Scholen met een project', kort: 'Scholen', soort: 'aantal', m: '', besluit: '', eigenaar: 'beheerder', tolerantie: '0',
     definitie: 'Unieke scholen met een project in het schooljaar dat niet gestopt, offerte of onduidelijk is.' },
   ondersteuners:         { team: 'bedrijf', label: 'Ondersteuners ingezet', kort: 'Ond.', soort: 'aantal', m: '', besluit: '', eigenaar: 'beheerder', tolerantie: '0',
@@ -4527,15 +4543,15 @@ var METRIEKEN = {
   retentie:              { team: 'sturing', label: 'Aanname retentie', kort: 'Retentie', soort: 'fractie', m: 'M03', besluit: 'B1', eigenaar: 'beheerder', tolerantie: '0',
     definitie: 'Het deel van de omzet vorig jaar dat naar verwachting bij dezelfde scholen terugkomt. Doel bestaand = omzet vorig jaar × retentie; doel nieuw = jaardoel − doel bestaand. Eén waarde per schooljaar, met onderbouwing en besluitdatum.' },
   gecontracteerd:        { team: 'sturing', label: 'Gecontracteerd', kort: 'Gecontr.', soort: 'euro', m: 'M04', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
-    definitie: 'Op de peildatum: de som van de getekende contractwaarde van alle gewonnen kansen waarvan de opdracht in het schooljaar valt, ongeacht de akkoorddatum, gesplitst naar nieuwe en bestaande klant. Het schooljaar van een winst is Kansen.schooljaar, anders dat van het project, anders dat van de akkoorddatum (dezelfde volgorde als de datacontracten). Geen schattingen. Een gewonnen kans zonder getekende waarde telt als aparte regel, niet als bedrag.' + opPeildatumTekst('de getekende contractwaarde, het schooljaar en de klant') },  // v7.9.4 herstel r1 (K3)
+    definitie: 'Op de peildatum: de som van de getekende contractwaarde van alle gewonnen kansen waarvan de opdracht in het schooljaar valt, ongeacht de akkoorddatum, gesplitst naar nieuwe en bestaande klant. Het schooljaar van een winst is Kansen.schooljaar, anders dat van het project, anders dat van de akkoorddatum (dezelfde volgorde als de datacontracten). Geen schattingen. Een gewonnen kans zonder getekende waarde telt als aparte regel, niet als bedrag. Heeft geen enkele winst van het schooljaar een getekende waarde, dan is de waarde leeg (geen basis), geen 0; zonder winsten is 0 een echte 0. Een deel (nieuw, bestaand) waarvan geen winst een getekende waarde heeft, is leeg; een deel zonder winsten is 0.' + opPeildatumTekst('de getekende contractwaarde, het schooljaar en de klant') },  // v7.9.4 herstel r1 (K3); herstel r3 (R3-D1): leeg
   doelpad:               { team: 'sturing', label: 'Doelpad', kort: 'Doelpad', soort: 'euro', m: 'M05', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
-    definitie: 'Per datum: doel bestaand of nieuw × het deel van de jaarwaarde dat in eerdere schooljaren op dezelfde dag al gewonnen was (de curve uit de wissels naar gewonnen op akkoorddatum, gewogen met contractwaarde). De curve wordt na 31 juli opnieuw berekend en met versie vastgelegd. Bij een omzetdoel: het doel verdeeld over de maanden naar gewerkte uren of netto-omzet van vorig jaar, nooit naar het factuurpatroon.' },
+    definitie: 'Per datum: doel bestaand of nieuw × het deel van de jaarwaarde dat in eerdere schooljaren op dezelfde dag al gewonnen was (de curve uit de wissels naar gewonnen op akkoorddatum, gewogen met contractwaarde). De curve wordt na 31 juli opnieuw berekend en met versie vastgelegd. Bij een omzetdoel: het doel verdeeld over de maanden naar gewerkte uren of netto-omzet van vorig jaar, nooit naar het factuurpatroon. Naast het doelpad staat de achterstand: gecontracteerd − doelpad; is gecontracteerd leeg (winsten zonder getekende waarde), dan is er geen achterstand (leeg). Hebben alleen sommige winsten geen getekende waarde, dan rekent de achterstand met de getekende en staat het aantal zonder getekende waarde ernaast (telt niet mee).' },  // v7.9.4 herstel r3 (R3-D1)
   gewogenPijplijn:       { team: 'sturing', label: 'Gewogen pipeline', kort: 'Gewogen', soort: 'euro', m: 'M06', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
     definitie: 'De som over open kansen van het schooljaar in de gewogen fasen van waarde × fasegewicht van de mijlpaal. De leadfase en gewonnen tellen niet. Kansen zonder waarde tellen als nul en staan er als aantal naast.' + opPeildatumTekst('de waarde, het fasegewicht van de mijlpaal, het schooljaar en de klant') },  // v7.9.4 herstel r1 (R794-7): ook het fasegewicht
   dekking:               { team: 'sturing', label: 'Dekking en nog te vinden', kort: 'Dekking', soort: 'procent', m: 'M07', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1',
-    definitie: 'Dekking = (gecontracteerd + gewogen pipeline) ÷ jaardoel. Nog te vinden = jaardoel − gecontracteerd − gewogen pipeline. Alleen te berekenen als teller en noemer dezelfde soort en periode hebben.' },
+    definitie: 'Dekking = (gecontracteerd + gewogen pipeline) ÷ jaardoel. Nog te vinden = jaardoel − gecontracteerd − gewogen pipeline. Alleen te berekenen als teller en noemer dezelfde soort en periode hebben. Is gecontracteerd leeg (winsten zonder getekende waarde), dan zijn dekking en nog te vinden leeg, nooit 0 % of het hele jaardoel. Hebben alleen sommige winsten geen getekende waarde, dan rekenen dekking en nog te vinden met de getekende en staat het aantal zonder getekende waarde ernaast (telt niet mee).' },  // v7.9.4 herstel r3 (R3-D1)
   urenVorigeJaren:       { team: 'sturing', label: 'Gewerkte uren tegenover vorige jaren', kort: 'Uren', soort: 'uren', m: 'M09', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
-    definitie: 'De som van gewerkte uren (XPS-diensten met een gewerkte status) per kalendermaand t/m de laatste hele maand, naast dezelfde maanden van de vorige schooljaren. Gesplitst naar bestaand en nieuw voor zover de school bekend is. Alleen diensten die aan een talent in Athena koppelen (de urenimport: accountnummer, e-mail of een unieke naam; een dienst zonder talent komt niet in TalentUren); de basislijn telt dezelfde diensten (test/urenbasislijn.js met de export). Mist de basislijn van een vorig schooljaar een van die maanden, dan is er voor dat schooljaar geen basis (leeg, met de ontbrekende maanden), nooit een som met 0.' },  // v7.9.4 herstel r1 (R794-4, R794-5, K8)
+    definitie: 'De som van gewerkte uren (XPS-diensten met een gewerkte status) per kalendermaand t/m de laatste hele maand, naast dezelfde maanden van de vorige schooljaren. Gesplitst naar bestaand en nieuw voor zover de school bekend is. De teller telt TalentUren: de diensten die bij de urenimport aan een talent in Athena koppelden (accountnummer, e-mail of een unieke naam), ook van wie daarna vertrokken is; een dienst zonder talent komt niet in TalentUren. De basislijn komt uit de XPS-dienstenexport (test/urenbasislijn.js) en telt de diensten die koppelen aan een talent in de Athena-export en, met de XPS-accountexport (--accounts), aan elk account dat niet actief is (inactief, uit dienst of zonder status); een actief account zonder profiel telt niet, net als in de teller (de urenimport koppelt alleen aan een profiel: importeer eerst de talenten). Zonder --accounts (alleen bewust, met --zonder-accounts) ontbreken flexkrachten die sindsdien vertrokken zijn en is de basislijn te laag. Zonder hele maand in het schooljaar (een peildatum in augustus) is er niets te vergelijken: leeg. Mist de basislijn van een vorig schooljaar een van die maanden, dan is er voor dat schooljaar geen basis (leeg, met de ontbrekende maanden), nooit een som met 0.' },  // v7.9.4 herstel r1 (R794-4, R794-5, K8); herstel r3 (R3-D3, R4); herstel r5 (R5-2, R5-C3)
   nettoOmzet:            { team: 'sturing', label: 'Netto-omzet tegen jaardoel', kort: 'Netto', soort: 'euro', m: 'M10', besluit: 'B2', eigenaar: 'FD', tolerantie: '1%', blokkade: 'extern: netto-omzet per maand van de boekhouder (§6)',
     definitie: 'Netto-omzet scholen per maand volgens het grootboek, inclusief vrijval, cumulatief in het boekjaar tegen het doelpad. Alleen als het jaardoel een omzetdoel is.' },
   benodigdeActiviteit:   { team: 'sturing', label: 'Benodigde activiteit (rekenmodel)', kort: 'Nodig', soort: 'aantal', m: 'M11', besluit: 'B3', eigenaar: 'beheerder', tolerantie: '0',
@@ -4551,7 +4567,7 @@ var METRIEKEN = {
   verwachteOpdrachten:   { team: 'sturing', label: 'Verwachte opdrachten (30 dagen)', kort: '30 dagen', soort: 'euro', m: 'M19', besluit: 'B5', eigenaar: 'beheerder', tolerantie: '1%',
     definitie: 'Open kansen in de voorstelfase met een verwachte tekendatum binnen 30 dagen na de peildatum, met hun waarde. Een verwachte tekendatum in het verleden staat als "verlopen" apart en telt niet.' + opPeildatumTekst('de waarde en de verwachte tekendatum') },
   stilstand:             { team: 'sturing', label: 'Stilstand', kort: 'Stil', soort: 'aantal', m: 'M20', besluit: 'B5', eigenaar: 'beheerder', tolerantie: '0',
-    definitie: 'Per open kans: het aantal dagen sinds het laatste contact tegen de norm van de mijlpaal; boven de norm is de kans stil.' + ' Op een eerdere peildatum het laatste contact tot die dag (uit de activiteiten van de kans en de school, anders de aanmaak).' + opPeildatumTekst('de mijlpaal en zijn norm') },
+    definitie: 'Per open kans: het aantal dagen sinds het laatste contact (Kansen.laatsteContact) tegen de norm van de mijlpaal; boven de norm is de kans stil. Een kans zonder laatste contact telt niet als stil, ook op een eerdere peildatum; het aantal open kansen zonder laatste contact staat ernaast. Heeft geen enkele open kans een laatste contact, dan is de waarde leeg (geen basis), geen 0; zonder open kansen is 0 een echte 0.' + ' Op een eerdere peildatum het laatste contact tot die dag: ligt Kansen.laatsteContact erna, dan uit de activiteiten van de kans en de school, anders de aanmaak.' + opPeildatumTekst('de mijlpaal en zijn norm') },  // v7.9.4 herstel r3 (N1); herstel r5 (R5-C1): het aantal zonder contact, leeg
   verloren:              { team: 'sturing', label: 'Verloren met reden', kort: 'Verloren', soort: 'aantal', m: 'M21', besluit: 'B5', eigenaar: 'beheerder', tolerantie: '0',
     definitie: 'Kansen met een wissel naar verloren met een werkelijke datum in de periode, per reden uit een vaste lijst. "Opgeschoond" is een eigen reden en telt niet in de conversie.' },
   icpDeciel:             { team: 'sturing', label: 'ICP-deciel', kort: 'ICP', soort: 'aantal', m: 'M22', besluit: 'B6', eigenaar: 'beheerder', tolerantie: '0', blokkade: 'besluit ICP (§5 besluit 9)',
@@ -4624,7 +4640,7 @@ function telWaarde(m, x) {
   if (s === 'procent') return x.n ? Math.round(100 * x.t / x.n) : null;
   if (s === 'dagen') return x.n ? Math.round(x.t / x.n) : null;
   if (s === 'gemiddelde') return x.n ? Math.round(10 * x.t / x.n) / 10 : null;  // v5.0: één decimaal (beoordeling 1–3)
-  if (m === 'gewonnenWaarde' && x.n && !x.t) return null;  // v7.9.4 herstel r1 (K4): alleen deals zonder getekende waarde (n): leeg, geen 0
+  if ((m === 'gewonnenWaarde' || m === 'contractwaarde') && x.n && !x.t) return null;  // v7.9.4 herstel r1 (K4): alleen deals zonder getekende waarde (n): leeg, geen 0; herstel r3 (N2): ook contractwaarde
   return Math.round(x.t * 100) / 100;
 }
 function dagenTussen(a, b) { var x = parseDatum(a), y = parseDatum(b); return x && y ? Math.max(0, Math.round((y - x) / 86400000)) : null; }
@@ -4753,7 +4769,8 @@ function doelenVan(periode, sleutel) {
 
 // De bedrijfscijfers van het huidige schooljaar; iedereen ziet ze (geen bedragen per persoon).
 function bedrijfCijfers() {
-  var sj = huidigSchooljaar(), vacs = lees('Vacatures'), kands = lees('Kandidaten'), ts = lees('Trajecten'), x = { contractwaarde: { t: contractwaardeSchooljaar(ts, sj), n: 0 }, scholen: { t: 0, n: 0 }, ondersteuners: { t: 0, n: 0 }, verlengingspercentage: { t: 0, n: 0 } }, scholen = {};  // v7.9 (punt 17): contractwaarde, één definitie met Financiën
+  // v7.9.4 herstel r3 (N2): n = projecten zonder contractwaarde; zonder één contractwaarde is het cijfer leeg (telWaarde: null), een echte 0 alleen zonder projecten
+  var sj = huidigSchooljaar(), vacs = lees('Vacatures'), kands = lees('Kandidaten'), ts = lees('Trajecten'), zonderCw = zonderContractwaardeSchooljaar(ts, sj), x = { contractwaarde: { t: contractwaardeSchooljaar(ts, sj), n: zonderCw }, scholen: { t: 0, n: 0 }, ondersteuners: { t: 0, n: 0 }, verlengingspercentage: { t: 0, n: 0 } }, scholen = {};  // v7.9 (punt 17): contractwaarde, één definitie met Financiën
   ts.filter(function (t) { return t.schooljaar === sj && ['gestopt', 'offerte', 'onduidelijk'].indexOf(t.status) < 0; }).forEach(function (t) {
     scholen[t.schoolId || klein(t.school)] = true;
     x.ondersteuners.t += Math.max(Number(t.ondersteuners) || 0, bezettingVan(t.id, vacs, kands).gevuld);
@@ -4761,7 +4778,7 @@ function bedrijfCijfers() {
   });
   x.scholen.t = Object.keys(scholen).length;
   return { schooljaar: sj, metrieken: metriekDefs('bedrijf'), cijfers: waardenVan('bedrijf', x), doelen: doelenVan('schooljaar', sj).bedrijf || {},  // v7.9: met het doel van dit schooljaar
-    zonderContractwaarde: zonderContractwaardeSchooljaar(ts, sj) };  // v7.9.4 (bouwpunt 19): projecten zonder contractwaarde tellen niet mee; de app toont het aantal als signaal
+    zonderContractwaarde: zonderCw };  // v7.9.4 (bouwpunt 19): projecten zonder contractwaarde tellen niet mee; de app toont het aantal als signaal
 }
 
 // Rapport van één team: management kiest een team, een teamlead ziet zijn team per persoon, een medewerker zichzelf plus het teamtotaal.
@@ -8616,9 +8633,10 @@ function datacontracten(S) {
     if (w && typeof w === 'object' && (w.bron === 'gefactureerd' || w.verdeling === 'gefactureerd' || (cd && typeof cd === 'object' && (cd.bron === 'gefactureerd' || cd.verdeling === 'gefactureerd')))) af('geen_target_op_facturatie', 'beheerder', 'instelling', v.id);
   });
   // 14. gewonnen_is_getekend: per kans de laatste geldige sluitende wissel; als die naar gewonnen gaat en in dit schooljaar valt: een project met contractwaarde en een werkelijke datum
+  var t14 = {};
   Object.keys(slot).forEach(function (k) {
     var w = slot[k]; if (w.naar !== 'gewonnen') return;
-    if (inSj(w.werkelijkeDatum || String(w.ingevoerdOp || '').slice(0, 10))) telP('gewonnen_is_getekend');
+    if (inSj(w.werkelijkeDatum || String(w.ingevoerdOp || '').slice(0, 10))) { telP('gewonnen_is_getekend'); t14[k] = true; }
     if (w.werkelijkeDatum ? inSj(w.werkelijkeDatum) && !getekend(k) : inSj(String(w.ingevoerdOp || '').slice(0, 10))) af('gewonnen_is_getekend', w.eigenaar, 'kans', k);
   });
   // v7.9.1 (review r3, R1): een kans die nu gewonnen is zonder tellende wissel naar gewonnen (dus geen deal), waarvan de laatste geldige wissel naar gewonnen
@@ -8629,7 +8647,14 @@ function datacontracten(S) {
   S.wissels.forEach(function (w) { if (w.naar !== 'gewonnen' || w.ongedaan || w.verwijderd || FASE_TELT_NIET.indexOf(w.bron) < 0) return; var k = String(w.kansId), h = admin[k]; if (!h || volgordeWerkelijk(h, w) < 0) admin[k] = w; });
   S.kansen.forEach(function (k) {
     var w = uitMap(admin, String(k.id)); if (k.fase !== 'gewonnen' || !w || uitMap(metWinst, String(k.id))) return;
-    if (inSj(w.werkelijkeDatum || String(w.ingevoerdOp || '').slice(0, 10))) { telP('gewonnen_is_getekend'); af('gewonnen_is_getekend', k.eigenaar, 'kans', k.id); zonderDatum++; }
+    if (inSj(w.werkelijkeDatum || String(w.ingevoerdOp || '').slice(0, 10))) { telP('gewonnen_is_getekend'); af('gewonnen_is_getekend', k.eigenaar, 'kans', k.id); zonderDatum++; t14[String(k.id)] = true; }
+  });
+  // v7.9.4 herstel r5 (R5-C2): ook elke winst van dit schooljaar volgens winstSchooljaar (de populatie van M04), ook met een akkoord vóór 1 augustus: zonder
+  // getekende waarde zakt het contract, zodat een leeg M04 altijd een melding aan de eigenaar heeft
+  winstNu.forEach(function (k) {
+    if (uitMap(t14, String(k.id))) return;
+    var w = uitMap(slot, String(k.id)); telP('gewonnen_is_getekend'); t14[String(k.id)] = true;
+    if (!getekend(k.id)) af('gewonnen_is_getekend', (w && w.naar === 'gewonnen' && w.eigenaar) || k.eigenaar, 'kans', k.id);
   });
   if (zonderDatum) vind_.gewonnen_is_getekend.reden = 'gewonnen zonder werkelijke datum (stap fasen): Beheer → Werkelijke datums importeren';
   // 15. lopend_project_heeft_contract (en, alleen met de overstapdatum, een kansId bij elk project dat daarna start)
@@ -8810,7 +8835,7 @@ function sturingBevriezen(peildatum, soort, maandSleutel) {
       var basis = { peildatum: peildatum, soort: soort, metriek: c.id, m: c.m, versie: c.def.versie, status: c.def.status, eigenaar: c.def.eigenaar, geblokkeerd: c.geblokkeerd || '', definitie: c.def.definitie, aangemaakt: t };
       var rij = { id: pre + c.id, uitsplitsing: '', waarde: c.waarde === '' || c.waarde === null || c.waarde === undefined ? '' : c.waarde };
       Object.keys(basis).forEach(function (k) { rij[k] = basis[k]; }); rijen.push(rij);
-      (c.uitsplitsing || []).forEach(function (u, i) { var r2 = { id: pre + c.id + '-' + slug(u.label || String(i)), uitsplitsing: String(u.label), waarde: u.waarde }; Object.keys(basis).forEach(function (k) { r2[k] = basis[k]; }); rijen.push(r2); });
+      (c.uitsplitsing || []).forEach(function (u, i) { var r2 = { id: pre + c.id + '-' + slug(u.label || String(i)), uitsplitsing: String(u.label), waarde: u.waarde === null ? '' : u.waarde };  /* herstel r4: leeg deel */ Object.keys(basis).forEach(function (k) { r2[k] = basis[k]; }); rijen.push(r2); });
     });
   });
   metLock(function () { schrijfVeel('Standen', rijen); });
@@ -8898,7 +8923,8 @@ function euro2(c) { return Math.round(c) / 100; }
 function klantDeel(k) { return k && (k.klant === 'nieuw' || k.klant === 'bestaand') ? k.klant : 'onbekend'; }
 // v7.9.4 (bouwpunt 4): per kans de getekende contractwaarde van zijn projecten (de som van Trajecten.contractwaarde > 0; geen terugval op de omzet). Lezen met uitMap.
 function getekendPerKans(ts) { var u = {}; ts.forEach(function (t) { var c = Number(t.contractwaarde); if (t.kansId && c > 0) u[String(t.kansId)] = (u[String(t.kansId)] || 0) + c; }); return u; }
-function delenUit(o) { return KLANT_DELEN.filter(function (d) { return o[d]; }).map(function (d) { return { label: d, waarde: Math.round(o[d] * 100) / 100 }; }); }
+// v7.9.4 herstel r4 (R4-2b): zonder = per deel het aantal winsten zonder getekende waarde; een deel met alleen zulke winsten is leeg (null), geen stille 0
+function delenUit(o, zonder) { return KLANT_DELEN.filter(function (d) { return o[d] || (zonder && zonder[d]); }).map(function (d) { return { label: d, waarde: o[d] ? Math.round(o[d] * 100) / 100 : null }; }); }
 // M09: gewerkte uren per maand van een schooljaar, uit TalentUren en (alleen vanaf het begin van dat schooljaar) TalentUren_archief (R9); weken t/m de peildatum.
 // Per maand ook bestaand, nieuw en onbekend (Trajecten.klant, anders het klantvoorstel op de school). Niet op Home of Financiën; financienData() blijft ongewijzigd (K1).
 function urenPerMaand(sj, peildatum) {
@@ -8929,6 +8955,9 @@ function cijferUit(id, x, peildatum) {
 }
 /* ----- v7.9.4 (bouwpunt 7): de fase van elke kans op een eerdere peildatum, uit Fasewissels (M04, M06, M18, M19, M20) ----- */
 var STAND_ALLEEN_VANDAAG = 'stand alleen voor vandaag';
+var M04_LEEG = 'geen basis: winsten zonder getekende contractwaarde';  // v7.9.4 herstel r3 (R3-D1): M04 leeg, en daarom M05 (achterstand) en M07
+var M20_LEEG = 'geen basis: open kansen zonder laatste contact';  // v7.9.4 herstel r5 (R5-C1)
+var M09_GEEN_MAAND = 'nog geen hele maand in dit schooljaar';  // v7.9.4 herstel r3 (R4)
 // Op of na vandaag: de stand van nu (Kansen). Op een eerdere peildatum per kans uit zijn geldige wissels (niet ongedaan, niet verwijderd) met een werkelijke datum,
 // in de volgorde van volgordeWerkelijk:
 // - de fase is de naar van de laatste wissel t/m de peildatum; ligt de eerste wissel na de peildatum, dan bestond een kans waarvan die wissel de aanmaak is (van
@@ -8943,7 +8972,8 @@ var STAND_ALLEEN_VANDAAG = 'stand alleen voor vandaag';
 // - een naam die daarna hernoemd is (bron hernoemd, direct erna in de keten) volgt die hernoeming, anders de koppeling van stap fasen (naamNaFasen); een open
 //   fase die geen mijlpaal meer is, is niet te reconstrueren;
 // - het laatste contact (M20): Kansen.laatsteContact als dat t/m de peildatum ligt, anders het laatste contact t/m de peildatum in de activiteiten (van de kans of
-//   de school, zoals zetLaatsteContact; geen notitie, fase of taak), de aanmaak of de aanmaakwissel; zonder één daarvan onbekend.
+//   de school, zoals zetLaatsteContact; geen notitie, fase of taak), de aanmaak of de aanmaakwissel; zonder één daarvan onbekend. Herstel r3 (N1): een kans
+//   zonder Kansen.laatsteContact houdt een leeg laatste contact (niet stil), net als vandaag.
 // Kansen.waarde, verwachteSluiting, schooljaar, klant en het project zijn niet gehistoriseerd: die komen uit de stand van nu (de definities zeggen het).
 // Geeft { kansen: kopieën met fase en laatsteContact op de peildatum (alleen die toen bestonden), onbekend, contactOnbekend, gereconstrueerd }.
 function kansenOpPeildatum(kansen, peildatum, acts) {
@@ -8972,8 +9002,9 @@ function kansenOpPeildatum(kansen, peildatum, acts) {
     if (kansOpen({ fase: fase }) && !bestaat(fase, pl)) { var n2 = naamNaFasen(fase, k.pipeline || ''); if (n2 !== fase && (!kansOpen({ fase: n2 }) || bestaat(n2, pl))) fase = n2; else { onbekend++; return; } }
     var c = {}; Object.keys(k).forEach(function (x) { c[x] = k[x]; }); c.fase = fase;
     if (kansOpen(c)) {
+      // v7.9.4 herstel r3 (N1): zonder Kansen.laatsteContact is een kans vandaag nooit stil (M20); op een eerdere peildatum dus ook niet (geen terugval op de aanmaak)
       var lc = String(k.laatsteContact || '').slice(0, 10);
-      if (!lc || lc > peildatum) {
+      if (lc && lc > peildatum) {
         if (!contact) {  // per kans en per school het laatste contact t/m de peildatum (één keer)
           contact = { kans: {}, school: {} };
           (acts || []).forEach(function (a) {
@@ -9022,14 +9053,16 @@ function sturingCijfers(peildatum) {
     C.retentie = { waarde: Number(ret), extra: doelB === null ? { verdeling: 'geblokkeerd: ' + verdeling } : { doelBestaand: doelB, doelNieuw: doelN } };
   }
   // M04: de getekende contractwaarde van de gewonnen kansen van het schooljaar (binnen de scope); zonder getekende waarde als aantal apart
-  var m04 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonderGetekend = 0, totM04 = 0, pSj04 = projectSchooljaren(ts);
+  var m04 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonder04 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonderGetekend = 0, totM04 = 0, pSj04 = projectSchooljaren(ts);
   kansenP.forEach(function (k) {  // v7.9.4 (bouwpunt 7): de fase op de peildatum
     if (k.fase !== 'gewonnen' || !binnen(schoolVan(k))) return;
     if (winstSchooljaar(k, uitMap(pSj04, String(k.id)), k.gesloten) !== sj) return;  // v7.9.4 herstel r1 (K3): één volgorde met de contracten en stap kansen
-    var w = cw(k.id); if (!(w > 0)) { zonderGetekend++; return; }
+    var w = cw(k.id); if (!(w > 0)) { zonderGetekend++; zonder04[klantDeel(k)]++; return; }
     m04[klantDeel(k)] += w; totM04 += w;
   });
-  C.gecontracteerd = standBlok ? { geblokkeerd: standBlok } : { waarde: Math.round(totM04 * 100) / 100, uitsplitsing: delenUit(m04), extra: ext({ zonderGetekend: zonderGetekend, scope: scopeTekst }) };
+  // v7.9.4 herstel r3 (R3-D1): zijn er winsten maar heeft geen enkele een getekende waarde, dan is M04 leeg (zoals M08, K4), nooit 0; zonder winsten een echte 0
+  var m04Leeg = zonderGetekend > 0 && !(totM04 > 0);
+  C.gecontracteerd = standBlok ? { geblokkeerd: standBlok } : { waarde: m04Leeg ? null : Math.round(totM04 * 100) / 100, uitsplitsing: m04Leeg ? [] : delenUit(m04, zonder04), extra: ext(m04Leeg ? { zonderGetekend: zonderGetekend, scope: scopeTekst, reden: M04_LEEG } : { zonderGetekend: zonderGetekend, scope: scopeTekst }) };
   // M06: open kansen van het schooljaar × fasegewicht (lead 0), binnen de scope
   var m06 = { nieuw: 0, bestaand: 0, onbekend: 0 }, totM06 = 0, zonderWaarde = 0, zonderSj = 0, aantal06 = 0;
   open.forEach(function (k) {
@@ -9047,15 +9080,19 @@ function sturingCijfers(peildatum) {
   else if (!curve || !(curve.totaal instanceof Array)) C.doelpad = { geblokkeerd: AANNAMES_BLOKKADE };
   else {
     var dag = Math.round((middag(parseDatum(peildatum)) - middag(parseDatum(sjStart))) / 86400000), fr = curveOp(curve.totaal, dag), dp = Math.round(N.waarde * fr);
-    var ex = { dag: dag, fractie: Math.round(fr * 10000) / 10000, bron: curve.bron || '', noemer: N.waarde, noemerLabel: N.label, achter: standBlok ? '' : Math.round(totM04 - dp) };  // v7.9.4: zonder M04 geen achterstand
+    var ex = { dag: dag, fractie: Math.round(fr * 10000) / 10000, bron: curve.bron || '', noemer: N.waarde, noemerLabel: N.label, achter: standBlok || m04Leeg ? '' : Math.round(totM04 - dp) };  // v7.9.4: zonder M04 geen achterstand
+    if (m04Leeg && !standBlok) ex.achterReden = M04_LEEG;  // herstel r3 (R3-D1)
+    else if (zonderGetekend && !standBlok) ex.zonderGetekend = zonderGetekend;  // herstel r4 (R4-3): deels getekend, die winsten tellen niet mee
     if (doelB !== null && curve.bestaand instanceof Array && curve.nieuw instanceof Array) { ex.bestaand = Math.round(doelB * curveOp(curve.bestaand, dag)); ex.nieuw = Math.round(doelN * curveOp(curve.nieuw, dag)); }
     C.doelpad = { waarde: dp, extra: ex };
   }
-  C.dekking = nBlok ? { geblokkeerd: nBlok } : standBlok ? { geblokkeerd: standBlok } : { waarde: Math.round(1000 * (totM04 + totM06) / N.waarde) / 10, extra: { nogTeVinden: Math.round(N.waarde - totM04 - totM06), noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst } };
+  // herstel r3 (R3-D1): zonder waarde van M04 geen dekking en geen "nog te vinden" (leeg met de reden), nooit 0 % of het hele jaardoel
+  C.dekking = nBlok ? { geblokkeerd: nBlok } : standBlok ? { geblokkeerd: standBlok } : m04Leeg ? { waarde: null, extra: { reden: M04_LEEG, noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst } }
+    : { waarde: Math.round(1000 * (totM04 + totM06) / N.waarde) / 10, extra: { nogTeVinden: Math.round(N.waarde - totM04 - totM06), noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst, zonderGetekend: zonderGetekend } };  // herstel r4 (R4-3)
   // M08: deals (per kans één, N8) met akkoorddatum in het schooljaar t/m de peildatum; de maand apart; zonder werkelijke datum apart
   // v7.9.4 (bouwpunt 4): de getekende contractwaarde van het project (Trajecten.contractwaarde, zoals M04), nooit de geschatte Fasewissels.waarde (bij een wissel uit
   // de tijdlijn, Capsule of een import is dat Kansen.waarde); een deal zonder project met contractwaarde staat apart (zonderGetekend), niet als bedrag
-  var m08 = { nieuw: 0, bestaand: 0, onbekend: 0 }, tot08 = 0, n08 = 0, getekend08 = 0, maand08 = { aantal: 0, waarde: 0 }, zonderDatum08 = 0, zonderGetekend08 = 0, cw08 = getekendPerKans(ts);
+  var m08 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonder08 = { nieuw: 0, bestaand: 0, onbekend: 0 }, tot08 = 0, n08 = 0, getekend08 = 0, maand08 = { aantal: 0, waarde: 0, zonderGetekend: 0 }, zonderDatum08 = 0, zonderGetekend08 = 0, cw08 = getekendPerKans(ts);
   // v7.9.4 herstel r1 (K4, R794-10): het aantal telt alle deals (zoals de definitie: het aantal en de getekende waarde), de waarde alleen de getekende; heeft geen
   // enkele deal een getekende waarde (de echte stand vóór stap 5: geen projecten), dan is de waarde leeg (geen 0) en staan ze allemaal onder zonderGetekend
   dealWissels().forEach(function (w) {
@@ -9063,11 +9100,13 @@ function sturingCijfers(peildatum) {
     if (w.werkelijkeDatum < sjStart || w.werkelijkeDatum > peildatum) return;
     var v = uitMap(cw08, String(w.kansId)) || 0, dezeMaand = w.werkelijkeDatum >= maandStart;
     n08++; if (dezeMaand) maand08.aantal++;
-    if (!(v > 0)) { zonderGetekend08++; return; }
+    if (!(v > 0)) { zonderGetekend08++; zonder08[klantDeel(kMap[String(w.kansId)])]++; if (dezeMaand) maand08.zonderGetekend++; return; }
     getekend08++; tot08 += v; m08[klantDeel(kMap[String(w.kansId)])] += v;
     if (dezeMaand) maand08.waarde += v;
   });
-  C.gewonnenWaarde = { waarde: n08 && !getekend08 ? null : Math.round(tot08 * 100) / 100, uitsplitsing: delenUit(m08), extra: { aantal: n08, maand: maand08, zonderDatum: zonderDatum08, zonderGetekend: zonderGetekend08 } };
+  // herstel r3 (R3-N1, R2): ook de maand: deals in de maand maar geen enkele met een getekende waarde → maand.waarde leeg (null), geen 0
+  if (maand08.aantal && maand08.aantal === maand08.zonderGetekend) maand08.waarde = null; else maand08.waarde = Math.round(maand08.waarde * 100) / 100;
+  C.gewonnenWaarde = { waarde: n08 && !getekend08 ? null : Math.round(tot08 * 100) / 100, uitsplitsing: n08 && !getekend08 ? [] : delenUit(m08, zonder08), extra: { aantal: n08, maand: maand08, zonderDatum: zonderDatum08, zonderGetekend: zonderGetekend08 } };
   // M09: uren per maand naast de basislijn van vorige schooljaren (punt 24)
   var maanden09 = urenPerMaand(sj, peildatum), heel = maanden09.filter(function (x) { return x.maand < peildatum.slice(0, 7); }), bl = aw('urenBasislijn');
   var som09 = { nieuw: 0, bestaand: 0, onbekend: 0 }, tot09 = 0; heel.forEach(function (x) { tot09 += x.uren; KLANT_DELEN.forEach(function (d) { som09[d] += x[d]; }); });
@@ -9080,7 +9119,9 @@ function sturingCijfers(peildatum) {
     heel.forEach(function (x) { var mv = ms[msNu.indexOf(x.maand)], u = Object.prototype.hasOwnProperty.call(b, mv) ? Number(b[mv]) : NaN; if (isFinite(u)) som += u; else mis.push(mv); });
     basislijn[vsj] = mis.length ? null : Math.round(som * 100) / 100; if (mis.length) ontbreekt09[vsj] = mis;
   });
+  // herstel r3 (R4): zonder hele maand (een peildatum in augustus) is er niets te vergelijken: leeg met de reden en geen basislijn per schooljaar, nooit 0
   C.urenVorigeJaren = !bl || !Object.keys(basislijn).length ? { geblokkeerd: 'basislijn vorige jaren ontbreekt (§5 besluit 14)', extra: { maanden: maanden09 } }
+    : !heel.length ? { waarde: null, extra: { maanden: maanden09, reden: M09_GEEN_MAAND, totEnMet: '' } }
     : { waarde: Math.round(tot09 * 100) / 100, uitsplitsing: delenUit(som09), extra: { maanden: maanden09, basislijn: basislijn, basislijnOntbreekt: ontbreekt09, totEnMet: heel.length ? heel[heel.length - 1].maand : '' } };
   C.nettoOmzet = {};  // blokkade uit het register (extern)
   // ---- aanpak ----
@@ -9142,13 +9183,16 @@ function sturingCijfers(peildatum) {
     });
     C.verwachteOpdrachten = { waarde: Math.round(w30 * 100) / 100, extra: ext({ aantal: n30, verlopen: verlopen, zonderDatum: zonderD, tot: tot30 }) };
   }
-  var mp = mijlpaalMap(), stilPer = {}, nStil = 0;
+  var mp = mijlpaalMap(), stilPer = {}, nStil = 0, zonderC = 0;
   open.forEach(function (k) {
     var m = uitMap(mp, k.fase), norm = m && m.dagenNorm ? m.dagenNorm : 7, d = k.laatsteContact ? dagenTussen(String(k.laatsteContact).slice(0, 10), peildatum) : null;
-    if (d !== null && d > norm) { nStil++; stilPer[k.fase] = (stilPer[k.fase] || 0) + 1; }
+    if (d === null) zonderC++;
+    else if (d > norm) { nStil++; stilPer[k.fase] = (stilPer[k.fase] || 0) + 1; }
   });
   var stilBlok = standBlok || standBlokkade(stand.contactOnbekend, peildatum, 'het laatste contact');  // v7.9.4 (bouwpunt 7): het laatste contact op de peildatum
-  C.stilstand = stilBlok ? { geblokkeerd: stilBlok } : { waarde: nStil, uitsplitsing: Object.keys(stilPer).map(function (f) { return { label: f, waarde: stilPer[f] }; }), extra: ext({}) };
+  // v7.9.4 herstel r5 (R5-C1): een kans zonder laatste contact is niet stil, maar het aantal staat ernaast (zonderContact); heeft geen open kans er een, dan leeg
+  var exS = ext(zonderC ? { zonderContact: zonderC } : {}); if (zonderC && zonderC === open.length) exS.reden = M20_LEEG;
+  C.stilstand = stilBlok ? { geblokkeerd: stilBlok } : { waarde: exS.reden ? '' : nStil, uitsplitsing: Object.keys(stilPer).map(function (f) { return { label: f, waarde: stilPer[f] }; }), extra: exS };
   if (!redenOk) C.verloren = { geblokkeerd: 'niet getoetst: verliesredenen niet gekoppeld (Beheer → Overstap v7.9)' };
   else {
     var slot = {}, perReden = {}, nV = 0;

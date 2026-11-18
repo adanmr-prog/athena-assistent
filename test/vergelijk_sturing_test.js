@@ -8,6 +8,12 @@
  * "leeg" en een open overstapstap (fasen, de Capsule-stand, de accounts, redenen zonder verloren kansen) zijn invoer, een cijfer zonder waarde is
  * "leeg (geen basis)"; diensten zonder gekoppeld talent of project tellen mee in het maandtotaal en geven een melding zonder aantal; twee Exact-invoeren
  * (--exact-verkoop, --exact-open) en een export zonder Open (geblokkeerd); exitcode 0, 1 of 2. Draait aan het eind test/urenbasislijn_test.js (bouwpunt 10).
+ * Herstel r3 (R3-D2): gezakt (invoer) is niet vergeleken: een run met alleen invoer, leeg of geblokkeerd geeft exitcode 3 (ook het scenario van U13 op de lege
+ * stand), met een vaste melding; naast een vergeleken regel exitcode 0 met een melding. Een mutant van het harnas (invoer als vergeleken) in het geheugen.
+ * Herstel r4 (R4-1, R4-2): leeg terwijl invoer het cijfer raakt is gezakt (invoer); het deel zonder (een telling in extra) wordt ook bij een lege hoofdwaarde
+ * vergeleken; twee mutanten van het harnas in het geheugen.
+ * Herstel r5 (R5-C2): de scenario's s5 en s6b (een winst van dit schooljaar met een akkoord vóór 1 augustus zonder getekende waarde, met en zonder lopend
+ * project zonder contractwaarde): contract gewonnen_is_getekend zakt en M04 en M07 zijn allebei gezakt (invoer).
  *   node test/vergelijk_sturing_test.js   → ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1) */
 'use strict';
 var fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), cp = require('child_process');
@@ -199,35 +205,125 @@ var refL = [
   ['ap', vorigeWeek, 3, '', 'geblokkeerd (geen leden)'], ['voorstellen', vorigeWeek, 1, '', 'geblokkeerd (geen leden)'], ['gewonnen', vorigeWeek, 1, '', 'geblokkeerd (geen leden)'],
   ['M23', maand, 4, '', 'geblokkeerd (geen leden)'], ['M35', maand, 3, '', 'geblokkeerd (geen leden)'],
   ['M06', vandaag, 12345, '', 'gezakt (invoer)'], ['M18', sj, 9, '', 'gezakt (invoer)'], ['M21', maand, 3, '', 'gezakt (invoer)'],
-  ['M24', maand, 50, '', 'leeg (geen basis)'], ['M36', vandaag, 2, '', 'leeg (geen basis)'], ['M26', maand, 1000, '', 'gezakt (invoer)']
+  ['M24', maand, 50, '', 'gezakt (invoer)'], ['M36', vandaag, 2, '', 'leeg (geen basis)'], ['M26', maand, 1000, '', 'gezakt (invoer)'],
+  // herstel r3 (R3-D1): de winsten van de lege stand hebben geen project met een getekende waarde: M04 (ook nieuw en bestaand) en M08 zijn leeg, nooit een 0.
+  // Herstel r4 (R4-1): leeg terwijl invoer het cijfer raakt (hier stap projecten; bij M24 ook lopend_project_heeft_contract) is gezakt (invoer), niet
+  // "leeg (geen basis)": anders telt een run met deze regels naast één geslaagde regel als geslaagd zonder melding. M36 heeft geen invoer en blijft leeg
+  ['M04', maand, 50000, '', 'gezakt (invoer)'], ['M04', maand, 20000, 'nieuw', 'gezakt (invoer)'], ['M04', maand, 30000, 'bestaand', 'gezakt (invoer)'], ['M08', maand, 30000, '', 'gezakt (invoer)']
 ];
 var runL = draai(['--export', EXPORT_L, '--referentie', schrijfRef('referentie_l.csv', refL)]);
-eis(runL.code === 0 && runL.fout.length === 0, 'lege stand: exitcode 0 (alles geblokkeerd, invoer of leeg; niets onverklaard), geen foutmelding');
+// herstel r3 (R3-D2): invoer is niet vergeleken; alleen geblokkeerd, invoer of leeg is dus exitcode 3 met de vaste meldingen, nooit 0
+eis(runL.code === 3 && runL.fout.length === 0 && runL.melding.some(function (l) { return /geen enkele regel is vergeleken/.test(l); }) && runL.melding.some(function (l) { return /niet vergeleken omdat Athena de invoer mist/.test(l); }) && runL.melding.every(function (l) { return !/\d/.test(l); }),
+  'lege stand: niets onverklaard, maar ook niets vergeleken (alles geblokkeerd, invoer of leeg): exitcode 3 met een vaste melding zonder aantal, geen foutmelding (exit ' + runL.code + ')');
 vergelijkRun('lege stand', runL, refL);
 var nulL = waardeVan(LL, 'contactmomenten', vorigeWeek), nul24 = waardeVan(LL, 'M24', maand);
 eis(nulL.geblokkeerd && H.blokSoort(nulL.reden) === 'geen leden' && nulL.waarde === null, 'bouwpunt 11: athenaWaarde geeft bij een team zonder leden geblokkeerd met de reden uit Code.gs (teamBlokkade), nooit 0');
 eis(nul24.leeg === true && nul24.waarde === null && !nul24.geblokkeerd, 'bouwpunt 13: athenaWaarde geeft bij een cijfer zonder waarde leeg, nooit 0');
 // M25 in de lege stand met een XPS-export: geen talent en geen project in Athena, toch een signaal (bron, of invoer als een contract leeg is), nooit onverklaard
 var runLx = draai(['--export', EXPORT_L, '--referentie', schrijfRef('referentie_lx.csv', [['M25', maand, 4321, '']]), '--xps', XPS_OK]);
-eis(runLx.code === 0 && runLx.uit.length === 1 && /^M25 \S+ gezakt \((bron|invoer)\)$/.test(runLx.uit[0]), 'bouwpunt 14: M25 in de lege stand met een dienstenexport is niet onverklaard (' + runLx.uit.join() + ')');
-eis(runLx.melding.length === 2 && runLx.melding.some(function (l) { return /talent/.test(l); }) && runLx.melding.some(function (l) { return /project/.test(l); }),
+eis(runLx.code === (/bron/.test(runLx.uit[0]) ? 0 : 3) && runLx.uit.length === 1 && /^M25 \S+ gezakt \((bron|invoer)\)$/.test(runLx.uit[0]), 'bouwpunt 14: M25 in de lege stand met een dienstenexport is niet onverklaard; herstel r3 (R3-D2): invoer alleen is exitcode 3 (' + runLx.uit.join() + '; exit ' + runLx.code + ')');
+eis(runLx.melding.some(function (l) { return /xps: .*talent/.test(l); }) && runLx.melding.some(function (l) { return /xps: .*project/.test(l); }),
   'bouwpunt 14: de lege stand meldt apart dat diensten niet aan een talent en niet aan een project koppelen (' + runLx.melding.join(' | ') + ')');
 
 // herstel r2 (A-B2): M25 (en M26) in de lege stand zonder --xps: geen enkel project in het schooljaar = de open stap projecten, dus invoer, nooit onverklaard
 var vorigeMaandL = ctx.plusDagenVan(maand + '-01', -1).slice(0, 7);
 var runLp = draai(['--export', EXPORT_L, '--referentie', schrijfRef('referentie_lp.csv', [['M25', vorigeMaandL, 4321, ''], ['M25', maand, 4321, ''], ['M27', maand, 2100, '']])]);
-eis(runLp.code === 0 && runLp.uit.join('|') === ['M25 ' + vorigeMaandL + ' gezakt (invoer)', 'M25 ' + maand + ' gezakt (invoer)', 'M27 ' + maand + ' gezakt (invoer)'].join('|'),
-  'herstel r2 (A-B2): zonder projecten in het schooljaar zijn M25 en M27 invoer (stap projecten open), ook zonder --xps; exitcode 0 (' + runLp.uit.join(' | ') + '; exit ' + runLp.code + ')');
+eis(runLp.code === 3 && runLp.uit.join('|') === ['M25 ' + vorigeMaandL + ' gezakt (invoer)', 'M25 ' + maand + ' gezakt (invoer)', 'M27 ' + maand + ' gezakt (invoer)'].join('|'),
+  'herstel r2 (A-B2): zonder projecten in het schooljaar zijn M25 en M27 invoer (stap projecten open), ook zonder --xps; herstel r3 (R3-D2): alleen invoer is exitcode 3 (' + runLp.uit.join(' | ') + '; exit ' + runLp.code + ')');
 eis(!H.invoerRaakt(L, { id: 'geleverd', per: H.periodeUit(L.ctx, maand, L.peildatum) }), 'herstel r2 (A-B2): met projecten in het schooljaar (de demoseed) is stap projecten niet open voor M25');
 // herstel r2 (B-B7): alleen geblokkeerde (geen leden) of lege regels: niets vergeleken, dus exitcode 3 met een melding, nooit 0
-var runLn = draai(['--export', EXPORT_L, '--referentie', schrijfRef('referentie_ln.csv', refL.slice(0, 5).concat([['M24', maand, 50, '']]))]);
+var runLn = draai(['--export', EXPORT_L, '--referentie', schrijfRef('referentie_ln.csv', refL.slice(0, 5).concat([['M36', vandaag, 2, '']]))]);  // herstel r4: M24 is nu invoer
 eis(runLn.code === 3 && runLn.uit.every(function (l) { return / (geblokkeerd \(geen leden\)|leeg \(geen basis\))$/.test(l); }) && runLn.melding.some(function (l) { return /geen enkele regel is vergeleken/.test(l); }),
   'herstel r2 (B-B7): een referentie waarvan geen enkele regel vergeleken wordt (geen leden, leeg) eindigt met exitcode 3 en een melding (' + runLn.uit.join(' | ') + '; exit ' + runLn.code + ')');
+// herstel r3 (R3-D2, het scenario van U13): op de lege stand zijn M26, M28 en M25 van deze maand invoer (geen project, termijn of uur in Athena; Athena heeft overal 0).
+// Dat is niet vergeleken, dus exitcode 3 met de vaste meldingen, nooit 0 ("slaagt")
+var runU = draai(['--export', EXPORT_L, '--referentie', schrijfRef('referentie_u13.csv', [['M26', maand, 1000, ''], ['M28', maand, 500, ''], ['M25', maand, 800, '']])]);
+eis(runU.code === 3 && runU.uit.length === 3 && runU.uit.every(function (l) { return / gezakt \(invoer\)$/.test(l); }) && runU.melding.some(function (l) { return /geen enkele regel is vergeleken \(alles invoer, geblokkeerd of leeg\)/.test(l); }) &&
+  runU.melding.some(function (l) { return /niet vergeleken omdat Athena de invoer mist/.test(l); }) && runU.melding.every(function (l) { return !/\d/.test(l); }),
+  'herstel r3 (R3-D2): alleen regels gezakt (invoer) (M26, M28, M25 op de lege stand) zijn niet vergeleken: exitcode 3 met een vaste melding zonder aantal (' + runU.uit.join(' | ') + '; exit ' + runU.code + ')');
+// herstel r3 (R3-D2): een mutant van het harnas zelf, alleen in het geheugen (geen kopie in de repo): telt het invoer als vergeleken, dan geeft dezelfde referentie
+// exitcode 0 ("slaagt"); de eis hierboven (exitcode 3) vangt hem
+var Module = require('module'), harnasBron = fs.readFileSync(HARNAS, 'utf8'), zoekM = "var VERGELEKEN = ['geslaagd', 'gezakt (definitie)', 'gezakt (bron)'];", mutant = new Module(HARNAS, null);
+mutant.filename = HARNAS; mutant.paths = Module._nodeModulePaths(path.dirname(HARNAS));
+mutant._compile(harnasBron.replace(zoekM, "var VERGELEKEN = ['geslaagd', 'gezakt (definitie)', 'gezakt (bron)', 'gezakt (invoer)'];  // MUTANT"), HARNAS);
+var uMut = mutant.exports.vergelijk({ export: EXPORT_L, referentie: path.join(TMP, 'referentie_u13.csv') });
+eis(harnasBron.split(zoekM).length === 2 && uMut.exit === 0 && runU.code === 3, 'herstel r3 (R3-D2): de mutant "invoer telt als vergeleken" geeft voor dezelfde referentie exitcode 0; de eis op exitcode 3 vangt hem (mutant: exit ' + uMut.exit + ')');
+eis(runA.code === 0 && runA.uit.some(function (l) { return / gezakt \(invoer\)$/.test(l); }) && runA.melding.some(function (l) { return /niet vergeleken omdat Athena de invoer mist/.test(l); }),
+  'herstel r3 (R3-D2): met minstens één vergeleken regel en daarnaast een regel gezakt (invoer) blijft de exitcode 0, met een vaste melding dat die regels niet vergeleken zijn (run A)');
+eis(runC.melding.every(function (l) { return !/invoer mist/.test(l); }), 'herstel r3 (R3-D2): zonder regel gezakt (invoer) geen invoermelding (run C)');
+// herstel r4 (R4-1, R4-2; het scenario van rev4/q1b en q3): de lege stand zoals vóór stap 5 (winsten zonder project). M04, M04/bestaand en M08 zijn leeg en
+// invoer raakt ze (stap projecten): gezakt (invoer) met de melding, nooit stil "leeg (geen basis)". Het deel zonder (M04: winsten zonder getekende waarde,
+// M08: deals zonder werkelijke datum) is een eigen telling in extra en wordt vergeleken, ook als de hoofdwaarde leeg is: hier de enige geslaagde regels
+var cL = {}; LL.ctx.sturingCijfers(LL.peildatum).blokken.forEach(function (b) { b.cijfers.forEach(function (c) { cL[c.id] = c; }); });
+var zonder04 = cL.gecontracteerd.extra.zonderGetekend, zonder08 = cL.gewonnenWaarde.extra.zonderDatum;
+eis(cL.gecontracteerd.waarde === '' && zonder04 > 0 && zonder08 === 0, 'herstel r4: in de lege stand is M04 leeg met winsten zonder getekende waarde (anders test het geval niets)');
+var refLz = [['M04', maand, zonder04, 'zonder', 'geslaagd'], ['M08', maand, zonder08, 'zonder', 'geslaagd'], ['M04', maand, 50000, '', 'gezakt (invoer)'],
+  ['M04', maand, 30000, 'bestaand', 'gezakt (invoer)'], ['M08', maand, 30000, '', 'gezakt (invoer)']];
+var runLz = draai(['--export', EXPORT_L, '--referentie', schrijfRef('referentie_lz.csv', refLz)]);
+vergelijkRun('herstel r4 (lege stand, deel zonder)', runLz, refLz);
+eis(runLz.code === 0 && runLz.melding.some(function (l) { return /niet vergeleken omdat Athena de invoer mist/.test(l); }) && !runLz.melding.some(function (l) { return /geen enkele regel/.test(l); }),
+  'herstel r4 (R4-1): naast een geslaagde regel blijven M04 en M08 zonder waarde invoer, met de vaste invoermelding (exit ' + runLz.code + '; ' + runLz.melding.join(' | ') + ')');
+// herstel r4 (R4-2b, het scenario van rev4/q1_m04_deel): een nieuwe winst zonder project en een bestaande met een project (getekend). Het deel nieuw van M04 en
+// M08 is in Code.gs leeg (geen stille 0 of een ontbrekend deel); het harnas maakt er geen "gezakt (definitie)" meer van, maar invoer (gewonnen_is_getekend)
+var expQ = kopie(exp), dQ = ctx.plusDagenVan(vandaag, -3) >= sjStart ? ctx.plusDagenVan(vandaag, -3) : vandaag;
+expQ.tabellen.Kansen = [['q-n', 'nieuw', 50000], ['q-b', 'bestaand', 9000]].map(function (x) { return { id: x[0], naam: 'Verzonnen ' + x[0], school: 'Verzonnen School ' + x[0], schoolId: '', fase: 'gewonnen', waarde: x[2], eigenaar: exp.tabellen.Kansen[0].eigenaar, pipeline: 'Scholen', schooljaar: sj, klant: x[1], gesloten: dQ, aangemaakt: sjStart + ' 09:00' }; });
+expQ.tabellen.Fasewissels = expQ.tabellen.Kansen.map(function (k) { return { id: k.id + '-fw', kansId: k.id, van: '', naar: 'gewonnen', werkelijkeDatum: dQ, ingevoerdOp: dQ + ' 10:00', door: k.eigenaar, eigenaar: k.eigenaar, zekerheid: 'laag', bron: 'tijdlijn', waarde: k.waarde }; });
+expQ.tabellen.Trajecten = [{ id: 'q-t', kansId: 'q-b', schoolId: '', school: 'Verzonnen School q-b', traject: 'Verzonnen', schooljaar: sj, status: 'opstart', contractwaarde: 1000, omzet: 1000 }]; expQ.tabellen.Facturen = [];
+var EXPORT_Q = path.join(TMP, 'export-deel.json'); fs.writeFileSync(EXPORT_Q, JSON.stringify(expQ));
+var refQ = [['M04', maand, 1000, 'bestaand', 'geslaagd'], ['M04', maand, 50000, 'nieuw', 'gezakt (invoer)'], ['M08', maand, 50000, 'nieuw', 'gezakt (invoer)']];
+var runQ = draai(['--export', EXPORT_Q, '--referentie', schrijfRef('referentie_q.csv', refQ)]);
+vergelijkRun('herstel r4 (R4-2b, deel zonder getekende waarde)', runQ, refQ);
+eis(runQ.code === 0 && runQ.melding.some(function (l) { return /invoer mist/.test(l); }), 'herstel r4 (R4-2b): het lege deel nieuw is invoer naast een geslaagd deel bestaand, met de invoermelding (exit ' + runQ.code + ')');
+// herstel r5 (R5-C2, de scenario's van rev5-r3review/s5 en s6b): na stap fasen en de Capsule-stand een winst van dit schooljaar (Kansen.schooljaar) met een
+// akkoord vóór 1 augustus zonder getekende waarde, een getekende winst van dit najaar voor volgend schooljaar en een kans in de voorstelfase. M04 en M07 zijn leeg
+// door dezelfde oorzaak; contract gewonnen_is_getekend toetst de winst (winstSchooljaar, zoals M04) en zakt, dus beide zijn gezakt (invoer), nooit stil leeg.
+// s6b: de winst heeft een lopend project zonder contractwaarde (zoals uit v6.4). Met M06 (geslaagd) erbij exitcode 0 met de invoermelding.
+var rk5 = function (fn, a) { var d = JSON.parse(ctxK.demoRun(fn, JSON.stringify(a), 'demo-sophie')); if (!d.ok) throw new Error(fn + ': ' + d.fout); return d.result; };
+rk5('apiAannameOpslaan', ['scope', { waarde: [], onderbouwing: 'verzonnen test', besluitdatum: ctx.plusDagenVan(vandaag, -1) }]);
+rk5('apiAannameOpslaan', ['jaardoel', { waarde: { soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000, schooljaar: sj }, onderbouwing: 'verzonnen test', besluitdatum: ctx.plusDagenVan(vandaag, -1) }]);
+var vo5 = ctxK.mijlpalen().filter(function (m) { return m.rol === 'voorstel'; })[0], sjVolgend = (+sj.slice(0, 4) + 1) + '-' + (+sj.slice(0, 4) + 2), eig5 = exp.tabellen.Kansen[0].eigenaar;
+function export5(legacy) {
+  var e = exportVan(ctxK), dA = ctx.plusDagenVan(sjStart, -40), dB = ctx.plusDagenVan(vandaag, -10);
+  e.eigenschappen.CAPSULE_MIGRATIE = vandaag + ' 09:00';
+  e.tabellen.Kansen = [
+    { id: 'r5-a', naam: 'Verzonnen A', school: 'Verzonnen School A', schoolId: '', fase: 'gewonnen', waarde: 40000, eigenaar: eig5, pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', gesloten: dA, aangemaakt: ctx.plusDagenVan(dA, -60) + ' 09:00' },
+    { id: 'r5-b', naam: 'Verzonnen B', school: 'Verzonnen School B', schoolId: '', fase: 'gewonnen', waarde: 9000, eigenaar: eig5, pipeline: 'Scholen', schooljaar: sjVolgend, klant: 'bestaand', gesloten: dB, aangemaakt: ctx.plusDagenVan(dB, -60) + ' 09:00' },
+    { id: 'r5-c', naam: 'Verzonnen C', school: 'Verzonnen School C', schoolId: '', fase: vo5.mijlpaal, waarde: 20000, eigenaar: eig5, pipeline: vo5.pipeline, schooljaar: sj, klant: 'nieuw', verwachteSluiting: ctx.plusDagenVan(vandaag, 20), aangemaakt: ctx.plusDagenVan(vandaag, -30) + ' 09:00', laatsteContact: ctx.plusDagenVan(vandaag, -2) }];
+  e.tabellen.Fasewissels = e.tabellen.Kansen.map(function (k) { var won = k.fase === 'gewonnen', d = won ? k.gesloten : ctx.plusDagenVan(vandaag, -30); return { id: k.id + '-fw', kansId: k.id, van: won ? vo5.mijlpaal : '', naar: k.fase, werkelijkeDatum: d, ingevoerdOp: d + ' 10:00', door: eig5, eigenaar: eig5, zekerheid: 'hoog', bron: 'app', waarde: k.waarde, vanRol: won ? 'voorstel' : '', naarRol: won ? '' : 'voorstel' }; });
+  e.tabellen.Trajecten = (legacy ? [{ id: 'r5-ta', kansId: 'r5-a', schoolId: '', school: 'Verzonnen School A', traject: 'Verzonnen A', schooljaar: sj, status: 'bezig', contractwaarde: '', omzet: 40000 }] : []).concat([
+    { id: 'r5-t0', kansId: '', schoolId: '', school: 'Verzonnen School D', traject: 'Verzonnen lopend', schooljaar: sj, status: 'bezig', contractwaarde: 30000, omzet: 30000, verlenging: 'verlengd' },
+    { id: 'r5-t', kansId: 'r5-b', schoolId: '', school: 'Verzonnen School B', traject: 'Verzonnen', schooljaar: sjVolgend, status: 'opstart', contractwaarde: 9000, omzet: 9000 }]);
+  e.tabellen.Facturen = []; e.tabellen.Doelen = (e.tabellen.Doelen || []).filter(function (d) { return d.eigenaar !== 'bedrijf'; });
+  return e;
+}
+[['s5', false], ['s6b', true]].forEach(function (x) {
+  var p = path.join(TMP, 'export-r5-' + x[0] + '.json'); fs.writeFileSync(p, JSON.stringify(export5(x[1])));
+  var L5 = H.laad({ export: p }), c14 = L5.ctx.datacontracten(L5.ctx.standVoorContracten(L5.peildatum)).filter(function (c) { return c.id === 'gewonnen_is_getekend'; })[0];
+  eis(c14.stand === 'gezakt' && c14.afwijkingen.some(function (a) { return a.id === 'r5-a'; }) && !c14.afwijkingen.some(function (a) { return a.id === 'r5-b'; }),
+    'herstel r5 (R5-C2, ' + x[0] + '): contract gewonnen_is_getekend toetst de winst van dit schooljaar met een akkoord vóór 1 augustus (winstSchooljaar) en zakt, de getekende winst voor volgend jaar niet (' + c14.stand + ')');
+  var ref5 = [['M04', maand, 40000, '', 'gezakt (invoer)'], ['M07', maand, 10, '', 'gezakt (invoer)'], ['M04', maand, 40000, 'nieuw', 'gezakt (invoer)'], ['M06', vandaag, waardeVan(L5, 'M06', vandaag).waarde, '', 'geslaagd']];
+  var run5 = draai(['--export', p, '--referentie', schrijfRef('referentie_r5_' + x[0] + '.csv', ref5)]);
+  vergelijkRun('herstel r5 (R5-C2, ' + x[0] + ')', run5, ref5);
+  eis(run5.code === 0 && run5.melding.some(function (l) { return /invoer mist/.test(l); }), 'herstel r5 (R5-C2, ' + x[0] + '): M04 en M07 leeg door dezelfde oorzaak zijn allebei invoer; met een geslaagde regel exitcode 0 en de invoermelding (exit ' + run5.code + ')');
+});
+// herstel r4: twee mutanten van het harnas, alleen in het geheugen: "leeg vóór invoer" (zoals 2744021) en "deel zonder pas na een lege hoofdwaarde"
+function harnasMutant(zoek, vervang) {
+  var m = new Module(HARNAS, null); m.filename = HARNAS; m.paths = Module._nodeModulePaths(path.dirname(HARNAS));
+  if (harnasBron.split(zoek).length !== 2) return null;
+  m._compile(harnasBron.replace(zoek, vervang), HARNAS); return m.exports;
+}
+var zoekLeeg = "if (a.leeg) return invoerRaakt(L, r) ? 'gezakt (invoer)' : 'leeg (geen basis)';", zoekZonder = "  if (r.uitsplitsing === 'zonder') return uit(c.extra ? c.extra[ZONDER[r.id]] : null);\n  if (zonderWaarde(c.waarde)) return uit(null);\n";
+var mLeeg = harnasMutant(zoekLeeg, "if (a.leeg) return 'leeg (geen basis)';  // MUTANT"), mZonder = harnasMutant(zoekZonder, "  if (zonderWaarde(c.waarde)) return uit(null);  // MUTANT\n  if (r.uitsplitsing === 'zonder') return uit(c.extra ? c.extra[ZONDER[r.id]] : null);\n");
+var refLzPad = path.join(TMP, 'referentie_lz.csv'), uLeeg = mLeeg && mLeeg.vergelijk({ export: EXPORT_L, referentie: refLzPad }), uZonder = mZonder && mZonder.vergelijk({ export: EXPORT_L, referentie: refLzPad });
+eis(!!uLeeg && uLeeg.uit[2] === 'M04 ' + maand + ' leeg (geen basis)' && uLeeg.meldingen.every(function (l) { return !/invoer mist/.test(l); }) && runLz.uit[2] !== uLeeg.uit[2],
+  'herstel r4 (R4-1): de mutant "leeg vóór invoer" geeft M04 stil leeg zonder invoermelding; de verwachting hierboven vangt hem (mutant: ' + (uLeeg ? uLeeg.uit.join(' | ') : 'zoektekst niet gevonden') + ')');
+eis(!!uZonder && uZonder.uit[0] === 'M04 ' + maand + '/zonder gezakt (invoer)' && uZonder.exit === 3 && runLz.uit[0] !== uZonder.uit[0],
+  'herstel r4 (R4-2): de mutant "deel zonder na een lege hoofdwaarde" vergelijkt M04/zonder niet (invoer, exitcode 3); de verwachting hierboven vangt hem (mutant: ' + (uZonder ? uZonder.uit.join(' | ') : 'zoektekst niet gevonden') + ')');
 
 /* ---- 4c. v7.9.4 (bouwpunt 12): fasen en de Capsule-stand per stand ---- */
 function refOverstap(Lx) { return [['M18', sj, waardeVan(Lx, 'M18', sj).waarde + 7, ''], ['M20', vandaag, waardeVan(Lx, 'M20', vandaag).waarde + 5, '']]; }
 var runO = draai(['--export', EXPORT, '--referentie', schrijfRef('referentie_o.csv', refOverstap(L))]);
-eis(runO.code === 0 && runO.uit.join('|') === ['M18 ' + sj + ' gezakt (invoer)', 'M20 ' + vandaag + ' gezakt (invoer)'].join('|'), 'overstap: zonder stap fasen en de Capsule-stand zijn M18 en M20 invoer (' + runO.uit.join(' | ') + ')');
+eis(runO.code === 3 && runO.uit.join('|') === ['M18 ' + sj + ' gezakt (invoer)', 'M20 ' + vandaag + ' gezakt (invoer)'].join('|'), 'overstap: zonder stap fasen en de Capsule-stand zijn M18 en M20 invoer; herstel r3 (R3-D2): niets vergeleken, dus exitcode 3 (' + runO.uit.join(' | ') + '; exit ' + runO.code + ')');
 var runOc = draai(['--export', EXPORT_C, '--referentie', schrijfRef('referentie_oc.csv', refOverstap(LC))]);
 eis(runOc.code === 1 && runOc.uit.join('|') === ['M18 ' + sj + ' gezakt (invoer)', 'M20 ' + vandaag + ' gezakt (onverklaard)'].join('|'), 'overstap: met de Capsule-stand blijft M18 invoer (stap fasen), M20 is onverklaard (' + runOc.uit.join(' | ') + ')');
 var runOk = draai(['--export', EXPORT_K, '--referentie', schrijfRef('referentie_ok.csv', refOverstap(LK))]);
@@ -348,10 +444,12 @@ var dataRegels = fs.readFileSync(VOORBEELD, 'utf8').split(/\r?\n/).filter(functi
 var runV = draai(['--export', EXPORT, '--referentie', kopieV, '--exact', EXACT_OK, '--xps', XPS_OK]);
 eis(runV.fout.length === 0 && runV.uit.length === dataRegels && dataRegels >= 10, 'het verzonnen voorbeeld test/voorbeelden/sturing_referentie.csv: elke regel gelezen, geen invoerfout (' + runV.uit.length + ' regels)');
 var runVl = draai(['--export', EXPORT_L, '--referentie', kopieV, '--exact', EXACT_OK, '--xps', XPS_OK]);
-eis(runVl.fout.length === 0 && runVl.uit.length === dataRegels && runVl.code === 0, 'v7.9.4: het verzonnen voorbeeld op de lege stand: elke regel gelezen en niets onverklaard (' + runVl.uit.filter(function (l) { return /onverklaard/.test(l); }).join(' | ') + ')');
+var vlVergeleken = runVl.uit.some(function (l) { return / (geslaagd|gezakt \((definitie|bron)\))$/.test(l); });  // herstel r3 (R3-D2): invoer telt niet als vergeleken
+eis(runVl.fout.length === 0 && runVl.uit.length === dataRegels && !runVl.uit.some(function (l) { return /onverklaard/.test(l); }) && runVl.code === (vlVergeleken ? 0 : 3),
+  'v7.9.4: het verzonnen voorbeeld op de lege stand: elke regel gelezen en niets onverklaard; herstel r3: exitcode ' + (vlVergeleken ? 0 : 3) + ' (' + runVl.uit.filter(function (l) { return /onverklaard/.test(l); }).join(' | ') + '; exit ' + runVl.code + ')');
 
 /* ---- 8. de uitvoer: patroon, geen namen, geen bedragen ---- */
-var runs = [runA, runB, runC, runC2, runV, runL, runLx, runLp, runLn, runO, runOc, runOk, runX, runXp, runE1, runE2, runE3, runE4, runE7, runE8, runB1, runVl, runS0, runS];
+var runs = [runA, runB, runC, runC2, runV, runL, runLx, runLp, runLn, runLz, runQ, runU, runO, runOc, runOk, runX, runXp, runE1, runE2, runE3, runE4, runE7, runE8, runB1, runVl, runS0, runS];
 var stdoutRegels = runs.reduce(function (s, r) { return s.concat(r.uit); }, []), meldingen = runs.reduce(function (s, r) { return s.concat(r.melding); }, []);
 var nietPatroon = stdoutRegels.filter(function (l) { return !PATROON.test(l); });
 eis(stdoutRegels.length > 0 && !nietPatroon.length, 'elke uitvoerregel matcht ' + PATROON + (nietPatroon.length ? ' (niet: ' + nietPatroon.slice(0, 3).join(' | ') + ')' : ''));

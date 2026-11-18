@@ -890,7 +890,7 @@ def handle_crm(fn, args):
         for st in t['stappen']: TAKEN.append({'id': 'tk' + uuid.uuid4().hex[:5], 'tekst': st['tekst'], 'bron': 'track', 'prio': st['prio'], 'deadline': (datetime.date.fromisoformat(args[2]) + datetime.timedelta(days=st['dagenNaStart'])).isoformat(), 'link': '', 'over': None, 'categorie': st['categorie'], 'eigenaar': args[3] if len(args) > 3 else 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': kop.get('schoolId', ''), 'persoonId': kop.get('persoonId', ''), 'kansId': kop.get('kansId', '')})
         return {'aantal': len(t['stappen']), 'track': t['naam']}
     if fn == 'apiTrackOpslaan': return TRACKS
-    if fn == 'apiRapport':
+    if fn == 'apiRapport':  # v7.9.4 herstel r3 (R3): winst.gewonnenWaarde is de getekende waarde (null als geen winst er een heeft), met winst.zonderGetekend
         c = {'gesprekken': 4, 'mails': 11, 'afspraken': 2, 'notities': 3, 'nieuweKansen': 2, 'voorstellen': 1, 'gewonnen': 1, 'gewonnenWaarde': 12000, 'verloren': 1, 'takenAf': 6}
         c2 = {'gesprekken': 6, 'mails': 7, 'afspraken': 3, 'notities': 1, 'nieuweKansen': 1, 'voorstellen': 0, 'gewonnen': 0, 'gewonnenWaarde': 0, 'verloren': 0, 'takenAf': 4}
         team = {k: c[k] + c2[k] for k in c}
@@ -898,7 +898,7 @@ def handle_crm(fn, args):
                 'perPersoon': [{'naam': 'Menno', 'cijfers': c, 'doelen': {}}, {'naam': 'Mees', 'cijfers': c2, 'doelen': {'gesprekken': 8}}], 'totaal': {'open': 3, 'waarde': 30040, 'gewogen': 10370},
                 'forecast': [{'maand': d(30)[:7], 'waarde': 15040, 'gewogen': 7520, 'aantal': 1}, {'maand': d(60)[:7], 'waarde': 9000, 'gewogen': 2250, 'aantal': 1}, {'maand': 'zonder datum', 'waarde': 6000, 'gewogen': 600, 'aantal': 1}],
                 'trechter': [{'mijlpaal': m['mijlpaal'], 'pipeline': 'Scholen', 'aantal': len([k for k in CRMKANSEN if k['fase'] == m['mijlpaal']]), 'waarde': sum(k['waarde'] for k in CRMKANSEN if k['fase'] == m['mijlpaal']), 'gewogen': sum(kans_uit(k)['gewogen'] for k in CRMKANSEN if k['fase'] == m['mijlpaal'])} for m in MIJLPALEN],
-                'winst': {'gewonnen': 1, 'gewonnenWaarde': 12000, 'verloren': 1, 'verlorenWaarde': 4000, 'ratio': 50}, 'redenen': [{'reden': 'Te duur', 'aantal': 1}], 'stil': [kans_uit(k) for k in CRMKANSEN if kans_uit(k)['stil']]}
+                'winst': {'gewonnen': 1, 'gewonnenWaarde': 12000, 'zonderGetekend': 0, 'verloren': 1, 'verlorenWaarde': 4000, 'ratio': 50}, 'redenen': [{'reden': 'Te duur', 'aantal': 1}], 'stil': [kans_uit(k) for k in CRMKANSEN if kans_uit(k)['stil']]}
     if fn == 'apiDoelen':  # v4.2: ook team- en bedrijfsdoelen
         eig = ([{'waarde': 'bedrijf', 'label': 'Bedrijf (iedereen)', 'team': 'bedrijf'}] if beheer() else []) + [y for t in TEAMLEDEN for y in [{'waarde': 'team:' + t, 'label': 'Team ' + t, 'team': t}] + [{'waarde': n, 'label': n, 'team': t} for n in TEAMLEDEN[t]]] if beheer() else []
         return {'doelen': DOELEN, 'metrics': [m['id'] for m in METR], 'metrieken': METR, 'periodes': ['week', 'maand', 'kwartaal', 'halfjaar', 'jaar', 'schooljaar'], 'gebruikers': GEBRUIKERS_NAMEN, 'eigenaren': eig,

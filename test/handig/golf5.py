@@ -18,6 +18,12 @@
 # v7.9.4 (sectie 12, docs/sturing-v7.9.md §3c): datakwaliteit met de stand leeg, de afdruk van de week en #rapport:week:<jjjj-Www> (`data-weekprint`,
 # `data-weeklink`), de stap kansen met gewonnen kansen, de soort per facturatievorm (`data-factsoort`), contractwaarde met projecten zonder, een team zonder leden.
 # v7.9.4 herstel r2 (`g5_794_weeklink_koud`): een koude start met #rapport:week:<jjjj-Www> zonder cache, de afdruktabel bij body.desk zonder hertekenen en de uitleg bij leeg.
+# v7.9.4 herstel r3 (sectie 13): leeg in plaats van 0 in het MT-overzicht (ook bevroren), Rapporten → Teams, Home en Vandaag; de basis na Toepassen en na de soort
+# per facturatievorm (telefoon, iOS R1); Soort kiezen 44 px op de telefoon (N3) en de weekpijlen 44 px op de iPad (N4).
+# v7.9.4 herstel r4 (sectie 14): na Werkelijke datums → Toepassen en Rollen opnieuw toepassen laadt een andere tab (R4-iOS-1); een tab die je kiest terwijl
+# een trage apiCrm loopt, tekent zodra de basis er is, ook Rapport en ook na Beheer-paden met alleen laadCrmBasis (R4-iOS-2).
+# v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout), ook niet na Andere datum; Gebruikers
+# verouderen alles; € met een harde spatie in de tegel Verloren; M20 met het aantal zonder laatste contact.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -517,6 +523,10 @@ with sync_playwright() as p:
         st = pg.evaluate("[document.body.classList.contains('desk'), document.querySelectorAll('[data-weekprint]').length, (document.querySelector('[data-weekprint]') || { getBoundingClientRect: function () { return { height: 0 }; } }).getBoundingClientRect().height]")
         ok('ipad staand (herstel r1, R1): zonder desktopweergave staat Afdrukken in Rapporten → Week, minstens 44 px', st[0] is False and st[1] == 1 and st[2] >= 44, st)
         pg.set_viewport_size({'width': 1180, 'height': 820}); pg.wait_for_timeout(400)
+        desk('rapporten', '#crmBalk [data-rweergave="week"]'); pg.click('#crmBalk [data-rweergave="week"]'); pg.wait_for_selector('#crmBalk .periode-nav button')
+        h = pg.evaluate("[document.body.classList.contains('desk'), [].map.call(document.querySelectorAll('#crmBalk .periode-nav button'), function (x) { return Math.round(x.getBoundingClientRect().height); })]")
+        ok('ipad liggend (herstel r3, N4): de weekpijlen (.periode-nav) minstens 44 px, net als Afdrukken en Link kopiëren', h[0] is True and len(h[1]) >= 2 and all(x >= 44 for x in h[1]), h)
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#crmInhoud [data-beheer]')
     stap('g5_794_ipad', g5_794_ipad)
     c.close()
 
@@ -1047,13 +1057,17 @@ with sync_playwright() as p:
     def g5_794_overstap_wis():  # herstel r1 (R794-1, B1): na Toepassen zijn de keuzes van de stap gewist en de caches (basis, pipeline, rapport, sturing) verouderd
         desk('rapporten', '#crmInhoud [data-beheer="v79"]'); pg.click('[data-beheer="v79"]'); venster_open('[data-v79="rollen:proef"]')
         pg.click('[data-v79="rollen:proef"]'); pg.wait_for_selector('[data-v79="rollen:toepassen"]')
-        pg.evaluate("V79.keuze['rol:x'] = 'ap'; CRM.sturing = { merk: 'oud' }; CRM.basis = CRM.basis || { merk: 'oud' }; CRM.rapport = CRM.rapport || { merk: 'oud' }")
+        # herstel r3 (iOS R1): de oude basis krijgt een merk; verouderd = weg of zonder merk (de app laadt hem meteen opnieuw), en daarna moet er een verse zijn
+        pg.evaluate("V79.keuze['rol:x'] = 'ap'; CRM.sturing = { merk: 'oud' }; CRM.basis = CRM.basis || {}; CRM.basis.oud = 1; CRM.rapport = CRM.rapport || { merk: 'oud' }")
         pg.click('[data-v79="rollen:toepassen"]'); toast('Stap rollen toegepast')
-        st = pg.evaluate("[Object.keys(V79.keuze).filter(function (k) { return k.indexOf('rol:') === 0; }).length, CRM.sturing === null, CRM.basis === null, CRM.rapport === null]")
+        st = pg.evaluate("[Object.keys(V79.keuze).filter(function (k) { return k.indexOf('rol:') === 0; }).length, CRM.sturing === null, !CRM.basis || !CRM.basis.oud, CRM.rapport === null]")
         ok('overstap (herstel r1, R794-1): na Toepassen van stap rollen is de keuze van die stap gewist en zijn basis, rapport en sturing verouderd', st == [0, True, True, True], st)
-        pg.evaluate("CRM.sturing = { merk: 'oud' }; CRM.basis = CRM.basis || { merk: 'oud' }")
+        try: pg.wait_for_function("CRM.basis && !CRM.basis.oud", timeout=5000); vers = True
+        except Exception: vers = False
+        ok('overstap (herstel r3, iOS R1): na Toepassen laadt de app de basis opnieuw (anders blijft een andere tab op de telefoon op Laden)', vers)
+        pg.evaluate("CRM.sturing = { merk: 'oud' }; CRM.basis = CRM.basis || {}; CRM.basis.oud = 1")
         pg.click('[data-v79="kansen:proef"]'); pg.wait_for_selector('#v79-kansen'); pg.click('[data-v79="kansen:toepassen"]'); toast('Stap kansen toegepast')
-        st2 = pg.evaluate("[CRM.sturing === null, CRM.basis === null]")
+        st2 = pg.evaluate("[CRM.sturing === null, !CRM.basis || !CRM.basis.oud]")
         ok('overstap (herstel r1, B1): ook na Toepassen van stap kansen zijn basis en sturing verouderd (geen oude stand in Rapporten of het kansvenster)', st2 == [True, True], st2)
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_794_overstap_wis', g5_794_overstap_wis)
@@ -1115,7 +1129,7 @@ with sync_playwright() as p:
         pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#crmInhoud [data-beheer="keuzelijsten"]'); pg.click('[data-beheer="keuzelijsten"]'); pg.wait_for_selector('[data-factsoort]')
         pg.click('[data-factsoort]'); venster_open('#vf-soort0')
         h = pg.evaluate("[document.getElementById('vf-soort0').getBoundingClientRect().height, parseFloat(getComputedStyle(document.getElementById('vf-soort0')).fontSize), document.querySelector('[data-factsoort]').getBoundingClientRect().height]")
-        ok('telefoon (bouwpunt 9): de keuzelijst in het venster 44 px en 16 px', h[0] >= 44 and h[1] >= 16, h)
+        ok('telefoon (bouwpunt 9; herstel r3, N3): de keuzelijst in het venster 44 px en 16 px, Soort kiezen 44 px', h[0] >= 44 and h[1] >= 16 and h[2] >= 44, h)
         pg.click('#venster [data-cf-annuleer]'); venster_dicht()
     stap('g5_794_telefoon', g5_794_telefoon)
     c.close()
@@ -1135,6 +1149,146 @@ with sync_playwright() as p:
         u = pg.evaluate("(function () { var x = document.querySelector('#dqWrap .dq-telling .dq-uitleg'); if (!x) return null; var r = x.getBoundingClientRect(), tags = [].map.call(document.querySelectorAll('#dqWrap .dq-telling .tag'), function (t) { return t.getBoundingClientRect().bottom; }); return [Math.round(r.top), Math.round(Math.max.apply(null, tags))]; })()")
         ok('datakwaliteit (herstel r2, N2): op de telefoon staat de uitleg bij leeg onder alle tags (eigen regel), niet naast een andere tag', bool(u) and u[0] >= u[1] - 1, u)
     stap('g5_794_weeklink_koud', g5_794_weeklink_koud)
+    c.close()
+
+    # ===== 13. v7.9.4 herstel r3: leeg in plaats van 0 (M04, M05, M07, M08, M09, Gewonnen · €, contractwaarde), de basis na Beheer op de telefoon en de tikdoelen =====
+    def leeg_stand():  # verzonnen: geen project heeft een contractwaarde (zoals de echte stand vóór stap 5), met een volledig jaardoel en een doelpadcurve
+        api('apiImporteer', 'trajecten', [{'id': x['id'], 'contractwaarde': ''} for x in api('apiTrajecten')['trajecten']])
+        sj = api('apiOverzicht')['kpi']['schooljaar']
+        for n, w in (('scope', []), ('jaardoel', {'soort': 'contractwaarde', 'periode': 'schooljaar', 'scope': 'scope v1', 'noemer': 'jaardoel', 'waarde': 400000, 'schooljaar': sj}), ('doelpadCurve', {'totaal': [[0, 0], [365, 1]], 'bron': 'reconstructie'})):
+            api('apiAannameOpslaan', n, {'waarde': w, 'onderbouwing': 'Test golf5 (verzonnen)', 'besluitdatum': dag(0)})
+    def mt_regel(m): return pg.evaluate("(function (m) { var r = [].filter.call(document.querySelectorAll('.mt .mt-regel'), function (x) { var e = x.querySelector('.mt-m'); return e && e.textContent === m; })[0]; var t = function (s) { return ((r && r.querySelector(s)) || {}).textContent || ''; }; return r ? { w: t('.mt-waarde'), b: t('.mt-geblokkeerd'), x: t('.mt-extra') } : null; })(%s)" % json.dumps(m))
+    c, pg = nieuw(b, 'sophie')
+    def g5_794_r3_leeg():
+        leeg_stand()
+        desk('rapporten', '#crmBalk [data-rweergave="mt"]'); pg.evaluate("CRM.sturing = null"); pg.click('#crmBalk [data-rweergave="mt"]'); pg.wait_for_selector('.mt .mt-blok')
+        m4, m5, m7, m8 = mt_regel('M04'), mt_regel('M05'), mt_regel('M07'), mt_regel('M08')
+        ok('MT (herstel r3, R3-D1): M04 zonder getekende waarde is "—" met de reden, geen € 0', bool(m4) and m4['w'] == '—' and 'geen basis: winsten zonder getekende contractwaarde' in m4['x'] and 'zonder getekende waarde:' in m4['x'], m4)
+        ok('MT (herstel r3, R3-D1): M07 is "—" met de reden, geen 0 % en geen "nog te vinden"', bool(m7) and m7['w'] == '—' and 'geen basis' in m7['x'] and 'nog te vinden' not in m7['x'], m7)
+        ok('MT (herstel r3, R3-D1): M05 houdt het doelpad; de achterstand is "—" met de reden (zonder de veldnaam achterReden)', bool(m5) and m5['w'].startswith('€') and 'achter: — (geen basis' in m5['x'] and 'achterReden' not in m5['x'], m5)
+        ok('MT (herstel r3, R3-N1, R2): M08 is "—" en de maand heeft "zonder getekende waarde", nooit "€ 0"', bool(m8) and m8['w'] == '—' and 'deze maand' in m8['x'] and 'zonder getekende waarde' in m8['x'].split('deze maand')[1] and '€ 0' not in m8['x'], m8)
+        u = pg.evaluate("[mtWaarde({ soort: 'uren', waarde: '' }), mtExtra({ id: 'urenVorigeJaren', waarde: '', extra: { maanden: [], reden: 'nog geen hele maand in dit schooljaar', totEnMet: '' } })]")
+        ok('MT (herstel r3, R4): M09 zonder hele maand is "—" met de reden', u[0] == '—' and 'nog geen hele maand in dit schooljaar' in u[1], u)
+        z = pg.evaluate("[mtExtra({ id: 'dekking', waarde: 0.2, extra: { nogTeVinden: 499000, noemer: 500000, noemerLabel: 'jaardoel', scope: '', zonderGetekend: 1 } }), mtExtra({ id: 'doelpad', waarde: 1000, extra: { dag: 3, achter: -5, zonderGetekend: 1 } }), mtExtra({ id: 'dekking', waarde: 1, extra: { nogTeVinden: 1, noemerLabel: 'jaardoel', zonderGetekend: 0 } })]")
+        ok('MT (herstel r4, R4-3): deels getekend noemen M07 en M05 het aantal winsten zonder getekende waarde dat niet meetelt (zonder de veldnaam), en zonder zulke winsten niets', all('zonder getekende waarde (telt niet mee): 1' in t and 'zonderGetekend' not in t for t in z[:2]) and 'zonder getekende' not in z[2], z)
+        pg.click('[data-mtbevries]'); toast('Tussenstand van'); pg.wait_for_selector('#mtStand option[value="%s"]' % dag(0), state='attached'); pg.select_option('#mtStand', dag(0)); pg.wait_for_selector('.mt-info:has-text("bevroren")')
+        v4, v7 = mt_regel('M04'), mt_regel('M07')
+        ok('MT (herstel r3, R3-D1): in de bevroren stand zijn M04 en M07 "—" met "leeg: geen basis", geen € 0 of 0 %', bool(v4) and v4['w'] == '—' and 'leeg: geen basis' in v4['x'] and bool(v7) and v7['w'] == '—' and 'leeg: geen basis' in v7['x'], [v4, v7])
+        pg.select_option('#mtStand', ''); pg.wait_for_selector('.mt-info:has-text("live")')
+        pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('[data-rteam="consultancy"]'); pg.click('[data-rteam="consultancy"]'); pg.wait_for_selector('#crmInhoud .kop:has-text("Gewonnen en verloren")')
+        t = pg.evaluate("(function () { var x = [].filter.call(document.querySelectorAll('#crmInhoud .tegel'), function (t) { return /^Gewonnen ·/.test((t.querySelector('.t-label') || {}).textContent || ''); })[0]; return x ? [x.querySelector('.t-label').textContent, (x.querySelector('.t-signaal') || {}).textContent || ''] : null; })()")
+        w = api('apiRapport', 'maand', '', 0)['winst']
+        ok('Rapporten → Teams (herstel r3, R3; r4, R4-iOS-3): "Gewonnen ·\u00a0—" (harde spatie, de streep nooit alleen op een regel) met het aantal zonder getekende waarde, niet de kanswaarde en niet € 0', bool(t) and w['gewonnenWaarde'] is None and t[0] == 'Gewonnen ·\u00a0—' and t[1] == '%d zonder getekende waarde' % w['zonderGetekend'], [t, w])
+        desk('home', '#homeInhoud .doel-rij'); g = pg.locator('#homeInhoud .doel-rij:has-text("Contractwaarde") .getal').first.inner_text()
+        ok('Home (herstel r3, N2): de contractwaarde zonder enkele getekende waarde is "—", geen € 0', g.startswith('—'), g)
+    stap('g5_794_r3_leeg', g5_794_r3_leeg)
+    c.close()
+
+    # telefoon 375×667 met touch: de tegel Contractwaarde op Vandaag (signaal op één regel, "—" als leeg) en na Opslaan van de soort per facturatievorm een andere tab
+    c, pg = nieuw(b, 'sophie', tel=True); pg.set_viewport_size({'width': 375, 'height': 667}); pg.wait_for_timeout(300)
+    def g5_794_r3_telefoon():
+        def cw_tegel(): return pg.evaluate("(function () { var s = [].filter.call(document.querySelectorAll('#kpis .tegel'), function (t) { return /Contractwaarde/.test(t.textContent); })[0], x = s && s.querySelector('.t-signaal'); if (!x) return null; var r = document.createRange(), top = {}; r.selectNodeContents(x); [].forEach.call(r.getClientRects(), function (q) { top[Math.round(q.top)] = 1; }); return { cijfer: s.querySelector('.t-cijfer').textContent, tekst: x.textContent, regels: Object.keys(top).length }; })()")
+        pg.wait_for_selector('#kpis .tegel .t-signaal'); m = {}
+        for bw in (375, 390, 393): pg.set_viewport_size({'width': bw, 'height': 667}); pg.wait_for_timeout(250); m[bw] = cw_tegel()
+        ok('Vandaag (herstel r3, N2): het signaal bij Contractwaarde past op 375, 390 en 393 px op één regel', all(m[bw] and m[bw]['regels'] == 1 and m[bw]['tekst'].endswith('zonder waarde') for bw in m), m)
+        pg.set_viewport_size({'width': 375, 'height': 667}); leeg_stand(); pg.evaluate("laadVandaag()")
+        try: pg.wait_for_function("/zonder waarde/.test(document.getElementById('kpis').textContent) && [].some.call(document.querySelectorAll('#kpis .tegel'), function (t) { return /Contractwaarde/.test(t.textContent) && t.querySelector('.t-cijfer').textContent !== '%s'; })" % m[375]['cijfer'], timeout=5000)
+        except Exception: pass
+        t = cw_tegel(); ok('Vandaag (herstel r3, N2): zonder enkele contractwaarde is de tegel "—" (geen € 0), met het aantal op één regel', bool(t) and t['cijfer'] == '—' and t['regels'] == 1, t)
+        api('apiKeuzelijstOpslaan', 'soortFacturatie', [{'waarde': 'vooraf', 'oud': 'vooraf'}, {'waarde': 'achteraf', 'oud': 'achteraf'}, {'waarde': 'stukprijs', 'oud': ''}])
+        pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="rapport"]'); pg.tap('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('#crmInhoud [data-beheer="keuzelijsten"]')
+        pg.tap('[data-beheer="keuzelijsten"]'); pg.wait_for_selector('[data-factsoort]'); h = pg.evaluate("document.querySelector('[data-factsoort]').getBoundingClientRect().height")
+        ok('telefoon 375 (herstel r3, N3): Soort kiezen minstens 44 px', h >= 44, h)
+        pg.tap('[data-factsoort]'); venster_open('#vf-soort0'); pg.select_option('#vf-soort0', 'achteraf'); pg.tap('#venster [data-cf-opslaan]'); toast('Soort per facturatievorm opgeslagen'); venster_dicht()
+        pg.tap('#crmTabs [data-crmtab="scholen"]')
+        try: pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]', timeout=5000); gel = True
+        except Exception: gel = False
+        ok('telefoon 375 (herstel r3, iOS R1): na Opslaan van de soort per facturatievorm laadt de tab Scholen binnen 5 s (niet op "Laden")', gel, pg.inner_text('#crmInhoud')[:60])
+    stap('g5_794_r3_telefoon', g5_794_r3_telefoon)
+    c.close()
+
+    # ===== 14. v7.9.4 herstel r4: geen tab blijft op "Laden" na Beheer op de telefoon, ook niet met een trage apiCrm (zoals Apps Script) =====
+    c, pg = nieuw(b, 'sophie', tel=True); pg.set_viewport_size({'width': 375, 'height': 667}); pg.wait_for_timeout(300)
+    def tab_laadt(tab, sel, ms=5000):  # de tab toont binnen ms zijn inhoud (niet de spinner "Laden")
+        try: pg.wait_for_selector(sel, timeout=ms); return True
+        except Exception: return False
+    def wat(): return pg.evaluate("[CRM.tab, CRM.basis === null, document.getElementById('crmInhoud').innerText.replace(/\\s+/g, ' ').slice(0, 50)]")
+    SCHOLEN, RAPPORT = '#crmInhoud [data-crm-open^="school:"]', '#crmBalk [data-rweergave="teams"]'
+    def naar_beheer(item):
+        pg.tap('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('#crmInhoud [data-beheer="%s"]' % item); pg.locator('[data-beheer="%s"]' % item).scroll_into_view_if_needed(); pg.tap('[data-beheer="%s"]' % item)
+    def g5_794_r4_beheer():  # R4-iOS-1: Werkelijke datums → Toepassen en Rollen opnieuw toepassen verouderden de basis zonder hem te laden
+        pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="rapport"]')
+        naar_beheer('werkelijkedatums'); venster_open('#vf-fwbestand')
+        pg.set_input_files('#vf-fwbestand', os.path.join(R, 'test', 'voorbeelden', 'werkelijke_datums.csv')); pg.wait_for_selector('[data-fwimport="proef"]:not([disabled])')
+        pg.tap('[data-fwimport="proef"]'); pg.wait_for_selector('#fwUit .kaart:has-text("Proefdraai")'); pg.tap('[data-fwimport="toepassen"]'); toast('Werkelijke datums toegepast')
+        pg.locator('#venster [data-cf-annuleer]').first.tap(); venster_dicht(); pg.tap('#crmTabs [data-crmtab="scholen"]')
+        ok('telefoon 375 (herstel r4, R4-iOS-1): na Werkelijke datums → Toepassen laadt de tab Scholen binnen 5 s', tab_laadt('scholen', SCHOLEN), wat())
+        naar_beheer('mijlpalen'); pg.wait_for_selector('#leMijlpalen .le-rij [data-le="rol"]')
+        r = pg.locator('#leMijlpalen .le-rij:has([data-le="mijlpaal"][value="gesprek"]) [data-le="rol"]').first; oud = r.input_value(); r.fill('ad' if oud != 'ad' else 'ap')
+        pg.locator('#crmBeheer [data-cf-opslaan]').scroll_into_view_if_needed(); pg.tap('#crmBeheer [data-cf-opslaan]'); toast('Mijlpalen opgeslagen')
+        pg.wait_for_selector('#crmBeheer [data-rollentoepassen]'); pg.wait_for_function("CRM.basis !== null", timeout=5000); pg.tap('#crmBeheer [data-rollentoepassen]'); toast('wissels bijgewerkt')
+        pg.tap('#crmTabs [data-crmtab="scholen"]')
+        ok('telefoon 375 (herstel r4, R4-iOS-1): na Rollen opnieuw toepassen laadt de tab Scholen binnen 5 s', tab_laadt('scholen', SCHOLEN), wat())
+    stap('g5_794_r4_beheer', g5_794_r4_beheer)
+    def g5_794_r4_traag():  # R4-iOS-2: een tab die je kiest terwijl apiCrm nog loopt, tekent zodra de basis er is (ook Rapport, ook na alleen laadCrmBasis)
+        pg.evaluate(TRAAG); pg.evaluate("window.__traag.apiCrm = 2500")
+        api('apiKeuzelijstOpslaan', 'soortFacturatie', [{'waarde': 'vooraf', 'oud': 'vooraf'}, {'waarde': 'achteraf', 'oud': 'achteraf'}, {'waarde': 'stukprijs', 'oud': ''}])
+        naar_beheer('keuzelijsten'); pg.wait_for_selector('[data-factsoort]'); pg.tap('[data-factsoort]'); venster_open('#vf-soort0'); pg.select_option('#vf-soort0', 'achteraf')
+        pg.tap('#venster [data-cf-opslaan]'); toast('Soort per facturatievorm opgeslagen'); venster_dicht()
+        pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_timeout(300); pg.tap('#crmTabs [data-crmtab="rapport"]')
+        ok('telefoon 375 (herstel r4, R4-iOS-2): Scholen en dan Rapport tijdens een trage apiCrm na de soort: Rapport tekent zodra de basis er is (binnen 5 s)', tab_laadt('rapport', RAPPORT), wat())
+        naar_beheer('keuzelijsten'); pg.wait_for_selector('#crmBeheer [data-cf-opslaan]'); pg.locator('#crmBeheer [data-cf-opslaan]').scroll_into_view_if_needed(); pg.tap('#crmBeheer [data-cf-opslaan]'); toast('Keuzelijsten opgeslagen')
+        pg.locator('#crmTabs [data-crmtab="rapport"]').scroll_into_view_if_needed(); pg.tap('#crmTabs [data-crmtab="rapport"]')
+        ok('telefoon 375 (herstel r4, R4-iOS-2): de chip Rapport meteen na Opslaan van de keuzelijsten: binnen 5 s de weergaven, niet "Laden" met een lege balk', tab_laadt('rapport', RAPPORT), wat())
+        naar_beheer('mijlpalen'); pg.wait_for_selector('#crmBeheer [data-cf-opslaan]'); pg.locator('#crmBeheer [data-cf-opslaan]').scroll_into_view_if_needed(); pg.tap('#crmBeheer [data-cf-opslaan]'); toast('Mijlpalen opgeslagen')
+        pg.tap('#crmTabs [data-crmtab="scholen"]')
+        ok('telefoon 375 (herstel r4, R4-iOS-2): Scholen meteen na Opslaan van de mijlpalen (tot r4 alleen laadCrmBasis): binnen 5 s de rijen', tab_laadt('scholen', SCHOLEN), wat())
+        n0 = len([x for x in pg.evaluate('window.__calls') if x['fn'] == 'apiPipeline']); pg.tap('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector(RAPPORT); naar_beheer('mijlpalen'); pg.wait_for_selector('#crmBeheer [data-cf-opslaan]')
+        pg.locator('#crmBeheer [data-cf-opslaan]').scroll_into_view_if_needed(); pg.tap('#crmBeheer [data-cf-opslaan]'); toast('Mijlpalen opgeslagen'); pg.tap('#crmTabs [data-crmtab="pipeline"]')
+        gel = tab_laadt('pipeline', '#crmInhoud [data-sleepdoel], #crmInhoud .rij'); pg.wait_for_timeout(500); n1 = len([x for x in pg.evaluate('window.__calls') if x['fn'] == 'apiPipeline'])
+        ok('telefoon 375 (herstel r4, R4-iOS-2): Pipeline tijdens het laden tekent één keer zodra de basis er is (één apiPipeline, geen dubbele)', gel and n1 - n0 == 1, [wat(), n1 - n0])
+        pg.evaluate("window.__traag = {}")
+    stap('g5_794_r4_traag', g5_794_r4_traag)
+    c.close()
+
+    # ===== 15. v7.9.4 herstel r5: een mislukte apiCrm laat geen tab op "Laden" (R5-iOS-1, R5-1), ook niet na Andere datum (R5-iOS-2); de Gebruikers-paden
+    # verouderen alles (R5-5); € en het bedrag op één regel (R5-iOS-3); M20 noemt het aantal zonder laatste contact (R5-C1) =====
+    c, pg = nieuw(b, 'sophie', tel=True); pg.set_viewport_size({'width': 375, 'height': 667}); pg.wait_for_timeout(300)
+    def soort_opslaan(n, soort):  # Keuzelijsten → Soort kiezen → een andere soort → Opslaan, met n mislukte apiCrm daarna (de storing van Apps Script)
+        naar_beheer('keuzelijsten'); pg.wait_for_selector('[data-factsoort]'); pg.tap('[data-factsoort]'); venster_open('#vf-soort0'); pg.select_option('#vf-soort0', soort)
+        pg.evaluate("window.__faal.apiCrm = %d" % n); pg.tap('#venster [data-cf-opslaan]'); venster_dicht(); toast('Storing (golf5)'); pg.wait_for_function("window.__faal.apiCrm === %d" % (n - 1), timeout=5000)
+    def g5_794_r5_storing():
+        pg.evaluate(TRAAG); api('apiKeuzelijstOpslaan', 'soortFacturatie', [{'waarde': 'vooraf', 'oud': 'vooraf'}, {'waarde': 'achteraf', 'oud': 'achteraf'}, {'waarde': 'stukprijs', 'oud': ''}])
+        pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="rapport"]')
+        soort_opslaan(1, 'achteraf'); pg.tap('#crmTabs [data-crmtab="scholen"]')
+        ok('telefoon 375 (herstel r5, R5-iOS-1): mislukt de apiCrm na Opslaan van de soort, dan probeert de tab Scholen het opnieuw en toont binnen 5 s de rijen', tab_laadt('scholen', SCHOLEN), wat())
+        soort_opslaan(2, 'vooraf'); pg.tap('#crmTabs [data-crmtab="scholen"]')
+        try: pg.wait_for_selector('#crmInhoud .leeg:has-text("Kon de relaties niet laden")', timeout=5000); fout = True
+        except Exception: fout = False
+        ok('telefoon 375 (herstel r5, R5-iOS-1): mislukt ook die poging, dan staat er "Kon de relaties niet laden" (zoals bij Relaties), niet "Laden"', fout, wat())
+        pg.tap('#crmTabs [data-crmtab="scholen"]')
+        ok('telefoon 375 (herstel r5, R5-iOS-1): een tik op de tab probeert het daarna opnieuw (binnen 5 s de rijen)', tab_laadt('scholen', SCHOLEN), wat())
+        pg.tap('#crmTabs [data-crmtab="pipeline"]'); pg.wait_for_selector('#crmInhoud [data-sleep^="kans:"]', timeout=8000)
+        kid, naar = pg.evaluate("(function () { var k = document.querySelector('#crmInhoud [data-sleep^=\"kans:\"]'), van = k.closest('[data-sleepdoel]').getAttribute('data-sleepdoel').slice(5); return [k.getAttribute('data-sleep').slice(5), [].map.call(document.querySelectorAll('[data-sleepdoel^=\"kans:\"]'), function (x) { return x.getAttribute('data-sleepdoel').slice(5); }).filter(function (d) { return d !== van && d !== 'gewonnen' && d !== 'verloren'; })[0]]; })()")
+        pg.evaluate("(function (a) { return sleepZet('kans', a[0], a[1], false, false, { bron: 'slepen' }); })(%s)" % json.dumps([kid, naar]))
+        pg.wait_for_selector('#toast.aan button:has-text("Andere datum")', timeout=8000); pg.tap('#toast.aan button:has-text("Andere datum")'); venster_open('#vf-datum')
+        pg.tap('#venster [data-cf-opslaan]'); venster_dicht(); pg.wait_for_timeout(300); pg.tap('#crmTabs [data-crmtab="scholen"]')
+        ok('telefoon 375 (herstel r5, R5-iOS-2): na Andere datum op het bord laadt de tab Scholen binnen 5 s (niet op "Laden")', tab_laadt('scholen', SCHOLEN), wat())
+        pg.tap('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector(RAPPORT); naar_beheer('gebruikers'); pg.wait_for_selector('#crmBeheer [data-gactief]')
+        voor = pg.evaluate("CRM.rapport !== null"); knop = pg.locator('#crmBeheer [data-gactief]').first; gid = knop.get_attribute('data-gactief'); waarde = knop.get_attribute('data-waarde')
+        knop.tap(); pg.wait_for_selector('#crmBeheer [data-gactief="%s"]:not([data-waarde="%s"])' % (gid, waarde), timeout=6000)
+        ok('herstel r5 (R5-5): Gebruiker in- of uitschakelen veroudert ook rapport, pipeline en taken (crmOpnieuw), niet alleen de basis', voor and pg.evaluate("CRM.rapport === null && CRM.pipeline === null && CRM.taken === null"), [voor, pg.evaluate("[CRM.rapport === null, CRM.pipeline === null]")])
+        pg.locator('#crmBeheer [data-gactief="%s"]' % gid).tap(); pg.wait_for_selector('#crmBeheer [data-gactief="%s"][data-waarde="%s"]' % (gid, waarde), timeout=6000)
+        pg.evaluate("window.__traag = {}; window.__faal = {}")
+    stap('g5_794_r5_storing', g5_794_r5_storing)
+    def g5_794_r5_euro():
+        pg.tap('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector('#crmBalk [data-rweergave="teams"]'); pg.tap('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('[data-rteam="consultancy"]')
+        pg.tap('[data-rteam="consultancy"]'); pg.wait_for_selector('#crmInhoud .kop:has-text("Gewonnen en verloren")')
+        t = pg.evaluate("(function () { var x = [].filter.call(document.querySelectorAll('#crmInhoud .tegel .t-label'), function (t) { return /^Verloren ·/.test(t.textContent); })[0]; return x ? x.textContent : null; })()")
+        ok('telefoon 375 (herstel r5, R5-iOS-3): in de tegel Verloren staan € en het bedrag met een harde spatie (nooit "€" alleen op een regel); euro() overal zo', bool(t) and re.match('^Verloren · € [0-9.]+$', t) is not None and pg.evaluate("euro(7200)") == '€ 7.200', t)
+        z = pg.evaluate("[mtExtra({ id: 'stilstand', waarde: '', extra: { zonderContact: 3, reden: 'geen basis: open kansen zonder laatste contact' } }), mtExtra({ id: 'stilstand', waarde: 2, extra: { zonderContact: 1 } }), mtExtra({ id: 'stilstand', waarde: 0, extra: {} })]")
+        ok('MT (herstel r5, R5-C1): M20 noemt het aantal open kansen zonder laatste contact (zonder de veldnaam) en de reden als hij leeg is; zonder zulke kansen niets', 'zonder laatste contact (telt niet als stil): 3' in z[0] and 'geen basis: open kansen zonder laatste contact' in z[0] and 'zonder laatste contact (telt niet als stil): 1' in z[1] and 'zonderContact' not in z[0] + z[1] and z[2] == '', z)
+    stap('g5_794_r5_euro', g5_794_r5_euro)
     c.close()
     b.close()
 

@@ -599,10 +599,10 @@ function demoVul() {
     taak('tk4', 'Tarief Waterpoort College bevestigen', M.lars, 1, 'hoog', 'mailen', { schoolId: 's7', kansId: 'k7' }),
     taak('tk5', 'Kennismaking De Zonnewijzer plannen', M.yara, 4, 'midden', 'afspraak', { schoolId: 's9', kansId: 'k9' }),
     taak('tk6', 'Rooster periode 2 afstemmen met Marieke', M.femke, 1, 'hoog', 'afspraak', { schoolId: 's1', trajectId: 't1', persoonId: 'p1', tijd: '10:30', tags: 'rooster, periode 2' }),  // v4.5: met tijd; v4.6: tags
-    // v4.6: twee subtaken onder tk6 en een taak met een tijd over tien minuten (voor de herinneringsmail)
+    // v4.6: twee subtaken onder tk6 en een taak met een tijd over tien minuten (voor de herinneringsmail); v7.9.4 r5: vlak voor middernacht 23:59 (anders morgen)
     taak('tk6a', 'Beschikbaarheid ondersteuners nagaan', M.femke, 1, 'midden', 'overig', { schoolId: 's1', trajectId: 't1', ouderId: 'tk6', tags: 'rooster' }),
     taak('tk6b', 'Conceptrooster naar Marieke mailen', M.femke, 1, 'midden', 'mailen', { schoolId: 's1', trajectId: 't1', persoonId: 'p1', ouderId: 'tk6' }),
-    taak('tk19', 'Bellen met de administratie van het Kompas College', M.femke, 0, 'hoog', 'bellen', { schoolId: 's2', trajectId: 't2', tijd: (function () { var z = new Date(Date.now() + 10 * 60000); return ('0' + z.getHours()).slice(-2) + ':' + ('0' + z.getMinutes()).slice(-2); })(), tags: 'factuur' }),
+    taak('tk19', 'Bellen met de administratie van het Kompas College', M.femke, 0, 'hoog', 'bellen', { schoolId: 's2', trajectId: 't2', tijd: (function () { var z = new Date(Date.now() + 10 * 60000); if (z.getDate() !== new Date().getDate()) return '23:59'; return ('0' + z.getHours()).slice(-2) + ':' + ('0' + z.getMinutes()).slice(-2); })(), tags: 'factuur' }),
     taak('tk7', 'Factuur Lyceum Valkenoord versturen', M.ruben, -2, 'hoog', 'overig', { schoolId: 's6', trajectId: 't5' }),
     taak('tk8', 'Matchinggesprek Thijs Brouwer (Kompas College, Rekenondersteuner)', M.ruben, 3, 'hoog', 'afspraak', { schoolId: 's2', trajectId: 't9' }),
     // v6.4: net gewonnen (k17): talentscout toewijzen (teamlead talent) en de taskforcemeeting inplannen (consultant)
