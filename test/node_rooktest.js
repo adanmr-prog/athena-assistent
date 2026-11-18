@@ -5165,6 +5165,40 @@ function fout794(naam, e) { eis(false, 'v7.9.4 ' + naam + ': onverwachte fout ' 
   } catch (e) { fout794('herstel r6', e); } finally { standTerug(st); }
 })();
 
+/* ---- v7.9.4 herstel r7 (review ronde 7): R7-D3 (M26 en M28 tellen een termijn zonder bestaand project niet, zoals Financiën; contract
+   termijn_verzonden_heeft_factuurnummer meldt hem), R7-2 (de winsten zonder schooljaar staan ook bij M05 en M07 als M04 een waarde heeft) en R7-D4 (het label
+   van contract kans_heeft_schooljaar_en_klant noemt de winsten zonder schooljaar). Verzonnen gegevens. ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var sj = sjNu(), vandaag = plusDagen(0), sjStart = sj.slice(0, 4) + '-08-01', dW = plusDagen(-7) >= sjStart ? plusDagen(-7) : vandaag;
+    var op = function (p) { ctx._LEES = {}; ctx.GEBRUIKER = null; var u = {}; ctx.sturingCijfers(p).blokken.forEach(function (b) { b.cijfers.forEach(function (c) { u[c.id] = c; }); }); return u; };
+    var fin = function () { var F = roep(SOPHIE, 'apiFinancien', sj), i0 = F.maanden.indexOf(vandaag.slice(0, 7)), x = 0; F.reeksen.gefactureerd.forEach(function (b, i) { if (i <= i0) x += b; }); return x; };
+    var c = function (x) { return Math.round(Number(x) * 100); };
+    // R7-D3: een project van dit schooljaar met één verzonden (open) termijn, daarna verwijderd; de termijn blijft staan
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk7-t', school: 'Verzonnen School W', schoolId: 's1', traject: 'Verzonnen wees', schooljaar: sj, status: 'bezig', contractwaarde: 9000, omzet: 9000, soortFacturatie: 'achteraf', am: 'Femke de Wit' }]));
+    ctx.schrijfVeel('Facturen', cx([{ id: 'rk7-f', trajectId: 'rk7-t', omschrijving: 'Verzonnen termijn', bedrag: 1500, datum: dW, status: 'verzonden', factuurnummer: 'RK7F', verzonden: dW, betaald: '' }]));
+    var N1 = op(vandaag), f1 = fin();
+    roep(SOPHIE, 'apiVerwijder', 'traject', 'rk7-t');
+    var N2 = op(vandaag), f2 = fin(), C17 = contractenOp().termijn_verzonden_heeft_factuurnummer;
+    eis(!!ctx.vind('Facturen', 'rk7-f') && f1 - f2 === 150000 && c(N2.gefactureerd.waarde) === f2 && c(N1.gefactureerd.waarde) - c(N2.gefactureerd.waarde) === 150000 && c(N1.openstaand.waarde) - c(N2.openstaand.waarde) === 150000,
+      'v7.9.4 herstel r7 (R7-D3): na het verwijderen van een project telt zijn termijn niet meer in M26 en M28, en M26 blijft gelijk aan Financiën (' + [N1.gefactureerd.waarde, N2.gefactureerd.waarde, f2 / 100, N1.openstaand.waarde, N2.openstaand.waarde].join(', ') + ')');
+    eis(C17.stand === 'gezakt' && C17.afwijkingen.some(function (a) { return a.id === 'rk7-f'; }), 'v7.9.4 herstel r7 (R7-D3): contract termijn_verzonden_heeft_factuurnummer meldt de termijn zonder project (' + C17.stand + ')');
+    // R7-2: één getekende winst van dit schooljaar (40000) en één Capsule-winst zonder schooljaar, project en akkoorddatum, met een volledig jaardoel
+    ['Kansen', 'Fasewissels', 'Trajecten', 'Facturen'].forEach(function (t) { ctx.verwijderRijen(t, function () { return true; }); }); ctx._LEES = {};
+    aannameZet('scope', ['particulier']); aannameZet('doelpadCurve', { totaal: [[0, 0], [365, 1]], bron: 'reconstructie' });
+    aannameZet('jaardoel', { soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000 });
+    ctx.schrijfVeel('Kansen', cx([{ id: 'rk7-z', capsuleId: 'rk7-z', naam: 'Verzonnen z', school: 'Verzonnen School Z', schoolId: '', fase: 'gewonnen', waarde: 30000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: '', klant: '', gesloten: '', aangemaakt: plusDagen(-200) + ' 09:00' },
+      { id: 'rk7-w', naam: 'Verzonnen w', school: 'Verzonnen School W', schoolId: '', fase: 'gewonnen', waarde: 40000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', gesloten: vandaag, aangemaakt: plusDagen(-60) + ' 09:00' }]));
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk7-wt', kansId: 'rk7-w', schoolId: '', school: 'Verzonnen School W', traject: 'Verzonnen', schooljaar: sj, status: 'bezig', contractwaarde: 40000, omzet: 40000 }])); ctx._LEES = {};
+    var M = mtCijfers();
+    eis(M.M04.waarde === 40000 && M.M04.extra.zonderSchooljaar === 1 && typeof M.M07.waarde === 'number' && M.M07.extra.zonderSchooljaar === 1 && typeof M.M05.extra.achter === 'number' && M.M05.extra.zonderSchooljaar === 1,
+      'v7.9.4 herstel r7 (R7-2): naast een getekende winst staat de winst zonder schooljaar ook bij M05 en M07 als signaal (telt niet mee) (' + JSON.stringify([M.M05.extra.zonderSchooljaar, M.M07.extra]) + ')');
+    var lab16 = ''; ctx.CONTRACTEN.forEach(function (x) { if (x[0] === 'kans_heeft_schooljaar_en_klant') lab16 = x[1]; });
+    eis(/zonder schooljaar/.test(lab16), 'v7.9.4 herstel r7 (R7-D4): het label van contract kans_heeft_schooljaar_en_klant noemt de winsten zonder schooljaar (' + lab16 + ')');
+  } catch (e) { fout794('herstel r7', e); } finally { standTerug(st); }
+})();
+
 /* ---- v7.9.4 harnasdekking (7): M25 en M26 zijn geen maandcijfer maar de som over het schooljaar t/m de peildatum (zoals sturingCijfers, het MT-overzicht en het
    harnas rekenen; herstel r6, R6-1: M26 over de facturen van het schooljaar van elk project). De definitie in het register zegt dat, niet "in de maand" of "per maand". Verzonnen gegevens. ---- */
 (function () {

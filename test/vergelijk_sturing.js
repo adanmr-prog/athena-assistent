@@ -39,7 +39,9 @@
  *                                     en open op de peildatum) ligt niet tussen de maand van de eerste en die van de laatste factuurdatum van de export (een
  *                                     vorig boekjaar, een export die later begint): een maand buiten de export is geen afwijking. Een maand zonder termijn in
  *                                     Athena telt niet. Herstel r6 (R6-1): de maand van de peildatum is gedekt als de export t/m de maand ervoor loopt (Exact
- *                                     heeft nog geen factuur van deze maand); M26 en M28 tellen aan beide kanten de facturen van dit schooljaar van elk project
+ *                                     heeft nog geen factuur van deze maand); herstel r7 (R7-1): alleen als dat de maand van de peildatum van de run is
+ *                                     (--peildatum, standaard vandaag), een eerdere maand direct na het einde van de export dekt niet. M26 en M28 tellen aan
+ *                                     beide kanten de facturen van dit schooljaar van elk bestaand project (r7, R7-D3: een termijn zonder project niet)
  *                                     De vier exportblokkades zijn niet vergeleken: exitcode 3, met een vaste melding
  *   leeg (geen basis)                 v7.9.4 (bouwpunt 13): Athena heeft voor dit cijfer geen waarde (geen basis of geen populatie); nooit een vergelijking met 0.
  *                                     Herstel r4 (R4-1): raakt invoer het cijfer (zie hieronder), dan is een lege waarde gezakt (invoer)
@@ -454,9 +456,11 @@ function leesExact(ctx, tekst, soort, eisOpen) {
 // en die van de laatste factuurdatum van de export ligt, grenzen inbegrepen (een maand zonder factuur daartussen is echt leeg). Alleen een maand met een termijn in
 // Athena telt: een maand zonder termijn in Athena kan geen schijnbare afwijking geven.
 // harnasdekking (3, 4): elke datum ligt tussen de maand van de eerste en die van de laatste factuurdatum van de export. Herstel r6 (R6-1): de maand van de peildatum P
-// ook, als de export t/m de maand ervoor loopt (een export van vandaag zonder factuur van deze maand: Exact heeft er nog geen, dat is bron, niet "dekt niet")
-function dekt(ex, datums, P) {
+// ook, als de export t/m de maand ervoor loopt (een export van vandaag zonder factuur van deze maand: Exact heeft er nog geen, dat is bron, niet "dekt niet").
+// Herstel r7 (R7-1): alleen als P in de maand van de run R ligt (--peildatum, standaard vandaag); een eerdere maand direct na het einde van de export dekt niet
+function dekt(ex, datums, P, R) {
   var eM = ex.eerste ? ex.eerste.slice(0, 7) : '', lM = ex.laatste ? ex.laatste.slice(0, 7) : '', pM = String(P || '').slice(0, 7), j = +pM.slice(0, 4), mm = +pM.slice(5, 7);
+  if (pM !== String(R || '').slice(0, 7)) pM = '';
   var vorige = !pM ? '' : mm === 1 ? (j - 1) + '-12' : j + '-' + ('0' + (mm - 1)).slice(-2);
   return datums.every(function (d) { var m = String(d).slice(0, 7); return !!eM && m >= eM && (m <= lM || (m === pM && lM >= vorige)); });
 }
@@ -467,9 +471,11 @@ function leesXps(ctx, tekst) {
   return rijen;
 }
 function eindeMaand(d) { return laatsteDag(+d.slice(0, 4), +d.slice(5, 7)); }
-// Gefactureerd in centen tussen van en tot: Exact op factuurdatum, Athena op de verzenddatum van de termijnen (alle projecten, zoals M26 sinds herstel r6)
+// Gefactureerd in centen tussen van en tot: Exact op factuurdatum, Athena op de verzenddatum van de termijnen (elk bestaand project, zoals M26 sinds herstel r6 en r7)
 // v7.9.4 (bouwpunt 15): '' (geen oordeel: geen export voor dit cijfer), 'wijkt', of een reden waarom de export de bron niet kan toetsen (BRON_BLOK): 'zonder open'
 // (M28 zonder kolom Open en zonder betaaldatum), 'zonder betaaldatum', 'stand onbekend' of 'dekt niet'. M26 en M27 lezen het verkoopboek, M28 de export met Open.
+// herstel r7 (R7-D3): de ids van de bestaande projecten; een termijn zonder project telt niet, zoals M26, M28 en Financiën
+function metProject(L) { return eenmaal(L, 'projecten', function () { var u = {}; L.ctx.lees('Trajecten').forEach(function (t) { u[t.id] = true; }); return u; }); }
 function exactWijkt(L, r) {
   var ctx = L.ctx, d = r.per.peildatum, tol = tolerantieVan(L, r.id), vergelijk = function (e, a) { return !binnen(a, e, tol.pct ? tol : { pct: 0, abs: tol.abs * 100 }) ? 'wijkt' : ''; };
   if (r.id === 'openstaand') {
@@ -481,15 +487,15 @@ function exactWijkt(L, r) {
     if (!X.metBetaald && !(L.openStand && opDag)) return L.openStand ? 'zonder betaaldatum' : 'stand onbekend';
     // herstel r6 (R6-1): aan beide kanten de facturen van dit schooljaar (factuurdatum vanaf 1 augustus), zoals M28
     X.rijen.forEach(function (x) { if (x.datum > d || x.datum < van) return; eO += opDag && x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
-    ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (v && v.datum >= van && v.datum <= d && !(b && b.datum <= d)) { aO += ctx.centen(f.bedrag); open.push(v.datum); } });
-    return dekt(X, open, d) ? vergelijk(eO, aO) : 'dekt niet';  // harnasdekking (4): een open termijn van Athena buiten het bereik van de export
+    ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (metProject(L)[f.trajectId] && v && v.datum >= van && v.datum <= d && !(b && b.datum <= d)) { aO += ctx.centen(f.bedrag); open.push(v.datum); } });
+    return dekt(X, open, d, L.peildatum) ? vergelijk(eO, aO) : 'dekt niet';  // harnasdekking (4): een open termijn van Athena buiten het bereik van de export
   }
   if (!L.exactVerkoop) return '';
   // herstel r2 (A-B1, B-B2): dezelfde periode als M26 (bouwpunt 7, K10): in een stand op een eerdere peildatum t/m die dag, aan beide kanten; vandaag de hele maand
   var van = sjVan(L, d).slice(0, 4) + '-08-01', tot = d < L.vandaag ? d : eindeMaand(d), e = 0, a = 0, verzonden = [];
   L.exactVerkoop.rijen.forEach(function (x) { if (x.datum >= van && x.datum <= tot) e += x.bedrag; });
-  ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f); if (v && v.datum >= van && v.datum <= tot) { a += ctx.centen(f.bedrag); verzonden.push(v.datum); } });
-  return dekt(L.exactVerkoop, verzonden, d) ? vergelijk(e, a) : 'dekt niet';  // harnasdekking (3): een vorig boekjaar dat het venster maar deels raakt, is geen bron
+  ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f); if (metProject(L)[f.trajectId] && v && v.datum >= van && v.datum <= tot) { a += ctx.centen(f.bedrag); verzonden.push(v.datum); } });
+  return dekt(L.exactVerkoop, verzonden, d, L.peildatum) ? vergelijk(e, a) : 'dekt niet';  // harnasdekking (3): een vorig boekjaar dat het venster maar deels raakt, is geen bron
 }
 // v7.9.4 (bouwpunt 14): de rijen van een dienstenexport met één vast accountnummer, zodat urenUitRijen elke dienst aan één verzonnen talent koppelt. Zo telt
 // het totaal per maand ook de diensten zonder talent in Athena, met verder precies de regels van urenUitRijen (datum t/m vandaag, archiefvenster, status
@@ -657,7 +663,7 @@ function main() {
 module.exports = {
   vergelijk: vergelijk, laad: laad, leesReferentie: leesReferentie, athenaWaarde: athenaWaarde, periodeUit: periodeUit, binnenRepo: binnenRepo, OUDE_DEFINITIES: OUDE_DEFINITIES, RAAKT: RAAKT,
   // v7.9.4: voor de test en voor test/urenbasislijn.js
-  blokSoort: blokSoort, openOverstap: openOverstap, invoerRaakt: invoerRaakt, invoerRedenen: invoerRedenen, beoordeel: beoordeel, dekt: dekt, opLageWissels: opLageWissels, alleDiensten: alleDiensten, ALLE_TALENT: ALLE_TALENT, maandTot: maandTot,
+  blokSoort: blokSoort, openOverstap: openOverstap, invoerRaakt: invoerRaakt, invoerRedenen: invoerRedenen, beoordeel: beoordeel, dekt: dekt, exactWijkt: exactWijkt, opLageWissels: opLageWissels, alleDiensten: alleDiensten, ALLE_TALENT: ALLE_TALENT, maandTot: maandTot,
   Invoerfout: Invoerfout, fout: fout, echtPad: echtPad, leesBestand: leesBestand, argumentenUit: argumentenUit, laadContext: laadContext, startMetExport: startMetExport,
   leesXps: leesXps, dagGeldig: dagGeldig, onverwacht: onverwacht, HOOFDLETTERS_ZIJN_GELIJK: HOOFDLETTERS_ZIJN_GELIJK
 };

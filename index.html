@@ -619,7 +619,7 @@
   .doel-rij .getal { white-space: nowrap; }
   .doel-rij { grid-template-columns: minmax(90px, 130px) minmax(60px, 1fr) auto; }
   .doel-rij > span:first-child { overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }
-  body.desk .doel-rij { grid-template-columns: minmax(110px, 175px) minmax(60px, 1fr) auto; }  /* v4.3: lange labels niet midden in het woord afbreken; v7.9.4: label uit het register */
+  body.desk .doel-rij { grid-template-columns: minmax(110px, 175px) minmax(60px, 1fr) auto; }  /* v4.3: lange labels niet midden in het woord afbreken; v7.9.4: register */
   .rapport-tabel td { white-space: nowrap; }
   .rapport-tabel td:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
   .rteams { flex-basis: 100%; margin-top: 0; }
@@ -927,7 +927,7 @@
   @media (hover: none) {
     body.desk #toast .toast-knoppen .toast-knop { min-height: 44px; padding: 8px 12px; }
     body.desk .mt-kop .knop, body.desk .week-kop .knop, body.desk [data-factsoort], body.desk .periode-nav button, body.desk .mt-kop select, body.desk .fasewissel-rij input[type=date], body.desk .fasewissel-rij select { min-height: 44px; }
-    body.desk [data-rweergave], body.desk [data-defs] { min-height: 36px; }
+    body.desk [data-rweergave], body.desk [data-defs], body.desk .leeg [data-crmtab] { min-height: 36px; }
     body.desk .fw-regel .t-bewerk { width: 44px; height: 44px; }  /* v7.9 (iOS-review): het potlood van een wissel, uitklapregels en doorklikregels ook 44 px op de iPad */
     body.desk .legenda-defs summary, body.desk .dq-eigenaar summary { min-height: 44px; }
     body.desk .dq-regel[data-crm-open] { min-height: 44px; display: flex; align-items: center; }
@@ -939,7 +939,7 @@
   body.defs-aan .t-def, .mt .t-def { display: block; }
   .t-def .zacht { color: var(--gedempt); font-weight: 600; }
   .doel-rij .t-def, .fin-sub .t-def { grid-column: 1 / -1; margin-top: 0; }
-  .doel-rij .doel-signaal { grid-column: 1 / -1; font-size: var(--fs-klein); color: var(--oranje-t); }  /* v7.9.4 (bouwpunt 19): projecten zonder contractwaarde */
+  .doel-rij .doel-signaal { grid-column: 1 / -1; font-size: var(--fs-klein); color: var(--oranje-t); }  /* v7.9.4: zonder contractwaarde */
   .tegel .t-signaal { color: var(--oranje-t); }
   button.tegel .t-def { text-align: left; }
   .defs-rij { margin-top: 8px; }
@@ -954,13 +954,13 @@
   .week-kaart .tegels { margin-top: 6px; }
   .week-kaart .tegel .t-cijfer { font-size: var(--fs-kop); }
   .week-kaart.team { border-left: 3px solid var(--paars); padding-left: 10px; }
-  /* v7.9.4: de afdruk van de week (vaste opzet); de tabel op de telefoon alleen in print */
+  /* v7.9.4: de afdruk van de week; de tabel alleen in print */
   .week-kop { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
   .week-kop:empty { display: none; }
   .week-print-kop, .week-print-defs { display: none; }
-  .week-print-tabel { display: none; }  /* r2 (N1): ook als body.desk later aangaat */
+  .week-print-tabel { display: none; }  /* v7.9.4: ook met body.desk */
   body:not(.desk) .week-kop .knop, body:not(.desk) .knop[data-factsoort] { min-height: 44px; }  /* r3 (N3) */
-  .week-kaart .week-blok { margin-top: 2px; }  /* v7.9.4: een kaart zonder leden zegt waarom */
+  .week-kaart .week-blok { margin-top: 2px; }  /* v7.9.4 */
   /* MT-overzicht (desktop) en maanddocument */
   .mt-kop { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
   .mt-kop select { border: 1.5px solid var(--lijn); border-radius: 8px; padding: 4px 8px; background: var(--wit); max-width: 100%; }
@@ -974,7 +974,7 @@
   .mt-waarde { font-size: var(--fs-kop); font-weight: 800; color: var(--paars); font-variant-numeric: tabular-nums; }
   .mt-geblokkeerd { font-size: var(--fs-zacht); color: var(--gedempt); }
   .mt-extra { font-size: var(--fs-klein); color: var(--inkt2); margin-top: 2px; }
-  .mt-dq { margin-top: 4px; }  /* v7.9.4 (bouwpunt 1): de stand per contract bij M36 */
+  .mt-dq { margin-top: 4px; }  /* v7.9.4: M36 */
   .mt-print-kop { display: none; }
   /* Datakwaliteit in Rapporten */
   .dq-eigenaar { margin-top: 8px; border: 1px solid var(--lijn); border-radius: 10px; padding: 6px 12px; background: var(--wit); }
@@ -987,11 +987,11 @@
   .tag.afgetekend, .tag.geslaagd { background: var(--groen-l); color: var(--groen); }
   .tag.gezakt { background: var(--rood-l); color: var(--rood); }
   .tag.geblokkeerd, .tag.niet-getoetst, .tag.vervallen { background: var(--vlak); color: var(--inkt2); }
-  /* v7.9.4: leeg (niets te toetsen) als eigen stand; .tag.leeg zet de maat van .leeg terug op die van een tag */
+  /* v7.9.4: de stand leeg; .tag.leeg met de maat van een tag */
   .tag.leeg { padding: 1px 7px; font-size: var(--fs-klein); background: var(--wit); color: var(--inkt2); border: 1px dashed var(--gedempt); }
-  body.desk .tag.leeg { padding: 0 6px; }  /* r1 (N2): even hoog als een tag zonder rand */
+  body.desk .tag.leeg { padding: 0 6px; }  /* v7.9.4 */
   .dq-telling { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .dq-uitleg { font-size: var(--fs-klein); color: var(--gedempt); order: 9; flex-basis: 100%; }  /* herstel r2 (N2): na alle tags op een eigen regel */
+  .dq-uitleg { font-size: var(--fs-klein); color: var(--gedempt); order: 9; flex-basis: 100%; }  /* v7.9.4: eigen regel */
   /* Weekdoelen invullen: per OC een rij met vijf velden */
   .wd-raster { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
   .wd-raster table { border-collapse: collapse; width: 100%; font-size: var(--fs-zacht); }
@@ -1785,7 +1785,7 @@
   // De melding na een wissel van een kans: Ongedaan maken (index 0) en Andere datum (index 1). Een oudere backend geeft geen wissel terug: dan alleen Ongedaan maken.
   function kansWisselMelding(tekst, fw, ongedaan, kansId) {
     if (!fw || !fw.id) { toastMetActie(tekst, 'Ongedaan maken', ongedaan); return; }
-    toastMetActies(tekst, [['Ongedaan maken', ongedaan], ['Andere datum', function () { andereDatumVenster(fw, function () { if (CRM.detail && CRM.detail.soort === 'kans') { crmVerouderd(); herlaadDetail(); } else { CRM.taken = CRM.rapport = CRM.sturing = null; laadCrmBasis(1).catch(function () {}); } }, kansId); }]]);  // v7.9.4 r6: basis en bord blijven tot de verse
+    toastMetActies(tekst, [['Ongedaan maken', ongedaan], ['Andere datum', function () { andereDatumVenster(fw, function () { if (CRM.detail && CRM.detail.soort === 'kans') { crmVerouderd(); herlaadDetail(); } else { CRM.taken = CRM.rapport = CRM.sturing = null; laadCrmBasis(1, 1).catch(function () {}); } }, kansId); }]]);  // v7.9.4: de oude basis blijft tot de verse (stil)
   }
   // v7.9 (punt 5, R14): bij de overgang naar de voorstelrol vraagt een klein venster de waarde en de verwachte tekendatum (alleen wat leeg is), altijd vóór de
   // aanroep. Opslaan = één apiKansOpslaan met fase, wissel én velden; Overslaan (niet als sturingVerplicht aan staat) = alleen fase en wissel; Annuleren,
@@ -3428,7 +3428,7 @@
 
   function ikNaam() { return CRM.basis ? CRM.basis.ik.naam : ''; }
   function crmVerouderd() { CRM.basis = null; CRM.pipeline = null; CRM.taken = null; CRM.rapport = null; CRM.sturing = null; }  // v7.9: ook de week en het MT-overzicht
-  function crmOpnieuw() { crmVerouderd(); CRM.wacht = CRM.tab !== 'rapport'; laadCrmBasis(1).catch(function () {}); }  // v7.9.4: anders blijft een tab op Laden; r5: vers
+  function crmOpnieuw() { crmVerouderd(); CRM.wacht = CRM.tab !== 'rapport'; laadCrmBasis(1, 1).catch(function () {}); }  // v7.9.4: vers en stil, anders blijft een tab op Laden
   function initialen(n) { var d = String(n || '?').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, ' ').trim().split(/\s+/); return ((d[0] || '?').charAt(0) + (d.length > 1 ? d[d.length - 1].charAt(0) : '')).toUpperCase(); }
   function tagsHtml(tags) { return (tags || []).map(function (t) { return '<span class="tag zacht">' + esc(t) + '</span>'; }).join(' '); }
   function nuLokaal(plusMin) { var d = new Date(Date.now() + (plusMin || 0) * 60000); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
@@ -3598,10 +3598,11 @@
   // v3.2: de laatst geladen Home en CRM-lijsten op dit toestel bewaren, zodat een scherm meteen gevuld is; de backend werkt het daarna bij
   function uitBewaard(k) { try { return JSON.parse(leesOpslag(k) || 'null'); } catch (e) { return null; } }
   function bewaar(k, v) { try { var t = JSON.stringify(v); if (t.length < 1500000) zetOpslag(k, t); } catch (e) {} }
-  function laadCrmBasis(vers) {  // v3.0: naam in de zijbalk; v4.0: menu per rechten; v7.9: de versie van de backend; v7.9.4 r5: één tegelijk (vers: een nieuwe)
-    if (CRM.laadt && !vers) return CRM.laadt;
-    var p = CRM.laadt = run('apiCrm').then(function (b) { var w = los(); CRM.basis = b; BACKEND.versie = b.backendVersie || ''; bewaar('aa_cache_crm', b); zetRechten(); zetMeldingen(b.meldingen); CRM.wacht = 0; if (w) renderCrm(); return b; },
+  function laadCrmBasis(vers, stil) {  // v3.0: naam in de zijbalk; v4.0: menu per rechten; v7.9: de versie van de backend; v7.9.4: één tegelijk (vers: nieuw), stil (wie aansluit niet)
+    if (CRM.laadt && !vers) { if (!stil) CRM.laadt.o.stil = 0; return CRM.laadt; }
+    var o = { stil: stil }, p = CRM.laadt = runKern('apiCrm', [], o).then(function (b) { var w = los(); CRM.basis = b; BACKEND.versie = b.backendVersie || ''; bewaar('aa_cache_crm', b); zetRechten(); zetMeldingen(b.meldingen); CRM.wacht = 0; if (w) renderCrm(); return b; },
       function (e) { if (los() && !CRM.basis) el('crmInhoud').innerHTML = '<div class="leeg">Kon de relaties niet laden. <button class="chip" data-crmtab="' + CRM.tab + '">Opnieuw proberen</button></div>'; throw e; });  // r6: opnieuw
+    p.o = o;
     function los() { if (CRM.laadt === p) CRM.laadt = null; return CRM.wacht && el('view-relaties').classList.contains('actief'); }
     return p;
   }
@@ -3613,7 +3614,7 @@
     // v7.6: de lijst van de open tab (taken, pipeline, rapport) ververst tegelijk met apiCrm in plaats van erná. Tot v7.5 wiste de then-tak
     // CRM.taken/pipeline/rapport en tekende opnieuw: elke tab kostte zo twee rondreizen achter elkaar en haalde apiTaken of apiTeamRapport twee keer op
     // (gemeten in de waterval). Scholen en personen komen uit apiCrm zelf en tekenen opnieuw zodra die binnen is.
-    var leeg = !CRM.basis; verversTab();  // v7.9.4 r2 (R1): zonder cache bleef een andere tab op Laden
+    var leeg = !CRM.basis; verversTab();  // v7.9.4: anders bleef een tab op Laden
     laadCrmBasis().then(function () { if (!leeg && (CRM.tab === 'scholen' || CRM.tab === 'personen')) renderCrm(); }).catch(function () {});
   }
   // v7.6: een tab die al getekend staat ververst stil (de vorige lijst blijft staan tot de verse er is); zonder gegevens heeft renderCrm al laadTab gestart
@@ -3630,7 +3631,7 @@
     el('crmZoekVak').style.display = CRM.tab === 'rapport' ? 'none' : 'flex';
     el('crmSnel').style.display = CRM.tab === 'taken' && CRM.basis ? '' : 'none';  // v4.5
     if (!CRM.basis) { el('crmBalk').innerHTML = ''; el('crmInhoud').innerHTML = '<div class="spinner">Laden</div>'; CRM.wacht = 1; laadCrmBasis().catch(function () {}); return; }  // v7.9.4: laadCrmBasis start en tekent dan
-    CRM.wacht = 0;  // r6: met een basis wacht niemand meer
+    CRM.wacht = 0;  // v7.9.4: met basis
     if (CRM.tab === 'scholen') renderScholen();
     else if (CRM.tab === 'personen') renderPersonen();
     else if (CRM.tab === 'pipeline') { if (CRM.pipeline) renderPipeline(); else laadTab('apiPipeline', 'pipeline', renderPipeline); }
@@ -4035,7 +4036,7 @@
     var opnieuw = CRM.sturing && CRM.sturing.weergave === W && el('crmBalk').querySelector('[data-rweergave]');
     if (opnieuw) { Array.prototype.forEach.call(el('crmBalk').querySelectorAll('button, select'), function (b) { b.disabled = true; }); el('crmInhoud').style.opacity = '.45'; }
     else { el('crmBalk').innerHTML = rWeergaveChips(); el('crmInhoud').innerHTML = '<div class="spinner">' + (W === 'week' ? 'Week laden' : 'MT-overzicht laden') + '</div>'; }
-    if (W === 'week' && CRM.weekLink) { var ws = weekStapVan(CRM.weekLink); CRM.weekLink = ''; if (ws !== null) CRM.rStap = ws; }  // v7.9.4 (bouwpunt 16)
+    if (W === 'week' && CRM.weekLink) { var ws = weekStapVan(CRM.weekLink); CRM.weekLink = ''; if (ws !== null) CRM.rStap = ws; }  // v7.9.4
     var o = W === 'week' ? { stap: CRM.rStap || 0, eigenaar: CRM.rEigenaar || '' } : { stand: CRM.mtStand || '' };
     run('apiSturing', W, o).then(function (r) { CRM.sturing = r; if (CRM.tab === 'rapport' && rWeergave() === W) renderSturing(); })
       .catch(function () { if (CRM.tab === 'rapport') { if (W === 'mt' && CRM.mtStand) CRM.mtStand = ''; el('crmInhoud').innerHTML = '<div class="leeg">Kon ' + (W === 'week' ? 'de week' : 'het MT-overzicht') + ' niet laden.</div>'; } })
@@ -4065,7 +4066,7 @@
     return '<dl class="week-print-defs">' + WEEK_KOLOMMEN.map(function (k) { var d = defVan(k[0], R.defs), t = d && d.definitie ? d.definitie + (d.versie !== undefined ? ' (v' + d.versie + ')' : '') : WEEK_UITLEG[k[0]] || ''; return t ? '<dt>' + esc(k[1]) + '</dt><dd>' + esc(t) + '</dd>' : ''; }).join('') + '</dl>';
   }
   function renderWeek(R) {
-    var kies = R.kiesbaar || [], tBlok = R.teamBlokkade || '';  // v7.9.4 (bouwpunt 5): een team zonder leden
+    var kies = R.kiesbaar || [], tBlok = R.teamBlokkade || '';  // v7.9.4: team zonder leden
     el('crmBalk').innerHTML = rWeergaveChips() +
       '<div class="periode-nav"><button type="button" data-rstap="-1" aria-label="Vorige week"><svg class="ic" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><button type="button" data-rstap="1" aria-label="Volgende week"' + (R.stap < 0 ? '' : ' disabled') + '><svg class="ic" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>' +
       '<span class="p-label">' + esc(R.label || R.week || '') + ' <small>' + esc(kortDatum(R.van)) + ' – ' + esc(kortDatum(R.eind || R.tot)) + '</small></span>' + (R.stap < 0 ? '<button type="button" class="p-nu" data-rstap="nu">Nu</button>' : '') + '</div>' +
@@ -4075,7 +4076,7 @@
     var rijen = (R.rijen || []).slice(), h = weekPrintKop(R) + kop + '<div class="hint week-info">Telt op de werkelijke datum van de wissel; de doelen zijn de weekdoelen van ' + esc(R.week || '') + '.</div>';
     if (!R.rollenIngesteld) h += '<div class="hint week-info">AP, AD en VO zijn geblokkeerd: de rollen van de mijlpalen zijn niet ingesteld (Beheer → Overstap naar v7.9).</div>';
     else if ((R.rolOntbreekt || []).length) h += '<div class="hint week-info">Geen mijlpaal met de rol ' + R.rolOntbreekt.map(function (x) { return x === 'ad' ? 'AD (AP gehouden)' : x === 'ap' ? 'AP (gepland)' : x.toUpperCase(); }).map(esc).join(', ') + ' (Beheer → Mijlpalen): die kolom blijft leeg.</div>';
-    if (tBlok) h += '<div class="hint week-info week-teamblok">Team (OC\'s samen): geblokkeerd: ' + esc(tBlok) + '. Zonder OC\'s telt het team niets, dus geen 0.</div>';  // v7.9.4 (bouwpunt 5)
+    if (tBlok) h += '<div class="hint week-info week-teamblok">Team (OC\'s samen): geblokkeerd: ' + esc(tBlok) + '. Zonder OC\'s telt het team niets, dus geen 0.</div>';  // v7.9.4
     var team = R.eigenaar || !R.totaal ? null : { naam: 'Team (OC\'s samen)', cijfers: R.totaal.cijfers, doelen: R.totaal.doelen, geblokkeerd: R.totaal.geblokkeerd, vertraging: R.totaal.vertraging, isTotaal: true, blokkade: tBlok };
     if (!R.eigenaar && !R.totaal && R.totaalUitleg) h += '<div class="hint week-teamuitleg week-info">' + esc(R.totaalUitleg) + '</div>';  // v7.9 (review P5, R8): te klein team, geen teamtotaal voor een medewerker
     var naamVanRij = function (r) { return r.naam === 'beheerder' ? 'Beheerder (niet in het teamtotaal)' : r.naam; }, alle = rijen.concat(team ? [team] : []);
@@ -4103,11 +4104,11 @@
     return String(v);
   }
   function mtExtra(c) {
-    var x = c.extra || {}, l = [], zg = 'zonder getekende waarde (telt niet mee):', e = function (a, b) { if (b !== undefined && b !== null && b !== '') l.push(a + ' ' + b); };  // v7.9.4 r4: zg (M05, M07)
+    var x = c.extra || {}, l = [], zt = { zonderGetekend: 'zonder getekende waarde (telt niet mee):', zonderSchooljaar: 'zonder schooljaar (telt niet mee):' }, e = function (a, b) { if (b !== undefined && b !== null && b !== '') l.push(a + ' ' + b); };  // v7.9.4 r4, r7: M05, M07
     if (c.id === 'jaardoel') { e('', [x.soort, x.periode ? 'per ' + x.periode : '', x.scope, x.noemerLabel ? 'noemer: ' + x.noemerLabel : ''].filter(Boolean).join(' · ')); if (x.reden) l.push(x.reden); }
     else if (c.id === 'gecontracteerd') { e('zonder getekende waarde:', x.zonderGetekend); e('zonder schooljaar:', x.zonderSchooljaar); }  // r6
     else if (c.id === 'gewogenPijplijn') { e('kansen:', x.aantal); e('zonder waarde:', x.zonderWaarde); e('zonder schooljaar:', x.zonderSchooljaar); }
-    else if (c.id === 'dekking') { if (x.nogTeVinden !== undefined) l.push('nog te vinden ' + euro(x.nogTeVinden)); e('noemer:', x.noemerLabel); e(zg, x.zonderGetekend || ''); }
+    else if (c.id === 'dekking') { if (x.nogTeVinden !== undefined) l.push('nog te vinden ' + euro(x.nogTeVinden)); e('noemer:', x.noemerLabel); e(zt.zonderGetekend, x.zonderGetekend || ''); e(zt.zonderSchooljaar, x.zonderSchooljaar); }
     else if (c.id === 'gewonnenWaarde') { e('deals:', x.aantal); if (x.zonderGetekend) e('zonder getekende waarde:', x.zonderGetekend); if (x.maand) l.push('deze maand ' + (x.maand.aantal || 0) + ' · ' + (x.maand.waarde === null ? 'zonder getekende waarde' : euro(x.maand.waarde || 0))); e('zonder werkelijke datum:', x.zonderDatum); }  // herstel r1 (K4); r3: maand leeg
     else if (c.id === 'funnel') { e('leads (telt niet als kans):', x.leads); e('zonder schooljaar:', x.zonderSchooljaar); }  // v7.9.1 (review r4, N3)
     else if (c.id === 'verwachteOpdrachten') { e('kansen:', x.aantal); if (x.verlopen) e('verlopen:', x.verlopen.aantal); e('zonder datum:', x.zonderDatum); }
@@ -4121,7 +4122,7 @@
     else if (c.id === 'registratievertraging') { e('wissels:', x.aantal); e('norm:', x.norm); }
     else if (c.id === 'voorspellingDeals') { e('model:', x.model); if (x.gemist) e('gemiste weken:', x.gemist); }
     else if (c.id === 'datakwaliteit') { e('stand van', x.dag ? kortDatum(x.dag) : ''); if (x.reden) l.push(x.reden); if (x.overstap && x.overstap.rollen && !x.overstap.rollen.ingesteld) l.push('rollen niet ingesteld'); if (x.overstap && x.overstap.verwijderd30) l.push(x.overstap.verwijderd30 + ' wissels van verwijderde kansen (30 dagen)'); }
-    else Object.keys(x).forEach(function (k) { if (k === 'achterReden') l.push('achter: — (' + x[k] + ')'); else if (k === 'zonderGetekend') e(zg, x[k]); else if (typeof x[k] === 'number' || (typeof x[k] === 'string' && x[k].length < 60)) e(k + ':', x[k]); });
+    else Object.keys(x).forEach(function (k) { if (k === 'achterReden') l.push('achter: — (' + x[k] + ')'); else if (zt.hasOwnProperty(k)) e(zt[k], x[k]); else if (typeof x[k] === 'number' || (typeof x[k] === 'string' && x[k].length < 60)) e(k + ':', x[k]); });
     if (x.reden && !l.some(function (s) { return s.indexOf(x.reden) >= 0; })) l.push(x.reden);  // v7.9.4: leeg met de reden
     if (!l.length && !c.geblokkeerd && (c.waarde === '' || c.waarde === null)) l.push('leeg: geen basis');  // bevroren stand (zonder extra)
     return l.length ? '<div class="mt-extra">' + esc(l.join(' · ')) + '</div>' : '';
@@ -4144,7 +4145,7 @@
         var d = c.def || {}, st = c.geblokkeerd ? 'geblokkeerd' : d.status || 'concept';
         return '<div class="mt-regel"><div class="mt-naam"><span class="mt-m">' + esc(c.m || '') + '</span><span>' + esc(c.label) + '</span></div>' +
           (c.geblokkeerd ? '<div class="mt-geblokkeerd">geblokkeerd: ' + esc(c.geblokkeerd) + '</div>' : '<div class="mt-waarde">' + esc(mtWaarde(c)) + '</div>') +
-          ((c.uitsplitsing || []).length ? '<div class="chips" style="margin-top:4px">' + c.uitsplitsing.map(function (u) { return '<span class="chip">' + esc(u.label) + ' ' + esc(mtWaarde({ soort: c.soort, waarde: u.waarde })) + '</span>'; }).join('') + '</div>' : '') + mtExtra(c) + (c.id === 'datakwaliteit' ? mtDqHtml(c) : '') +  // v7.9.4 (bouwpunt 1)
+          ((c.uitsplitsing || []).length ? '<div class="chips" style="margin-top:4px">' + c.uitsplitsing.map(function (u) { return '<span class="chip">' + esc(u.label) + ' ' + esc(mtWaarde({ soort: c.soort, waarde: u.waarde })) + '</span>'; }).join('') + '</div>' : '') + mtExtra(c) + (c.id === 'datakwaliteit' ? mtDqHtml(c) : '') +  // v7.9.4
           '<div class="t-def">' + esc(d.definitie || '') + ' <span class="zacht">v' + esc(d.versie || 0) + ' · ' + esc(d.eigenaar || '') + '</span> <span class="tag ' + esc(statusKlasse(st)) + '">' + esc(st) + '</span>' + (d.wachtOp ? ' <span class="zacht">wacht op ' + esc(d.wachtOp) + '</span>' : '') + '</div></div>';
       }).join('') + '</section>';
     }).join('');
@@ -4161,14 +4162,14 @@
   function dqBlokHtml(D) {
     var tel = dqTelling(D.contracten);
     var h = '<div class="kop" id="dqBlok" tabindex="-1">Datakwaliteit <small>' + (D.dag ? 'stand van ' + esc(kortDatum(D.dag)) + (D.bron === 'vers' ? ' · zojuist gerekend' : '') : 'nog geen controle gedraaid') + '</small></div><div class="datakwaliteit-blok"' + defTitel('datakwaliteit', D.defs) + '>' +
-      '<div class="dq-telling">' + dqTellingHtml(tel) + '</div>' + defRegel('datakwaliteit', D.defs);  // v7.9.4 (bouwpunt 1)
+      '<div class="dq-telling">' + dqTellingHtml(tel) + '</div>' + defRegel('datakwaliteit', D.defs);  // v7.9.4
     h += (D.perEigenaar || []).map(function (e) {
       return '<details class="dq-eigenaar"><summary>' + esc(e.eigenaar) + ' <span class="tag ' + statusKlasse('gezakt') + '">' + esc(e.aantal) + '</span></summary>' + e.gezakt.map(function (g) {
         return '<div class="dq-contract"><b>' + esc(g.label) + '</b> <small class="zacht">' + esc(g.aantal) + '</small>' + (g.verwijzingen || []).map(function (v) {
           return v.open && v.id ? '<a class="dq-regel" data-crm-open="' + esc(v.soort + ':' + v.id) + '" tabindex="0" role="link">' + esc(v.naam) + '</a>' : '<span class="dq-regel">' + esc(v.naam) + '</span>';
         }).join('') + '</div>';
       }).join('') + '</details>';
-    }).join('') || '<div class="leeg">Geen punten om op te lossen' + (tel.leeg ? ': ' + esc(tel.leeg) + (tel.leeg === 1 ? ' contract had' : ' contracten hadden') + ' niets te toetsen (leeg), dat is geen geslaagd' : '') + '.</div>';  // v7.9.4 (bouwpunt 1)
+    }).join('') || '<div class="leeg">Geen punten om op te lossen' + (tel.leeg ? ': ' + esc(tel.leeg) + (tel.leeg === 1 ? ' contract had' : ' contracten hadden') + ' niets te toetsen (leeg), dat is geen geslaagd' : '') + '.</div>';  // v7.9.4
     h += '<details class="legenda-defs"><summary>Alle contracten</summary><dl>' + (D.contracten || []).map(function (c) { return '<dt>' + esc(c.label) + ' <span class="tag ' + esc(statusKlasse(c.stand)) + '">' + esc(c.stand) + '</span></dt>' + (c.reden || c.stand === 'leeg' ? '<dd>' + esc(c.reden || DQ_LEEG_UITLEG) + '</dd>' : ''); }).join('') + '</dl></details>';  // v7.9.4: leeg met de reden "niets te toetsen: geen …"
     if (D.magVers) h += '<div class="balk"><button class="knop licht klein" data-dqvers="1">Nu opnieuw rekenen</button></div>';
     return h + '</div>';
@@ -4178,7 +4179,7 @@
     var d = String(wat || '').split(':'), w = d[0] === 'week' ? 'week' : d[0] === 'mt' ? 'mt' : 'teams';
     CRM.rWeergave = w; if (w !== 'teams') zetOpslag('aa_rweergave', w); else CRM.naarDq = d[0] === 'datakwaliteit';
     CRM.mtStand = w === 'mt' && /^\d{4}-\d{2}(-\d{2})?$/.test(d[1] || '') ? d[1] : ''; CRM.rStap = 0; CRM.rapport = null; CRM.sturing = null;
-    if (w === 'week') CRM.rEigenaar = '';  // v7.9.4: de link noemt geen persoon, dus het hele team
+    if (w === 'week') CRM.rEigenaar = '';  // v7.9.4: de link noemt geen persoon
     CRM.weekLink = w === 'week' && /^\d{4}-W\d{2}$/.test(d[1] || '') ? d[1] : '';  // v7.9.4: de week wordt een stap in laadSturing
     if (CRM.detail) { CRM.detail = null; el('crmDetailScherm').style.display = 'none'; el('crmDetailScherm').innerHTML = ''; el('crmLijstScherm').style.display = 'block'; }
     CRM.tab = 'rapport';
@@ -4768,7 +4769,7 @@
       return;
     }
     if (t.closest('[data-crm-terug]')) { if (history.state && history.state.crm) history.back(); else sluitDetail(); return; }
-    if ((x = t.closest('[data-crmtab]'))) { CRM.tab = x.dataset.crmtab; if (isDesk()) DESK.contacten = CRM.tab; el('crmNieuw').innerHTML = ''; formActie = null; renderCrm(); return; }
+    if ((x = t.closest('[data-crmtab]'))) { CRM.tab = x.dataset.crmtab; if (isDesk() && /^(scholen|personen)$/.test(CRM.tab)) DESK.contacten = CRM.tab; el('crmNieuw').innerHTML = ''; formActie = null; renderCrm(); return; }  // v7.9.4: niet Opnieuw proberen
     if (t.closest('[data-crmmijn]')) { CRM.mijn = !CRM.mijn; CRM.weergaveActief = null; renderCrm(); return; }
     if (t.closest('[data-crmbrin]')) { CRM.zonderBrin = !CRM.zonderBrin; renderCrm(); return; }  // v7.9 (punt 6): scholen zonder BRIN
     if ((x = t.closest('[data-fwdatum]'))) { var fwd = REG.fw && REG.fw[x.getAttribute('data-fwdatum')]; if (fwd) andereDatumVenster(fwd, function () { crmVerouderd(); herlaadDetail(); }); return; }  // v7.9 (punt 2): andere datum voor een wissel in de kansdetail
@@ -4813,7 +4814,7 @@
       if (b === 'sync') { x.disabled = true; run('apiCrmSync').then(function (r) { x.disabled = false; toast(r.mails + ' mails en ' + r.afspraken + ' afspraken gekoppeld.'); crmOpnieuw(); }).catch(function () { x.disabled = false; }); }
       else if (b === 'gebruikers') beheerGebruikers();
       else if (b === 'doelen') beheerDoelen();
-      else if (b === 'mijlpalen') basisKlaar().then(beheerMijlpalen, function () {});  // r6: na een mislukte crmOpnieuw eerst de basis
+      else if (b === 'mijlpalen') basisKlaar().then(beheerMijlpalen, function () {});  // v7.9.4: eerst de basis
       else if (b === 'tracks') basisKlaar().then(function (B) { beheerTracks((B.tracks[0] || {}).id); }, function () {});
       else if (b === 'keuzelijsten') beheerKeuzelijsten();  // v3.7
       else if (b === 'tags') beheerTagsVelden();
@@ -5591,7 +5592,7 @@
       (Number(S0.rollen.afwijkend) > 0 ? ' · ' + S0.rollen.afwijkend + (Number(S0.rollen.afwijkend) === 1 ? ' rol past' : ' rollen passen') + ' niet bij de naam' : '');  // v7.9.1 (review r3, R4)
     if (stap === 'tijdlijn') return S0.tijdlijn.teOmzetten + ' om te zetten · ' + S0.tijdlijn.alOmgezet + ' al omgezet';
     if (stap === 'wissels') return S0.wissels.teHerzien + ' te herzien';
-    if (stap === 'kansen') return S0.kansen.zonderSchooljaar + ' zonder schooljaar · ' + S0.kansen.zonderKlant + ' zonder klant' + (S0.kansen.teVullen !== undefined ? ' (open en gewonnen) · ' + S0.kansen.teVullen + ' aan te vullen' + (S0.kansen.zonderBasis ? ' · ' + S0.kansen.zonderBasis + ' zonder basis' : '') : '');  // v7.9.4 (bouwpunt 3)
+    if (stap === 'kansen') return S0.kansen.zonderSchooljaar + ' zonder schooljaar · ' + S0.kansen.zonderKlant + ' zonder klant' + (S0.kansen.teVullen !== undefined ? ' (open en gewonnen) · ' + S0.kansen.teVullen + ' aan te vullen' + (S0.kansen.zonderBasis ? ' · ' + S0.kansen.zonderBasis + ' zonder basis' : '') : '');  // v7.9.4
     return S0.redenen.gekoppeld ? 'gekoppeld' : S0.redenen.buitenLijst + ' buiten de lijst';
   }
   function beheerOverstap() {
@@ -5621,7 +5622,7 @@
         else if (p && st[0] === 'rollen') keuzes = ((p.mijlpalen || []).map(function (m) { var gekozen = v79Keuze('rol:' + m.id, m.voorstel); return '<div class="v79-keuze"><span>' + esc(m.pipeline + ' · ' + m.mijlpaal) + '</span><select data-v79rol="' + esc(m.id) + '" aria-label="Rol van ' + esc(m.mijlpaal) + '">' + ['', 'lead', 'ap', 'ad', 'voorstel'].map(function (x) { return '<option value="' + x + '"' + (x === gekozen ? ' selected' : '') + '>' + (x || 'geen rol') + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle pipelines hebben al rollen.</div>') +
           ((p.afwijkend || []).length ? '<div class="hint" id="v79-rolafwijkend">De rol past niet bij de naam van de mijlpaal: ' + esc(p.afwijkend.map(function (m) { return m.pipeline + ' · ' + m.mijlpaal + ' heeft ' + (m.rol || 'geen rol') + ', op naam ' + (m.voorstel || 'geen rol'); }).join('; ')) + '. Zet het recht in Beheer → Mijlpalen; de overstap past dit niet aan.</div>' : '');  // v7.9.1 (review r3, R4): alleen een signaal
         else if (p && st[0] === 'redenen') keuzes = (p.redenen || []).map(function (x, i) { var gekozen = v79Keuze('reden:' + x.reden, x.voorstel); return '<div class="v79-keuze"><span>' + esc(x.reden) + ' (' + esc(x.aantal) + '×)</span><select data-v79reden="' + i + '" aria-label="Reden voor ' + esc(x.reden) + '"><option value="">kies een reden</option>' + (p.lijst || []).map(function (l) { return '<option' + (l === gekozen ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select></div>'; }).join('') || '<div class="hint">Alle redenen staan al in de lijst.</div>';
-        else if (p && st[0] === 'kansen') keuzes = v79KansenHtml(p, false);  // v7.9.4 (bouwpunt 3)
+        else if (p && st[0] === 'kansen') keuzes = v79KansenHtml(p, false);  // v7.9.4
         else if (p) keuzes = '<div class="r-meta">Proefdraai: ' + esc(Object.keys(p).filter(function (k) { return typeof p[k] === 'number'; }).map(function (k) { return k + ' ' + p[k]; }).join(' · ')) + '</div>';
         return '<div class="v79-stap" id="v79stap-' + st[0] + '"><div class="r-titel" tabindex="-1">' + esc(st[1]) + ' <small class="zacht">' + esc(v79Telling(st[0], S0)) + '</small></div><div class="hint" style="margin-top:2px">' + esc(st[0] === 'fasen' && v792() ? FASEN_TEKST_792 : st[2]) + '</div>' + keuzes +
           '<div class="balk"><button class="knop licht klein" data-v79="' + st[0] + ':proef">Proefdraaien</button><button class="knop licht klein" data-v79="' + st[0] + ':toepassen"' + (p && !p.alGedaan && !(st[0] === 'fasen' && !(p.mijlpalen || []).length) ? '' : ' disabled') + '>Toepassen</button></div></div>';
@@ -6110,7 +6111,7 @@
   function isDesk() { return document.body.classList.contains('desk'); }
   function zetDesk() { document.body.classList.toggle('desk', !!(deskMq && deskMq.matches)); }
   function ymd(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
-  function basisKlaar() { return CRM.basis ? Promise.resolve(CRM.basis) : laadCrmBasis(); }  // v7.9.4 r5: zie laadCrmBasis
+  function basisKlaar() { return CRM.basis ? Promise.resolve(CRM.basis) : laadCrmBasis(); }  // v7.9.4
   function startApp() {
     if (!CRM.basis) { var bw = uitBewaard('aa_cache_crm'); if (bw && bw.scholen && bw.ik) { CRM.basis = bw; zetRechten(); } }  // v4.0: rechten kennen voordat een scherm opent
     var h = (location.hash || '').replace('#', '');

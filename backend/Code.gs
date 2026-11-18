@@ -8444,7 +8444,7 @@ var CONTRACTEN = [
   ['geen_target_op_facturatie', 'Geen doelpad op het factuurpatroon', 'beheerder'],
   ['gewonnen_is_getekend', 'Gewonnen is getekend', 'eigenaar van de kans'],
   ['lopend_project_heeft_contract', 'Lopend project heeft een contractwaarde', 'accountmanager'],
-  ['kans_heeft_schooljaar_en_klant', 'Open kans of winst van dit schooljaar heeft schooljaar en klant', 'eigenaar van de kans'],  // v7.9.4 (bouwpunt 2): ook de winsten
+  ['kans_heeft_schooljaar_en_klant', 'Open kans of winst (van dit schooljaar of zonder schooljaar) heeft schooljaar en klant', 'eigenaar van de kans'],  // v7.9.4 (bouwpunt 2): ook de winsten; r7 (R7-D4)
   ['termijn_verzonden_heeft_factuurnummer', 'Verzonden termijn heeft een uniek factuurnummer', 'boekhouder'],
   ['tarief_echt', 'Tarief is echt', 'accountmanager'],
   ['verlenging_bekend', 'Verlengingsstatus bekend', 'accountmanager'],
@@ -8524,7 +8524,7 @@ function datacontracten(S) {
   var slot = {};
   tellend.forEach(function (w) { if (w.naar !== 'gewonnen' && w.naar !== 'verloren') return; var k = String(w.kansId), h = slot[k]; if (!h || volgordeWerkelijk(h, w) < 0) slot[k] = w; });
   // v7.9.4 (bouwpunt 2): het schooljaar van een winst. Herstel r1 (K3, R794-3): dezelfde volgorde als M04 (winstSchooljaar): Kansen.schooljaar, dan het project,
-  // dan de akkoorddatum (de werkelijke datum van de laatste wissel naar gewonnen, anders Kansen.gesloten); zonder alle drie '' (dan toetst geen contract hem)
+  // dan de akkoorddatum (de werkelijke datum van de laatste wissel naar gewonnen, anders Kansen.gesloten); zonder alle drie '' (herstel r6, R6-2: dan toetst 16 hem)
   var pSj = projectSchooljaren(S.trajecten);
   var winstVanSj = function (k) {
     var w = slot[String(k.id)], akkoord = w && w.naar === 'gewonnen' && w.werkelijkeDatum ? w.werkelijkeDatum : k.gesloten;
@@ -9089,12 +9089,15 @@ function sturingCijfers(peildatum) {
     var ex = { dag: dag, fractie: Math.round(fr * 10000) / 10000, bron: curve.bron || '', noemer: N.waarde, noemerLabel: N.label, achter: standBlok || m04Leeg ? '' : Math.round(totM04 - dp) };  // v7.9.4: zonder M04 geen achterstand
     if (m04Leeg && !standBlok) ex.achterReden = r04;  // herstel r3 (R3-D1)
     else if (zonderGetekend && !standBlok) ex.zonderGetekend = zonderGetekend;  // herstel r4 (R4-3): deels getekend, die winsten tellen niet mee
+    if (!m04Leeg && zonderSj04 && !standBlok) ex.zonderSchooljaar = zonderSj04;  // herstel r7 (R7-2): telt niet mee, zoals bij M04
     if (doelB !== null && curve.bestaand instanceof Array && curve.nieuw instanceof Array) { ex.bestaand = Math.round(doelB * curveOp(curve.bestaand, dag)); ex.nieuw = Math.round(doelN * curveOp(curve.nieuw, dag)); }
     C.doelpad = { waarde: dp, extra: ex };
   }
   // herstel r3 (R3-D1): zonder waarde van M04 geen dekking en geen "nog te vinden" (leeg met de reden), nooit 0 % of het hele jaardoel
+  var x07 = nBlok || standBlok || m04Leeg ? null : { nogTeVinden: Math.round(N.waarde - totM04 - totM06), noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst, zonderGetekend: zonderGetekend };  // herstel r4 (R4-3)
+  if (x07 && zonderSj04) x07.zonderSchooljaar = zonderSj04;  // herstel r7 (R7-2): telt niet mee, zoals bij M04
   C.dekking = nBlok ? { geblokkeerd: nBlok } : standBlok ? { geblokkeerd: standBlok } : m04Leeg ? { waarde: null, extra: { reden: r04, noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst } }
-    : { waarde: Math.round(1000 * (totM04 + totM06) / N.waarde) / 10, extra: { nogTeVinden: Math.round(N.waarde - totM04 - totM06), noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst, zonderGetekend: zonderGetekend } };  // herstel r4 (R4-3)
+    : { waarde: Math.round(1000 * (totM04 + totM06) / N.waarde) / 10, extra: x07 };
   // M08: deals (per kans één, N8) met akkoorddatum in het schooljaar t/m de peildatum; de maand apart; zonder werkelijke datum apart
   // v7.9.4 (bouwpunt 4): de getekende contractwaarde van het project (Trajecten.contractwaarde, zoals M04), nooit de geschatte Fasewissels.waarde (bij een wissel uit
   // de tijdlijn, Capsule of een import is dat Kansen.waarde); een deal zonder project met contractwaarde staat apart (zonderGetekend), niet als bedrag
@@ -9248,7 +9251,9 @@ function sturingCijfers(peildatum) {
   });
   // v7.9.4 herstel r6 (R6-1): M26 en M28 per termijn: de facturen van dit schooljaar (verzonden vanaf 1 augustus) van elk project, zoals Exact en Financiën per
   // maand; verzonden en betaald zoals financienProject (op een eerdere peildatum t/m die dag, ouderdom tot de peildatum; vandaag zoals Financiën)
-  Object.keys(D.fac).forEach(function (id) { D.fac[id].forEach(function (x) {
+  // herstel r7 (R7-D3): alleen van een bestaand project, zoals Financiën (apiVerwijder laat de termijnen staan; contract 17 meldt ze)
+  var tBest = perId(ts);
+  Object.keys(D.fac).forEach(function (id) { if (tBest[id]) D.fac[id].forEach(function (x) {
     var v = verzondenVan(x), b = betaaldVan(x), c = centen(x.bedrag);
     if (opPeil && v && v.datum > peildatum) v = null;
     if (opPeil && b && b.datum > peildatum) b = null;

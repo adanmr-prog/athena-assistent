@@ -19,6 +19,8 @@
  * Herstel r6: een slottermijn van een project van vorig schooljaar (M26 en M28 geslaagd tegen Exact), een open junitermijn naast een export van het boekjaar
  * (onverklaard, niet "dekt niet"; zonder de melding dat niets vergeleken is), de lopende maand zonder factuur in het verkoopboek (bron), M26 per project van
  * het schooljaar (definitie) en een lopend project zonder contractwaarde (M04 en M07 invoer); vier mutanten van het harnas erbij.
+ * Herstel r7: een eerdere maand direct na het einde van het verkoopboek dekt niet (alleen de maand van de run, R7-1), en een termijn van een verwijderd project
+ * telt aan de kant van Athena niet (R7-D3); één mutant erbij.
  *   node test/vergelijk_sturing_test.js   → ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1) */
 'use strict';
 var fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), cp = require('child_process');
@@ -434,6 +436,22 @@ var runD2 = draai(['--export', EXPORT_D, '--referentie', refD3, '--exact-verkoop
 eis(runD2.uit.join() === 'M26 ' + perV + ' gezakt (bron)' && runD2.code === 0, 'harnasdekking (3): een verkoopboek dat het venster dekt en afwijkt, is bron; september (zonder factuur, tussen de eerste en de laatste) telt als gedekt (' + runD2.uit.join(' | ') + '; exit ' + runD2.code + ')');
 var runD3 = draai(['--export', EXPORT_D, '--referentie', refD3, '--exact-verkoop', VERKOOP_HEEL]);
 eis(runD3.uit.join() === 'M26 ' + perV + ' gezakt (onverklaard)' && runD3.code === 1, 'harnasdekking (3): een verkoopboek dat het venster dekt en klopt, wijst niet naar de bron (' + runD3.uit.join(' | ') + '; exit ' + runD3.code + ')');
+// herstel r7 (R7-1, R7-D1): de maand van de peildatum geldt alleen als gedekt (export t/m de maand ervoor) als het de maand van de run is (--peildatum, standaard
+// vandaag). Een regel op een eerdere peildatum in de maand direct na het einde van het verkoopboek (t/m augustus, termijn op 15 september) is niet gedekt
+var perS9 = jV + '-09', expD5 = kopie(expD);
+expD5.tabellen.Facturen.push({ id: 'harnas-d3', trajectId: 'harnas-td', omschrijving: 'Verzonnen termijn', bedrag: 3000, datum: jV + '-09-15', status: 'betaald', factuurnummer: '978003', verzonden: jV + '-09-15', betaald: jV + '-09-15', aangemaakt: jV + '-09-15 09:00' });
+var EXPORT_D5 = path.join(TMP, 'export-dekking-september.json'); fs.writeFileSync(EXPORT_D5, JSON.stringify(expD5));
+var aD5 = waardeVan(H.laad({ export: EXPORT_D5 }), 'M26', perS9), refD5 = schrijfRef('referentie_d5.csv', [['M26', perS9, Math.round(aD5.waarde * 1.5 + 4321), '']]);
+var runD5 = draai(['--export', EXPORT_D5, '--referentie', refD5, '--exact-verkoop', VERKOOP_AUG]);
+eis(runD5.uit.join() === 'M26 ' + perS9 + ' geblokkeerd (export dekt de periode niet)' && runD5.code === 3 && runD5.melding.some(function (l) { return /de export kan de bron niet toetsen/.test(l); }),
+  'herstel r7 (R7-1): een regel op een eerdere peildatum in de maand direct na het einde van het verkoopboek: geblokkeerd (export dekt de periode niet), exitcode 3, niet bron (' + runD5.uit.join(' | ') + '; exit ' + runD5.code + ')');
+var runD6 = draai(['--export', EXPORT_D5, '--referentie', refD5, '--exact-verkoop', VERKOOP_AUG, '--peildatum', jV + '-09-30']);
+eis(runD6.uit.join() === 'M26 ' + perS9 + ' gezakt (bron)' && runD6.code === 0, 'herstel r7 (R7-1): met --peildatum in die maand (de run van toen) is het de lopende maand: bron, exitcode 0 (' + runD6.uit.join(' | ') + '; exit ' + runD6.code + ')');
+// herstel r7 (R7-D3): ook aan de kant van Athena telt het harnas een termijn zonder bestaand project niet (zoals M26 en Financiën); Exact = Athena zonder de wees
+var expW7 = kopie(expD); expW7.tabellen.Facturen.push({ id: 'harnas-wees', trajectId: 'harnas-weg', omschrijving: 'Verzonnen termijn', bedrag: 900, datum: jV + '-10-20', status: 'betaald', factuurnummer: '978009', verzonden: jV + '-10-20', betaald: jV + '-10-20', aangemaakt: jV + '-10-20 09:00' });
+var EXPORT_W7 = path.join(TMP, 'export-wees.json'); fs.writeFileSync(EXPORT_W7, JSON.stringify(expW7));
+var LW7 = H.laad({ export: EXPORT_W7, 'exact-verkoop': VERKOOP_HEEL }), rW7 = { id: 'gefactureerd', per: H.periodeUit(LW7.ctx, perV, LW7.vandaag) };
+eis(typeof H.exactWijkt === 'function' && H.exactWijkt(LW7, rW7) === '', 'herstel r7 (R7-D3): een termijn van een verwijderd project telt aan de kant van Athena niet mee: een verkoopboek zonder die termijn wijkt niet af (' + (H.exactWijkt ? H.exactWijkt(LW7, rW7) : 'geen exactWijkt') + ')');
 
 // (4) M28 met de kolom Open en zonder betaaldatum: Open is de stand op de dag van de export. Zonder --exact-open-stand: geblokkeerd (stand van Open onbekend); met
 // een standdatum die niet de peildatum is: geblokkeerd (export zonder betaaldatum); met de standdatum gelijk aan de peildatum een vergelijking zoals voorheen
@@ -552,14 +570,16 @@ var laag = function (run) { return run.melding.some(function (l) { return /zeker
 var runZ1 = draai(['--export', EXPORT_Z, '--referentie', refZ]), runZ0 = draai(['--export', EXPORT, '--referentie', refZ]), runZ2 = draai(['--export', EXPORT_Z, '--referentie', refZ2]);
 eis(runZ1.uit.join() === 'M06 ' + vorigeMaand + ' geslaagd' && runZ1.code === 0 && laag(runZ1) && !laag(runZ0) && !laag(runZ2) && runZ2.code === 0,
   'harnasdekking (8): M06 op een eerdere peildatum met een wissel met zekerheid laag geeft een melding (geen blokkade); de seed, de stand van vandaag en M26 niet (' + runZ1.melding.concat(runZ0.melding, runZ2.melding).join(' | ') + ')');
-// Zes (herstel r6: tien) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
+// Zes (herstel r6: tien; r7: elf) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
 var metMelding = function (u, re) { return u.meldingen.some(function (l) { return re.test(l); }); };
 [['dekking (3, 4)', 'return datums.every(function (d) {', 'return true || datums.every(function (d) {', function (m) {
     return m.vergelijk({ export: EXPORT_D, referentie: refD3, 'exact-verkoop': VERKOOP_AUG }).uit[0] === 'M26 ' + perV + ' gezakt (bron)' &&
       (maand === sjStart.slice(0, 7) || m.vergelijk({ export: EXPORT_O, referentie: refO7, 'exact-open': EXACT_LAAT, 'exact-open-stand': vandaag }).uit[0] !== 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'); }],
   // herstel r6: vier erbij (de lopende maand en M28 op de factuurdatum (R6-1), de oude definitie van M26 (nit R6-4) en RAAKT.dekking (nit R6-2))
   ['lopende maand (R6-1)', ' || (m === pM && lM >= vorige)', '', function (m) { return m.vergelijk({ export: EXPORT_S, referentie: path.join(TMP, 'referentie_s.csv'), 'exact-verkoop': path.join(TMP, 'verkoop_lopend.csv') }).uit[0] === 'M26 ' + maand + ' geblokkeerd (export dekt de periode niet)'; }],
-  ['M28 op de factuurdatum (R6-1)', "if (v && v.datum >= van && v.datum <= d && !(b && b.datum <= d))", "if (v && v.datum <= d && !(b && b.datum <= d))", function (m) { return m.vergelijk({ export: EXPORT_J, referentie: path.join(TMP, 'referentie_j.csv'), 'exact-open': EXACT_BOEKJAAR, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'; }],
+  ['M28 op de factuurdatum (R6-1)', "v && v.datum >= van && v.datum <= d && !(b && b.datum <= d))", "v && v.datum <= d && !(b && b.datum <= d))", function (m) { return m.vergelijk({ export: EXPORT_J, referentie: path.join(TMP, 'referentie_j.csv'), 'exact-open': EXACT_BOEKJAAR, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'; }],
+  // herstel r7 (R7-1, R7-D1): de versoepeling op elke peildatum (zoals herstel r6)
+  ['versoepeling op elke peildatum (R7-1)', "if (pM !== String(R || '').slice(0, 7)) pM = '';", '', function (m) { return m.vergelijk({ export: EXPORT_D5, referentie: refD5, 'exact-verkoop': VERKOOP_AUG }).uit[0] === 'M26 ' + perS9 + ' gezakt (bron)'; }],
   ['oude definitie M26 (nit R6-4)', '  gefactureerd: function (L, r) {', '  gefactureerdUit: function (L, r) {', function (m) { return m.vergelijk({ export: EXPORT_R, referentie: path.join(TMP, 'referentie_m.csv') }).uit[0] === 'M26 ' + maand + ' gezakt (onverklaard)'; }],
   ['RAAKT.dekking (nit R6-2)', "'lopend_project_heeft_contract', 'noemerbewaking', 'overstap:fasen', 'overstap:capsule', 'overstap:projecten'],", "'noemerbewaking', 'overstap:fasen', 'overstap:capsule'],", function (m) { var u = m.vergelijk({ export: EXPORT_3, referentie: REF_3 }); return u.uit[1] === 'M07 ' + maand + ' gezakt (onverklaard)' && u.exit === 1; }],
   ['standdatum van Open (4)', 'if (!X.metBetaald && !(L.openStand && opDag))', 'if (!X.metBetaald && d < L.vandaag)', function (m) { return m.vergelijk({ export: EXPORT, referentie: refO4, 'exact-open': EXACT_OPEN_ANDERS }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }],
@@ -618,7 +638,7 @@ eis(runVl.fout.length === 0 && runVl.uit.length === dataRegels && !runVl.uit.som
 
 /* ---- 8. de uitvoer: patroon, geen namen, geen bedragen ---- */
 var runs = [runA, runB, runC, runC2, runV, runL, runLx, runLp, runLn, runLz, runQ, runU, runO, runOc, runOk, runX, runXp, runE1, runE2, runE3, runE4, runE7, runE8, runB1, runVl, runS0, runS,
-  runD1, runD2, runD3, runO1, runO2, runO3, runO7, runW1, runW2, runZ0, runZ1, runZ2, runR1, runJ, runS, runM, run3];  // harnasdekking; herstel r6
+  runD1, runD2, runD3, runO1, runO2, runO3, runO7, runW1, runW2, runZ0, runZ1, runZ2, runR1, runJ, runS, runM, run3, runD5, runD6];  // harnasdekking; herstel r6, r7
 var stdoutRegels = runs.reduce(function (s, r) { return s.concat(r.uit); }, []), meldingen = runs.reduce(function (s, r) { return s.concat(r.melding); }, []);
 var nietPatroon = stdoutRegels.filter(function (l) { return !PATROON.test(l); });
 eis(stdoutRegels.length > 0 && !nietPatroon.length, 'elke uitvoerregel matcht ' + PATROON + (nietPatroon.length ? ' (niet: ' + nietPatroon.slice(0, 3).join(' | ') + ')' : ''));

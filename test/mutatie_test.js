@@ -1,7 +1,7 @@
 // v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien; v7.9.3: eenentwintig; v7.9.4: achtendertig, na herstel r1 eenenveertig, na herstel r2 eenenvijftig, na herstel r3 zevenenvijftig, na herstel r4 negenenvijftig, na herstel r5 eenenzestig, na de harnasdekking tweeënzestig, na herstel r6 achtenzestig) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
 // onaangeraakt); per mutant draait `CODE_GS=<kopie> node test/node_rooktest.js`. Een mutant is "gedood" als de rooktest faalt
 // (exitcode ≠ 0, crash of timeout) en "OVERLEEFD" als hij ALLES GOED geeft: dan mist de rooktest een eis(...) voor die invariant.
-// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 67 van 68 gedood (v7.9.4 herstel r6, alle op één na; na de harnasdekking ≥ 61 van 62; na herstel r5 ≥ 60 van 61; na herstel r4 ≥ 58 van 59; na herstel r3 ≥ 56 van 57; na herstel r2 ≥ 50 van 51; daarvoor ≥ 40 van 41 en ≥ 37 van 38; was ≥ 20 van 21) (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
+// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 69 van 70 gedood (v7.9.4 herstel r7, alle op één na; na herstel r6 ≥ 67 van 68; na de harnasdekking ≥ 61 van 62; na herstel r5 ≥ 60 van 61; na herstel r4 ≥ 58 van 59; na herstel r3 ≥ 56 van 57; na herstel r2 ≥ 50 van 51; daarvoor ≥ 40 van 41 en ≥ 37 van 38; was ≥ 20 van 21) (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
 // v7.9 (review T3, T5): de noemerregel zonder waarde en zonder schooljaarcontrole, en het venster van de voorspelling één week opgeschoven.
 // v7.9.2: vraagtStart_niet_verplicht (een kans gaat zonder verwachte startdatum naar fase 5b bijna rond) en (review r1) fasenEffectief_5b_leeg (5b erft de
 // voorstelrol niet meer, zodat stap fasen een historische VO-wissel stil herziet). v7.9.3: fasen_herhaal_op_naam (opnieuw toepassen zoekt een fase alleen op
@@ -14,7 +14,7 @@
 var fs = require('fs'), path = require('path'), cp = require('child_process');
 var R = path.join(__dirname, '..'), BRON = path.join(R, 'backend/Code.gs'), ROOKTEST = path.join(__dirname, 'node_rooktest.js');
 var UIT_MAP = path.join(R, 'test/shots/robuust'), UIT = path.join(UIT_MAP, 'mutatie.json');
-var TIMEOUT_MS = 120000, MIN_GEDOOD = 67;  // v7.9.4 herstel r6: achtenzestig mutanten, norm ≥ 67 (zes erbij: R6-1, R6-2 en de nits R6-3 en R6-4); v7.9.4 harnasdekking: tweeënzestig mutanten, norm ≥ 61 (één erbij: de definitie van M26); v7.9.4 herstel r5: eenenzestig mutanten, norm ≥ 60 (twee erbij: R5-C1 en R5-C2); v7.9.4 herstel r4: negenenvijftig mutanten, norm ≥ 58 (twee erbij: R4-2b en R4-3); v7.9.4 herstel r3: zevenenvijftig mutanten, norm ≥ 56 (zes erbij: R3-D1, R2, R3, R4, N1 en N2); v7.9.4 herstel r2: eenenvijftig mutanten, norm ≥ 50 (tien erbij: A-B3 tot A-B7, B-B1, B-B4, B-B5 en twee voor B-B9); v7.9.4 herstel r1: eenenveertig mutanten, norm ≥ 40 (drie erbij: K1, K3 en K6); v7.9.4: achtendertig mutanten, norm ≥ 37 (alle op één na; stap 2: acht erbij voor de bouwpunten 4, 7, 8 en 9); v7.9 (review): vijftien mutanten, norm ≥ 14; v7.9.2: zestien, norm ≥ 15; review r1: zeventien, norm ≥ 16; v7.9.3: achttien, norm ≥ 17; v7.9.3 review r1: negentien, norm ≥ 18; review r2: twintig, norm ≥ 19; review r3: eenentwintig, norm ≥ 20
+var TIMEOUT_MS = 120000, MIN_GEDOOD = 69;  // v7.9.4 herstel r7: zeventig mutanten, norm ≥ 69 (twee erbij: R7-D3 en R7-2); herstel r6: achtenzestig mutanten, norm ≥ 67 (zes erbij: R6-1, R6-2 en de nits R6-3 en R6-4); v7.9.4 harnasdekking: tweeënzestig mutanten, norm ≥ 61 (één erbij: de definitie van M26); v7.9.4 herstel r5: eenenzestig mutanten, norm ≥ 60 (twee erbij: R5-C1 en R5-C2); v7.9.4 herstel r4: negenenvijftig mutanten, norm ≥ 58 (twee erbij: R4-2b en R4-3); v7.9.4 herstel r3: zevenenvijftig mutanten, norm ≥ 56 (zes erbij: R3-D1, R2, R3, R4, N1 en N2); v7.9.4 herstel r2: eenenvijftig mutanten, norm ≥ 50 (tien erbij: A-B3 tot A-B7, B-B1, B-B4, B-B5 en twee voor B-B9); v7.9.4 herstel r1: eenenveertig mutanten, norm ≥ 40 (drie erbij: K1, K3 en K6); v7.9.4: achtendertig mutanten, norm ≥ 37 (alle op één na; stap 2: acht erbij voor de bouwpunten 4, 7, 8 en 9); v7.9 (review): vijftien mutanten, norm ≥ 14; v7.9.2: zestien, norm ≥ 15; review r1: zeventien, norm ≥ 16; v7.9.3: achttien, norm ≥ 17; v7.9.3 review r1: negentien, norm ≥ 18; review r2: twintig, norm ≥ 19; review r3: eenentwintig, norm ≥ 20
 
 // De kopieën staan buiten de repo: standaard in de scratchpad van de sessie (--map overschrijft), nooit naast het origineel.
 var argMap = process.argv.indexOf('--map');
@@ -297,8 +297,8 @@ var MUTANTEN = [
     vervang: "return KLANT_DELEN.filter(function (d) { return o[d]; /* MUTANT */ })",
     voorstel: "eis(deel(M.M04, 'nieuw').waarde === null, 'het deel nieuw is leeg, niet weg');" },
   { id: 'dekking_zonder_getekend_weg', gebied: 'sturing (v7.9.4 herstel r4)', invariant: 'deels getekend: M07 noemt het aantal winsten zonder getekende waarde, dat niet meetelt (R4-3)',
-    zoek: "noemerLabel: N.label, scope: scopeTekst, zonderGetekend: zonderGetekend } };",
-    vervang: "noemerLabel: N.label, scope: scopeTekst } };  // MUTANT",
+    zoek: "noemerLabel: N.label, scope: scopeTekst, zonderGetekend: zonderGetekend };",
+    vervang: "noemerLabel: N.label, scope: scopeTekst };  // MUTANT",
     voorstel: "eis(M.M07.extra.zonderGetekend === 1, 'M07 noemt de winsten zonder getekende waarde');" },
   // v7.9.4 herstel r5 (review ronde 5): twee erbij
   { id: 'stilstand_zonder_contact_nul', gebied: 'sturing (v7.9.4 herstel r5)', invariant: 'heeft geen open kans een laatste contact, dan is M20 leeg met het aantal ernaast, geen stille 0 (R5-C1)',
@@ -316,7 +316,7 @@ var MUTANTEN = [
     voorstel: "eis(!/in de maand/.test(ctx.METRIEKEN.gefactureerd.definitie), 'M26 is geen maandcijfer');" },
   // v7.9.4 herstel r6: zes erbij (R6-1 twee, R6-2 twee, de nits R6-3 en R6-4)
   { id: 'm26_alleen_projecten_sj', gebied: 'sturing (v7.9.4 herstel r6)', invariant: 'M26 en M28 tellen de facturen van dit schooljaar van elk project, ook een slottermijn van een project van vorig schooljaar (R6-1)',
-    zoek: "  Object.keys(D.fac).forEach(function (id) { D.fac[id].forEach(function (x) {",
+    zoek: "  Object.keys(D.fac).forEach(function (id) { if (tBest[id]) D.fac[id].forEach(function (x) {",
     vervang: "  Object.keys(D.fac).forEach(function (id) { var t0 = ts.filter(function (t) { return t.id === id; })[0]; if (!t0 || String(t0.schooljaar) !== sj) return; /* MUTANT */ D.fac[id].forEach(function (x) {",
     voorstel: "eis(dV('gefactureerd') === 3000, 'M26 telt de slottermijn van een project van vorig schooljaar');" },
   { id: 'm28_alle_datums', gebied: 'sturing (v7.9.4 herstel r6)', invariant: 'M28 telt alleen de facturen van dit schooljaar (verzonden vanaf 1 augustus), geen open termijn van juli (R6-1)',
@@ -338,7 +338,16 @@ var MUTANTEN = [
   { id: 'm20_capsule_aanmaak', gebied: 'sturing (v7.9.4 herstel r6)', invariant: 'op een eerdere peildatum valt alleen een kans uit Athena terug op de aanmaak; een Capsule-kans zonder contact t/m die dag is zonder laatste contact (nit R6-4)',
     zoek: "        var eigen = !k.capsuleId;",
     vervang: "        var eigen = true;  // MUTANT",
-    voorstel: "eis(S20.waarde === 1 && S20.extra.zonderContact === 2, 'Capsule-kans zonder contact op de peildatum is niet stil');" }
+    voorstel: "eis(S20.waarde === 1 && S20.extra.zonderContact === 2, 'Capsule-kans zonder contact op de peildatum is niet stil');" },
+  // v7.9.4 herstel r7: twee erbij (R7-D3 en R7-2)
+  { id: 'm26_wees_telt', gebied: 'sturing (v7.9.4 herstel r7)', invariant: 'M26 en M28 tellen een termijn zonder bestaand project niet, zoals Financiën (R7-D3)',
+    zoek: "  Object.keys(D.fac).forEach(function (id) { if (tBest[id]) D.fac[id].forEach(function (x) {",
+    vervang: "  Object.keys(D.fac).forEach(function (id) { if (tBest || true) D.fac[id].forEach(function (x) {  /* MUTANT */",
+    voorstel: "eis(c(N2.gefactureerd.waarde) === f2, 'M26 gelijk aan Financiën na het verwijderen van een project');" },
+  { id: 'dekking_zonder_sj_weg', gebied: 'sturing (v7.9.4 herstel r7)', invariant: 'naast een getekende winst noemen M05 en M07 de winsten zonder schooljaar (telt niet mee) (R7-2)',
+    zoek: "  if (x07 && zonderSj04) x07.zonderSchooljaar = zonderSj04;",
+    vervang: "  /* MUTANT */",
+    voorstel: "eis(M.M07.extra.zonderSchooljaar === 1, 'M07 noemt de winst zonder schooljaar');" }
 ];
 
 var fouten = 0, overleefd = 0, gedood = 0, t0 = Date.now();
@@ -405,7 +414,7 @@ resultaat.gedood = gedood; resultaat.overleefd = overleefd; resultaat.looptijdS 
 resultaat.geslaagd = gedood >= MIN_GEDOOD && resultaat.mutanten.every(function (r) { return r.toegepast; });
 fs.writeFileSync(UIT, JSON.stringify(resultaat, null, 2));
 console.log('     ' + gedood + ' van ' + MUTANTEN.length + ' gedood, ' + overleefd + ' overleefd; json: ' + path.relative(R, UIT) + '; looptijd ' + looptijdS + ' s');
-// Oordeel: ≥ 67 van 68 gedood (v7.9.4 herstel r6: zes erbij; harnasdekking: één erbij, ≥ 61 van 62; herstel r5: twee erbij, ≥ 60 van 61; herstel r4: twee erbij, ≥ 58 van 59; herstel r3: zes erbij, ≥ 56 van 57; herstel r2: tien erbij, ≥ 50 van 51; herstel r1: drie erbij, ≥ 40 van 41; v7.9.4: negen mutanten in stap 1 en acht in stap 2 erbij, ≥ 37 van 38); daarvoor ≥ 20 van 21 (v7.9.3 na review r3; na review r2 ≥ 19 van 20; na review r1 ≥ 18 van 19; v7.9.3 ≥ 17 van 18; v7.9.2 na review r1 ≥ 16 van 17; daarvoor ≥ 15 van 16; v7.9 na de review ≥ 14 van 15; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
+// Oordeel: ≥ 69 van 70 gedood (v7.9.4 herstel r7: twee erbij; herstel r6: zes erbij, ≥ 67 van 68; harnasdekking: één erbij, ≥ 61 van 62; herstel r5: twee erbij, ≥ 60 van 61; herstel r4: twee erbij, ≥ 58 van 59; herstel r3: zes erbij, ≥ 56 van 57; herstel r2: tien erbij, ≥ 50 van 51; herstel r1: drie erbij, ≥ 40 van 41; v7.9.4: negen mutanten in stap 1 en acht in stap 2 erbij, ≥ 37 van 38); daarvoor ≥ 20 van 21 (v7.9.3 na review r3; na review r2 ≥ 19 van 20; na review r1 ≥ 18 van 19; v7.9.3 ≥ 17 van 18; v7.9.2 na review r1 ≥ 16 van 17; daarvoor ≥ 15 van 16; v7.9 na de review ≥ 14 van 15; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
 if (resultaat.geslaagd) console.log('ALLES GOED' + (overleefd ? ' (met ' + overleefd + ' overlevende mutant: zie de FOUT-regel hierboven)' : ''));
 else console.log('FOUTEN: ' + fouten);
 process.exit(resultaat.geslaagd ? 0 : 1);
