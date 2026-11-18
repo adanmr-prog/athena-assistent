@@ -5220,6 +5220,31 @@ function fout794(naam, e) { eis(false, 'v7.9.4 ' + naam + ': onverwachte fout ' 
   } catch (e) { fout794('harnasdekking definitie', e); } finally { standTerug(st); }
 })();
 
+/* ---- v7.9.4 herstel r11 (R11-1b): een stand op zijn eigen peildatum (live, de maandstand van de trigger, een tussenstand) telt M26–M28 zoals Financiën, niet
+   op datum: een verzonden termijn is open, ook met een (geplande) verzenddatum erna, en elke ingevulde betaaldatum telt als betaald. Dezelfde peildatum later
+   opnieuw gerekend (hier: gisteren) telt op datum. De definitie in het register, en dus in de bevroren stand, zegt dat. Verzonnen gegevens. ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var vandaag = plusDagen(0), gisteren = plusDagen(-1), sjStart = sjNu().slice(0, 4) + '-08-01', vroeg = plusDagen(-20) < sjStart ? sjStart : plusDagen(-20), tr = ctx.lees('Trajecten')[0];
+    var cijfer = function (p, id) { var w = null; ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.sturingCijfers(p).blokken.forEach(function (b) { b.cijfers.forEach(function (c) { if (c.id === id) w = c.waarde; }); }); return w; };
+    var voor = cijfer(vandaag, 'openstaand'), voorG = cijfer(gisteren, 'openstaand');
+    var f = function (id, v, status, b) { return { id: id, trajectId: tr.id, omschrijving: 'Verzonnen termijn', bedrag: 900, datum: v, status: status, factuurnummer: 'R11' + id, verzonden: v, betaald: b, aangemaakt: vroeg + ' 09:00' }; };
+    // a: verzonden vóór de peildatum, betaald (gepland) na vandaag; b: verzonden met een factuurdatum na vandaag (zoals apiExactImport hem vastlegt)
+    ctx.schrijfVeel('Facturen', cx([f('a', vroeg, 'betaald', plusDagen(5)), f('b', plusDagen(3), 'verzonden', '')]));
+    ctx.verwijderRijen('Standen', function () { return true; }); ctx._LEES = {}; ctx.GEBRUIKER = null; ctx.sturingBevriezen(vandaag, 'tussenstand');
+    var rij = function (id) { return ctx.lees('Standen').filter(function (r) { return r.metriek === id && !r.uitsplitsing && String(r.peildatum).slice(0, 10) === vandaag; })[0] || {}; }, r28 = rij('openstaand'), r26 = rij('gefactureerd');
+    eis(cijfer(vandaag, 'openstaand') === voor + 900 && Number(r28.waarde) === voor + 900,
+      'v7.9.4 herstel r11 (R11-1b): op de dag zelf (live en in een tussenstand van vandaag) telt M28 zoals Financiën: de termijn met een betaaldatum na vandaag als betaald, die met een verzenddatum na vandaag als open (' + [voor, cijfer(vandaag, 'openstaand'), r28.waarde].join(' → ') + ')');
+    eis(vroeg > gisteren || cijfer(gisteren, 'openstaand') === voorG + 900,
+      'v7.9.4 herstel r11 (R11-1b): op een eerdere peildatum telt M28 op datum: de termijn die na die dag betaald is als open, die met een latere verzenddatum niet (' + voorG + ' → ' + cijfer(gisteren, 'openstaand') + ')');
+    eis([r28.definitie, ctx.METRIEKEN.openstaand.definitie].every(function (d) { return /In een stand op een eerdere peildatum: verzonden en niet betaald t\/m die dag/.test(d) && /Op de dag zelf \(live, en ook een maand- of tussenstand die die dag bevroren is\) telt het zoals Financiën/.test(d) && /elke ingevulde betaaldatum telt als betaald/.test(d) && /later opnieuw gerekend telt op datum/.test(d) && !/In een stand: verzonden/.test(d); }),
+      'v7.9.4 herstel r11 (R11-1b): de definitie van M28 (register en bevroren stand) zegt dat een stand op de dag zelf telt zoals Financiën en een eerdere peildatum op datum (' + r28.definitie + ')');
+    eis(['geleverd', 'gefactureerd', 'nogTeFactureren'].every(function (k) { return /Op de dag zelf \(live, en ook een maand- of tussenstand die die dag bevroren is\) telt het zoals Financiën/.test(ctx.METRIEKEN[k].definitie); }) && /op de dag zelf t\/m het eind van die maand/.test(r26.definitie || ''),
+      'v7.9.4 herstel r11 (R11-1b): ook M25–M27 zeggen dat een stand op de dag zelf telt zoals Financiën (M26: t/m het eind van die maand) (' + r26.definitie + ')');
+  } catch (e) { fout794('herstel r11', e); } finally { standTerug(st); }
+})();
+
 /* ---- v7.9.4 herstel r2 (B-B3): §4 van docs/sturing-v7.9.md (de tekst die het MT aftekent) is per M-code gelijk aan de definitie in het register (METRIEKEN),
    behalve M16 (in het register vier regels: AP, AD, VO en deal). Wie een definitie in de code verandert, werkt §4 mee bij. ---- */
 (function () {

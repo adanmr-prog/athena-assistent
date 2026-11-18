@@ -23,8 +23,15 @@
  * telt aan de kant van Athena niet (R7-D3); één mutant erbij.
  * Herstel r8: --exact-open-stand is de grens, ook met een betaaldatum en bij --exact voor M26 (R8-1a), de maand van die dag is de maand van de run, en de
  * oude definitie "alle open posten" telt een termijn zonder project niet (R8-1b, via beoordeel); vijf mutanten erbij. Herstel r9: de stand van R8-1b
- * zonder verzend- of betaaldatum na vandaag, zodat de mutant niet van de dag afhangt. Let op (bestaand): dit bestand rekent met de echte dag en is alleen
- * buiten augustus tot begin oktober stabiel (VASTE_DATUM met test/tz_klok.js laat het op een andere dag draaien).
+ * zonder verzend- of betaaldatum na vandaag, zodat de mutant niet van de dag afhangt. Herstel r10 (R10-1a): een termijn met een verzend- of betaaldatum na
+ * vandaag en een referentie zoals Exact is nooit gezakt (definitie): zonder export onverklaard, met een export met Open bron; twee mutanten erbij.
+ * Herstel r11 (R11-1a): dezelfde factuur met een factuurdatum na vandaag in Athena en Exact wijkt niet af (de export telt hem op de stand van vandaag ook);
+ * (nit R11-3) de geplande datum van R10-1a A in de volgende maand, zodat de begrenzing voor de dekking elke dag getoetst wordt; twee mutanten erbij.
+ * Herstel r10 (nit R10-N1): het bestand rekent met de echte dag, maar de afwijkingen in de Exact- en XPS-exports liggen in dit schooljaar, de kopie heeft geen
+ * termijnen met een datum na vandaag, M06 telt alleen mee met open kansen van dit schooljaar en het voorbeeld schuift zo nodig hele jaren terug. Met VASTE_DATUM
+ * (test/tz_klok.js, ook voor de kindprocessen) groen gemeten op 2026-08-10, -12, -14 en -16, 2026-09-01, 2026-10-01, 2026-10-15, 2026-10-25, 2026-11-18,
+ * 2027-01-01, 2027-04-01, 2027-07-15, 2027-07-30, 2027-07-31, 2027-08-16 en 2027-10-15; rood alleen in de eerste dagen van augustus (2026-08-03, 2026-08-08, 2026-08-09, 2027-08-02):
+ * de seed heeft dan nog geen uren of facturen in het nieuwe schooljaar.
  *   node test/vergelijk_sturing_test.js   → ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1) */
 'use strict';
 var fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), cp = require('child_process');
@@ -59,7 +66,10 @@ var exp = exportVan(ctx);
 // Mutaties in de tijdelijke kopie (nooit in de seed): een gewonnen kans met een geschatte waarde die afwijkt van de getekende (oude definitie M08),
 // en elke termijn een uniek factuurnummer (zodat het contract termijn_verzonden_heeft_factuurnummer slaagt en M26 tot de bron kan komen)
 var kWinId = exp.tabellen.Kansen.filter(function (k) { return k.fase === 'gewonnen' && String(k.gesloten).slice(0, 10) >= sjStart; })[0].id;
+// herstel r10 (nit R10-N1): zonder de termijnen die de seed op sommige dagen met een verzend- of betaaldatum na vandaag maakt (zo'n factuur staat niet in Exact,
+// en Athena telt hem op de stand van vandaag als open of betaald): anders hangen de Exact-exports hieronder van de dag af
 function muteer(e) {
+  e.tabellen.Facturen = e.tabellen.Facturen.filter(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); return !(v && v.datum > vandaag) && !(b && b.datum > vandaag); });
   e.tabellen.Kansen.forEach(function (k) { if (k.id === kWinId) k.waarde = Number(k.waarde) + 11400; });
   e.tabellen.Facturen.forEach(function (f, i) { if (f.factuurnummer !== '' || f.verzonden || ['verzonden', 'betaald'].indexOf(f.status) >= 0) f.factuurnummer = String(970000 + i); });
   return e;
@@ -90,12 +100,14 @@ function verzondenOp(f) { return f.verzonden ? String(f.verzonden).slice(0, 10) 
 function nlDatum(d) { return d.slice(8, 10) + '-' + d.slice(5, 7) + '-' + d.slice(0, 4); }
 function nlBedrag(x) { return (Math.round(Number(x) * 100) / 100).toFixed(2).replace('.', ','); }
 var exactKop = fs.readFileSync(path.join(R, 'test/voorbeelden/facturen_export.csv'), 'utf8').replace(/^﻿/, '').split(/\r?\n/)[0];
-// extra: bij het bedrag van de eerste factuur; openExtra (v7.9.4): bij de kolom Open van de eerste factuur
+// extra: bij het bedrag van de eerste factuur van dit schooljaar; openExtra (v7.9.4): bij de kolom Open van die factuur. Herstel r10 (nit R10-N1): niet de eerste
+// factuur van de export, want die is van augustus tot in september van vorig schooljaar en telt dan niet in M26 en M28 (bron werd onverklaard)
+var fAnders = (exp.tabellen.Facturen.filter(function (f) { var v = verzondenOp(f); return v >= sjStart && v <= vandaag; })[0] || {}).id;
 function exactCsv(extra, openExtra) {
   var regels = [exactKop], i = 0;
   exp.tabellen.Facturen.forEach(function (f) {
     var v = verzondenOp(f); if (!v) return;
-    var bedrag = Number(f.bedrag) + (i === 0 ? extra : 0), betaald = f.status === 'betaald' || !!f.betaald, open = (betaald ? 0 : bedrag) + (i === 0 ? openExtra || 0 : 0); i++;
+    var bedrag = Number(f.bedrag) + (f.id === fAnders ? extra : 0), betaald = f.status === 'betaald' || !!f.betaald, open = (betaald ? 0 : bedrag) + (f.id === fAnders ? openExtra || 0 : 0); i++;
     regels.push(['"' + nlDatum(v) + '"', '"' + f.factuurnummer + '"', '"Termijn"', '""', '"Debiteur ' + i + '"', '"' + (30000 + i) + '"', '""', '"' + nlBedrag(bedrag) + '"', '"0"', '"' + nlBedrag(open) + '"', '""'].join(';'));
   });
   return regels.join('\n') + '\n';
@@ -103,18 +115,21 @@ function exactCsv(extra, openExtra) {
 // v7.9.4 (bouwpunt 15): het verkoopboek, zonder kolom Open en zonder betaaldatum
 function verkoopCsv(extra) {
   var regels = ['Factuurnummer;Factuurdatum;Debiteur;Omschrijving;Bedrag'], i = 0;
-  exp.tabellen.Facturen.forEach(function (f) { var v = verzondenOp(f); if (!v) return; i++; regels.push([f.factuurnummer, nlDatum(v), 'Debiteur ' + i, 'Termijn', nlBedrag(Number(f.bedrag) + (i === 1 ? extra : 0))].join(';')); });
+  exp.tabellen.Facturen.forEach(function (f) { var v = verzondenOp(f); if (!v) return; i++; regels.push([f.factuurnummer, nlDatum(v), 'Debiteur ' + i, 'Termijn', nlBedrag(Number(f.bedrag) + (f.id === fAnders ? extra : 0))].join(';')); });
   return regels.join('\n') + '\n';
 }
 var talent = {}, traject = {}; exp.tabellen.Talenten.forEach(function (t) { talent[t.id] = t; }); exp.tabellen.Trajecten.forEach(function (t) { traject[t.id] = t; });
 var xpsKop = fs.readFileSync(path.join(R, 'test/voorbeelden/xps_diensten.csv'), 'utf8').replace(/^﻿/, '').split(/\r?\n/)[0];
 function xpsRegel(dag, uren, xpsId, project) { return [dag, dag + ' 08:30', '', nlBedrag(uren), '', 'Dienst', 'Uitgevoerd', project, '', '', '', xpsId, '', project].join(';'); }
 // extraRegels (v7.9.4): verzonnen diensten erbij, zoals een dienst van een flexkracht zonder profiel in Athena
+// herstel r10 (nit R10-N1): extra komt bij de laatste week van dit schooljaar t/m vandaag (met een accountnummer), niet bij de eerste rij: die ligt van eind juli
+// tot in oktober in het vorige schooljaar, en dan telde de afwijking niet mee in M25 (run A onverklaard in plaats van bron)
+var iAnders = 0; exp.tabellen.TalentUren.forEach(function (u, i) { var d = ctx.maandagVanWeek(u.week); if (d >= sjStart && d <= vandaag && (talent[u.talentId] || {}).xpsId) iAnders = i; });
 function xpsCsv(extra, extraRegels) {
   var regels = [xpsKop];
   exp.tabellen.TalentUren.forEach(function (u, i) {
     var t = talent[u.talentId] || {}, p = traject[u.trajectId] || {}, dag = ctx.maandagVanWeek(u.week);
-    regels.push([dag, dag + ' 08:30', '', nlBedrag(Number(u.uren) + (i === 0 ? extra : 0)), '', 'Dienst', 'Uitgevoerd', u.xpsProject || '', '', '', '', t.xpsId || '', '', p.xpsProject || ''].join(';'));
+    regels.push([dag, dag + ' 08:30', '', nlBedrag(Number(u.uren) + (i === iAnders ? extra : 0)), '', 'Dienst', 'Uitgevoerd', u.xpsProject || '', '', '', '', t.xpsId || '', '', p.xpsProject || ''].join(';'));
   });
   return regels.concat(extraRegels || []).join('\n') + '\n';
 }
@@ -146,7 +161,9 @@ var a28 = A('M28', vandaag), a20 = A('M20', vandaag);
 eis(a04.waarde === mtW.gecontracteerd && a06.waarde === mtW.gewogenPijplijn && a26.waarde === mtW.gefactureerd && a25.waarde === mtW.geleverd && a08.waarde === mtW.gewonnenWaarde,
   'het harnas rekent M04, M06, M08, M25 en M26 van deze maand gelijk aan apiSturing(\'mt\')');
 eis(wk.week === vorigeWeek && a14.waarde === wk.totaal.cijfers.contactmomenten, 'het harnas rekent M14 van vorige week gelijk aan het teamtotaal van apiSturing(\'week\')');
-eis(a04.waarde > 0 && a26.waarde > 0 && a25.waarde > 0 && a06.waarde > 0 && a28.waarde > 0, 'de demoseed heeft M04, M06, M25, M26 en M28 boven nul (anders test de vergelijking niets)');
+// herstel r10 (nit R10-N1): M06 telt de open kansen van dit schooljaar; eind juli heeft de seed die niet meer (hun verwachte tekendatum valt in het volgende)
+var open06 = exp.tabellen.Kansen.some(function (k) { return ctx.kansOpen(k) && String(k.schooljaar) === sj; });
+eis(a04.waarde > 0 && a26.waarde > 0 && a25.waarde > 0 && (a06.waarde > 0 || !open06) && a28.waarde > 0, 'de demoseed heeft M04, M06 (als er open kansen van dit schooljaar zijn), M25, M26 en M28 boven nul (anders test de vergelijking niets)');
 eis(A('M01', maand).geblokkeerd && A('M30', maand).geblokkeerd, 'M01 (zonder jaardoel) en M30 (marge) zijn in de standaardseed geblokkeerd');
 eis(H.blokSoort(A('M01', maand).reden) === 'besluit' && H.blokSoort(A('M30', maand).reden) === 'extern' && H.blokSoort('rollen niet ingesteld (Beheer → Overstap v7.9)') === 'rollen' && H.blokSoort('niet getoetst: verliesredenen niet gekoppeld') === 'redenen' && H.blokSoort('iets anders') === '',
   'v7.9.4: de soort van een blokkade (besluit, extern, rollen, redenen; anders geen soort)');
@@ -547,6 +564,52 @@ eis(runW8.uit.join() === 'M28 ' + vandaag + ' gezakt (invoer)' && runW8.code ===
   'herstel r8 (R8-1b): een open termijn zonder project en de referentie M28 = Athena + de wees: gezakt (invoer), exitcode 3, met de invoermelding; niet gezakt (definitie) (' + runW8.uit.join(' | ') + '; exit ' + runW8.code + '; ' + runW8.melding.join(' | ') + ')');
 eis(H.exactWijkt(LW8, { id: 'openstaand', per: H.periodeUit(LW8.ctx, vandaag, LW8.vandaag) }) === '', 'herstel r8 (R8-1b): het M28-pad van exactWijkt telt de wees niet: een export met Open zonder de wees wijkt niet af (' + H.exactWijkt(LW8, { id: 'openstaand', per: H.periodeUit(LW8.ctx, vandaag, LW8.vandaag) }) + ')');
 function invoerVan8(run) { return run.melding.filter(function (l) { return /^melding: invoer die de regels gezakt \(invoer\) raakt: /.test(l); }); }
+// herstel r10 (R10-1a, het scenario van rev10/t1_toekomst): de oude definitie "M28 voor de projecten van het schooljaar / alle open posten" verschilt van
+// Athena alleen in de populatie, niet in de datumregels. Op de stand van vandaag telt Code.gs (zoals Financiën) een verzonden termijn als open, ook met een
+// (geschatte) verzenddatum na vandaag, en elke betaaldatum als betaald, ook een na vandaag. (A) status verzonden zonder verzenddatum, geplande datum na vandaag,
+// referentie = Athena − de termijn (Exact heeft hem nog niet); (B) verzonden, betaaldatum na vandaag, referentie = Athena + de termijn (in Exact nog open).
+// Nooit gezakt (definitie): zonder export onverklaard (exitcode 1); met een export met Open van vandaag rekent ook exactWijkt zoals Athena en wijst de bron
+var basis10 = kopie(exp); basis10.tabellen.Facturen = basis10.tabellen.Facturen.filter(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); return !(v && (v.datum > vandaag || v.datum < sjStart && !b)) && !(b && b.datum > vandaag); });
+var vroeg10 = ctx.plusDagenVan(vandaag, -20) < sjStart ? sjStart : ctx.plusDagenVan(vandaag, -20), later10 = ctx.plusDagenVan(vandaag, 5);
+// herstel r11 (nit R11-3): de geplande datum van A in de volgende maand, zodat eis A met de export de begrenzing voor de dekking (open.push) elke dag raakt
+var jm10 = vandaag.slice(5, 7) === '12' ? [+vandaag.slice(0, 4) + 1, 1] : [+vandaag.slice(0, 4), +vandaag.slice(5, 7) + 1], volgende10 = jm10[0] + '-' + ('0' + jm10[1]).slice(-2) + '-01';
+var t10 = { a: { id: 'harnas-r10-a', trajectId: tO.id, omschrijving: 'Verzonnen termijn', bedrag: 900, datum: volgende10, status: 'verzonden', factuurnummer: '969101', verzonden: '', betaald: '', aangemaakt: vroeg10 + ' 09:00' },
+  b: { id: 'harnas-r10-b', trajectId: tO.id, omschrijving: 'Verzonnen termijn', bedrag: 900, datum: vroeg10, status: 'betaald', factuurnummer: '969102', verzonden: vroeg10, betaald: later10, aangemaakt: vroeg10 + ' 09:00' } };
+var EXACT_10A = schrijfCsv('open_r10_a.csv', exactCsvVan(basis10)), b10Open = kopie(basis10);  // A: Exact zonder de termijn; B: Exact met de termijn open
+b10Open.tabellen.Facturen.push(Object.assign(kopie(t10.b), { status: 'verzonden', betaald: '' }));
+var EXACT_10B = schrijfCsv('open_r10_b.csv', exactCsvVan(b10Open));
+function r10(k, delta, exact) {
+  var e = kopie(basis10); e.tabellen.Facturen.push(t10[k]);
+  var p = path.join(TMP, 'export-r10-' + k + '.json'); fs.writeFileSync(p, JSON.stringify(e));
+  var a = waardeVan(H.laad({ export: p }), 'M28', vandaag).waarde, ref = schrijfRef('referentie_r10_' + k + '.csv', [['M28', vandaag, Math.round((a + delta) * 100) / 100, '']]);
+  return { export: p, referentie: ref, run: draai(['--export', p, '--referentie', ref]), runE: draai(['--export', p, '--referentie', ref, '--exact-open', exact, '--exact-open-stand', vandaag]) };
+}
+var r10A = r10('a', -900, EXACT_10A), r10B = r10('b', 900, EXACT_10B);
+[['A', r10A], ['B', r10B]].forEach(function (x) {
+  var u = x[1];
+  eis(u.run.uit.join() === 'M28 ' + vandaag + ' gezakt (onverklaard)' && u.run.code === 1,
+    'herstel r10 (R10-1a, ' + x[0] + '): een termijn met een ' + (x[0] === 'A' ? 'verzenddatum' : 'betaaldatum') + ' na vandaag en de referentie zoals Exact: nooit gezakt (definitie), zonder export onverklaard met exitcode 1 (' + u.run.uit.join(' | ') + '; exit ' + u.run.code + ')');
+  eis(u.runE.uit.join() === 'M28 ' + vandaag + ' gezakt (bron)',
+    'herstel r10 (R10-1a, ' + x[0] + '): met een export met Open van vandaag rekent exactWijkt zoals Athena en wijst de bron (' + u.runE.uit.join(' | ') + '; exit ' + u.runE.code + ')');
+});
+// herstel r11 (R11-1a, de scenario's van rev11/s1 en s3): dezelfde vooruitgedateerde factuur in Athena en in de Exact-export met Open van vandaag (apiExactImport
+// zet verzonden = de factuurdatum van Exact). Op de stand van vandaag telt de export die rij ook (Open van die dag), zoals Athena: de export wijkt niet af, dus
+// een referentie die om een andere reden afwijkt is onverklaard (exitcode 1), nooit gezakt (bron). (C) beide met de factuurdatum na vandaag; (D) Athena
+// verzonden vandaag (de AM zette de termijn op verzonden), Exact met de factuurdatum na vandaag
+function r11(k, athenaDatum) {
+  var e = kopie(basis10), f = { id: 'harnas-r11-' + k, trajectId: tO.id, omschrijving: 'Verzonnen factuur', bedrag: 900, datum: later10, status: 'verzonden', factuurnummer: '969111', verzonden: athenaDatum, betaald: '', aangemaakt: vandaag + ' 09:00' };
+  var x = kopie(basis10); x.tabellen.Facturen.push(Object.assign(kopie(f), { verzonden: later10 })); e.tabellen.Facturen.push(f);
+  var p = path.join(TMP, 'export-r11-' + k + '.json'); fs.writeFileSync(p, JSON.stringify(e));
+  var exact = schrijfCsv('open_r11_' + k + '.csv', exactCsvVan(x)), a = waardeVan(H.laad({ export: p }), 'M28', vandaag).waarde, ref = schrijfRef('referentie_r11_' + k + '.csv', [['M28', vandaag, Math.round((a + 500) * 100) / 100, '']]);
+  var Lx = H.laad({ export: p, 'exact-open': exact, 'exact-open-stand': vandaag });
+  return { export: p, exact: exact, wijkt: H.exactWijkt(Lx, { id: 'openstaand', per: H.periodeUit(Lx.ctx, vandaag, Lx.vandaag) }), run: draai(['--export', p, '--referentie', ref, '--exact-open', exact, '--exact-open-stand', vandaag]) };
+}
+var r11C = r11('c', later10), r11D = r11('d', vandaag);
+[['C', r11C], ['D', r11D]].forEach(function (x) {
+  var u = x[1];
+  eis(u.wijkt === '' && u.run.uit.join() === 'M28 ' + vandaag + ' gezakt (onverklaard)' && u.run.code === 1,
+    'herstel r11 (R11-1a, ' + x[0] + '): dezelfde factuur met een factuurdatum na vandaag in Athena en Exact: de export wijkt niet af, een referentie Athena + 500 is onverklaard met exitcode 1, nooit gezakt (bron) (exactWijkt "' + u.wijkt + '"; ' + u.run.uit.join(' | ') + '; exit ' + u.run.code + ')');
+});
 
 // herstel r6 (R6-1, de scenario's van rev6/p1c, p1b, s1_dekt en s4): M26 en M28 tellen de facturen van dit schooljaar van elk project, zoals Exact
 var expR = kopie(exp), dSept = ctx.plusDagenVan(sjStart, 40) <= vandaag ? ctx.plusDagenVan(sjStart, 40) : vandaag;
@@ -624,14 +687,14 @@ var laag = function (run) { return run.melding.some(function (l) { return /zeker
 var runZ1 = draai(['--export', EXPORT_Z, '--referentie', refZ]), runZ0 = draai(['--export', EXPORT, '--referentie', refZ]), runZ2 = draai(['--export', EXPORT_Z, '--referentie', refZ2]);
 eis(runZ1.uit.join() === 'M06 ' + vorigeMaand + ' geslaagd' && runZ1.code === 0 && laag(runZ1) && !laag(runZ0) && !laag(runZ2) && runZ2.code === 0,
   'harnasdekking (8): M06 op een eerdere peildatum met een wissel met zekerheid laag geeft een melding (geen blokkade); de seed, de stand van vandaag en M26 niet (' + runZ1.melding.concat(runZ0.melding, runZ2.melding).join(' | ') + ')');
-// Zes (herstel r6: tien; r7: elf; r8: zestien) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
+// Zes (herstel r6: tien; r7: elf; r8: zestien; r10: achttien; r11: twintig) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
 var metMelding = function (u, re) { return u.meldingen.some(function (l) { return re.test(l); }); };
 [['dekking (3, 4)', 'return datums.every(function (d) {', 'return true || datums.every(function (d) {', function (m) {
     return m.vergelijk({ export: EXPORT_D, referentie: refD3, 'exact-verkoop': VERKOOP_AUG }).uit[0] === 'M26 ' + perV + ' gezakt (bron)' &&
       (maand === sjStart.slice(0, 7) || m.vergelijk({ export: EXPORT_O, referentie: refO7, 'exact-open': EXACT_LAAT, 'exact-open-stand': vandaag }).uit[0] !== 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'); }],
   // herstel r6: vier erbij (de lopende maand en M28 op de factuurdatum (R6-1), de oude definitie van M26 (nit R6-4) en RAAKT.dekking (nit R6-2))
   ['lopende maand (R6-1)', ' || (m === pM && lM >= vorige)', '', function (m) { return m.vergelijk({ export: EXPORT_S, referentie: path.join(TMP, 'referentie_s.csv'), 'exact-verkoop': path.join(TMP, 'verkoop_lopend.csv') }).uit[0] === 'M26 ' + maand + ' geblokkeerd (export dekt de periode niet)'; }],
-  ['M28 op de factuurdatum (R6-1)', "v && v.datum >= van && v.datum <= d && !(b && b.datum <= d))", "v && v.datum <= d && !(b && b.datum <= d))", function (m) { return m.vergelijk({ export: EXPORT_J, referentie: path.join(TMP, 'referentie_j.csv'), 'exact-open': EXACT_BOEKJAAR, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'; }],
+  ['M28 op de factuurdatum (R6-1)', "v && v.datum >= van && (nu || v.datum <= d) && !(b && (nu || b.datum <= d)))", "v && (nu || v.datum <= d) && !(b && (nu || b.datum <= d)))", function (m) { return m.vergelijk({ export: EXPORT_J, referentie: path.join(TMP, 'referentie_j.csv'), 'exact-open': EXACT_BOEKJAAR, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'; }],
   // herstel r7 (R7-1, R7-D1): de versoepeling op elke peildatum (zoals herstel r6)
   ['versoepeling op elke peildatum (R7-1)', "if (pM !== String(R || '').slice(0, 7)) pM = '';", '', function (m) { return m.vergelijk({ export: EXPORT_D5, referentie: refD5, 'exact-verkoop': VERKOOP_AUG }).uit[0] === 'M26 ' + perS9 + ' gezakt (bron)'; }],
   ['oude definitie M26 (nit R6-4)', '  gefactureerd: function (L, r) {', '  gefactureerdUit: function (L, r) {', function (m) { return m.vergelijk({ export: EXPORT_R, referentie: path.join(TMP, 'referentie_m.csv') }).uit[0] === 'M26 ' + maand + ' gezakt (onverklaard)'; }],
@@ -642,11 +705,19 @@ var metMelding = function (u, re) { return u.meldingen.some(function (l) { retur
   ['afgekapte week (6)', 'afgekapt: P < eind', 'afgekapt: false', function (m) { return !metMelding(m.vergelijk({ export: EXPORT, referentie: path.join(TMP, 'referentie_w1.csv'), peildatum: woVorig }), /afgekapt/); }],
   ['zekerheid laag (8)', "return w.zekerheid === 'laag' &&", 'return false &&', function (m) { return !metMelding(m.vergelijk({ export: EXPORT_Z, referentie: refZ }), /zekerheid laag/); }],
   // herstel r8 (R8-1a): de standdatum als grens (M28 en bij --exact M26) en als maand van de run; (R8-1b) de wees in de oude definitie en in het M28-pad
-  ['grens van de standdatum, M28 (R8-1a)', "    if (S && d > S) return 'dekt niet';  // herstel r8 (R8-1a)\n", '', function (m) { return m.vergelijk({ export: EXPORT_S8, referentie: refS8, 'exact-open': OPEN_S8, 'exact-open-stand': vorigEind }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }],
+  // herstel r10 (nit R10-N1): in augustus ligt de standdatum (31 juli) in het vorige schooljaar; dan dekt de export de termijnen van dit schooljaar ook zonder de grens
+  // niet en is er niets te onderscheiden (zoals de mutant "dekking" in augustus)
+  ['grens van de standdatum, M28 (R8-1a)', "    if (S && d > S) return 'dekt niet';  // herstel r8 (R8-1a)\n", '', function (m) { return maand === sjStart.slice(0, 7) || m.vergelijk({ export: EXPORT_S8, referentie: refS8, 'exact-open': OPEN_S8, 'exact-open-stand': vorigEind }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }],
   ['grens van de standdatum bij --exact (R8-1a)', "  if (een && S && d > S) return 'dekt niet';\n", '', function (m) { return m.vergelijk({ export: EXPORT_S8, referentie: refB28, exact: OPEN_S8, 'exact-open-stand': vorigEind }).uit[0] === 'M26 ' + vandaag + ' gezakt (onverklaard)'; }],
   ['maand van de run is de standdatum (R8-1a)', 'R = S || L.peildatum;', 'R = L.peildatum;', function (m) { return m.vergelijk({ export: EXPORT_C8, referentie: refC8, 'exact-open': OPEN_C8, 'exact-open-stand': vorigEind }).uit[0] === 'M28 ' + vorigEind + ' geblokkeerd (export dekt de periode niet)'; }],
   ['alle open posten met de wees (R8-1b)', " || !metProject(L)[f.trajectId]) return; u[1] += x;", ') return; u[1] += x;', function (m) { return m.vergelijk({ export: EXPORT_W8, referentie: path.join(TMP, 'referentie_r8_w.csv') }).uit[0] === 'M28 ' + vandaag + ' gezakt (definitie)'; }],
-  ['M28 in exactWijkt met de wees (R8-1b)', 'b = ctx.betaaldVan(f); if (metProject(L)[f.trajectId] && v', 'b = ctx.betaaldVan(f); if (v', function (m) { var Lm = m.laad({ export: EXPORT_W8, 'exact-open': EXACT_W8, 'exact-open-stand': vandaag }); return m.exactWijkt(Lm, { id: 'openstaand', per: m.periodeUit(Lm.ctx, vandaag, Lm.vandaag) }) === 'wijkt'; }]
+  ['M28 in exactWijkt met de wees (R8-1b)', 'b = ctx.betaaldVan(f); if (metProject(L)[f.trajectId] && v', 'b = ctx.betaaldVan(f); if (v', function (m) { var Lm = m.laad({ export: EXPORT_W8, 'exact-open': EXACT_W8, 'exact-open-stand': vandaag }); return m.exactWijkt(Lm, { id: 'openstaand', per: m.periodeUit(Lm.ctx, vandaag, Lm.vandaag) }) === 'wijkt'; }],
+  // herstel r10 (R10-1a): de oude definitie van M28 en de kant van Athena in exactWijkt weer op datum op de stand van vandaag
+  ['oude definitie M28 op datum (R10-1a)', "if (!v || (!nu && v.datum > d) || (b && (nu || b.datum <= d)) ||", "if (!v || v.datum > d || (b && b.datum <= d) ||", function (m) { return m.vergelijk({ export: r10A.export, referentie: r10A.referentie }).uit[0] === 'M28 ' + vandaag + ' gezakt (definitie)'; }],
+  ['exactWijkt M28 op datum (R10-1a)', "var nu = d >= L.vandaag;\n    X.rijen", "var nu = false;\n    X.rijen", function (m) { var Lm = m.laad({ export: r10B.export, 'exact-open': EXACT_10B, 'exact-open-stand': vandaag }); return m.exactWijkt(Lm, { id: 'openstaand', per: m.periodeUit(Lm.ctx, vandaag, Lm.vandaag) }) === ''; }],
+  // herstel r11: de begrenzing voor de dekking (nit R11-3) en de kant van de export op de stand van vandaag (R11-1a)
+  ['begrenzing van de dekking (R10-1a, nit R11-3)', 'open.push(v.datum > d ? d : v.datum);', 'open.push(v.datum);', function (m) { return m.vergelijk({ export: r10A.export, referentie: r10A.referentie, 'exact-open': EXACT_10A, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'; }],
+  ['export op datum op de stand van vandaag (R11-1a)', 'if ((!nu && x.datum > d) || x.datum < van) return;', 'if (x.datum > d || x.datum < van) return;', function (m) { return m.vergelijk({ export: r11C.export, referentie: path.join(TMP, 'referentie_r11_c.csv'), 'exact-open': r11C.exact, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }]
 ].forEach(function (x) { var m = harnasMutant(x[1], x[2]); eis(!!m && x[3](m), 'harnasdekking: de mutant "' + x[0] + '" geeft het oude gedrag; een eis hierboven vangt hem' + (m ? '' : ' (zoektekst niet gevonden)')); });
 
 /* ---- 5. invoerfouten: alleen bestand, regelnummer en kolomnaam; v7.9.4: een fout in het harnas zelf is exitcode 2 ---- */
@@ -687,7 +758,14 @@ var runR4 = draai(['--export', EXPORT, '--referentie', 'test/voorbeelden/sturing
 eis(runR4.code === 1 && runR4.fout.join() === 'referentie: het bestand is niet te lezen.', 'een relatief pad wordt gelezen vanuit de werkmap (hier de tijdelijke map), niet vanuit de repo');
 
 /* ---- 7. het verzonnen voorbeeld: elke regel wordt gelezen ---- */
-var kopieV = path.join(TMP, 'sturing_referentie.csv'); fs.copyFileSync(VOORBEELD, kopieV);
+// herstel r10 (nit R10-N1): het voorbeeld heeft vaste datums (de laatste periode begint eind oktober 2026); begint een periode na vandaag, dan schuift de kopie hele
+// jaren terug (alleen de kolom periode), zodat de test ook op een eerdere dag draait (VASTE_DATUM met test/tz_klok.js)
+var vbBron = fs.readFileSync(VOORBEELD, 'utf8'), vbJaren = 0;
+function vbTerug(t, n) { return t.split('\n').map(function (l) { if (/^\s*#/.test(l)) return l; var c = l.split(';'); if (c.length > 1) c[1] = c[1].replace(/\d{4}/g, function (j) { return String(+j - n); }); return c.join(';'); }).join('\n'); }
+function vbBegin(p) { return /^\d{4}-W\d{2}$/.test(p) ? ctx.maandagVanWeek(p) : /^\d{4}-\d{4}$/.test(p) ? p.slice(0, 4) + '-08-01' : p.length === 7 ? p + '-01' : p; }
+function vbLaatste(n) { return vbTerug(vbBron, n).split(/\r?\n/).filter(function (l) { return l.trim() && !/^\s*#/.test(l); }).slice(1).map(function (l) { return vbBegin(String(l.split(';')[1]).trim()); }).sort().pop(); }
+while (vbLaatste(vbJaren) > vandaag && vbJaren < 5) vbJaren++;
+var kopieV = path.join(TMP, 'sturing_referentie.csv'); fs.writeFileSync(kopieV, vbTerug(vbBron, vbJaren));
 var dataRegels = fs.readFileSync(VOORBEELD, 'utf8').split(/\r?\n/).filter(function (l) { return l.trim() && !/^\s*#/.test(l); }).length - 1;
 var runV = draai(['--export', EXPORT, '--referentie', kopieV, '--exact', EXACT_OK, '--xps', XPS_OK]);
 eis(runV.fout.length === 0 && runV.uit.length === dataRegels && dataRegels >= 10, 'het verzonnen voorbeeld test/voorbeelden/sturing_referentie.csv: elke regel gelezen, geen invoerfout (' + runV.uit.length + ' regels)');

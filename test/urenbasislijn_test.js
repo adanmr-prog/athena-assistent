@@ -81,7 +81,7 @@ function gelijk(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 var vbTekst = fs.readFileSync(VOORBEELD, 'utf8'), vbOrakel = orakel(vbTekst, null, TAL_VB);
 var runV = draai(['--xps', VOORBEELD, '--voorbeeld', '--export', EXPORT_VB]);
 if (Object.keys(vbOrakel.waarde).length) eis(runV.code === 0 && gelijk(runV.json, vbOrakel.waarde), 'het voorbeeld met --voorbeeld: de basislijn van het voorbije schooljaar zoals het orakel (' + runV.stdout.trim().slice(0, 80) + ')');
-else eis(runV.code === 1 && !runV.stdout && runV.fout.join() === 'xps: geen gewerkte diensten in een voorbij schooljaar (de export loopt van ' + vbOrakel.van + ' tot ' + vbOrakel.tot + ').',
+else eis(runV.code === 1 && !runV.stdout && runV.fout.join() === (vbOrakel.van ? 'xps: geen gewerkte diensten in een voorbij schooljaar (de export loopt van ' + vbOrakel.van + ' tot ' + vbOrakel.tot + ').' : 'xps: geen dienst met een datum tot en met vandaag.'),  // herstel r10 (nit R10-N1): vóór de eerste dienst van het voorbeeld
   'het voorbeeld met --voorbeeld: het schooljaar van het voorbeeld is nog niet voorbij, dus geen basislijn en exitcode 1 (' + runV.fout.join(' | ') + ')');
 var runVr = draai(['--xps', VOORBEELD, '--export', EXPORT_VB]);
 eis(runVr.code === 1 && runVr.fout.join() === 'xps: Zet echte bestanden buiten de repo.', 'zonder --voorbeeld wordt het voorbeeld in de repo geweigerd');

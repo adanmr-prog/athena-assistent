@@ -47,7 +47,9 @@
  *                                     van de export dekt niet. M26 en M28 tellen aan de kant van Athena de facturen van dit schooljaar van elk bestaand project
  *                                     (r7, R7-D3: een termijn zonder project niet; Exact telt elke factuur), ook de oude definitie "alle open posten" (herstel
  *                                     r8, R8-1b): een termijn zonder project is dus gezakt (invoer) door contract 17, nooit gezakt (definitie). Een peildatum na
- *                                     --exact-open-stand dekt nooit (herstel r8, R8-1a)
+ *                                     --exact-open-stand dekt nooit (herstel r8, R8-1a). Herstel r10 (R10-1a): op de stand van vandaag rekenen M28 en de oude
+ *                                     definitie met de datumregels van Code.gs (verzonden = open, ook na vandaag; elke betaaldatum = betaald); herstel r11
+ *                                     (R11-1a): de export met Open dan ook, dus met een factuurdatum na vandaag (Open van de exportdag)
  *                                     De vier exportblokkades zijn niet vergeleken: exitcode 3, met een vaste melding
  *   leeg (geen basis)                 v7.9.4 (bouwpunt 13): Athena heeft voor dit cijfer geen waarde (geen basis of geen populatie); nooit een vergelijking met 0.
  *                                     Herstel r4 (R4-1): raakt invoer het cijfer (zie hieronder), dan is een lege waarde gezakt (invoer)
@@ -328,10 +330,12 @@ var OUDE_DEFINITIES = {
   },
   // herstel r6 (R6-1): M28 voor alleen de projecten van het schooljaar (ook van vóór 1 augustus) en voor alle open posten (zoals de werklijst of Openstaande posten);
   // herstel r8 (R8-1b): ook "alle open posten" alleen van een bestaand project, zoals exactWijkt: een termijn zonder project is invoer (contract 17), geen definitie
+  // herstel r10 (R10-1a): alleen de populatie verschilt van Athena, niet de datumregels: op de stand van vandaag (nu) telt een verzonden termijn als open, ook met
+  // een verzenddatum na vandaag, en elke betaaldatum als betaald, zoals Code.gs (Financiën); op een eerdere peildatum op datum, ook zoals Code.gs
   openstaand: function (L, r) {
     if (r.uitsplitsing) return [];
-    var d = r.per.peildatum, inSj = projectenVan(L, sjVan(L, d)), u = [0, 0];
-    L.ctx.lees('Facturen').forEach(function (f) { var v = L.ctx.verzondenVan(f), b = L.ctx.betaaldVan(f), x = Number(f.bedrag) || 0; if (!v || v.datum > d || (b && b.datum <= d) || !metProject(L)[f.trajectId]) return; u[1] += x; if (inSj[f.trajectId]) u[0] += x; });
+    var d = r.per.peildatum, nu = d >= L.vandaag, inSj = projectenVan(L, sjVan(L, d)), u = [0, 0];
+    L.ctx.lees('Facturen').forEach(function (f) { var v = L.ctx.verzondenVan(f), b = L.ctx.betaaldVan(f), x = Number(f.bedrag) || 0; if (!v || (!nu && v.datum > d) || (b && (nu || b.datum <= d)) || !metProject(L)[f.trajectId]) return; u[1] += x; if (inSj[f.trajectId]) u[0] += x; });
     return u;
   },
   // M27 als de som van de termijnen "nog te doen" (de oude tegel op Home), voor de projecten van het schooljaar en voor alle projecten
@@ -498,8 +502,12 @@ function exactWijkt(L, r) {
     if (!X.metBetaald && !(S && opDag)) return S ? 'zonder betaaldatum' : 'stand onbekend';
     if (S && d > S) return 'dekt niet';  // herstel r8 (R8-1a)
     // herstel r6 (R6-1): aan beide kanten de facturen van dit schooljaar (factuurdatum vanaf 1 augustus), zoals M28
-    X.rijen.forEach(function (x) { if (x.datum > d || x.datum < van) return; eO += opDag && x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
-    ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (metProject(L)[f.trajectId] && v && v.datum >= van && v.datum <= d && !(b && b.datum <= d)) { aO += ctx.centen(f.bedrag); open.push(v.datum); } });
+    // herstel r10 (R10-1a): Athena op de stand van vandaag (nu) zoals Code.gs: verzonden is open, ook na vandaag (voor de dekking telt die termijn op de
+    // peildatum), en elke betaaldatum is betaald; zo wijst een export met Open zo'n termijn als bron aan. Herstel r11 (R11-1a): de export dan ook met een
+    // factuurdatum na vandaag (Open van de exportdag telt hem; apiExactImport zet verzonden = de factuurdatum), anders wees dezelfde factuur als bron
+    var nu = d >= L.vandaag;
+    X.rijen.forEach(function (x) { if ((!nu && x.datum > d) || x.datum < van) return; eO += opDag && x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
+    ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (metProject(L)[f.trajectId] && v && v.datum >= van && (nu || v.datum <= d) && !(b && (nu || b.datum <= d))) { aO += ctx.centen(f.bedrag); open.push(v.datum > d ? d : v.datum); } });
     return dekt(X, open, d, R) ? vergelijk(eO, aO) : 'dekt niet';  // harnasdekking (4): een open termijn van Athena buiten het bereik van de export
   }
   if (!L.exactVerkoop) return '';

@@ -311,7 +311,7 @@ var MUTANTEN = [
     voorstel: "eis(contractenOp().gewonnen_is_getekend.stand === 'gezakt', 'een winst van dit schooljaar zonder getekende waarde zakt');" },
   // v7.9.4 harnasdekking (7): één erbij
   { id: 'm26_definitie_per_maand', gebied: 'register (v7.9.4 harnasdekking)', invariant: 'de definitie van M26 is de som over het schooljaar t/m de peildatum, geen maandcijfer, zoals sturingCijfers rekent',
-    zoek: "'De som van de facturen van dit schooljaar: de termijnen met een verzenddatum vanaf 1 augustus, van elk bestaand project (zoals Financiën; ook een slottermijn van een project van vorig schooljaar; Exact telt op factuurdatum ook een factuur zonder project in Athena), opgeteld over het schooljaar t/m de peildatum (geen maandcijfer), met creditnota",
+    zoek: "'De som van de facturen van dit schooljaar: de termijnen met een verzenddatum vanaf 1 augustus, van elk bestaand project (zoals Financiën; ook een slottermijn van een project van vorig schooljaar; Exact telt op factuurdatum ook een factuur zonder project in Athena), opgeteld over het schooljaar t/m de peildatum (geen maandcijfer; op de dag zelf t/m het eind van die maand, zoals Financiën), met creditnota",
     vervang: "'De som van termijnen met een verzenddatum in de maand, met creditnota",
     voorstel: "eis(!/in de maand/.test(ctx.METRIEKEN.gefactureerd.definitie), 'M26 is geen maandcijfer');" },
   // v7.9.4 herstel r6: zes erbij (R6-1 twee, R6-2 twee, de nits R6-3 en R6-4)

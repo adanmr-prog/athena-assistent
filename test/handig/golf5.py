@@ -31,6 +31,10 @@
 # v7.9.4 herstel r9 (sectie 19): een mislukte stille verversing blijft niet hangen (de volgende lijst laadt opnieuw, anders de fout met Opnieuw proberen), een
 # keuzelijst houdt de huidige waarde als de basis hem nog niet kent, een oudere apiCrm overschrijft geen nieuwere, Ongedaan maken tekent het bord opnieuw, en
 # notitie, verloren en + Persoon met een mislukte verse apiCrm.
+# v7.9.4 herstel r10 (sectie 20): na een mislukte stille verversing blijft de lijst bruikbaar (ook zoeken, zonder apiCrm per toets) met één regel erboven, een
+# nieuwe poging bij Terug, een tab of Relaties, Opnieuw proberen laat + Persoon staan; de terugval van een keuzelijst alleen voor koppelvelden, met het label uit het record.
+# v7.9.4 herstel r11 (sectie 21): een oudere stille verversing wist de regel niet na een nieuwere die mislukte (R11-iOS-1), een geslaagde apiCrm via Relaties
+# wist hem wel (nit R11-2), en Opnieuw proberen in de regel loopt luid met de focus op de knop of de tab (nit R11-iOS-N1).
 # v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout); na Andere datum een verse basis en een bruikbaar bord; Gebruikers
 # verouderen alles; € met een harde spatie in de tegel Verloren; M20 met het aantal zonder laatste contact.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
@@ -1470,7 +1474,7 @@ with sync_playwright() as p:
         c.close()
 
     # ===== 19. v7.9.4 herstel r9. R9-1/R9-iOS-2: mislukt de stille verversing na + School, dan laadt de volgende lijst (Terug, een tab) de basis opnieuw en staat
-    # de school er één keer; mislukt ook die, dan de fout met Opnieuw proberen. R9-iOS-1: een keuzelijst houdt de huidige waarde ook als de basis die school nog
+    # de school er één keer; mislukt ook die, dan (r10) een regel met Opnieuw proberen boven de lijst. R9-iOS-1: een keuzelijst houdt de huidige waarde ook als de basis die school nog
     # niet kent (persoon, taak), dus Opslaan koppelt niets los. R9-iOS-3: een oudere apiCrm die later antwoordt (Apps Script leest bij ontvangst) overschrijft
     # geen nieuwere. Nits: Ongedaan maken na Terug naar het bord tekent het bord opnieuw; notitie, verloren en + Persoon met een mislukte verse apiCrm =====
     # __laat[fn] = ms: de backend rekent meteen en het antwoord komt later (zoals Apps Script); __traag vertraagt de aanroep zelf
@@ -1510,10 +1514,11 @@ with sync_playwright() as p:
             s2 = 'Verzonnen school R9b ' + wie
             pg.evaluate("window.__faal.apiCrm = 2"); nieuwe_school(s2); mislukt(1)
             terug(); fout = True
-            try: pg.wait_for_selector('#crmInhoud .leeg:has-text("Kon de relaties niet laden") [data-crmtab="scholen"]', timeout=8000)
+            try: pg.wait_for_selector('#crmInhoud > .leeg:has-text("Niet bijgewerkt") [data-crmtab="scholen"]', timeout=8000)
             except Exception: fout = False
-            ok(wie + ' (herstel r9, R9-1): mislukt ook de nieuwe poging, dan staat in de lijst de fout met Opnieuw proberen (niet stil de oude lijst zonder de school)', fout and 'Niet gelukt' not in melding(), [fout, melding()])
-            if fout: pg.tap('#crmInhoud [data-crmtab="scholen"]')
+            n_oud = pg.evaluate("document.querySelectorAll('#crmInhoud .rij[data-crm-open^=\"school:\"]').length")
+            ok(wie + ' (herstel r9, R9-1; r10, R10-1b): mislukt ook de nieuwe poging, dan staat boven de oude lijst een regel met Opnieuw proberen (niet stil de oude lijst zonder de school)', fout and n_oud > 0 and 'Niet gelukt' not in melding(), [fout, n_oud, melding()])
+            if fout: pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]')
             pg.wait_for_function("window.__faal.apiCrm === 0 && CRM.laadt === null && !!document.querySelector('#crmInhoud [data-crm-open^=\"school:\"]')", timeout=8000); pg.wait_for_timeout(300)
             ok(wie + ' (herstel r9, R9-1): na Opnieuw proberen staat de school er één keer', in_lijst(s2) == 1, in_lijst(s2))
             ok(wie + ' (herstel r9): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
@@ -1593,6 +1598,184 @@ with sync_playwright() as p:
             ok(wie + ' (herstel r9, nit R9-2): + Persoon vanuit de lijst met een mislukte verse apiCrm: "Persoon toegevoegd" en het detail toont de persoon', 'Persoon toegevoegd' in t and 'Niet gelukt' not in t and d[0] == 'Verzonnen Lijst R9' and not d[1], [t, d])
             ok(wie + ' (herstel r9): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
         stap('g5_794_r9_paden', g5_794_r9_paden)
+        c.close()
+
+    # ===== 20. v7.9.4 herstel r10. R10-1b/R10-iOS-2: mislukt een stille verversing terwijl er een basis is (apiCrm blijft falen, zoals 'Load failed' op iOS
+    # zonder bereik), dan blijft de lijst staan en bruikbaar (ook zoeken, zonder apiCrm per toets) met één regel erboven; een nieuwe poging alleen bij Terug, een
+    # tab, Relaties in de tabbalk of Opnieuw proberen, en Opnieuw proberen op dezelfde tab laat een half ingevuld + Persoon staan. R10-iOS-1: de terugval van een
+    # keuzelijst (r9) alleen voor koppelvelden (…Id): een hernoemde status of categorie werkt zoals vóór r9. Nits R10-2/R10-iOS-3: het label komt uit het record =====
+    for vp in ({'width': 375, 'height': 667}, {'width': 810, 'height': 1080}):
+        wie = 'iphone 375' if vp['width'] < 500 else 'ipad 810'
+        c = b.new_context(viewport=vp, is_mobile=True, has_touch=True)
+        pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('r10: ' + str(e))); pg.on('dialog', dialoog)
+        pg.goto(U + 'sophie'); pg.wait_for_selector('nav'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG); pg.evaluate(TRAAG)
+        def melding(): return pg.evaluate("document.getElementById('toast').classList.contains('aan') ? document.getElementById('toast').innerText.replace(/\\s+/g, ' ') : ''")
+        def rijen(s): return pg.evaluate("document.querySelectorAll('#crmInhoud .rij[data-crm-open^=\"%s:\"]').length" % s)
+        # de regel boven de lijst: [bovenaan, tekst, knop Opnieuw proberen voor deze tab, aantal regels]; None zonder regel
+        def regel(t): return pg.evaluate("(function (t) { var i = document.getElementById('crmInhoud'), l = i.querySelectorAll(':scope > .leeg'), e = l[0]; return e ? [e === i.firstElementChild, e.textContent, !!e.querySelector('[data-crmtab=\"' + t + '\"]'), l.length] : null; })(%s)" % json.dumps(t))
+        def pogingen(): return pg.evaluate("1000 - window.__faal.apiCrm")  # een mislukte aanroep komt niet in __calls (TRAAG ligt om VOLG)
+        def na_poging(n): pg.wait_for_function("1000 - window.__faal.apiCrm === %d && CRM.laadt === null" % n, timeout=8000); pg.wait_for_timeout(300)
+        def geen_fout(): return 'Kon de relaties niet laden' not in pg.inner_text('#crmInhoud')
+        def g5_794_r10_lijst():
+            f0 = len(pageerrors); pg.evaluate("window.__faal = {}; window.__traag = {}")
+            pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="scholen"]'); pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=8000)
+            n = rijen('school'); naam = pg.evaluate("CRM.basis.personen.slice().sort(naamSort)[0].naam"); zoek = naam.split(' ')[-1][:4]
+            pg.evaluate("window.__faal.apiCrm = 1000")
+            s1 = 'Verzonnen school R10 ' + wie
+            pg.tap('#crmBalk [data-crmnieuw="school"]'); pg.wait_for_selector('#crmNieuw input[id$="naam"]', timeout=5000)
+            pg.fill('#crmNieuw input[id$="naam"]', s1); pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap()
+            pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % s1, timeout=8000); na_poging(1); t = melding()
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2); r = regel('scholen')
+            ok(wie + ' (herstel r10, R10-1b/R10-iOS-2): mislukt na + School ook de nieuwe poging bij Terug, dan blijft de lijst Scholen met de oude rijen staan en staat erboven één regel met Opnieuw proberen (niet "Kon de relaties niet laden")',
+               'School toegevoegd' in t and n > 0 and rijen('school') >= n and r and r[0] and 'Niet bijgewerkt' in r[1] and r[2] and r[3] == 1 and geen_fout(), [t, n, rijen('school'), r])
+            pg.tap('#crmTabs [data-crmtab="personen"]'); na_poging(3); r = regel('personen'); np = rijen('persoon')
+            ok(wie + ' (herstel r10, R10-1b): de tab Personen probeert één keer opnieuw; mislukt dat, dan de personen met de regel erboven', np > 0 and r and r[0] and r[2] and geen_fout(), [np, r])
+            pg.tap('#crmZoek'); pg.keyboard.type(zoek, delay=80); pg.wait_for_timeout(600)
+            gevonden = pg.evaluate("[].some.call(document.querySelectorAll('#crmInhoud .rij[data-crm-open^=\"persoon:\"] .r-titel'), function (x) { return x.textContent === %s; })" % json.dumps(naam))
+            ok(wie + ' (herstel r10, R10-1b/R10-iOS-2): zoeken vindt een bestaande persoon, zonder een apiCrm per toets, en de regel blijft', gevonden and pogingen() == 3 and regel('personen') and geen_fout(), [zoek, gevonden, pogingen(), regel('personen')])
+            pg.fill('#crmZoek', ''); pg.wait_for_timeout(300)
+            pg.tap('nav button[data-view="vandaag"]'); pg.wait_for_timeout(300); pg.tap('nav button[data-view="relaties"]'); na_poging(4); r = regel('personen')
+            ok(wie + ' (herstel r10, R10-iOS-2): Relaties in de tabbalk probeert één keer opnieuw; mislukt dat, dan blijft de lijst met de regel', rijen('persoon') == np and r and r[0] and geen_fout(), [rijen('persoon'), np, r])
+            pg.tap('#crmBalk [data-crmnieuw="persoon"]'); pg.wait_for_selector('#crmNieuw #cf-voornaam', timeout=5000)
+            pg.fill('#crmNieuw #cf-voornaam', 'Verzonnen'); pg.fill('#crmNieuw #cf-achternaam', 'Half R10'); pg.fill('#crmNieuw #cf-email', 'half.r10@voorbeeld.invalid')
+            pg.tap('#crmInhoud > .leeg [data-crmtab="personen"]'); na_poging(5)
+            v = pg.evaluate("['voornaam', 'achternaam', 'email'].map(function (n) { var e = document.querySelector('#crmNieuw #cf-' + n); return e ? e.value : null; })")
+            ok(wie + ' (herstel r10, R10-iOS-2): Opnieuw proberen op dezelfde tab probeert opnieuw en laat een half ingevuld + Persoon staan', v == ['Verzonnen', 'Half R10', 'half.r10@voorbeeld.invalid'] and regel('personen'), [v, regel('personen')])
+            pg.evaluate("window.__faal = {}"); n0 = len(calls('apiCrm'))
+            if regel('personen'): pg.tap('#crmInhoud > .leeg [data-crmtab="personen"]')
+            pg.wait_for_function("CRM.laadt === null && !document.querySelector('#crmInhoud > .leeg')", timeout=8000); pg.wait_for_timeout(300)
+            v = pg.evaluate("['voornaam', 'achternaam'].map(function (n) { var e = document.querySelector('#crmNieuw #cf-' + n); return e ? e.value : null; })")
+            ok(wie + ' (herstel r10, R10-1b): lukt Opnieuw proberen, dan verdwijnt de regel en blijft het formulier', len(calls('apiCrm')) == n0 + 1 and v == ['Verzonnen', 'Half R10'], [len(calls('apiCrm')) - n0, v])
+            pg.tap('#crmNieuw [data-cf-annuleer]'); n0 = len(calls('apiCrm')); pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]'); pg.wait_for_timeout(500)
+            een = pg.evaluate("[].filter.call(document.querySelectorAll('#crmInhoud .rij[data-crm-open^=\"school:\"] .r-titel'), function (x) { return x.firstChild && x.firstChild.textContent === %s; }).length" % json.dumps(s1))
+            ok(wie + ' (herstel r10, R10-1b): daarna staat de school er één keer en kost een tab geen apiCrm meer', een == 1 and len(calls('apiCrm')) == n0 and not regel('scholen'), [een, len(calls('apiCrm')) - n0])
+            ok(wie + ' (herstel r10): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            pg.evaluate("window.__faal = {}")
+        stap('g5_794_r10_lijst', g5_794_r10_lijst)
+        if vp['width'] > 500: c.close(); continue
+        def g5_794_r10_label():
+            f0 = len(pageerrors); pg.evaluate("window.__faal = {}; window.__traag = {}")
+            sids = pg.evaluate("(function () { var t = {}; CRM.basis.personen.forEach(function (p) { t[p.schoolId] = (t[p.schoolId] || 0) + 1; }); return Object.keys(t).filter(function (k) { return t[k] >= 2; }); })()")
+            g = None
+            for s in sids:
+                acts = [a for a in (api('apiSchool', s).get('tijdlijn') or []) if a.get('persoonId') and a.get('persoon') and a.get('type') not in ('fase', 'taak')]
+                if acts: g = (s, acts[0]); break
+            s, a = g
+            pg.evaluate("openDetail('school', %s, true)" % json.dumps(s)); pg.wait_for_selector('#crmDetailScherm .d-naam h2', timeout=8000); pg.wait_for_timeout(500)
+            pg.evaluate("(function (pid) { CRM.basis.personen = CRM.basis.personen.filter(function (p) { return p.id !== pid; }); })(%s)" % json.dumps(a['persoonId']))
+            pg.evaluate("bewerkActiviteit(%s)" % json.dumps(a['id'])); venster_open('[data-cf="persoonId"]')
+            v = pg.evaluate("(function () { var s = document.querySelector('#venster [data-cf=persoonId]'); return [s.value, s.options[s.selectedIndex].text]; })()")
+            ok(wie + ' (herstel r10, nits R10-2/R10-iOS-3): een activiteit met een persoon die de basis niet kent: de keuzelijst Persoon houdt die persoon met de naam uit het record, niet het id', v == [a['persoonId'], a['persoon']], [v, a['persoon']])
+            pg.tap('#venster [data-cf-annuleer]'); venster_dicht()
+            pid = pg.evaluate("CRM.basis.projecten.filter(function (p) { return ['afgelopen', 'afgerond', 'gestopt'].indexOf(p.status) < 0; })[0].id")
+            api('apiTaakOpslaan', {'tekst': 'Verzonnen taak R10 project', 'trajectId': pid, 'deadline': dag(0)})
+            tk = pg.evaluate("run('apiTaken').then(function (d) { var t = d.taken.filter(function (x) { return x.tekst === 'Verzonnen taak R10 project'; })[0]; REG.taak[t.id] = t; return t; })")
+            pg.evaluate("(function (pid) { CRM.basis.projecten = CRM.basis.projecten.filter(function (p) { return p.id !== pid; }); })(%s)" % json.dumps(pid))
+            pg.evaluate("bewerkTaak(%s)" % json.dumps(tk['id'])); venster_open('[data-cf="trajectId"]')
+            v = pg.evaluate("(function () { var s = document.querySelector('#venster [data-cf=trajectId]'); return [s.value, s.options[s.selectedIndex].text]; })()"); nm = pg.evaluate("REG.taak[%s].project" % json.dumps(tk['id']))
+            ok(wie + ' (herstel r10, nit R10-2): een taak met een project dat de basis niet kent: de keuzelijst Project houdt dat project met de naam uit het record', nm and v == [pid, nm], [v, nm])
+            pg.tap('#venster [data-cf-annuleer]'); venster_dicht()
+            ok(wie + ' (herstel r10): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r10_label', g5_794_r10_label)
+        def g5_794_r10_keuze():
+            f0 = len(pageerrors); pg.evaluate("window.__faal = {}; window.__traag = {}")
+            ins = api('apiInstellingen')
+            api('apiKeuzelijstOpslaan', 'schoolStatussen', [{'waarde': 'potentieel' if x == 'lead' else x, 'oud': x} for x in ins['schoolStatussen']])
+            api('apiKeuzelijstOpslaan', 'taakCategorieen', [{'waarde': 'opvolging' if x == 'opvolgen' else x, 'oud': x} for x in ins['taakCategorieen']])
+            pg.tap('nav button[data-view="vandaag"]'); pg.wait_for_timeout(300); pg.evaluate("crmVerouderd()"); pg.tap('nav button[data-view="relaties"]')
+            pg.wait_for_function("CRM.basis !== null && CRM.laadt === null && CRM.basis.statussen.indexOf('potentieel') >= 0 && CRM.basis.categorieen.indexOf('opvolging') >= 0", timeout=8000)
+            pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=8000)
+            pg.tap('#crmBalk [data-crmnieuw="school"]'); pg.wait_for_selector('#crmNieuw [data-cf="status"]', timeout=5000)
+            s2 = 'Verzonnen school R10 status'; pg.fill('#crmNieuw input[id$="naam"]', s2)
+            st = pg.evaluate("(function () { var s = document.querySelector('#crmNieuw [data-cf=status]'); return [s.value, CRM.basis.statussen.indexOf(s.value) >= 0]; })()")
+            pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap()
+            try: toast('School toegevoegd'); goed = True
+            except Exception: goed = False
+            ok(wie + ' (herstel r10, R10-iOS-1): "lead" hernoemd in Beheer → Keuzelijsten: + School toont een geldige status (niet "lead") en geeft "School toegevoegd."', goed and st[0] != 'lead' and st[1], [goed, st, melding()])
+            if goed: pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % s2, timeout=8000); pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(300)
+            pg.evaluate("nieuweTaakVenster({ tekst: 'Verzonnen taak R10 categorie' })"); venster_open('[data-cf="categorie"]')
+            cat = pg.evaluate("document.querySelector('#venster [data-cf=categorie]').value"); pg.tap('#venster [data-cf-opslaan]'); toast('Taak toegevoegd'); pg.wait_for_timeout(300)
+            bew = [x['categorie'] for x in api('apiTaken')['taken'] if x['tekst'] == 'Verzonnen taak R10 categorie']
+            ok(wie + ' (herstel r10, R10-iOS-1): "opvolgen" hernoemd: het venster Nieuwe taak (Shift+Enter) toont als categorie wat bewaard wordt', bew == [cat] and cat != 'opvolgen', [cat, bew])
+            ok(wie + ' (herstel r10): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r10_keuze', g5_794_r10_keuze)
+        c.close()
+
+    # ===== 21. v7.9.4 herstel r11. R11-iOS-1: komt een oudere stille verversing (A, traag, lukt) binnen nadat een nieuwere (B) mislukte, dan wist A de vlag
+    # CRM.oud niet: na Terug staat de nieuwe persoon in de lijst of staat de regel "Niet bijgewerkt" erboven. Nit R11-2: een geslaagde apiCrm via Relaties in de
+    # tabbalk wist de regel (de volgende tab kost geen apiCrm). Nit R11-iOS-N1: Opnieuw proberen in de regel loopt luid (een fout geeft een melding), de regel
+    # blijft tot de poging lukt en de focus staat daarna op de knop of op de tab =====
+    for vp in ({'width': 375, 'height': 667}, {'width': 810, 'height': 1080}):
+        wie = 'iphone 375' if vp['width'] < 500 else 'ipad 810'
+        c = b.new_context(viewport=vp, is_mobile=True, has_touch=True)
+        pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('r11: ' + str(e))); pg.on('dialog', dialoog)
+        pg.goto(U + 'sophie'); pg.wait_for_selector('nav'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG); pg.evaluate(TRAAG); pg.evaluate(LAAT)
+        def melding(): return pg.evaluate("document.getElementById('toast').classList.contains('aan') ? document.getElementById('toast').innerText.replace(/\\s+/g, ' ') : ''")
+        def leeg(): pg.evaluate("window.__faal = {}; window.__traag = {}; window.__laat = {}")
+        def regel(t): return pg.evaluate("(function (t) { var i = document.getElementById('crmInhoud'), e = i.querySelector(':scope > .leeg'); return e ? [e.textContent, !!e.querySelector('[data-crmtab=\"' + t + '\"]')] : null; })(%s)" % json.dumps(t))
+        def na_poging(n): pg.wait_for_function("1000 - window.__faal.apiCrm === %d && CRM.laadt === null" % n, timeout=8000); pg.wait_for_timeout(300)
+        def n_crm(): return len(calls('apiCrm'))
+        def in_lijst(soort, n): return pg.evaluate("[].some.call(document.querySelectorAll('#crmInhoud .rij[data-crm-open^=\"%s:\"] .r-titel'), function (x) { return (x.firstChild ? x.firstChild.textContent : x.textContent) === %s; })" % (soort, json.dumps(n)))
+        def scholen():
+            pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="scholen"]'); pg.tap('#crmTabs [data-crmtab="scholen"]')
+            pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=8000); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+        def nieuwe_school(n):
+            pg.tap('#crmBalk [data-crmnieuw="school"]'); pg.wait_for_selector('#crmNieuw input[id$="naam"]', timeout=5000)
+            pg.fill('#crmNieuw input[id$="naam"]', n); pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap()
+            pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % n, timeout=8000)
+        def g5_794_r11_race():
+            f0 = len(pageerrors); leeg(); scholen()
+            sid = pg.evaluate("document.querySelector('#crmInhoud .rij[data-crm-open^=\"school:\"]').getAttribute('data-crm-open').slice(7)")
+            pg.locator('#crmInhoud [data-crm-open="school:%s"]' % sid).first.tap(); pg.wait_for_selector('#crmDetailScherm .d-naam h2', timeout=8000); pg.wait_for_timeout(300)
+            n0 = n_crm(); pg.evaluate("window.__laat.apiCrm = 2500")  # A: het antwoord na 2,5 s, met een basis van vóór de tweede opslag
+            pg.tap('#crmDetailScherm [data-dtab="historie"]'); pg.wait_for_timeout(200)
+            pg.select_option('#crmDetailScherm [data-logvorm]', 'call'); pg.wait_for_selector('#crmComposer #cf-tekst')
+            pg.fill('#crmComposer #cf-tekst', 'Verzonnen verslag R11'); pg.locator('#crmComposer button:has-text("Opslaan")').first.tap()
+            pg.wait_for_function("window.__calls.filter(function (x) { return x.fn === 'apiCrm'; }).length > %d" % n0, timeout=6000)
+            pg.evaluate("window.__laat = {}; window.__faal.apiCrm = 1")  # B: mislukt meteen
+            pg.tap('#crmDetailScherm [data-dtab="personen"]'); pg.wait_for_timeout(200)
+            pg.tap('#crmDetailScherm [data-composer="persoon"]'); pg.wait_for_selector('#crmComposer #cf-voornaam')
+            pg.fill('#crmComposer #cf-voornaam', 'Verzonnen'); pg.fill('#crmComposer #cf-achternaam', 'Race R11'); pg.locator('#crmComposer button:has-text("Opslaan")').first.tap()
+            pg.wait_for_function("window.__faal.apiCrm === 0", timeout=6000); t = melding()
+            pg.wait_for_timeout(3000); oud = pg.evaluate("[CRM.oud, CRM.basis.personen.some(function (p) { return p.naam === 'Verzonnen Race R11'; })]")
+            pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(300); pg.wait_for_function("CRM.laadt === null", timeout=8000)
+            pg.tap('#crmTabs [data-crmtab="personen"]'); pg.wait_for_timeout(300); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+            staat, r = in_lijst('persoon', 'Verzonnen Race R11'), regel('personen')
+            ok(wie + ' (herstel r11, R11-iOS-1): een oudere stille verversing die lukt na een nieuwere die mislukte, wist de regel niet: na Terug staat de nieuwe persoon in de lijst Personen of staat "Niet bijgewerkt" erboven',
+               'Persoon toegevoegd' in t and (staat or (r and 'Niet bijgewerkt' in r[0])), [t, oud, staat, r, n_crm() - n0])
+            ok(wie + ' (herstel r11): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r11_race', g5_794_r11_race)
+        def g5_794_r11_relaties():
+            f0 = len(pageerrors); leeg(); scholen(); s1 = 'Verzonnen school R11 relaties ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1000"); nieuwe_school(s1); na_poging(1)
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2); r0 = regel('scholen')
+            pg.evaluate("window.__faal = {}"); pg.tap('nav button[data-view="vandaag"]'); pg.wait_for_timeout(300); pg.tap('nav button[data-view="relaties"]')
+            pg.wait_for_function("CRM.laadt === null && !document.querySelector('#crmInhoud > .leeg')", timeout=8000); pg.wait_for_timeout(300)
+            n0 = n_crm(); pg.tap('#crmTabs [data-crmtab="personen"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="persoon:"]', timeout=8000); pg.wait_for_timeout(500)
+            ok(wie + ' (herstel r11, nit R11-2): na een mislukte verversing wist een geslaagde apiCrm via Relaties in de tabbalk de regel; de volgende tab kost geen apiCrm meer',
+               r0 and 'Niet bijgewerkt' in r0[0] and not regel('personen') and n_crm() == n0 and not pg.evaluate("CRM.oud"), [r0, regel('personen'), n_crm() - n0, pg.evaluate("CRM.oud")])
+            ok(wie + ' (herstel r11): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r11_relaties', g5_794_r11_relaties)
+        def g5_794_r11_opnieuw():
+            f0 = len(pageerrors); leeg(); scholen(); s1 = 'Verzonnen school R11 opnieuw ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1000"); nieuwe_school(s1); na_poging(1)
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2); r0 = regel('scholen')
+            pg.evaluate("window.__faal.apiCrm = 1; window.__laat.apiCrm = 1500")  # de poging mislukt na 1,5 s
+            pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_timeout(400)
+            tijdens = [regel('scholen'), pg.evaluate("!!CRM.laadt")]
+            pg.wait_for_function("window.__faal.apiCrm === 0 && CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+            na, t, f = regel('scholen'), melding(), pg.evaluate("(function (a) { return a ? [a.tagName, !!a.closest('#crmInhoud > .leeg'), !!a.closest('#crmTabs')] : null; })(document.activeElement)")
+            ok(wie + ' (herstel r11, nit R11-iOS-N1): Opnieuw proberen loopt luid: de regel blijft tijdens de poging, een fout geeft een melding en de focus staat op Opnieuw proberen',
+               r0 and tijdens[0] and tijdens[1] and na and 'Storing (golf5)' in t and f and f[1], [r0, tijdens, na, t, f])
+            leeg(); pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]')
+            pg.wait_for_function("CRM.laadt === null && !document.querySelector('#crmInhoud > .leeg')", timeout=8000); pg.wait_for_timeout(300)
+            f = pg.evaluate("(function (a) { return a ? [a.tagName, !!a.closest('#crmInhoud > .leeg'), !!a.closest('#crmTabs')] : null; })(document.activeElement)")
+            ok(wie + ' (herstel r11, nit R11-iOS-N1): lukt Opnieuw proberen, dan staat de school in de lijst, is de regel weg en staat de focus op de tab', in_lijst('school', s1) and f and f[2], [in_lijst('school', s1), f])
+            ok(wie + ' (herstel r11): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r11_opnieuw', g5_794_r11_opnieuw)
         c.close()
     b.close()
 
