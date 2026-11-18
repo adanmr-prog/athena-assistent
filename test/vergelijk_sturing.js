@@ -14,7 +14,10 @@
  * --exact-verkoop v7.9.4 (bouwpunt 15): het verkoopboek van Exact (alleen scholen), de bron voor M26 en M27; een kolom Open is niet nodig
  * --exact-open    v7.9.4 (bouwpunt 15): een Exact-export met de kolom Open of een betaaldatum, de bron voor M28; zonder die kolom een invoerfout
  * --exact-open-stand  harnasdekking (4): de dag van die export (Open is de stand op die dag), niet in de toekomst; alleen met --exact-open of --exact. Zonder
- *                 betaaldatum vergelijkt het harnas Open alleen op een peildatum gelijk aan die dag
+ *                 betaaldatum vergelijkt het harnas Open alleen op een peildatum gelijk aan die dag. Herstel r8 (R8-1a): die dag is ook de grens met een
+ *                 betaaldatum (een termijn die erna verzonden of betaald is, staat niet in de export): een regel met een peildatum erna is "geblokkeerd (export
+ *                 dekt de periode niet)", bij --exact ook voor M26 en M27, en de maand van die dag is de maand van de run in de dekking. Zonder
+ *                 --exact-open-stand geldt de aanname dat de export met een betaaldatum van de run is (--peildatum, standaard vandaag)
  * --exact         het oude gedrag: één facturatie-export voor M26, M27 en M28. Heeft die geen kolom Open en geen betaaldatum (het verkoopboek), dan geeft
  *                 M28 "geblokkeerd (export zonder Open)" in plaats van elke factuur als open te tellen. Niet samen met --exact-verkoop of --exact-open.
  * --xps           de dienstenexport van XPS (M09, M25: categorie bron)
@@ -40,8 +43,11 @@
  *                                     vorig boekjaar, een export die later begint): een maand buiten de export is geen afwijking. Een maand zonder termijn in
  *                                     Athena telt niet. Herstel r6 (R6-1): de maand van de peildatum is gedekt als de export t/m de maand ervoor loopt (Exact
  *                                     heeft nog geen factuur van deze maand); herstel r7 (R7-1): alleen als dat de maand van de peildatum van de run is
- *                                     (--peildatum, standaard vandaag), een eerdere maand direct na het einde van de export dekt niet. M26 en M28 tellen aan
- *                                     beide kanten de facturen van dit schooljaar van elk bestaand project (r7, R7-D3: een termijn zonder project niet)
+ *                                     (--peildatum, standaard vandaag; herstel r8, R8-1a: met --exact-open-stand die dag), een eerdere maand direct na het einde
+ *                                     van de export dekt niet. M26 en M28 tellen aan de kant van Athena de facturen van dit schooljaar van elk bestaand project
+ *                                     (r7, R7-D3: een termijn zonder project niet; Exact telt elke factuur), ook de oude definitie "alle open posten" (herstel
+ *                                     r8, R8-1b): een termijn zonder project is dus gezakt (invoer) door contract 17, nooit gezakt (definitie). Een peildatum na
+ *                                     --exact-open-stand dekt nooit (herstel r8, R8-1a)
  *                                     De vier exportblokkades zijn niet vergeleken: exitcode 3, met een vaste melding
  *   leeg (geen basis)                 v7.9.4 (bouwpunt 13): Athena heeft voor dit cijfer geen waarde (geen basis of geen populatie); nooit een vergelijking met 0.
  *                                     Herstel r4 (R4-1): raakt invoer het cijfer (zie hieronder), dan is een lege waarde gezakt (invoer)
@@ -256,7 +262,7 @@ var INVOER_MELDING = 'melding: een of meer regels zijn niet vergeleken omdat Ath
 var VERGELEKEN = ['geslaagd', 'gezakt (definitie)', 'gezakt (bron)'];
 var STAND_MELDING = 'melding: een of meer regels zijn niet vergeleken: de stand op die peildatum is niet te reconstrueren (fasewissels zonder werkelijke datum: importeer de werkelijke datums in Beheer), of vergelijk de stand van vandaag.';  // geen getal (geen aantal)
 // harnasdekking: vaste zinnen zonder aantal (3, 4: de export; 6: een afgekapte week; 8: wissels met zekerheid laag; 5 noemt de invoer met vaste namen)
-var EXPORT_MELDING = 'melding: een of meer regels wijken af, maar de export kan de bron niet toetsen (geblokkeerd (export …) of (stand van Open onbekend)); die regels zijn niet vergeleken: geef een export die de hele periode dekt, met een betaaldatum of met de kolom Open en --exact-open-stand gelijk aan de peildatum.';
+var EXPORT_MELDING = 'melding: een of meer regels wijken af, maar de export kan de bron niet toetsen (geblokkeerd (export …) of (stand van Open onbekend)); die regels zijn niet vergeleken: geef een export die de hele periode dekt, van de peildatum of later (--exact-open-stand), met een betaaldatum of met de kolom Open en --exact-open-stand gelijk aan de peildatum.';
 var WEEK_MELDING = 'melding: een of meer weekregels zijn op de peildatum afgekapt (maandag t/m de peildatum, niet de hele week); vergelijk ze met een rapport over dezelfde dagen.';
 var LAAG_MELDING = 'melding: een of meer standregels op een eerdere peildatum rusten op fasewissels met zekerheid laag (bij een tijdlijnwissel is de werkelijke datum de dag van invoer, de echte datum kan eerder liggen); geen blokkade, maar importeer de werkelijke datums in Beheer voor een zekere stand.';
 // harnasdekking (8): standcijfers die op een eerdere peildatum op fasewissels rusten (de fase uit kansenOpPeildatum, of wissels in de periode)
@@ -320,11 +326,12 @@ var OUDE_DEFINITIES = {
     L.ctx.lees('Facturen').forEach(function (f) { var v = L.ctx.verzondenVan(f); if (inSj[f.trajectId] && v && v.datum >= van && v.datum <= tot) som += Number(f.bedrag) || 0; });
     return [som];
   },
-  // herstel r6 (R6-1): M28 voor alleen de projecten van het schooljaar (ook van vóór 1 augustus) en voor alle open posten (zoals de werklijst of Openstaande posten)
+  // herstel r6 (R6-1): M28 voor alleen de projecten van het schooljaar (ook van vóór 1 augustus) en voor alle open posten (zoals de werklijst of Openstaande posten);
+  // herstel r8 (R8-1b): ook "alle open posten" alleen van een bestaand project, zoals exactWijkt: een termijn zonder project is invoer (contract 17), geen definitie
   openstaand: function (L, r) {
     if (r.uitsplitsing) return [];
     var d = r.per.peildatum, inSj = projectenVan(L, sjVan(L, d)), u = [0, 0];
-    L.ctx.lees('Facturen').forEach(function (f) { var v = L.ctx.verzondenVan(f), b = L.ctx.betaaldVan(f), x = Number(f.bedrag) || 0; if (!v || v.datum > d || (b && b.datum <= d)) return; u[1] += x; if (inSj[f.trajectId]) u[0] += x; });
+    L.ctx.lees('Facturen').forEach(function (f) { var v = L.ctx.verzondenVan(f), b = L.ctx.betaaldVan(f), x = Number(f.bedrag) || 0; if (!v || v.datum > d || (b && b.datum <= d) || !metProject(L)[f.trajectId]) return; u[1] += x; if (inSj[f.trajectId]) u[0] += x; });
     return u;
   },
   // M27 als de som van de termijnen "nog te doen" (de oude tegel op Home), voor de projecten van het schooljaar en voor alle projecten
@@ -478,24 +485,31 @@ function eindeMaand(d) { return laatsteDag(+d.slice(0, 4), +d.slice(5, 7)); }
 function metProject(L) { return eenmaal(L, 'projecten', function () { var u = {}; L.ctx.lees('Trajecten').forEach(function (t) { u[t.id] = true; }); return u; }); }
 function exactWijkt(L, r) {
   var ctx = L.ctx, d = r.per.peildatum, tol = tolerantieVan(L, r.id), vergelijk = function (e, a) { return !binnen(a, e, tol.pct ? tol : { pct: 0, abs: tol.abs * 100 }) ? 'wijkt' : ''; };
+  // herstel r8 (R8-1a): --exact-open-stand (S) is de dag van de export met Open en dus de grens: een peildatum erna is niet te toetsen, ook met een betaaldatum
+  // (een termijn die na S verzonden of betaald is, staat er niet in). De maand van S is dan ook de maand van de run in dekt(). Zonder S geldt de aanname dat de
+  // export van de run is (--peildatum, standaard vandaag)
+  var S = L.openStand, R = S || L.peildatum;
   if (r.id === 'openstaand') {
     var X = L.exactOpen; if (!X) return '';
     if (!X.metOpen) return 'zonder open';
     // herstel r1 (K12); harnasdekking (4): de kolom Open is de stand op de exportdag (--exact-open-stand). Zonder betaaldatum telt Open alleen als die dag de
-    // peildatum is; zonder --exact-open-stand geen oordeel. Met een betaaldatum zoals voorheen (Open op vandaag, anders de betaaldatum)
-    var opDag = L.openStand ? L.openStand === d : d >= L.vandaag, eO = 0, aO = 0, open = [], van = sjVan(L, d).slice(0, 4) + '-08-01';
-    if (!X.metBetaald && !(L.openStand && opDag)) return L.openStand ? 'zonder betaaldatum' : 'stand onbekend';
+    // peildatum is; zonder --exact-open-stand geen oordeel. Met een betaaldatum Open op de exportdag (zonder S: vanaf vandaag), anders de betaaldatum
+    var opDag = S ? S === d : d >= L.vandaag, eO = 0, aO = 0, open = [], van = sjVan(L, d).slice(0, 4) + '-08-01';
+    if (!X.metBetaald && !(S && opDag)) return S ? 'zonder betaaldatum' : 'stand onbekend';
+    if (S && d > S) return 'dekt niet';  // herstel r8 (R8-1a)
     // herstel r6 (R6-1): aan beide kanten de facturen van dit schooljaar (factuurdatum vanaf 1 augustus), zoals M28
     X.rijen.forEach(function (x) { if (x.datum > d || x.datum < van) return; eO += opDag && x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
     ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (metProject(L)[f.trajectId] && v && v.datum >= van && v.datum <= d && !(b && b.datum <= d)) { aO += ctx.centen(f.bedrag); open.push(v.datum); } });
-    return dekt(X, open, d, L.peildatum) ? vergelijk(eO, aO) : 'dekt niet';  // harnasdekking (4): een open termijn van Athena buiten het bereik van de export
+    return dekt(X, open, d, R) ? vergelijk(eO, aO) : 'dekt niet';  // harnasdekking (4): een open termijn van Athena buiten het bereik van de export
   }
   if (!L.exactVerkoop) return '';
+  var een = L.exactVerkoop === L.exactOpen;  // herstel r8 (R8-1a): --exact, één bestand voor verkoop en Open: dezelfde grens en dezelfde maand van de run
+  if (een && S && d > S) return 'dekt niet';
   // herstel r2 (A-B1, B-B2): dezelfde periode als M26 (bouwpunt 7, K10): in een stand op een eerdere peildatum t/m die dag, aan beide kanten; vandaag de hele maand
   var van = sjVan(L, d).slice(0, 4) + '-08-01', tot = d < L.vandaag ? d : eindeMaand(d), e = 0, a = 0, verzonden = [];
   L.exactVerkoop.rijen.forEach(function (x) { if (x.datum >= van && x.datum <= tot) e += x.bedrag; });
   ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f); if (metProject(L)[f.trajectId] && v && v.datum >= van && v.datum <= tot) { a += ctx.centen(f.bedrag); verzonden.push(v.datum); } });
-  return dekt(L.exactVerkoop, verzonden, d, L.peildatum) ? vergelijk(e, a) : 'dekt niet';  // harnasdekking (3): een vorig boekjaar dat het venster maar deels raakt, is geen bron
+  return dekt(L.exactVerkoop, verzonden, d, een ? R : L.peildatum) ? vergelijk(e, a) : 'dekt niet';  // harnasdekking (3): een vorig boekjaar dat het venster maar deels raakt, is geen bron
 }
 // v7.9.4 (bouwpunt 14): de rijen van een dienstenexport met één vast accountnummer, zodat urenUitRijen elke dienst aan één verzonnen talent koppelt. Zo telt
 // het totaal per maand ook de diensten zonder talent in Athena, met verder precies de regels van urenUitRijen (datum t/m vandaag, archiefvenster, status

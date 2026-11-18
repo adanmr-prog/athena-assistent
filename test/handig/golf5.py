@@ -26,6 +26,11 @@
 # hertekening over een Beheer-formulier na een mislukte basis; de fout met Opnieuw proberen.
 # v7.9.4 herstel r7 (sectie 16 en 17): de verversing na een geslaagde opslag is stil (geen "Niet gelukt"), en op de iPad liggend zet Opnieuw proberen Contacten
 # niet op Taken, Pipeline of Rapporten; de knop is daar 36 px.
+# v7.9.4 herstel r8 (sectie 18): na een geslaagde opslag blijft de basis staan en komt de verse stil, ook in het kansdetail (mijlpaal, Andere datum, Ongedaan maken)
+# en na + School (Terug vóór de verse basis: de school daarna één keer in de lijst), op de iPhone en de iPad staand; een mislukte stille apiCrm wordt gemeten.
+# v7.9.4 herstel r9 (sectie 19): een mislukte stille verversing blijft niet hangen (de volgende lijst laadt opnieuw, anders de fout met Opnieuw proberen), een
+# keuzelijst houdt de huidige waarde als de basis hem nog niet kent, een oudere apiCrm overschrijft geen nieuwere, Ongedaan maken tekent het bord opnieuw, en
+# notitie, verloren en + Persoon met een mislukte verse apiCrm.
 # v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout); na Andere datum een verse basis en een bruikbaar bord; Gebruikers
 # verouderen alles; € met een harde spatie in de tegel Verloren; M20 met het aantal zonder laatste contact.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
@@ -1401,6 +1406,194 @@ with sync_playwright() as p:
         pg.evaluate("window.__traag = {}; window.__faal = {}")
     stap('g5_794_r7_ipad', g5_794_r7_ipad)
     c.close()
+
+    # ===== 18. v7.9.4 herstel r8 (R8-iOS-1): na een geslaagde opslag blijft de basis staan en komt de verse stil, ook in het kansdetail (mijlpaal, Andere datum,
+    # Ongedaan maken) en na + School; een mislukte verse apiCrm raakt melding en detail niet, en tik je Terug vóór de verse basis, dan staat de nieuwe school er
+    # daarna één keer. Op de iPhone (375×667) en de iPad staand (810×1080) met touch. R8-iOS-2: een mislukte stille apiCrm komt wel in de metingen =====
+    for vp in ({'width': 375, 'height': 667}, {'width': 810, 'height': 1080}):
+        wie = 'iphone 375' if vp['width'] < 500 else 'ipad 810'
+        c = b.new_context(viewport=vp, is_mobile=True, has_touch=True)
+        pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('r8: ' + str(e))); pg.on('dialog', dialoog)
+        pg.goto(U + 'lars'); pg.wait_for_selector('nav'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG); pg.evaluate(TRAAG)
+        def melding(): return pg.evaluate("document.getElementById('toast').classList.contains('aan') ? document.getElementById('toast').innerText.replace(/\\s+/g, ' ') : ''")
+        def detail(): return pg.evaluate("(function () { var d = document.getElementById('crmDetailScherm'), h = d.querySelector('.d-naam h2'); return [h ? h.textContent : null, /Kon dit niet laden/.test(d.innerText), d.contains(document.activeElement) && document.activeElement !== d]; })()")
+        def mislukt(): pg.wait_for_function("window.__faal.apiCrm === 0", timeout=6000); pg.wait_for_timeout(400)
+        def g5_794_r8_kans():
+            f0 = len(pageerrors); pg.evaluate("window.__faal = {}; window.__traag = {}")
+            pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="pipeline"]'); pg.tap('#crmTabs [data-crmtab="pipeline"]'); pg.wait_for_selector('#crmInhoud [data-sleep^="kans:"]', timeout=8000)
+            kid = pg.evaluate("document.querySelector('#crmInhoud [data-sleep^=\"kans:\"]').getAttribute('data-sleep').slice(5)")
+            pg.locator('#crmInhoud [data-crm-open="kans:%s"]' % kid).first.tap(); pg.wait_for_selector('#crmDetailScherm [data-kansfase]', timeout=8000); pg.wait_for_timeout(300)
+            van, doel = pg.evaluate("(function () { var s = document.querySelector('#crmDetailScherm [data-kansfase]'), k = CRM.detail.data.kans; return [s.value, [].map.call(s.options, function (o) { return o.value; }).filter(function (f) { return f && f !== s.value && f !== 'gewonnen' && f !== 'verloren' && !faseVensterNodig(k, f); })[0]]; })()")
+            pg.evaluate("window.__faal.apiCrm = 1"); pg.select_option('#crmDetailScherm [data-kansfase]', doel); mislukt()
+            t, d, knoppen = melding(), detail(), pg.locator('#toast.aan button').all_inner_texts()
+            ok(wie + ', Lars (herstel r8, R8-iOS-1): mislukt de verse apiCrm na een mijlpaal in het kansdetail, dan blijven Ongedaan maken en Andere datum in de melding (geen "Niet gelukt") en tekent het detail met de nieuwe mijlpaal, de focus in het detail',
+               'Mijlpaal: ' + doel in t and 'Niet gelukt' not in t and 'Ongedaan maken' in knoppen and 'Andere datum' in knoppen and d[0] and not d[1] and d[2] and pg.evaluate("CRM.detail.data.kans.fase") == doel, [t, knoppen, d])
+            pg.evaluate("window.__faal.apiCrm = 1"); pg.tap('#toast.aan button:has-text("Andere datum")'); venster_open('#vf-datum'); pg.tap('#venster [data-cf-opslaan]'); venster_dicht(); mislukt()
+            t, d = melding(), detail()
+            ok(wie + ' (herstel r8, R8-iOS-1): mislukt de verse apiCrm na Andere datum in het kansdetail, dan blijft de melding "Datum van de mijlpaal" en het detail (niet "Kon dit niet laden")', 'Datum van de mijlpaal' in t and 'Niet gelukt' not in t and d[0] and not d[1], [t, d])
+            pg.wait_for_timeout(300); pg.select_option('#crmDetailScherm [data-kansfase]', van); pg.wait_for_selector('#toast.aan button:has-text("Ongedaan maken")', timeout=6000); pg.wait_for_timeout(300)
+            pg.evaluate("window.__faal.apiCrm = 1"); pg.tap('#toast.aan button:has-text("Ongedaan maken")'); mislukt()
+            t, d = melding(), detail()
+            ok(wie + ' (herstel r8, R8-iOS-1): mislukt de verse apiCrm na Ongedaan maken in het kansdetail, dan blijft "Teruggezet naar" en het detail', 'Teruggezet naar ' + doel in t and 'Niet gelukt' not in t and d[0] and not d[1] and pg.evaluate("CRM.detail.data.kans.fase") == doel, [t, d])
+            ok(wie + ' (herstel r8): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            pg.evaluate("window.__faal = {}"); pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(300)
+        stap('g5_794_r8_kans', g5_794_r8_kans)
+        def g5_794_r8_school():
+            f0 = len(pageerrors); pg.evaluate("window.__faal = {}; window.__traag = {}")
+            pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="scholen"]'); pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]', timeout=8000)
+            def nieuwe_school(n):
+                pg.tap('#crmBalk [data-crmnieuw="school"]'); pg.wait_for_selector('#crmNieuw input[id$="naam"]', timeout=5000)
+                pg.fill('#crmNieuw input[id$="naam"]', n); pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap()
+            def in_lijst(n): return pg.evaluate("(function (n) { return [].filter.call(document.querySelectorAll('#crmInhoud [data-crm-open^=\"school:\"] .r-titel'), function (x) { return x.firstChild && x.firstChild.textContent === n; }).length; })(%s)" % json.dumps(n))
+            s1 = 'Verzonnen school R8 ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1"); nieuwe_school(s1); pg.wait_for_selector('#crmDetailScherm .d-naam h2, #crmDetailScherm .leeg', timeout=6000); mislukt()
+            t, d = melding(), detail()
+            ok(wie + ' (herstel r8, R8-iOS-1): + School met een mislukte verse apiCrm: "School toegevoegd" (geen "Niet gelukt"), het detail toont de school met de focus op de naam', 'School toegevoegd' in t and 'Niet gelukt' not in t and d[0] == s1 and not d[1] and pg.evaluate("document.activeElement === document.querySelector('#crmDetailScherm .d-naam h2')"), [t, d])
+            pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]')
+            pg.tap('nav button[data-view="vandaag"]'); pg.wait_for_timeout(300); pg.tap('nav button[data-view="relaties"]'); pg.wait_for_function("CRM.laadt === null && CRM.basis !== null", timeout=8000); pg.wait_for_timeout(300)
+            ok(wie + ' (herstel r8, R8-iOS-1): na een geslaagde verversing staat de nieuwe school één keer in de lijst', in_lijst(s1) == 1, in_lijst(s1))
+            s2 = 'Verzonnen school R8b ' + wie
+            pg.evaluate("window.__traag.apiCrm = 2500"); nieuwe_school(s2); pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % s2, timeout=6000)
+            loopt = pg.evaluate("CRM.laadt !== null && CRM.basis !== null"); pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]'); voor = in_lijst(s2)
+            pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300); na = in_lijst(s2); pg.evaluate("window.__traag = {}")
+            ok(wie + ' (herstel r8, R8-iOS-1): met een trage apiCrm tekent het detail van de nieuwe school met de oude basis terwijl de verse nog loopt; Terug daarvóór: na de stille verversing staat de school één keer in de lijst', loopt and voor == 0 and na == 1, [loopt, voor, na])
+            ok(wie + ' (herstel r8): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r8_school', g5_794_r8_school)
+        def g5_794_r8_meting():
+            tel = "(function () { var l = METING.lijst || []; return [l.filter(function (m) { return m.fn === 'apiCrm'; }).length, l.filter(function (m) { return m.fn === 'apiCrm' && !m.ok; }).length]; })()"
+            a = pg.evaluate(tel); pg.evaluate("window.__faal.apiCrm = 1; crmOpnieuw()"); pg.wait_for_function("window.__faal.apiCrm === 0 && CRM.laadt === null", timeout=6000); pg.wait_for_timeout(300)
+            z = pg.evaluate(tel); t = melding()
+            ok(wie + ' (herstel r8, R8-iOS-2): een mislukte stille verversing (crmOpnieuw) geeft geen melding maar komt wel als fout in de metingen (METING.lijst)', z[0] == a[0] + 1 and z[1] == a[1] + 1 and 'Niet gelukt' not in t, [a, z, t])
+            pg.evaluate("crmOpnieuw()"); pg.wait_for_function("CRM.laadt === null && CRM.basis !== null", timeout=6000)
+            ok(wie + ' (herstel r8, R8-iOS-2): een geslaagde stille verversing komt ook in de metingen', pg.evaluate(tel)[0] == z[0] + 1, [z, pg.evaluate(tel)])
+        stap('g5_794_r8_meting', g5_794_r8_meting)
+        c.close()
+
+    # ===== 19. v7.9.4 herstel r9. R9-1/R9-iOS-2: mislukt de stille verversing na + School, dan laadt de volgende lijst (Terug, een tab) de basis opnieuw en staat
+    # de school er één keer; mislukt ook die, dan de fout met Opnieuw proberen. R9-iOS-1: een keuzelijst houdt de huidige waarde ook als de basis die school nog
+    # niet kent (persoon, taak), dus Opslaan koppelt niets los. R9-iOS-3: een oudere apiCrm die later antwoordt (Apps Script leest bij ontvangst) overschrijft
+    # geen nieuwere. Nits: Ongedaan maken na Terug naar het bord tekent het bord opnieuw; notitie, verloren en + Persoon met een mislukte verse apiCrm =====
+    # __laat[fn] = ms: de backend rekent meteen en het antwoord komt later (zoals Apps Script); __traag vertraagt de aanroep zelf
+    LAAT = """(function () { if (window.__laat) return; window.__laat = {}; var D = window.AthenaDemo, o = D.run;
+  D.run = function (fn) { var x = o.apply(this, arguments), ms = window.__laat[fn]; return ms ? x.then(function (r) { return new Promise(function (z) { setTimeout(function () { z(r); }, ms); }); }) : x; }; })()"""
+    for vp in ({'width': 375, 'height': 667}, {'width': 810, 'height': 1080}):
+        wie = 'iphone 375' if vp['width'] < 500 else 'ipad 810'
+        def open_als(rol):
+            c = b.new_context(viewport=vp, is_mobile=True, has_touch=True)
+            p2 = c.new_page(); p2.on('pageerror', lambda e: pageerrors.append('r9: ' + str(e))); p2.on('dialog', dialoog)
+            p2.goto(U + rol); p2.wait_for_selector('nav'); p2.wait_for_load_state('networkidle'); p2.wait_for_timeout(500); p2.evaluate(VOLG); p2.evaluate(TRAAG); p2.evaluate(LAAT)
+            return c, p2
+        c, pg = open_als('sophie')
+        def melding(): return pg.evaluate("document.getElementById('toast').classList.contains('aan') ? document.getElementById('toast').innerText.replace(/\\s+/g, ' ') : ''")
+        def detail(): return pg.evaluate("(function () { var d = document.getElementById('crmDetailScherm'), h = d.querySelector('.d-naam h2'); return [h ? h.textContent : null, /Kon dit niet laden/.test(d.innerText)]; })()")
+        def leeg(): pg.evaluate("window.__faal = {}; window.__traag = {}; window.__laat = {}")
+        def mislukt(n=0): pg.wait_for_function("window.__faal.apiCrm === %d && CRM.laadt === null" % n, timeout=8000); pg.wait_for_timeout(300)
+        def tab(t): pg.tap('#crmTabs [data-crmtab="%s"]' % t)
+        def scholen():
+            pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="scholen"]'); tab('scholen'); pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]', timeout=8000)
+        def nieuwe_school(n):
+            pg.tap('#crmBalk [data-crmnieuw="school"]'); pg.wait_for_selector('#crmNieuw input[id$="naam"]', timeout=5000)
+            pg.fill('#crmNieuw input[id$="naam"]', n); pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap()
+            pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % n, timeout=8000); return pg.evaluate("CRM.detail.id")
+        def in_lijst(n): return pg.evaluate("(function (n) { return [].filter.call(document.querySelectorAll('#crmInhoud [data-crm-open^=\"school:\"] .r-titel'), function (x) { return x.firstChild && x.firstChild.textContent === n; }).length; })(%s)" % json.dumps(n))
+        def terug(): pg.tap('#crmDetailScherm [data-crm-terug]')
+        def g5_794_r9_oud():
+            f0 = len(pageerrors); leeg(); scholen()
+            s1 = 'Verzonnen school R9 ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1"); nieuwe_school(s1); mislukt()
+            n0 = len(calls('apiCrm')); terug(); pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]'); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+            ok(wie + ' (herstel r9, R9-1/R9-iOS-2): mislukt de stille verversing na + School, dan laadt Terug naar de lijst (zonder schermwissel) de basis opnieuw en staat de school er één keer',
+               in_lijst(s1) == 1 and len(calls('apiCrm')) == n0 + 1 and 'Niet gelukt' not in melding(), [in_lijst(s1), len(calls('apiCrm')) - n0, melding()])
+            tab('personen'); pg.wait_for_selector('#crmBalk [data-crmnieuw="persoon"]'); pg.tap('#crmBalk [data-crmnieuw="persoon"]'); pg.wait_for_selector('#crmNieuw #cf-schoolId', timeout=5000)
+            ok(wie + ' (herstel r9, R9-iOS-2): daarna staat de school in de keuzelijst School van + Persoon', pg.evaluate("[].some.call(document.getElementById('cf-schoolId').options, function (o) { return o.text === %s; })" % json.dumps(s1)))
+            pg.tap('#crmNieuw [data-cf-annuleer]'); tab('scholen'); pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]')
+            s2 = 'Verzonnen school R9b ' + wie
+            pg.evaluate("window.__faal.apiCrm = 2"); nieuwe_school(s2); mislukt(1)
+            terug(); fout = True
+            try: pg.wait_for_selector('#crmInhoud .leeg:has-text("Kon de relaties niet laden") [data-crmtab="scholen"]', timeout=8000)
+            except Exception: fout = False
+            ok(wie + ' (herstel r9, R9-1): mislukt ook de nieuwe poging, dan staat in de lijst de fout met Opnieuw proberen (niet stil de oude lijst zonder de school)', fout and 'Niet gelukt' not in melding(), [fout, melding()])
+            if fout: pg.tap('#crmInhoud [data-crmtab="scholen"]')
+            pg.wait_for_function("window.__faal.apiCrm === 0 && CRM.laadt === null && !!document.querySelector('#crmInhoud [data-crm-open^=\"school:\"]')", timeout=8000); pg.wait_for_timeout(300)
+            ok(wie + ' (herstel r9, R9-1): na Opnieuw proberen staat de school er één keer', in_lijst(s2) == 1, in_lijst(s2))
+            ok(wie + ' (herstel r9): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r9_oud', g5_794_r9_oud)
+        def g5_794_r9_keuze():
+            f0 = len(pageerrors); leeg(); scholen()
+            s3 = 'Verzonnen school R9c ' + wie
+            pg.evaluate("window.__faal.apiCrm = 3"); sid = nieuwe_school(s3); mislukt(2)
+            pg.locator('#crmDetailScherm [data-composer="taak"]').first.tap(); pg.wait_for_selector('#crmComposer #cf-tekst')
+            pg.fill('#crmComposer #cf-tekst', 'Verzonnen taak R9 ' + wie); pg.locator('#crmComposer button:has-text("Opslaan")').first.tap(); toast('Taak toegevoegd'); mislukt(1)
+            pg.locator('#crmDetailScherm [data-taakbewerk]:has-text("Verzonnen taak R9")').first.tap(); venster_open('[data-cf="schoolId"]')
+            v = pg.evaluate("(function (sid) { var s = document.querySelector('#venster [data-cf=schoolId]'); return [s.value, s.options[s.selectedIndex].text, CRM.basis.scholen.some(function (x) { return x.id === sid; })]; })(%s)" % json.dumps(sid))
+            ok(wie + ' (herstel r9, R9-iOS-1): een taak van een school die de basis (na een mislukte verversing) nog niet kent: de keuzelijst School in het venster houdt die school',
+               v[0] == sid and v[1] == s3 and not v[2], v)
+            pg.fill('#venster [data-cf="tekst"]', 'Verzonnen taak R9 bewerkt ' + wie); pg.tap('#venster [data-cf-opslaan]'); toast('Taak opgeslagen'); pg.wait_for_timeout(500)
+            tk = [t for t in api('apiSchool', sid)['taken'] if t['tekst'].startswith('Verzonnen taak R9 bewerkt')]
+            ok(wie + ' (herstel r9, R9-iOS-1): na Opslaan hoort de taak nog bij de school', len(tk) == 1 and tk[0]['schoolId'] == sid, tk)
+            pg.tap('#crmDetailScherm [data-dtab="personen"]'); pg.wait_for_timeout(300); pg.tap('#crmDetailScherm [data-composer="persoon"]'); pg.wait_for_selector('#crmComposer #cf-voornaam')
+            pg.fill('#cf-voornaam', 'Verzonnen'); pg.fill('#cf-achternaam', 'Keuze R9'); pg.locator('#crmComposer button:has-text("Opslaan")').first.tap(); toast('Persoon toegevoegd'); mislukt()
+            if pg.evaluate("!!document.querySelector('#crmDetailScherm [data-dtab=personen]:not(.aan)')"): pg.tap('#crmDetailScherm [data-dtab="personen"]')
+            pg.wait_for_selector('#crmDetailScherm [data-crm-open^="persoon:"]', timeout=8000); pg.locator('#crmDetailScherm [data-crm-open^="persoon:"]').first.tap(); pg.wait_for_selector('#crmDetailScherm [data-composer="bewerk"]', timeout=8000)
+            pid = pg.evaluate("CRM.detail.id"); pg.tap('#crmDetailScherm [data-composer="bewerk"]'); pg.wait_for_selector('#crmComposer #cf-schoolId')
+            v = pg.evaluate("(function (sid) { var s = document.getElementById('cf-schoolId'); return [s.value, s.options[s.selectedIndex].text, CRM.basis.scholen.some(function (x) { return x.id === sid; })]; })(%s)" % json.dumps(sid))
+            ok(wie + ' (herstel r9, R9-iOS-1): Persoon bewerken bij een school die de basis nog niet kent: de keuzelijst School houdt die school (niet "Kies een school")', v[0] == sid and v[1] == s3 and not v[2], v)
+            pg.fill('#crmComposer #cf-telefoon', '0612345678'); pg.locator('#crmComposer button:has-text("Opslaan")').first.tap(); toast('Persoon opgeslagen'); pg.wait_for_timeout(500)
+            pp = api('apiPersoon', pid)['persoon']
+            ok(wie + ' (herstel r9, R9-iOS-1): na Opslaan van alleen het telefoonnummer hoort de persoon nog bij de school', pp['schoolId'] == sid and pp['telefoon'] == '0612345678', [pp['schoolId'], pp['telefoon']])
+            ok(wie + ' (herstel r9): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r9_keuze', g5_794_r9_keuze)
+        if vp['width'] > 500: c.close(); continue
+        def g5_794_r9_volgorde():
+            f0 = len(pageerrors); leeg(); scholen()
+            pg.evaluate("window.__laat.apiCrm = 4000"); nieuwe_school('Verzonnen school R9d ' + wie); pg.evaluate("window.__laat = {}")
+            pg.tap('#crmDetailScherm [data-dtab="personen"]'); pg.wait_for_timeout(300); pg.tap('#crmDetailScherm [data-composer="persoon"]'); pg.wait_for_selector('#crmComposer #cf-voornaam')
+            pg.fill('#cf-voornaam', 'Verzonnen'); pg.fill('#cf-achternaam', 'Volgorde R9'); pg.locator('#crmComposer button:has-text("Opslaan")').first.tap(); toast('Persoon toegevoegd')
+            q = "CRM.basis.personen.some(function (p) { return p.naam === 'Verzonnen Volgorde R9'; })"
+            try: pg.wait_for_function(q, timeout=3000); eerst = True
+            except Exception: eerst = False
+            pg.wait_for_timeout(4500); na = pg.evaluate(q)
+            terug(); tab('personen'); pg.wait_for_timeout(800); lijst = pg.evaluate("document.getElementById('crmInhoud').innerText.indexOf('Verzonnen Volgorde R9') >= 0")
+            ok(wie + ' (herstel r9, R9-iOS-3): een oudere apiCrm (na + School, antwoord na 4 s) die na een nieuwere (na + Persoon) binnenkomt, overschrijft die niet: de persoon blijft in de basis en in de lijst Personen',
+               eerst and na and lijst, [eerst, na, lijst])
+            ok(wie + ' (herstel r9): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r9_volgorde', g5_794_r9_volgorde)
+        c.close()
+        c, pg = open_als('lars')
+        def kaart_open():
+            pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="pipeline"]'); tab('pipeline'); pg.wait_for_selector('#crmInhoud [data-sleep^="kans:"]', timeout=8000)
+            kid = pg.evaluate("document.querySelector('#crmInhoud [data-sleep^=\"kans:\"]').getAttribute('data-sleep').slice(5)")
+            pg.locator('#crmInhoud [data-crm-open="kans:%s"]' % kid).first.tap(); pg.wait_for_selector('#crmDetailScherm [data-kansfase]', timeout=8000); pg.wait_for_timeout(300)
+            return kid
+        def doelfase(): return pg.evaluate("(function () { var s = document.querySelector('#crmDetailScherm [data-kansfase]'), k = CRM.detail.data.kans; return [s.value, [].map.call(s.options, function (o) { return o.value; }).filter(function (f) { return f && f !== s.value && f !== 'gewonnen' && f !== 'verloren' && !faseVensterNodig(k, f); })[0]]; })()")
+        def g5_794_r9_bord():
+            f0 = len(pageerrors); leeg(); kid = kaart_open(); van, doel = doelfase()
+            pg.select_option('#crmDetailScherm [data-kansfase]', doel); pg.wait_for_selector('#toast.aan button:has-text("Ongedaan maken")', timeout=6000)
+            terug(); pg.wait_for_selector('#crmInhoud [data-sleep="kans:%s"]' % kid, timeout=8000); pg.wait_for_timeout(300); k1 = kol('#crmInhoud [data-sleep="kans:%s"]' % kid)
+            pg.tap('#toast.aan button:has-text("Ongedaan maken")'); toast('Teruggezet naar')
+            try: pg.wait_for_function("(function () { var k = document.querySelector('#crmInhoud [data-sleep=\"kans:%s\"]'); return !!k && k.closest('[data-sleepdoel]').getAttribute('data-sleepdoel') === %s; })()" % (kid, json.dumps('kans:' + van)), timeout=6000); k2 = 'kans:' + van
+            except Exception: k2 = kol('#crmInhoud [data-sleep="kans:%s"]' % kid)
+            ok(wie + ' (herstel r9, nit R9-2/R9-3/R9-iOS-4): Ongedaan maken na Terug naar het bord zet de kaart op het bord terug in de oude kolom', k1 == 'kans:' + doel and k2 == 'kans:' + van and api('apiKans', kid)['kans']['fase'] == van, [k1, k2, van, doel])
+            ok(wie + ' (herstel r9): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r9_bord', g5_794_r9_bord)
+        def g5_794_r9_paden():
+            f0 = len(pageerrors); leeg(); kid = kaart_open()
+            pg.evaluate("window.__faal.apiCrm = 1"); pg.select_option('#crmDetailScherm [data-logvorm]', 'notitie'); pg.wait_for_selector('#crmComposer [data-cf="tekst"]')
+            pg.fill('#crmComposer [data-cf="tekst"]', 'Verzonnen notitie R9'); pg.locator('#crmComposer button:has-text("Opslaan")').first.tap(); mislukt()
+            t, d = melding(), detail()
+            ok(wie + ' (herstel r9, nit R9-2): een notitie (naOpslaan) met een mislukte verse apiCrm: de melding blijft (geen "Niet gelukt") en het detail tekent', 'vastgelegd' in t and 'Niet gelukt' not in t and d[0] and not d[1], [t, d])
+            pg.evaluate("window.__faal.apiCrm = 1"); pg.select_option('#crmDetailScherm [data-kansfase]', 'verloren'); venster_open('#vf-verliesReden')
+            pg.select_option('#vf-verliesReden', index=1); pg.tap('#venster [data-cf-opslaan]'); venster_dicht(); mislukt()
+            t, d = melding(), detail()
+            ok(wie + ' (herstel r9, nit R9-2): verloren via het venster met een mislukte verse apiCrm: "Mijlpaal: verloren" met Ongedaan maken blijft en het detail tekent', 'Mijlpaal: verloren' in t and 'Niet gelukt' not in t and d[0] and not d[1] and pg.evaluate("CRM.detail.data.kans.fase") == 'verloren', [t, d])
+            terug(); pg.wait_for_selector('#crmTabs [data-crmtab="personen"]'); tab('personen'); pg.wait_for_selector('#crmBalk [data-crmnieuw="persoon"]', timeout=8000)
+            pg.tap('#crmBalk [data-crmnieuw="persoon"]'); pg.wait_for_selector('#crmNieuw #cf-voornaam'); pg.fill('#crmNieuw #cf-voornaam', 'Verzonnen'); pg.fill('#crmNieuw #cf-achternaam', 'Lijst R9')
+            pg.evaluate("window.__faal.apiCrm = 1"); pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap(); pg.wait_for_selector('#crmDetailScherm .d-naam h2, #crmDetailScherm .leeg', timeout=8000); mislukt()
+            t, d = melding(), detail()
+            ok(wie + ' (herstel r9, nit R9-2): + Persoon vanuit de lijst met een mislukte verse apiCrm: "Persoon toegevoegd" en het detail toont de persoon', 'Persoon toegevoegd' in t and 'Niet gelukt' not in t and d[0] == 'Verzonnen Lijst R9' and not d[1], [t, d])
+            ok(wie + ' (herstel r9): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        stap('g5_794_r9_paden', g5_794_r9_paden)
+        c.close()
     b.close()
 
 srv.shutdown()

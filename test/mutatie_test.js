@@ -1,4 +1,4 @@
-// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien; v7.9.3: eenentwintig; v7.9.4: achtendertig, na herstel r1 eenenveertig, na herstel r2 eenenvijftig, na herstel r3 zevenenvijftig, na herstel r4 negenenvijftig, na herstel r5 eenenzestig, na de harnasdekking tweeënzestig, na herstel r6 achtenzestig) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
+// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien; v7.9.3: eenentwintig; v7.9.4: achtendertig, na herstel r1 eenenveertig, na herstel r2 eenenvijftig, na herstel r3 zevenenvijftig, na herstel r4 negenenvijftig, na herstel r5 eenenzestig, na de harnasdekking tweeënzestig, na herstel r6 achtenzestig, na herstel r7 zeventig) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
 // onaangeraakt); per mutant draait `CODE_GS=<kopie> node test/node_rooktest.js`. Een mutant is "gedood" als de rooktest faalt
 // (exitcode ≠ 0, crash of timeout) en "OVERLEEFD" als hij ALLES GOED geeft: dan mist de rooktest een eis(...) voor die invariant.
 // Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 69 van 70 gedood (v7.9.4 herstel r7, alle op één na; na herstel r6 ≥ 67 van 68; na de harnasdekking ≥ 61 van 62; na herstel r5 ≥ 60 van 61; na herstel r4 ≥ 58 van 59; na herstel r3 ≥ 56 van 57; na herstel r2 ≥ 50 van 51; daarvoor ≥ 40 van 41 en ≥ 37 van 38; was ≥ 20 van 21) (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
@@ -311,7 +311,7 @@ var MUTANTEN = [
     voorstel: "eis(contractenOp().gewonnen_is_getekend.stand === 'gezakt', 'een winst van dit schooljaar zonder getekende waarde zakt');" },
   // v7.9.4 harnasdekking (7): één erbij
   { id: 'm26_definitie_per_maand', gebied: 'register (v7.9.4 harnasdekking)', invariant: 'de definitie van M26 is de som over het schooljaar t/m de peildatum, geen maandcijfer, zoals sturingCijfers rekent',
-    zoek: "'De som van de facturen van dit schooljaar: de termijnen met een verzenddatum vanaf 1 augustus, van elk project (zoals Exact op factuurdatum en Financiën; ook een slottermijn van een project van vorig schooljaar), opgeteld over het schooljaar t/m de peildatum (geen maandcijfer), met creditnota",
+    zoek: "'De som van de facturen van dit schooljaar: de termijnen met een verzenddatum vanaf 1 augustus, van elk bestaand project (zoals Financiën; ook een slottermijn van een project van vorig schooljaar; Exact telt op factuurdatum ook een factuur zonder project in Athena), opgeteld over het schooljaar t/m de peildatum (geen maandcijfer), met creditnota",
     vervang: "'De som van termijnen met een verzenddatum in de maand, met creditnota",
     voorstel: "eis(!/in de maand/.test(ctx.METRIEKEN.gefactureerd.definitie), 'M26 is geen maandcijfer');" },
   // v7.9.4 herstel r6: zes erbij (R6-1 twee, R6-2 twee, de nits R6-3 en R6-4)

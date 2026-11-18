@@ -21,6 +21,10 @@
  * het schooljaar (definitie) en een lopend project zonder contractwaarde (M04 en M07 invoer); vier mutanten van het harnas erbij.
  * Herstel r7: een eerdere maand direct na het einde van het verkoopboek dekt niet (alleen de maand van de run, R7-1), en een termijn van een verwijderd project
  * telt aan de kant van Athena niet (R7-D3); één mutant erbij.
+ * Herstel r8: --exact-open-stand is de grens, ook met een betaaldatum en bij --exact voor M26 (R8-1a), de maand van die dag is de maand van de run, en de
+ * oude definitie "alle open posten" telt een termijn zonder project niet (R8-1b, via beoordeel); vijf mutanten erbij. Herstel r9: de stand van R8-1b
+ * zonder verzend- of betaaldatum na vandaag, zodat de mutant niet van de dag afhangt. Let op (bestaand): dit bestand rekent met de echte dag en is alleen
+ * buiten augustus tot begin oktober stabiel (VASTE_DATUM met test/tz_klok.js laat het op een andere dag draaien).
  *   node test/vergelijk_sturing_test.js   → ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1) */
 'use strict';
 var fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), cp = require('child_process');
@@ -493,6 +497,56 @@ var refO7 = schrijfRef('referentie_o7.csv', [['M28', vandaag, Math.round(waardeV
 var runO7 = draai(['--export', EXPORT_O, '--referentie', refO7, '--exact-open', EXACT_LAAT, '--exact-open-stand', vandaag]);
 if (maand > sjStart.slice(0, 7)) eis(runO7.uit.join() === 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)' && runO7.code === 3, 'harnasdekking (4): een open termijn in Athena vóór het bereik van de export: geblokkeerd (export dekt de periode niet), niet bron (' + runO7.uit.join(' | ') + '; exit ' + runO7.code + ')');
 else eis(true, 'harnasdekking (4): in augustus ligt 1 augustus in de maand van de export; niets te toetsen');
+// herstel r8 (R8-1a, de scenario's van rev8/s1_open_stand en s1b_betaald_na_stand): --exact-open-stand is de grens, ook met een betaaldatum. Een export met Open
+// en Betaaldatum van de laatste dag van vorige maand kan een stand van vandaag niet toetsen (een termijn verzonden of betaald na die dag staat er niet in):
+// geblokkeerd (export dekt de periode niet), exitcode 3 en de exportmelding, nooit gezakt (bron). Met --exact geldt dezelfde grens voor M26 (B). De maand van de
+// standdatum is de maand van de run (C, C2): een export t/m de maand ervoor dekt een termijn in die maand, dus een afwijking is bron
+var vorigEind = ctx.plusDagenVan(maand + '-01', -1), vorigMaand1 = vorigEind.slice(0, 8) + '01', vorig10 = vorigEind.slice(0, 8) + '10';
+function standCsv(e, stand, tot) {  // Open en Betaaldatum op de standdatum; de facturen t/m tot (standaard de standdatum)
+  var regels = ['Factuurnummer;Factuurdatum;Debiteur;Omschrijving;Bedrag;Betaaldatum;Open'], i = 0;
+  e.tabellen.Facturen.forEach(function (f) {
+    var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (!v || v.datum > (tot || stand)) return; i++;
+    var bt = b && b.datum <= stand ? b.datum : ''; regels.push([f.factuurnummer, nlDatum(v.datum), 'Debiteur ' + i, 'Termijn', nlBedrag(f.bedrag), bt ? nlDatum(bt) : '', nlBedrag(bt ? 0 : f.bedrag)].join(';'));
+  });
+  return regels.join('\n') + '\n';
+}
+var dektNiet = function (run, regel) { return run.uit.join() === regel + ' geblokkeerd (export dekt de periode niet)' && run.code === 3 && run.melding.some(function (l) { return /de export kan de bron niet toetsen/.test(l); }); };
+var expA8 = kopie(exp); expA8.tabellen.Facturen.push(termijn('harnas-r8-na', tO.id, vandaag, 4400, false, '969001'));
+var EXPORT_A8 = path.join(TMP, 'export-r8-na-stand.json'); fs.writeFileSync(EXPORT_A8, JSON.stringify(expA8));
+var OPEN_A8 = schrijfCsv('open_stand_r8.csv', standCsv(expA8, vorigEind)), LA8 = H.laad({ export: EXPORT_A8 });
+var refA8 = schrijfRef('referentie_r8_a.csv', [['M28', vandaag, waardeVan(LA8, 'M28', vandaag).waarde + 12345, '']]), refB8 = schrijfRef('referentie_r8_b.csv', [['M26', vandaag, waardeVan(LA8, 'M26', vandaag).waarde + 12345, '']]);
+var runA8 = draai(['--export', EXPORT_A8, '--referentie', refA8, '--exact-open', OPEN_A8, '--exact-open-stand', vorigEind]);
+eis(dektNiet(runA8, 'M28 ' + vandaag), 'herstel r8 (R8-1a, A): een open termijn verzonden na de exportdag, export met Betaaldatum van ' + vorigEind + ', M28 van vandaag: geblokkeerd (export dekt de periode niet), exitcode 3 met de exportmelding (' + runA8.uit.join(' | ') + '; exit ' + runA8.code + ')');
+var expS8 = kopie(exp); expS8.tabellen.Facturen = expS8.tabellen.Facturen.filter(function (f) { var v = ctx.verzondenVan(f); return !v || v.datum <= vorigEind; });
+expS8.tabellen.Facturen.push({ id: 'harnas-r8-laat', trajectId: tO.id, omschrijving: 'Verzonnen termijn', bedrag: 4400, datum: vorig10, status: 'betaald', factuurnummer: '969002', verzonden: vorig10, betaald: vandaag, aangemaakt: vorig10 + ' 09:00' });
+var EXPORT_S8 = path.join(TMP, 'export-r8-betaald-na-stand.json'); fs.writeFileSync(EXPORT_S8, JSON.stringify(expS8));
+var refS8 = schrijfRef('referentie_r8_s.csv', [['M28', vandaag, waardeVan(H.laad({ export: EXPORT_S8 }), 'M28', vandaag).waarde + 12345, '']]);
+var OPEN_S8 = schrijfCsv('open_stand_r8_s.csv', standCsv(expS8, vorigEind)), runS8 = draai(['--export', EXPORT_S8, '--referentie', refS8, '--exact-open', OPEN_S8, '--exact-open-stand', vorigEind]);
+eis(dektNiet(runS8, 'M28 ' + vandaag), 'herstel r8 (R8-1a, S1b): een termijn verzonden vóór en betaald na de exportdag (in de export nog open), M28 van vandaag: geblokkeerd (export dekt de periode niet), exitcode 3 (' + runS8.uit.join(' | ') + '; exit ' + runS8.code + ')');
+var runB8 = draai(['--export', EXPORT_A8, '--referentie', refB8, '--exact', OPEN_A8, '--exact-open-stand', vorigEind]);
+var refB28 = schrijfRef('referentie_r8_b2.csv', [['M26', vandaag, waardeVan(H.laad({ export: EXPORT_S8 }), 'M26', vandaag).waarde + 12345, '']]), runB28 = draai(['--export', EXPORT_S8, '--referentie', refB28, '--exact', OPEN_S8, '--exact-open-stand', vorigEind]);
+eis(dektNiet(runB8, 'M26 ' + vandaag) && dektNiet(runB28, 'M26 ' + vandaag), 'herstel r8 (R8-1a, B): --exact met --exact-open-stand ' + vorigEind + ', M26 van vandaag: dezelfde grens, geblokkeerd (export dekt de periode niet), exitcode 3, ook zonder termijn na de exportdag (' + runB8.uit.concat(runB28.uit).join(' | ') + '; exit ' + runB8.code + ', ' + runB28.code + ')');
+var expC8 = kopie(exp), mVoor15 = ctx.plusDagenVan(vorigMaand1, -1).slice(0, 8) + '15';
+expC8.tabellen.Facturen.push(termijn('harnas-r8-maand', tO.id, vorig10, 2600, false, '969003'), termijn('harnas-r8-ervoor', tO.id, mVoor15, 300, true, '969004'));
+var EXPORT_C8 = path.join(TMP, 'export-r8-standmaand.json'); fs.writeFileSync(EXPORT_C8, JSON.stringify(expC8));
+var OPEN_C8 = schrijfCsv('open_stand_r8_c.csv', standCsv(expC8, vorigEind, ctx.plusDagenVan(vorigMaand1, -1))), LC8 = H.laad({ export: EXPORT_C8 });
+var refC8 = schrijfRef('referentie_r8_c.csv', [['M28', vorigEind, waardeVan(LC8, 'M28', vorigEind).waarde + 12345, '']]), refC28 = schrijfRef('referentie_r8_c2.csv', [['M26', vorigEind, waardeVan(LC8, 'M26', vorigEind).waarde + 12345, '']]);
+var runC8 = draai(['--export', EXPORT_C8, '--referentie', refC8, '--exact-open', OPEN_C8, '--exact-open-stand', vorigEind]), runC28 = draai(['--export', EXPORT_C8, '--referentie', refC28, '--exact', OPEN_C8, '--exact-open-stand', vorigEind]);
+eis(runC8.uit.join() === 'M28 ' + vorigEind + ' gezakt (bron)' && runC8.code === 0 && runC28.uit.join() === 'M26 ' + vorigEind + ' gezakt (bron)' && runC28.code === 0,
+  'herstel r8 (R8-1a, C): de maand van --exact-open-stand is de maand van de run: een export t/m de maand ervoor dekt een termijn in die maand, bron voor M28 en (--exact) M26 (' + runC8.uit.concat(runC28.uit).join(' | ') + '; exit ' + runC8.code + ', ' + runC28.code + ')');
+// herstel r8 (R8-1b, het scenario van rev8/p2_wees_harnas): de oude definitie "alle open posten" telt alleen termijnen van een bestaand project, zoals Athena en
+// exactWijkt. Een open termijn zonder project en een referentie M28 = Athena + de wees (zoals Exact hem telt): gezakt (invoer) met de melding, exitcode 3,
+// nooit gezakt (definitie). Ook het M28-pad van exactWijkt slaat de wees over: een export met Open zonder de wees wijkt niet af
+var expW8 = kopie(exp); expW8.tabellen.Facturen = expW8.tabellen.Facturen.filter(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); return !(v && (v.datum > vandaag || v.datum < sjStart && !b)) && !(b && b.datum > vandaag); });  // geen open post van vóór 1 augustus; herstel r9 (nit R9-1): ook geen verzend- of betaaldatum na vandaag (Athena telt die zonder peildatum als open of betaald, de oude definitie op datum), anders hangt de mutant van de dag af
+var EXACT_W8 = schrijfCsv('open_zonder_wees_r8.csv', exactCsvVan(expW8));
+expW8.tabellen.Facturen.push(termijn('harnas-r8-wees', 'harnas-r8-weg', vandaag, 900, false, '969005'));
+var EXPORT_W8 = path.join(TMP, 'export-r8-wees.json'); fs.writeFileSync(EXPORT_W8, JSON.stringify(expW8));
+var LW8 = H.laad({ export: EXPORT_W8, 'exact-open': EXACT_W8, 'exact-open-stand': vandaag }), a28W8 = waardeVan(LW8, 'M28', vandaag).waarde;
+var runW8 = draai(['--export', EXPORT_W8, '--referentie', schrijfRef('referentie_r8_w.csv', [['M28', vandaag, a28W8 + 900, '']])]);
+eis(runW8.uit.join() === 'M28 ' + vandaag + ' gezakt (invoer)' && runW8.code === 3 && invoerVan8(runW8).length === 1 && /contract termijn_verzonden_heeft_factuurnummer \(gezakt\)/.test(invoerVan8(runW8)[0]),
+  'herstel r8 (R8-1b): een open termijn zonder project en de referentie M28 = Athena + de wees: gezakt (invoer), exitcode 3, met de invoermelding; niet gezakt (definitie) (' + runW8.uit.join(' | ') + '; exit ' + runW8.code + '; ' + runW8.melding.join(' | ') + ')');
+eis(H.exactWijkt(LW8, { id: 'openstaand', per: H.periodeUit(LW8.ctx, vandaag, LW8.vandaag) }) === '', 'herstel r8 (R8-1b): het M28-pad van exactWijkt telt de wees niet: een export met Open zonder de wees wijkt niet af (' + H.exactWijkt(LW8, { id: 'openstaand', per: H.periodeUit(LW8.ctx, vandaag, LW8.vandaag) }) + ')');
+function invoerVan8(run) { return run.melding.filter(function (l) { return /^melding: invoer die de regels gezakt \(invoer\) raakt: /.test(l); }); }
 
 // herstel r6 (R6-1, de scenario's van rev6/p1c, p1b, s1_dekt en s4): M26 en M28 tellen de facturen van dit schooljaar van elk project, zoals Exact
 var expR = kopie(exp), dSept = ctx.plusDagenVan(sjStart, 40) <= vandaag ? ctx.plusDagenVan(sjStart, 40) : vandaag;
@@ -570,7 +624,7 @@ var laag = function (run) { return run.melding.some(function (l) { return /zeker
 var runZ1 = draai(['--export', EXPORT_Z, '--referentie', refZ]), runZ0 = draai(['--export', EXPORT, '--referentie', refZ]), runZ2 = draai(['--export', EXPORT_Z, '--referentie', refZ2]);
 eis(runZ1.uit.join() === 'M06 ' + vorigeMaand + ' geslaagd' && runZ1.code === 0 && laag(runZ1) && !laag(runZ0) && !laag(runZ2) && runZ2.code === 0,
   'harnasdekking (8): M06 op een eerdere peildatum met een wissel met zekerheid laag geeft een melding (geen blokkade); de seed, de stand van vandaag en M26 niet (' + runZ1.melding.concat(runZ0.melding, runZ2.melding).join(' | ') + ')');
-// Zes (herstel r6: tien; r7: elf) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
+// Zes (herstel r6: tien; r7: elf; r8: zestien) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
 var metMelding = function (u, re) { return u.meldingen.some(function (l) { return re.test(l); }); };
 [['dekking (3, 4)', 'return datums.every(function (d) {', 'return true || datums.every(function (d) {', function (m) {
     return m.vergelijk({ export: EXPORT_D, referentie: refD3, 'exact-verkoop': VERKOOP_AUG }).uit[0] === 'M26 ' + perV + ' gezakt (bron)' &&
@@ -582,11 +636,17 @@ var metMelding = function (u, re) { return u.meldingen.some(function (l) { retur
   ['versoepeling op elke peildatum (R7-1)', "if (pM !== String(R || '').slice(0, 7)) pM = '';", '', function (m) { return m.vergelijk({ export: EXPORT_D5, referentie: refD5, 'exact-verkoop': VERKOOP_AUG }).uit[0] === 'M26 ' + perS9 + ' gezakt (bron)'; }],
   ['oude definitie M26 (nit R6-4)', '  gefactureerd: function (L, r) {', '  gefactureerdUit: function (L, r) {', function (m) { return m.vergelijk({ export: EXPORT_R, referentie: path.join(TMP, 'referentie_m.csv') }).uit[0] === 'M26 ' + maand + ' gezakt (onverklaard)'; }],
   ['RAAKT.dekking (nit R6-2)', "'lopend_project_heeft_contract', 'noemerbewaking', 'overstap:fasen', 'overstap:capsule', 'overstap:projecten'],", "'noemerbewaking', 'overstap:fasen', 'overstap:capsule'],", function (m) { var u = m.vergelijk({ export: EXPORT_3, referentie: REF_3 }); return u.uit[1] === 'M07 ' + maand + ' gezakt (onverklaard)' && u.exit === 1; }],
-  ['standdatum van Open (4)', 'if (!X.metBetaald && !(L.openStand && opDag))', 'if (!X.metBetaald && d < L.vandaag)', function (m) { return m.vergelijk({ export: EXPORT, referentie: refO4, 'exact-open': EXACT_OPEN_ANDERS }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }],
+  ['standdatum van Open (4)', 'if (!X.metBetaald && !(S && opDag))', 'if (!X.metBetaald && d < L.vandaag)', function (m) { return m.vergelijk({ export: EXPORT, referentie: refO4, 'exact-open': EXACT_OPEN_ANDERS }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }],
   ['exitcode bij een exportblokkade (3, 4)', 'stand || exportBlok ||', 'stand ||', function (m) { return m.vergelijk({ export: EXPORT, referentie: path.join(TMP, 'referentie_e1.csv'), exact: VERKOOP_ANDERS }).exit === 0; }],
   ['de invoer bij naam (5)', "meldingen.push(INVOER_MELDING, 'melding: invoer die de regels gezakt (invoer) raakt: ' + invoerNamen.join(', ') + '.')", 'meldingen.push(INVOER_MELDING)', function (m) { return !metMelding(m.vergelijk({ export: EXPORT_L, referentie: path.join(TMP, 'referentie_l.csv') }), /invoer die de regels/); }],
   ['afgekapte week (6)', 'afgekapt: P < eind', 'afgekapt: false', function (m) { return !metMelding(m.vergelijk({ export: EXPORT, referentie: path.join(TMP, 'referentie_w1.csv'), peildatum: woVorig }), /afgekapt/); }],
-  ['zekerheid laag (8)', "return w.zekerheid === 'laag' &&", 'return false &&', function (m) { return !metMelding(m.vergelijk({ export: EXPORT_Z, referentie: refZ }), /zekerheid laag/); }]
+  ['zekerheid laag (8)', "return w.zekerheid === 'laag' &&", 'return false &&', function (m) { return !metMelding(m.vergelijk({ export: EXPORT_Z, referentie: refZ }), /zekerheid laag/); }],
+  // herstel r8 (R8-1a): de standdatum als grens (M28 en bij --exact M26) en als maand van de run; (R8-1b) de wees in de oude definitie en in het M28-pad
+  ['grens van de standdatum, M28 (R8-1a)', "    if (S && d > S) return 'dekt niet';  // herstel r8 (R8-1a)\n", '', function (m) { return m.vergelijk({ export: EXPORT_S8, referentie: refS8, 'exact-open': OPEN_S8, 'exact-open-stand': vorigEind }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }],
+  ['grens van de standdatum bij --exact (R8-1a)', "  if (een && S && d > S) return 'dekt niet';\n", '', function (m) { return m.vergelijk({ export: EXPORT_S8, referentie: refB28, exact: OPEN_S8, 'exact-open-stand': vorigEind }).uit[0] === 'M26 ' + vandaag + ' gezakt (onverklaard)'; }],
+  ['maand van de run is de standdatum (R8-1a)', 'R = S || L.peildatum;', 'R = L.peildatum;', function (m) { return m.vergelijk({ export: EXPORT_C8, referentie: refC8, 'exact-open': OPEN_C8, 'exact-open-stand': vorigEind }).uit[0] === 'M28 ' + vorigEind + ' geblokkeerd (export dekt de periode niet)'; }],
+  ['alle open posten met de wees (R8-1b)', " || !metProject(L)[f.trajectId]) return; u[1] += x;", ') return; u[1] += x;', function (m) { return m.vergelijk({ export: EXPORT_W8, referentie: path.join(TMP, 'referentie_r8_w.csv') }).uit[0] === 'M28 ' + vandaag + ' gezakt (definitie)'; }],
+  ['M28 in exactWijkt met de wees (R8-1b)', 'b = ctx.betaaldVan(f); if (metProject(L)[f.trajectId] && v', 'b = ctx.betaaldVan(f); if (v', function (m) { var Lm = m.laad({ export: EXPORT_W8, 'exact-open': EXACT_W8, 'exact-open-stand': vandaag }); return m.exactWijkt(Lm, { id: 'openstaand', per: m.periodeUit(Lm.ctx, vandaag, Lm.vandaag) }) === 'wijkt'; }]
 ].forEach(function (x) { var m = harnasMutant(x[1], x[2]); eis(!!m && x[3](m), 'harnasdekking: de mutant "' + x[0] + '" geeft het oude gedrag; een eis hierboven vangt hem' + (m ? '' : ' (zoektekst niet gevonden)')); });
 
 /* ---- 5. invoerfouten: alleen bestand, regelnummer en kolomnaam; v7.9.4: een fout in het harnas zelf is exitcode 2 ---- */

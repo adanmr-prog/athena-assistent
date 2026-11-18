@@ -5117,8 +5117,8 @@ function fout794(naam, e) { eis(false, 'v7.9.4 ' + naam + ': onverwachte fout ' 
     F6.reeksen.gefactureerd.forEach(function (x, i) { if (i <= nuIdx) gefFin += x; });
     eis(nuIdx >= 0 && Math.round(Number(N1.gefactureerd.waarde) * 100) === gefFin, 'v7.9.4 herstel r6 (R6-1): M26 van vandaag is gelijk aan Financiën → gefactureerd per maand t/m deze maand (' + N1.gefactureerd.waarde + ' en ' + gefFin / 100 + '), één populatie');
     var d26 = ctx.METRIEKEN.gefactureerd.definitie, d28 = ctx.METRIEKEN.openstaand.definitie, d27 = ctx.METRIEKEN.nogTeFactureren.definitie;
-    eis(/van elk project/.test(d26) && /van elk project/.test(d28) && /facturen van dit schooljaar|verzenddatum vanaf 1 augustus/.test(d28) && /project(en)? van het schooljaar/.test(d27),
-      'v7.9.4 herstel r6 (R6-1): de definities van M26 en M28 noemen de populatie (facturen van dit schooljaar, van elk project) en die van M27 de projecten van het schooljaar');
+    eis(/van elk bestaand project/.test(d26) && /Exact telt .*zonder project/.test(d26) && /van elk bestaand project/.test(d28) && /Exact telt ook een open post zonder project/.test(d28) && /facturen van dit schooljaar|verzenddatum vanaf 1 augustus/.test(d28) && /project(en)? van het schooljaar/.test(d27),
+      'v7.9.4 herstel r6 (R6-1): de definities van M26 en M28 noemen de populatie (facturen van dit schooljaar, van elk project; herstel r8, R8-1b: M26 van elk bestaand project, Exact telt ook een factuur zonder project; herstel r9: M28 ook) en die van M27 de projecten van het schooljaar');
     vers79();
     // R6-2: twee Capsule-winsten zonder schooljaar, project en akkoorddatum (fase 6 lopend traject, in Capsule nog open), met een volledig jaardoel
     ['Kansen', 'Fasewissels', 'Trajecten', 'Facturen'].forEach(leeg); ctx._LEES = {};
