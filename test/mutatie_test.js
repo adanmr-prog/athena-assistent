@@ -1,7 +1,7 @@
-// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien; v7.9.3: eenentwintig; v7.9.4: achtendertig, na herstel r1 eenenveertig, na herstel r2 eenenvijftig, na herstel r3 zevenenvijftig, na herstel r4 negenenvijftig, na herstel r5 eenenzestig) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
+// v7.2: mutatietest van de rooktest. Tien mutanten (v7.9: vijftien; v7.9.2: zeventien; v7.9.3: eenentwintig; v7.9.4: achtendertig, na herstel r1 eenenveertig, na herstel r2 eenenvijftig, na herstel r3 zevenenvijftig, na herstel r4 negenenvijftig, na herstel r5 eenenzestig, na de harnasdekking tweeënzestig, na herstel r6 achtenzestig) breken elk één invariant in een KOPIE van backend/Code.gs (het origineel blijft
 // onaangeraakt); per mutant draait `CODE_GS=<kopie> node test/node_rooktest.js`. Een mutant is "gedood" als de rooktest faalt
 // (exitcode ≠ 0, crash of timeout) en "OVERLEEFD" als hij ALLES GOED geeft: dan mist de rooktest een eis(...) voor die invariant.
-// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 60 van 61 gedood (v7.9.4 na herstel r5, alle op één na; na herstel r4 ≥ 58 van 59; na herstel r3 ≥ 56 van 57; na herstel r2 ≥ 50 van 51; daarvoor ≥ 40 van 41 en ≥ 37 van 38; was ≥ 20 van 21) (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
+// Gebruik: node test/mutatie_test.js [--map <kopieënmap>]  → "ALLES GOED" bij ≥ 67 van 68 gedood (v7.9.4 herstel r6, alle op één na; na de harnasdekking ≥ 61 van 62; na herstel r5 ≥ 60 van 61; na herstel r4 ≥ 58 van 59; na herstel r3 ≥ 56 van 57; na herstel r2 ≥ 50 van 51; daarvoor ≥ 40 van 41 en ≥ 37 van 38; was ≥ 20 van 21) (exitcode 0), anders "FOUTEN: n" (exitcode 1). v7.9: twee mutanten erbij;
 // v7.9 (review T3, T5): de noemerregel zonder waarde en zonder schooljaarcontrole, en het venster van de voorspelling één week opgeschoven.
 // v7.9.2: vraagtStart_niet_verplicht (een kans gaat zonder verwachte startdatum naar fase 5b bijna rond) en (review r1) fasenEffectief_5b_leeg (5b erft de
 // voorstelrol niet meer, zodat stap fasen een historische VO-wissel stil herziet). v7.9.3: fasen_herhaal_op_naam (opnieuw toepassen zoekt een fase alleen op
@@ -14,7 +14,7 @@
 var fs = require('fs'), path = require('path'), cp = require('child_process');
 var R = path.join(__dirname, '..'), BRON = path.join(R, 'backend/Code.gs'), ROOKTEST = path.join(__dirname, 'node_rooktest.js');
 var UIT_MAP = path.join(R, 'test/shots/robuust'), UIT = path.join(UIT_MAP, 'mutatie.json');
-var TIMEOUT_MS = 120000, MIN_GEDOOD = 60;  // v7.9.4 herstel r5: eenenzestig mutanten, norm ≥ 60 (twee erbij: R5-C1 en R5-C2); v7.9.4 herstel r4: negenenvijftig mutanten, norm ≥ 58 (twee erbij: R4-2b en R4-3); v7.9.4 herstel r3: zevenenvijftig mutanten, norm ≥ 56 (zes erbij: R3-D1, R2, R3, R4, N1 en N2); v7.9.4 herstel r2: eenenvijftig mutanten, norm ≥ 50 (tien erbij: A-B3 tot A-B7, B-B1, B-B4, B-B5 en twee voor B-B9); v7.9.4 herstel r1: eenenveertig mutanten, norm ≥ 40 (drie erbij: K1, K3 en K6); v7.9.4: achtendertig mutanten, norm ≥ 37 (alle op één na; stap 2: acht erbij voor de bouwpunten 4, 7, 8 en 9); v7.9 (review): vijftien mutanten, norm ≥ 14; v7.9.2: zestien, norm ≥ 15; review r1: zeventien, norm ≥ 16; v7.9.3: achttien, norm ≥ 17; v7.9.3 review r1: negentien, norm ≥ 18; review r2: twintig, norm ≥ 19; review r3: eenentwintig, norm ≥ 20
+var TIMEOUT_MS = 120000, MIN_GEDOOD = 67;  // v7.9.4 herstel r6: achtenzestig mutanten, norm ≥ 67 (zes erbij: R6-1, R6-2 en de nits R6-3 en R6-4); v7.9.4 harnasdekking: tweeënzestig mutanten, norm ≥ 61 (één erbij: de definitie van M26); v7.9.4 herstel r5: eenenzestig mutanten, norm ≥ 60 (twee erbij: R5-C1 en R5-C2); v7.9.4 herstel r4: negenenvijftig mutanten, norm ≥ 58 (twee erbij: R4-2b en R4-3); v7.9.4 herstel r3: zevenenvijftig mutanten, norm ≥ 56 (zes erbij: R3-D1, R2, R3, R4, N1 en N2); v7.9.4 herstel r2: eenenvijftig mutanten, norm ≥ 50 (tien erbij: A-B3 tot A-B7, B-B1, B-B4, B-B5 en twee voor B-B9); v7.9.4 herstel r1: eenenveertig mutanten, norm ≥ 40 (drie erbij: K1, K3 en K6); v7.9.4: achtendertig mutanten, norm ≥ 37 (alle op één na; stap 2: acht erbij voor de bouwpunten 4, 7, 8 en 9); v7.9 (review): vijftien mutanten, norm ≥ 14; v7.9.2: zestien, norm ≥ 15; review r1: zeventien, norm ≥ 16; v7.9.3: achttien, norm ≥ 17; v7.9.3 review r1: negentien, norm ≥ 18; review r2: twintig, norm ≥ 19; review r3: eenentwintig, norm ≥ 20
 
 // De kopieën staan buiten de repo: standaard in de scratchpad van de sessie (--map overschrijft), nooit naast het origineel.
 var argMap = process.argv.indexOf('--map');
@@ -189,7 +189,7 @@ var MUTANTEN = [
     vervang: "      // MUTANT: de keten wordt niet gecontroleerd",
     voorstel: "eis(/^stand alleen voor vandaag/.test(S2.gecontracteerd.geblokkeerd), 'niet te reconstrueren = geblokkeerd');" },
   { id: 'facturatie_hele_maand', gebied: 'sturing (v7.9.4)', invariant: 'M26 en M28 tellen in een stand alleen termijnen die t/m de peildatum verzonden of betaald waren',
-    zoek: "    if (opPeil) { if (v && v.datum > peildatum) v = null; if (b && b.datum > peildatum) b = null; }",
+    zoek: "    if (opPeil && v && v.datum > peildatum) v = null;\n    if (opPeil && b && b.datum > peildatum) b = null;",  // herstel r6: de lus van M26 en M28
     vervang: "    // MUTANT: alles telt, ook na de peildatum",
     voorstel: "eis(dP('gefactureerd') === gef, 'gefactureerd t/m de peildatum');" },
   // v7.9.4 (bouwpunt 8): Prognoses.gemaakt en .maand als tekst. Leest een bestaand tabblad '2026-11' als datum, dan wordt de maand '00:00': bevriezen is niet
@@ -243,7 +243,7 @@ var MUTANTEN = [
     vervang: "var blok = blok0; if (false && tb && !naam) {  /* MUTANT */",
     voorstel: "eis(T1.cijfers.contactmomenten === null, 'zonder OC\\'s is het teamtotaal geblokkeerd');" },
   { id: 'later_betaald_stil', gebied: 'financiën (v7.9.4 herstel r2)', invariant: 'M28 op een eerdere peildatum noemt de termijnen die later als betaald zijn vastgelegd (A-B7)',
-    zoek: "    if (opPeil && v && !b && betaaldVan(f)) { later.aantal++; later.bedrag += bedrag; }",
+    zoek: "    if (opPeil && betaaldVan(x)) f.later++;",  // herstel r6: de lus van M28 in sturingCijfers
     vervang: "    // MUTANT: geen signaal",
     voorstel: "eis(lb === 1, 'M28 noemt de later betaalde termijnen');" },
   { id: 'noemer_tegen_jaardoel', gebied: 'sturing (v7.9.4 herstel r2)', invariant: 'noemerbewaking vergelijkt een bedrijfsdoel met de noemer van het MT-overzicht, ook bij een afgeleid contracteerdoel (B-B1)',
@@ -251,8 +251,8 @@ var MUTANTEN = [
     vervang: " /* MUTANT: alleen het jaardoel */",
     voorstel: "eis(g1.stand === 'geslaagd', 'een bedrijfsdoel gelijk aan het afgeleide contracteerdoel is geen afwijking');" },
   { id: 'ouderdom_tot_vandaag', gebied: 'financiën (v7.9.4 herstel r2)', invariant: 'M28 in een stand rekent de ouderdom tot de peildatum, op elke dag van de maand (B-B4)',
-    zoek: "betaaltijden = [], vandaag = opPeil ? peildatum : datumStr(new Date()),",
-    vervang: "betaaltijden = [], vandaag = datumStr(new Date()) /* MUTANT */,",
+    zoek: "var oud = dagenTussen(v.datum, opPeil ? peildatum : vandaag) || 0;",  // herstel r6: de lus van M28 in sturingCijfers
+    vervang: "var oud = dagenTussen(v.datum, vandaag) /* MUTANT */ || 0;",
     voorstel: "eis(ud(F0, F1, '0-30 dagen') === 1900, 'P−30 valt op de peildatum in 0–30');" },
   { id: 'stilstand_contact_genegeerd', gebied: 'sturing (v7.9.4 herstel r2)', invariant: 'M20 is geblokkeerd als het laatste contact op de peildatum onbekend is (B-B5)',
     zoek: "  var stilBlok = standBlok || standBlokkade(stand.contactOnbekend, peildatum, 'het laatste contact');",
@@ -268,8 +268,8 @@ var MUTANTEN = [
     voorstel: "eis(!kn9.kansen.length && kn9.onbekend === 0, 'een kans van na de peildatum telt niet');" },
   // v7.9.4 herstel r3 (review ronde 3): zes erbij
   { id: 'm04_zonder_getekend_nul', gebied: 'sturing (v7.9.4 herstel r3)', invariant: 'zijn er winsten maar heeft geen enkele een getekende waarde, dan is M04 leeg (en M05-achter en M07 ook), nooit 0 (R3-D1)',
-    zoek: "  var m04Leeg = zonderGetekend > 0 && !(totM04 > 0);",
-    vervang: "  var m04Leeg = false;  // MUTANT",
+    zoek: "  var m04Leeg = (zonderGetekend > 0 || zonderSj04 > 0) && !(totM04 > 0),",  // herstel r6: ook zonder schooljaar
+    vervang: "  var m04Leeg = false /* MUTANT */,",
     voorstel: "eis(M.M04.waarde === '' && M.M07.waarde === '', 'M04 en M07 leeg bij winsten zonder getekende waarde');" },
   { id: 'm08_maand_nul', gebied: 'sturing (v7.9.4 herstel r3)', invariant: 'de maand van M08 is leeg als de deals van de maand geen getekende waarde hebben (R3-N1, R2)',
     zoek: "  if (maand08.aantal && maand08.aantal === maand08.zonderGetekend) maand08.waarde = null;",
@@ -308,7 +308,37 @@ var MUTANTEN = [
   { id: 'getekend_alleen_op_akkoord', gebied: 'datacontracten (v7.9.4 herstel r5)', invariant: 'contract gewonnen_is_getekend toetst ook een winst van dit schooljaar (winstSchooljaar) met een akkoord vóór 1 augustus (R5-C2)',
     zoek: "  winstNu.forEach(function (k) {\n    if (uitMap(t14, String(k.id))) return;",
     vervang: "  winstNu.forEach(function (k) {\n    return;  // MUTANT\n    if (uitMap(t14, String(k.id))) return;",
-    voorstel: "eis(contractenOp().gewonnen_is_getekend.stand === 'gezakt', 'een winst van dit schooljaar zonder getekende waarde zakt');" }
+    voorstel: "eis(contractenOp().gewonnen_is_getekend.stand === 'gezakt', 'een winst van dit schooljaar zonder getekende waarde zakt');" },
+  // v7.9.4 harnasdekking (7): één erbij
+  { id: 'm26_definitie_per_maand', gebied: 'register (v7.9.4 harnasdekking)', invariant: 'de definitie van M26 is de som over het schooljaar t/m de peildatum, geen maandcijfer, zoals sturingCijfers rekent',
+    zoek: "'De som van de facturen van dit schooljaar: de termijnen met een verzenddatum vanaf 1 augustus, van elk project (zoals Exact op factuurdatum en Financiën; ook een slottermijn van een project van vorig schooljaar), opgeteld over het schooljaar t/m de peildatum (geen maandcijfer), met creditnota",
+    vervang: "'De som van termijnen met een verzenddatum in de maand, met creditnota",
+    voorstel: "eis(!/in de maand/.test(ctx.METRIEKEN.gefactureerd.definitie), 'M26 is geen maandcijfer');" },
+  // v7.9.4 herstel r6: zes erbij (R6-1 twee, R6-2 twee, de nits R6-3 en R6-4)
+  { id: 'm26_alleen_projecten_sj', gebied: 'sturing (v7.9.4 herstel r6)', invariant: 'M26 en M28 tellen de facturen van dit schooljaar van elk project, ook een slottermijn van een project van vorig schooljaar (R6-1)',
+    zoek: "  Object.keys(D.fac).forEach(function (id) { D.fac[id].forEach(function (x) {",
+    vervang: "  Object.keys(D.fac).forEach(function (id) { var t0 = ts.filter(function (t) { return t.id === id; })[0]; if (!t0 || String(t0.schooljaar) !== sj) return; /* MUTANT */ D.fac[id].forEach(function (x) {",
+    voorstel: "eis(dV('gefactureerd') === 3000, 'M26 telt de slottermijn van een project van vorig schooljaar');" },
+  { id: 'm28_alle_datums', gebied: 'sturing (v7.9.4 herstel r6)', invariant: 'M28 telt alleen de facturen van dit schooljaar (verzonden vanaf 1 augustus), geen open termijn van juli (R6-1)',
+    zoek: "    if (!v || v.datum < sjStart) return;\n    if (maandVan(v.datum) <= nuM) f.gefactureerd += c;",
+    vervang: "    if (!v) return;  // MUTANT\n    if (v.datum >= sjStart && maandVan(v.datum) <= nuM) f.gefactureerd += c;",
+    voorstel: "eis(dV('openstaand') === 3000, 'M28 telt geen open termijn van juli');" },
+  { id: 'm04_zonder_schooljaar_stil', gebied: 'sturing (v7.9.4 herstel r6)', invariant: 'een winst zonder schooljaar telt bij M04 apart; zonder getekende winst van het schooljaar is M04 dan leeg, geen echte 0 (R6-2)',
+    zoek: "if (!wsj) zonderSj04++;",
+    vervang: "if (!wsj && false) zonderSj04++;  /* MUTANT */",
+    voorstel: "eis(M.M04.waarde === '' && M.M04.extra.zonderSchooljaar === 2, 'M04 leeg bij winsten zonder schooljaar');" },
+  { id: 'contract16_zonder_sj_weg', gebied: 'datacontracten (v7.9.4 herstel r6)', invariant: 'contract kans_heeft_schooljaar_en_klant toetst ook een winst zonder schooljaar (R6-2)',
+    zoek: "open.concat(winstNu, S.kansen.filter(function (k) { return k.fase === 'gewonnen' && !winstVanSj(k); }))",
+    vervang: "open.concat(winstNu, S.kansen.filter(function (k) { return false && k.fase === 'gewonnen' && !winstVanSj(k); }))",
+    voorstel: "eis(contractenOp().kans_heeft_schooljaar_en_klant.stand === 'gezakt', 'een winst zonder schooljaar zakt');" },
+  { id: 'contract14_dubbel_geteld', gebied: 'datacontracten (v7.9.4 herstel r6)', invariant: 'contract gewonnen_is_getekend telt een winst één keer, ook als de slot-lus en de winsten van het schooljaar hem allebei zien (nit R6-3)',
+    zoek: "    if (inSj(w.werkelijkeDatum || String(w.ingevoerdOp || '').slice(0, 10))) { telP('gewonnen_is_getekend'); t14[k] = true; }",
+    vervang: "    if (inSj(w.werkelijkeDatum || String(w.ingevoerdOp || '').slice(0, 10))) { telP('gewonnen_is_getekend'); }  // MUTANT",
+    voorstel: "eis(C14.populatie === 1 && C14.afwijkingen.length === 1, 'één winst telt één keer');" },
+  { id: 'm20_capsule_aanmaak', gebied: 'sturing (v7.9.4 herstel r6)', invariant: 'op een eerdere peildatum valt alleen een kans uit Athena terug op de aanmaak; een Capsule-kans zonder contact t/m die dag is zonder laatste contact (nit R6-4)',
+    zoek: "        var eigen = !k.capsuleId;",
+    vervang: "        var eigen = true;  // MUTANT",
+    voorstel: "eis(S20.waarde === 1 && S20.extra.zonderContact === 2, 'Capsule-kans zonder contact op de peildatum is niet stil');" }
 ];
 
 var fouten = 0, overleefd = 0, gedood = 0, t0 = Date.now();
@@ -375,7 +405,7 @@ resultaat.gedood = gedood; resultaat.overleefd = overleefd; resultaat.looptijdS 
 resultaat.geslaagd = gedood >= MIN_GEDOOD && resultaat.mutanten.every(function (r) { return r.toegepast; });
 fs.writeFileSync(UIT, JSON.stringify(resultaat, null, 2));
 console.log('     ' + gedood + ' van ' + MUTANTEN.length + ' gedood, ' + overleefd + ' overleefd; json: ' + path.relative(R, UIT) + '; looptijd ' + looptijdS + ' s');
-// Oordeel: ≥ 60 van 61 gedood (v7.9.4 herstel r5: twee erbij; herstel r4: twee erbij, ≥ 58 van 59; herstel r3: zes erbij, ≥ 56 van 57; herstel r2: tien erbij, ≥ 50 van 51; herstel r1: drie erbij, ≥ 40 van 41; v7.9.4: negen mutanten in stap 1 en acht in stap 2 erbij, ≥ 37 van 38); daarvoor ≥ 20 van 21 (v7.9.3 na review r3; na review r2 ≥ 19 van 20; na review r1 ≥ 18 van 19; v7.9.3 ≥ 17 van 18; v7.9.2 na review r1 ≥ 16 van 17; daarvoor ≥ 15 van 16; v7.9 na de review ≥ 14 van 15; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
+// Oordeel: ≥ 67 van 68 gedood (v7.9.4 herstel r6: zes erbij; harnasdekking: één erbij, ≥ 61 van 62; herstel r5: twee erbij, ≥ 60 van 61; herstel r4: twee erbij, ≥ 58 van 59; herstel r3: zes erbij, ≥ 56 van 57; herstel r2: tien erbij, ≥ 50 van 51; herstel r1: drie erbij, ≥ 40 van 41; v7.9.4: negen mutanten in stap 1 en acht in stap 2 erbij, ≥ 37 van 38); daarvoor ≥ 20 van 21 (v7.9.3 na review r3; na review r2 ≥ 19 van 20; na review r1 ≥ 18 van 19; v7.9.3 ≥ 17 van 18; v7.9.2 na review r1 ≥ 16 van 17; daarvoor ≥ 15 van 16; v7.9 na de review ≥ 14 van 15; was ≥ 11 van 12, daarvoor ≥ 9 van 10) en alle mutanten toegepast. Eén overlevende is dus toegestaan maar staat hierboven als FOUT (een gat in de rooktest).
 if (resultaat.geslaagd) console.log('ALLES GOED' + (overleefd ? ' (met ' + overleefd + ' overlevende mutant: zie de FOUT-regel hierboven)' : ''));
 else console.log('FOUTEN: ' + fouten);
 process.exit(resultaat.geslaagd ? 0 : 1);

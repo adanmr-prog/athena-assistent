@@ -22,7 +22,9 @@
 # per facturatievorm (telefoon, iOS R1); Soort kiezen 44 px op de telefoon (N3) en de weekpijlen 44 px op de iPad (N4).
 # v7.9.4 herstel r4 (sectie 14): na Werkelijke datums → Toepassen en Rollen opnieuw toepassen laadt een andere tab (R4-iOS-1); een tab die je kiest terwijl
 # een trage apiCrm loopt, tekent zodra de basis er is, ook Rapport en ook na Beheer-paden met alleen laadCrmBasis (R4-iOS-2).
-# v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout), ook niet na Andere datum; Gebruikers
+# v7.9.4 herstel r6 (sectie 16): na Andere datum blijft de basis tot de verse er is (slepen met Alleen mijn); Beheer → Mijlpalen en Tracks wachten op de basis; geen
+# hertekening over een Beheer-formulier na een mislukte basis; de fout met Opnieuw proberen.
+# v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout); na Andere datum een verse basis en een bruikbaar bord; Gebruikers
 # verouderen alles; € met een harde spatie in de tegel Verloren; M20 met het aantal zonder laatste contact.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
@@ -1166,7 +1168,7 @@ with sync_playwright() as p:
         ok('MT (herstel r3, R3-D1): M04 zonder getekende waarde is "—" met de reden, geen € 0', bool(m4) and m4['w'] == '—' and 'geen basis: winsten zonder getekende contractwaarde' in m4['x'] and 'zonder getekende waarde:' in m4['x'], m4)
         ok('MT (herstel r3, R3-D1): M07 is "—" met de reden, geen 0 % en geen "nog te vinden"', bool(m7) and m7['w'] == '—' and 'geen basis' in m7['x'] and 'nog te vinden' not in m7['x'], m7)
         ok('MT (herstel r3, R3-D1): M05 houdt het doelpad; de achterstand is "—" met de reden (zonder de veldnaam achterReden)', bool(m5) and m5['w'].startswith('€') and 'achter: — (geen basis' in m5['x'] and 'achterReden' not in m5['x'], m5)
-        ok('MT (herstel r3, R3-N1, R2): M08 is "—" en de maand heeft "zonder getekende waarde", nooit "€ 0"', bool(m8) and m8['w'] == '—' and 'deze maand' in m8['x'] and 'zonder getekende waarde' in m8['x'].split('deze maand')[1] and '€ 0' not in m8['x'], m8)
+        ok('MT (herstel r3, R3-N1, R2): M08 is "—" en de maand heeft "zonder getekende waarde", nooit "€ 0"', bool(m8) and m8['w'] == '—' and 'deze maand' in m8['x'] and 'zonder getekende waarde' in m8['x'].split('deze maand')[1] and not re.search('€\\s0(?![0-9.])', m8['x']), m8)  # r5: euro() met een harde spatie (\s vangt beide)
         u = pg.evaluate("[mtWaarde({ soort: 'uren', waarde: '' }), mtExtra({ id: 'urenVorigeJaren', waarde: '', extra: { maanden: [], reden: 'nog geen hele maand in dit schooljaar', totEnMet: '' } })]")
         ok('MT (herstel r3, R4): M09 zonder hele maand is "—" met de reden', u[0] == '—' and 'nog geen hele maand in dit schooljaar' in u[1], u)
         z = pg.evaluate("[mtExtra({ id: 'dekking', waarde: 0.2, extra: { nogTeVinden: 499000, noemer: 500000, noemerLabel: 'jaardoel', scope: '', zonderGetekend: 1 } }), mtExtra({ id: 'doelpad', waarde: 1000, extra: { dag: 3, achter: -5, zonderGetekend: 1 } }), mtExtra({ id: 'dekking', waarde: 1, extra: { nogTeVinden: 1, noemerLabel: 'jaardoel', zonderGetekend: 0 } })]")
@@ -1272,7 +1274,12 @@ with sync_playwright() as p:
         kid, naar = pg.evaluate("(function () { var k = document.querySelector('#crmInhoud [data-sleep^=\"kans:\"]'), van = k.closest('[data-sleepdoel]').getAttribute('data-sleepdoel').slice(5); return [k.getAttribute('data-sleep').slice(5), [].map.call(document.querySelectorAll('[data-sleepdoel^=\"kans:\"]'), function (x) { return x.getAttribute('data-sleepdoel').slice(5); }).filter(function (d) { return d !== van && d !== 'gewonnen' && d !== 'verloren'; })[0]]; })()")
         pg.evaluate("(function (a) { return sleepZet('kans', a[0], a[1], false, false, { bron: 'slepen' }); })(%s)" % json.dumps([kid, naar]))
         pg.wait_for_selector('#toast.aan button:has-text("Andere datum")', timeout=8000); pg.tap('#toast.aan button:has-text("Andere datum")'); venster_open('#vf-datum')
-        pg.tap('#venster [data-cf-opslaan]'); venster_dicht(); pg.wait_for_timeout(300); pg.tap('#crmTabs [data-crmtab="scholen"]')
+        pg.tap('#venster [data-cf-opslaan]'); venster_dicht()
+        js = "(function (id, f) { return CRM.basis !== null && !!CRM.pipeline && CRM.pipeline.kansen.some(function (k) { return k.id === id && k.fase === f; }) && !!document.querySelector('#crmInhoud [data-sleep=\"kans:' + id + '\"]'); })(%s, %s)" % (json.dumps(kid), json.dumps(naar))
+        try: pg.wait_for_function(js, timeout=5000); bord = True
+        except Exception: bord = False
+        ok('telefoon 375 (herstel r5, R5-iOS-2): na Andere datum op het bord laadt de basis meteen opnieuw (zonder tik) en blijft het bord bruikbaar: de kaart in zijn nieuwe kolom, slepen kan weer (CRM.pipeline)', bord, wat())
+        pg.tap('#crmTabs [data-crmtab="scholen"]')
         ok('telefoon 375 (herstel r5, R5-iOS-2): na Andere datum op het bord laadt de tab Scholen binnen 5 s (niet op "Laden")', tab_laadt('scholen', SCHOLEN), wat())
         pg.tap('#crmTabs [data-crmtab="rapport"]'); pg.wait_for_selector(RAPPORT); naar_beheer('gebruikers'); pg.wait_for_selector('#crmBeheer [data-gactief]')
         voor = pg.evaluate("CRM.rapport !== null"); knop = pg.locator('#crmBeheer [data-gactief]').first; gid = knop.get_attribute('data-gactief'); waarde = knop.get_attribute('data-waarde')
@@ -1289,6 +1296,66 @@ with sync_playwright() as p:
         z = pg.evaluate("[mtExtra({ id: 'stilstand', waarde: '', extra: { zonderContact: 3, reden: 'geen basis: open kansen zonder laatste contact' } }), mtExtra({ id: 'stilstand', waarde: 2, extra: { zonderContact: 1 } }), mtExtra({ id: 'stilstand', waarde: 0, extra: {} })]")
         ok('MT (herstel r5, R5-C1): M20 noemt het aantal open kansen zonder laatste contact (zonder de veldnaam) en de reden als hij leeg is; zonder zulke kansen niets', 'zonder laatste contact (telt niet als stil): 3' in z[0] and 'geen basis: open kansen zonder laatste contact' in z[0] and 'zonder laatste contact (telt niet als stil): 1' in z[1] and 'zonderContact' not in z[0] + z[1] and z[2] == '', z)
     stap('g5_794_r5_euro', g5_794_r5_euro)
+    c.close()
+
+    # ===== 16. v7.9.4 herstel r6: na Andere datum blijft de oude basis tot de verse er is, dus Lars met "Alleen mijn" sleept tijdens een trage of mislukte apiCrm
+    # gewoon verder (R6-iOS-1); Beheer → Mijlpalen en Tracks wachten op de basis (R6-iOS-2); na een mislukte basis tekent de basis van laadRelaties niet over een
+    # open Beheer-formulier heen (R6-iOS-3); de fout heeft een knop Opnieuw proberen (R6-iOS-4) =====
+    c, pg = nieuw(b, 'lars', tel=True); pg.set_viewport_size({'width': 375, 'height': 667}); pg.wait_for_timeout(300)
+    def sleep(kid, naar): pg.evaluate("(function (a) { return sleepZet('kans', a[0], a[1], false, false, { bron: 'slepen' }); })(%s)" % json.dumps([kid, naar]))
+    def andere_datum():
+        pg.wait_for_selector('#toast.aan button:has-text("Andere datum")', timeout=8000); pg.tap('#toast.aan button:has-text("Andere datum")'); venster_open('#vf-datum')
+        pg.tap('#venster [data-cf-opslaan]'); venster_dicht()
+    def opgeslagen(n0, kid):
+        try: pg.wait_for_function("(function (id) { return window.__calls.slice(%d).some(function (c) { return c.fn === 'apiKansOpslaan' && JSON.stringify(c.args || c).indexOf(id) >= 0; }); })(%s)" % (n0, json.dumps(kid)), timeout=3000); return True
+        except Exception: return False
+    def g5_794_r6_bord():
+        pg.evaluate(TRAAG); pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="pipeline"]')
+        pg.tap('#crmTabs [data-crmtab="pipeline"]'); pg.wait_for_selector('#crmInhoud [data-sleep^="kans:"]', timeout=8000)
+        if not pg.evaluate("CRM.mijn"): pg.tap('#crmBalk [data-crmmijn]'); pg.wait_for_function("CRM.mijn === true", timeout=3000)
+        paren = pg.evaluate("""(function () { var u = [], kol = [].map.call(document.querySelectorAll('[data-sleepdoel^="kans:"]'), function (d) { return d.getAttribute('data-sleepdoel').slice(5); });
+          [].forEach.call(document.querySelectorAll('#crmInhoud [data-sleep^="kans:"]'), function (x) {
+            var id = x.getAttribute('data-sleep').slice(5), van = x.closest('[data-sleepdoel]').getAttribute('data-sleepdoel').slice(5), k = CRM.pipeline.kansen.filter(function (k) { return k.id === id; })[0];
+            var naar = kol.filter(function (d) { return d !== van && d !== 'gewonnen' && d !== 'verloren' && !voorstelNodig(k, d) && !vraagtStartApp(d, k.pipeline); })[0];
+            if (naar && k.eigenaar === ikNaam()) u.push([id, van, naar]); }); return u; })()""")
+        ok('telefoon 375, Lars (herstel r6): met "Alleen mijn" staan minstens twee eigen kaarten op het bord met een doelkolom zonder venster', len(paren) >= 2, paren)
+        (k1, v1, n1), (k2, v2, n2) = paren[0], paren[1]
+        f0 = len(pageerrors); sleep(k1, n1); pg.evaluate("window.__traag.apiCrm = 4000"); andere_datum()
+        n0 = n_calls(); basis = pg.evaluate("CRM.basis !== null && !!CRM.pipeline"); sleep(k2, n2); op = opgeslagen(n0, k2)
+        ok('telefoon 375, Lars met "Alleen mijn" (herstel r6, R6-iOS-1): na Andere datum blijft de oude basis tot de verse er is; een volgende sleep tijdens een trage apiCrm (4 s) slaat op, zonder JS-fout', basis and op and len(pageerrors) == f0, [basis, op, pageerrors[f0:]])
+        pg.wait_for_function("CRM.laadt === null", timeout=10000); pg.evaluate("window.__traag = {}")
+        ok('telefoon 375 (herstel r6, R6-iOS-1): de backend heeft de nieuwe fase van de tweede kaart, net als het bord', kans(k2)['kans']['fase'] == n2 and kol('[data-sleep="kans:%s"]' % k2) == 'kans:' + n2, [kans(k2)['kans']['fase'], n2])
+        pg.evaluate("window.__faal.apiCrm = 1"); andere_datum(); toast('Storing (golf5)')
+        n0 = n_calls(); basis = pg.evaluate("CRM.basis !== null"); sleep(k1, v1); op = opgeslagen(n0, k1)
+        ok('telefoon 375, Lars met "Alleen mijn" (herstel r6, R6-iOS-1): mislukt de verse apiCrm na Andere datum, dan blijft de oude basis en slaat de volgende sleep op, zonder JS-fout', basis and op and len(pageerrors) == f0, [basis, op, pageerrors[f0:]])
+        pg.wait_for_timeout(500); pg.evaluate("window.__faal = {}")
+    stap('g5_794_r6_bord', g5_794_r6_bord)
+    c.close()
+    c, pg = nieuw(b, 'sophie', tel=True); pg.set_viewport_size({'width': 375, 'height': 667}); pg.wait_for_timeout(300)
+    def g5_794_r6_beheer():
+        pg.evaluate(TRAAG); api('apiKeuzelijstOpslaan', 'soortFacturatie', [{'waarde': 'vooraf', 'oud': 'vooraf'}, {'waarde': 'achteraf', 'oud': 'achteraf'}, {'waarde': 'stukprijs', 'oud': ''}])
+        pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmTabs [data-crmtab="rapport"]')
+        def beheer_direct(item): pg.locator('#crmInhoud [data-beheer="%s"]' % item).scroll_into_view_if_needed(); pg.tap('#crmInhoud [data-beheer="%s"]' % item)  # zonder eerst de tab Rapport (die laadt de basis)
+        f0 = len(pageerrors); soort_opslaan(1, 'achteraf'); leeg1 = pg.evaluate("CRM.basis === null"); beheer_direct('mijlpalen')
+        m = tab_laadt('mijlpalen', '#leMijlpalen .le-rij')
+        soort_opslaan(1, 'vooraf'); leeg2 = pg.evaluate("CRM.basis === null"); beheer_direct('tracks')
+        t = tab_laadt('tracks', '#crmBeheer [data-trackbewerk]')
+        ok('telefoon 375 (herstel r6, R6-iOS-2): na een mislukte apiCrm (CRM.basis leeg op Rapport) openen Beheer → Mijlpalen en Tracks zodra de basis er is, zonder JS-fout', leeg1 and leeg2 and m and t and len(pageerrors) == f0, [leeg1, leeg2, m, t, pageerrors[f0:]])
+        soort_opslaan(2, 'achteraf'); pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_selector('#crmInhoud .leeg:has-text("Kon de relaties niet laden")', timeout=5000)
+        knop = pg.locator('#crmInhoud .leeg [data-crmtab="scholen"]:has-text("Opnieuw proberen")')
+        ok('telefoon 375 (herstel r6, R6-iOS-4): de fout "Kon de relaties niet laden" heeft een knop Opnieuw proberen (een chip, 36 px), niet de koppeling', knop.count() == 1 and knop.bounding_box()['height'] >= 36 and 'koppeling' not in pg.inner_text('#crmInhoud'), pg.inner_text('#crmInhoud')[:120])
+        pg.tap('nav button[data-view="vandaag"]'); pg.wait_for_timeout(300); pg.evaluate("window.__traag.apiCrm = 4000")
+        pg.tap('nav button[data-view="relaties"]'); naar_beheer('keuzelijsten'); pg.wait_for_selector('#crmBeheer [data-cf-opslaan]', timeout=8000)
+        veld = pg.locator('#crmBeheer input[type="text"], #crmBeheer input:not([type])').first; veld.fill('2031-2032')
+        pg.wait_for_function("CRM.laadt === null", timeout=10000); pg.wait_for_timeout(300); pg.evaluate("window.__traag = {}")
+        v = pg.evaluate("(function () { var x = document.querySelector('#crmBeheer input[type=\"text\"], #crmBeheer input:not([type])'); return x ? x.value : null; })()")
+        ok('telefoon 375 (herstel r6, R6-iOS-3): na een mislukte basis, Vandaag en terug naar Relaties, tekent de verse apiCrm niet over een open Beheer-formulier heen (de ingevulde waarde blijft)', v == '2031-2032', [v, wat()])
+        pg.tap('#crmTabs [data-crmtab="scholen"]'); ok('telefoon 375 (herstel r6): daarna laadt Scholen gewoon', tab_laadt('scholen', SCHOLEN), wat())
+        soort_opslaan(2, 'vooraf'); pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_selector('#crmInhoud .leeg [data-crmtab="scholen"]', timeout=5000); pg.tap('#crmInhoud .leeg [data-crmtab="scholen"]')
+        ok('telefoon 375 (herstel r6, R6-iOS-4): Opnieuw proberen laadt de basis opnieuw en toont binnen 5 s de rijen', tab_laadt('scholen', SCHOLEN), wat())
+        z = pg.evaluate("[mtExtra({ id: 'gecontracteerd', waarde: 40000, extra: { zonderGetekend: 0, zonderSchooljaar: 2 } }), mtExtra({ id: 'gecontracteerd', waarde: '', extra: { zonderGetekend: 0, zonderSchooljaar: 2, reden: 'geen basis: winsten zonder schooljaar (geen schooljaar, project of akkoorddatum)' } })]")
+        ok('MT (herstel r6, R6-2): M04 noemt het aantal winsten zonder schooljaar (zonder de veldnaam) en de reden als hij leeg is', 'zonder schooljaar: 2' in z[0] and 'zonder schooljaar: 2' in z[1] and 'geen basis: winsten zonder schooljaar' in z[1] and 'zonderSchooljaar' not in z[0] + z[1], z)
+    stap('g5_794_r6_beheer', g5_794_r6_beheer)
     c.close()
     b.close()
 

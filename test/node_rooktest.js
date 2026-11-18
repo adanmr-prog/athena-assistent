@@ -4587,13 +4587,14 @@ function fout794(naam, e) { eis(false, 'v7.9.4 ' + naam + ': onverwachte fout ' 
     eis(dP('gefactureerd') === gef && (!zelfdeSj || dV('gefactureerd') === gefNu) && F1.gefactureerd.extra.totEnMet === P,
       'v7.9.4 B7 M26: gefactureerd telt termijnen verzonden t/m de peildatum (' + gef + '), niet een termijn van de dag erna in dezelfde maand; vandaag telt die wel (' + gefNu + ')');
     var ud = function (S0, S1, k) { var a = (S0.openstaand.uitsplitsing.filter(function (u) { return u.label === k; })[0] || { waarde: 0 }).waarde, b = (S1.openstaand.uitsplitsing.filter(function (u) { return u.label === k; })[0] || { waarde: 0 }).waarde; return Math.round((b - a) * 100) / 100; };
-    eis(dP('openstaand') === 2200 && ud(F0, F1, '0-30 dagen') === 1900 && ud(F0, F1, '31-60 dagen') === 300 && ud(F0, F1, '60+ dagen') === 0 && (!zelfdeSj || dV('openstaand') === 3700),
+    var o30 = inSj(dertig) ? 400 : 0, o60 = inSj(oud) ? 300 : 0;  // herstel r6 (R6-1): M28 telt alleen facturen van dit schooljaar
+    eis(dP('openstaand') === 1500 + o30 + o60 && ud(F0, F1, '0-30 dagen') === 1500 + o30 && ud(F0, F1, '31-60 dagen') === o60 && ud(F0, F1, '60+ dagen') === 0 && (!zelfdeSj || dV('openstaand') === 3000 + o30 + o60),
       'v7.9.4 B7 M28: op de peildatum staan open wat t/m die dag verzonden en niet betaald was (ook een termijn die de dag erna betaald werd), met de ouderdom tot de peildatum (P−30 nog 0–30, P−60 nog 31–60); vandaag anders');
     // herstel r2 (B-B4): vandaag ligt altijd na P (1 t/m 31 dagen), dus P−30 valt tot vandaag nooit meer in 0–30 en P−60 nooit meer in 31–60; de verwachte klasse per termijn
     // rekent de test zelf uit (op de eerste van de maand ligt P een maand terug)
     var V3 = (V1.openstaand.uitsplitsing || []).reduce(function (m, u) { m[u.label] = u.waarde; return m; }, {}), V3a = (V0.openstaand.uitsplitsing || []).reduce(function (m, u) { m[u.label] = u.waarde; return m; }, {});
     var kl = function (d) { var o = ctx.dagenTussen(d, vandaag); return o <= 30 ? '0-30 dagen' : o <= 60 ? '31-60 dagen' : '60+ dagen'; }, verwachtV = { '0-30 dagen': 0, '31-60 dagen': 0, '60+ dagen': 0 };
-    [[P, 1000], [na, 2000], [oud, 300], [dertig, 400]].forEach(function (x) { verwachtV[kl(x[0])] += x[1]; });
+    [[P, 1000], [na, 2000], [oud, o60], [dertig, o30]].forEach(function (x) { verwachtV[kl(x[0])] += x[1]; });
     eis(!zelfdeSj || (['0-30 dagen', '31-60 dagen', '60+ dagen'].every(function (k) { return Math.round((V3[k] - V3a[k]) * 100) === verwachtV[k] * 100; }) && kl(dertig) !== '0-30 dagen' && kl(oud) === '60+ dagen'),
       'v7.9.4 herstel r2 (B-B4): de stand van vandaag rekent de ouderdom tot vandaag (P−30 niet meer 0–30, P−60 nu 60+), op elke dag van de maand; de stand op P tot P (' + JSON.stringify(verwachtV) + ')');
     eis(dP('nogTeFactureren') === 10000 - 2200 && (!zelfdeSj || dV('nogTeFactureren') === 10000 - 4200),
@@ -5086,6 +5087,103 @@ function fout794(naam, e) { eis(false, 'v7.9.4 ' + naam + ': onverwachte fout ' 
     var C14b = contractenOp().gewonnen_is_getekend, M04b = op(vandaag).gecontracteerd;
     eis(M04b.waarde === 40000 && C14b.stand === 'geslaagd' && C14b.populatie >= 1, 'v7.9.4 herstel r5 (R5-C2): met een project met contractwaarde telt M04 de winst en slaagt het contract, met de winst in de populatie (' + C14b.stand + ', ' + C14b.populatie + ')');
   } catch (e) { fout794('herstel r5', e); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9.4 herstel r6 (review ronde 6): R6-1 (M26 en M28 tellen de facturen van dit schooljaar op de factuurdatum, van elk project, zoals Exact en Financiën
+   per maand: een slottermijn van een project van vorig schooljaar telt mee, een open termijn van vóór 1 augustus niet; M27 blijft per project van het schooljaar),
+   R6-2 (een winst zonder schooljaar telt bij M04 als zonderSchooljaar; heeft geen winst van het schooljaar een getekende waarde, dan is M04 leeg, zonder achterstand
+   en dekking, en contract kans_heeft_schooljaar_en_klant zakt), nit R6-3 (gewonnen_is_getekend telt een winst één keer) en nit R6-4 (M20 op een eerdere peildatum
+   valt alleen bij een kans uit Athena terug op de aanmaak, want alleen die kreeg bij de aanmaak een laatste contact). Verzonnen gegevens. ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var sj = sjNu(), vandaag = plusDagen(0), sjStart = sj.slice(0, 4) + '-08-01', jV = +sj.slice(0, 4) - 1, sjV = jV + '-' + (jV + 1);
+    var leeg = function (t) { ctx.verwijderRijen(t, function () { return true; }); };
+    var op = function (p) { ctx._LEES = {}; ctx.GEBRUIKER = null; var u = {}; ctx.sturingCijfers(p).blokken.forEach(function (b) { b.cijfers.forEach(function (c) { u[c.id] = c; }); }); return u; };
+    // R6-1: een project van vorig schooljaar met een slottermijn in dit schooljaar (open) en een open termijn van juli; een project van dit schooljaar met een
+    // vooraf-factuur van juli (open). Alleen de slottermijn is een factuur van dit schooljaar.
+    var N0 = op(vandaag), dIn = plusDagen(-10) >= sjStart ? plusDagen(-10) : sjStart, dJuli = ctx.plusDagenVan(sjStart, -20), dVoor = ctx.plusDagenVan(dIn, -1);
+    var P0 = dIn < vandaag ? op(dIn) : null, Q0 = dIn < vandaag ? op(dVoor) : null;  // dezelfde peildatum vóór en na de verzonnen termijnen (de seed verandert ook van dag tot dag)
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk6-v', school: 'Verzonnen School V', schoolId: 's1', traject: 'Verzonnen vorig', schooljaar: sjV, status: 'afgelopen', contractwaarde: 9000, omzet: 9000, soortFacturatie: 'achteraf', am: 'Femke de Wit' },
+      { id: 'rk6-n', school: 'Verzonnen School N', schoolId: 's1', traject: 'Verzonnen nu', schooljaar: sj, status: 'bezig', contractwaarde: 5000, omzet: 5000, soortFacturatie: 'vooraf', am: 'Femke de Wit' }]));
+    var fac = function (id, tr, d, b) { return { id: id, trajectId: tr, omschrijving: 'Verzonnen termijn', bedrag: b, datum: d, status: 'verzonden', factuurnummer: 'RK6' + id, verzonden: d, betaald: '' }; };
+    ctx.schrijfVeel('Facturen', cx([fac('a', 'rk6-v', dIn, 3000), fac('b', 'rk6-v', dJuli, 400), fac('c', 'rk6-n', dJuli, 700)]));
+    var N1 = op(vandaag), dV = function (c) { return Math.round((Number(N1[c].waarde) - Number(N0[c].waarde)) * 100) / 100; };
+    eis(dV('gefactureerd') === 3000 && dV('openstaand') === 3000 && dV('nogTeFactureren') === 4300,
+      'v7.9.4 herstel r6 (R6-1): M26 en M28 tellen de slottermijn van een project van vorig schooljaar die in dit schooljaar verzonden is (3000), niet de open termijnen van juli; M27 blijft per project van het schooljaar (5000 − 700) (' + [dV('gefactureerd'), dV('openstaand'), dV('nogTeFactureren')].join(', ') + ')');
+    var dP = P0 ? Math.round((Number(op(dIn).openstaand.waarde) - Number(P0.openstaand.waarde)) * 100) / 100 : 3000, dQ = Q0 ? Math.round((Number(op(dVoor).openstaand.waarde) - Number(Q0.openstaand.waarde)) * 100) / 100 : 0;
+    eis(dP === 3000 && dQ === 0, 'v7.9.4 herstel r6 (R6-1): op een eerdere peildatum telt M28 de slottermijn vanaf de dag van verzending, niet de dag ervoor en nooit de open termijnen van juli (' + dP + ', ' + dQ + ')');
+    var F6 = roep(SOPHIE, 'apiFinancien', sj), nuIdx = F6.maanden.indexOf(vandaag.slice(0, 7)), gefFin = 0;
+    F6.reeksen.gefactureerd.forEach(function (x, i) { if (i <= nuIdx) gefFin += x; });
+    eis(nuIdx >= 0 && Math.round(Number(N1.gefactureerd.waarde) * 100) === gefFin, 'v7.9.4 herstel r6 (R6-1): M26 van vandaag is gelijk aan Financiën → gefactureerd per maand t/m deze maand (' + N1.gefactureerd.waarde + ' en ' + gefFin / 100 + '), één populatie');
+    var d26 = ctx.METRIEKEN.gefactureerd.definitie, d28 = ctx.METRIEKEN.openstaand.definitie, d27 = ctx.METRIEKEN.nogTeFactureren.definitie;
+    eis(/van elk project/.test(d26) && /van elk project/.test(d28) && /facturen van dit schooljaar|verzenddatum vanaf 1 augustus/.test(d28) && /project(en)? van het schooljaar/.test(d27),
+      'v7.9.4 herstel r6 (R6-1): de definities van M26 en M28 noemen de populatie (facturen van dit schooljaar, van elk project) en die van M27 de projecten van het schooljaar');
+    vers79();
+    // R6-2: twee Capsule-winsten zonder schooljaar, project en akkoorddatum (fase 6 lopend traject, in Capsule nog open), met een volledig jaardoel
+    ['Kansen', 'Fasewissels', 'Trajecten', 'Facturen'].forEach(leeg); ctx._LEES = {};
+    aannameZet('scope', ['particulier']); aannameZet('doelpadCurve', { totaal: [[0, 0], [365, 1]], bron: 'reconstructie' });
+    aannameZet('jaardoel', { soort: 'contractwaarde', periode: 'schooljaar', scope: 'scope v1', noemer: 'jaardoel', waarde: 500000 });
+    var cw = function (id, w) { return { id: id, capsuleId: id, naam: 'Verzonnen ' + id, school: 'Verzonnen School ' + id, schoolId: '', fase: 'gewonnen', waarde: w, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: '', klant: '', gesloten: '', aangemaakt: plusDagen(-200) + ' 09:00' }; };
+    var cwW = function (id, w) { return { id: id + '-fw', kansId: id, van: '', naar: 'gewonnen', werkelijkeDatum: '', ingevoerdOp: plusDagen(-20) + ' 10:00', door: 'Capsule', eigenaar: 'Lars Visser', zekerheid: 'laag', bron: 'capsule', waarde: w }; };
+    ctx.schrijfVeel('Kansen', cx([cw('rk6-c1', 25000), cw('rk6-c2', 15000)])); ctx.schrijfVeel('Fasewissels', cx([cwW('rk6-c1', 25000), cwW('rk6-c2', 15000)])); ctx._LEES = {};
+    var M = mtCijfers(), C16 = contractenOp().kans_heeft_schooljaar_en_klant;
+    eis(M.M04.waarde === '' && !M.M04.geblokkeerd && M.M04.extra.zonderSchooljaar === 2 && /zonder schooljaar/.test(M.M04.extra.reden || '') && !M.M04.uitsplitsing.length,
+      'v7.9.4 herstel r6 (R6-2): winsten zonder schooljaar (geen schooljaar, project of akkoorddatum) en geen getekende winst van het schooljaar: M04 is leeg met zonderSchooljaar en een reden, geen echte 0 (' + JSON.stringify([M.M04.waarde, M.M04.extra]) + ')');
+    eis(M.M05.extra.achter === '' && /zonder schooljaar/.test(M.M05.extra.achterReden || '') && M.M07.waarde === '' && M.M07.extra.nogTeVinden === undefined && /zonder schooljaar/.test(M.M07.extra.reden || ''),
+      'v7.9.4 herstel r6 (R6-2): dan geen achterstand bij M05 en geen dekking of "nog te vinden = het hele jaardoel" bij M07, maar leeg met de reden');
+    eis(C16.stand === 'gezakt' && ['rk6-c1', 'rk6-c2'].every(function (id) { return C16.afwijkingen.some(function (a) { return a.id === id && a.eigenaar === 'Lars Visser'; }); }),
+      'v7.9.4 herstel r6 (R6-2): contract kans_heeft_schooljaar_en_klant toetst ook een winst zonder schooljaar en zakt, met een melding aan de eigenaar (' + C16.stand + ', ' + C16.populatie + ')');
+    ctx.schrijfVeel('Kansen', cx([{ id: 'rk6-w', naam: 'Verzonnen winst', school: 'Verzonnen School W', schoolId: '', fase: 'gewonnen', waarde: 40000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', gesloten: vandaag, aangemaakt: plusDagen(-60) + ' 09:00' }]));
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'rk6-wt', kansId: 'rk6-w', schoolId: '', school: 'Verzonnen School W', traject: 'Verzonnen', schooljaar: sj, status: 'bezig', contractwaarde: 40000, omzet: 40000 }])); ctx._LEES = {};
+    var M2 = mtCijfers();
+    eis(M2.M04.waarde === 40000 && M2.M04.extra.zonderSchooljaar === 2 && !M2.M04.extra.reden && typeof M2.M07.waarde === 'number' && typeof M2.M05.extra.achter === 'number',
+      'v7.9.4 herstel r6 (R6-2): met een getekende winst van het schooljaar telt M04 (40000) en staan de winsten zonder schooljaar als signaal ernaast; M05 en M07 rekenen');
+    eis(/zonder schooljaar/.test(ctx.METRIEKEN.gecontracteerd.definitie) && /zonder schooljaar/.test(ctx.uitMap(ctx.CONTRACT_POPULATIE, 'kans_heeft_schooljaar_en_klant')),
+      'v7.9.4 herstel r6 (R6-2): de definitie van M04 en de populatie van contract kans_heeft_schooljaar_en_klant noemen de winsten zonder schooljaar');
+    // nit R6-3: één winst met een akkoord in het schooljaar (de slot-lus) en zonder project: populatie 1 en één afwijking, ook op de demoseed hoogstens één per kans
+    ['Kansen', 'Fasewissels', 'Trajecten'].forEach(leeg); ctx._LEES = {};
+    ctx.schrijfVeel('Kansen', cx([{ id: 'rk6-a', naam: 'Verzonnen akkoord', school: 'Verzonnen School A', schoolId: '', fase: 'gewonnen', waarde: 8000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', gesloten: vandaag, aangemaakt: plusDagen(-30) + ' 09:00' }]));
+    ctx.schrijfVeel('Fasewissels', cx([{ id: 'rk6-a-fw', kansId: 'rk6-a', van: 'voorstel', naar: 'gewonnen', werkelijkeDatum: vandaag, ingevoerdOp: vandaag + ' 10:00', door: 'Lars Visser', eigenaar: 'Lars Visser', zekerheid: 'hoog', bron: 'app', waarde: 8000 }])); ctx._LEES = {};
+    var C14 = contractenOp().gewonnen_is_getekend;
+    eis(C14.stand === 'gezakt' && C14.populatie === 1 && C14.afwijkingen.length === 1, 'v7.9.4 herstel r6 (nit R6-3): een winst met een akkoord in het schooljaar telt één keer in gewonnen_is_getekend (populatie ' + C14.populatie + ', afwijkingen ' + C14.afwijkingen.length + ')');
+    vers79();
+    var C14s = contractenOp().gewonnen_is_getekend, perK = {};
+    C14s.afwijkingen.forEach(function (a) { perK[a.id] = (perK[a.id] || 0) + 1; });
+    eis(Object.keys(perK).every(function (k) { return perK[k] === 1; }) && C14s.populatie >= Object.keys(perK).length, 'v7.9.4 herstel r6 (nit R6-3): op de demoseed heeft elke kans hoogstens één afwijking in gewonnen_is_getekend (' + JSON.stringify(perK) + ')');
+    // nit R6-4: M20 op een eerdere peildatum. Drie kansen in gesprek, 120 dagen geleden aangemaakt, zonder activiteit vóór de peildatum: A en B uit Capsule (A zonder
+    // laatste contact, B met een eerste contact na de peildatum) en C uit Athena (laatste contact na de peildatum). A en B hadden toen geen laatste contact; C kreeg bij
+    // de aanmaak zijn eerste (kansOpslaan), dus C was stil.
+    ['Kansen', 'Fasewissels', 'Activiteiten'].forEach(leeg); ctx._LEES = {};
+    var kans = function (id, capsule, lc) { var k = { id: id, naam: 'Verzonnen ' + id, school: 'Verzonnen School ' + id, schoolId: '', fase: 'gesprek', waarde: 5000, eigenaar: 'Lars Visser', pipeline: 'Scholen', schooljaar: sj, klant: 'nieuw', aangemaakt: plusDagen(-120) + ' 09:00', laatsteContact: lc }; if (capsule) k.capsuleId = id; return k; };
+    var aanm = function (id, capsule) { return { id: id + '-fw', kansId: id, van: '', naar: 'gesprek', werkelijkeDatum: plusDagen(-120), ingevoerdOp: plusDagen(capsule ? -1 : -120) + ' 10:00', door: capsule ? 'Capsule' : 'Lars Visser', eigenaar: 'Lars Visser', zekerheid: capsule ? 'laag' : 'hoog', bron: capsule ? 'capsule' : 'app' }; };
+    ctx.schrijfVeel('Kansen', cx([kans('rk6-ma', true, ''), kans('rk6-mb', true, plusDagen(-5)), kans('rk6-mc', false, plusDagen(-5))]));
+    ctx.schrijfVeel('Fasewissels', cx([aanm('rk6-ma', true), aanm('rk6-mb', true), aanm('rk6-mc', false)])); ctx._LEES = {};
+    var S20 = op(plusDagen(-30)).stilstand;
+    eis(!S20.geblokkeerd && S20.waarde === 1 && S20.extra.zonderContact === 2, 'v7.9.4 herstel r6 (nit R6-4): op een eerdere peildatum is een Capsule-kans zonder contact t/m die dag zonder laatste contact (niet stil), met of zonder later contact; een kans uit Athena valt terug op de aanmaak (' + JSON.stringify([S20.waarde, S20.extra, S20.geblokkeerd]) + ')');
+    eis(/uit Athena/.test(ctx.METRIEKEN.stilstand.definitie), 'v7.9.4 herstel r6 (nit R6-4): de definitie van M20 zegt dat alleen een kans uit Athena op de aanmaak terugvalt');
+  } catch (e) { fout794('herstel r6', e); } finally { standTerug(st); }
+})();
+
+/* ---- v7.9.4 harnasdekking (7): M25 en M26 zijn geen maandcijfer maar de som over het schooljaar t/m de peildatum (zoals sturingCijfers, het MT-overzicht en het
+   harnas rekenen; herstel r6, R6-1: M26 over de facturen van het schooljaar van elk project). De definitie in het register zegt dat, niet "in de maand" of "per maand". Verzonnen gegevens. ---- */
+(function () {
+  vers79(); var st = standBewaren();
+  try {
+    var d25 = ctx.METRIEKEN.geleverd.definitie, d26 = ctx.METRIEKEN.gefactureerd.definitie;
+    eis(!/in de maand|per maand/.test(d25 + d26) && [d25, d26].every(function (d) { return /schooljaar t\/m de peildatum/.test(d) && /geen maandcijfer/.test(d); }),
+      'v7.9.4 harnasdekking (7): de definitie van M25 en M26 is de som over het schooljaar t/m de peildatum (geen maandcijfer), niet "in de maand" of "per maand"');
+    // M26 op 30 november van vorig schooljaar: de termijnen van 20 augustus en 15 oktober tellen allebei, en (herstel r6, R6-1) die van september van een project van
+    // een eerder schooljaar ook; die van juli (vorig schooljaar) en van december niet
+    var jV = +sjNu().slice(0, 4) - 1, sjV = jV + '-' + (jV + 1), leeg = function (t) { ctx.verwijderRijen(t, function () { return true; }); };
+    ['Trajecten', 'Facturen'].forEach(leeg);
+    ctx.schrijfVeel('Trajecten', cx([{ id: 'hd-t', kansId: '', schoolId: '', school: 'Verzonnen School HD', traject: 'Verzonnen', schooljaar: sjV, status: 'afgelopen', contractwaarde: 20000, omzet: 20000 },
+      { id: 'hd-x', kansId: '', schoolId: '', school: 'Verzonnen School HX', traject: 'Verzonnen', schooljaar: (jV - 1) + '-' + jV, status: 'afgelopen', contractwaarde: 9000, omzet: 9000 }]));
+    var t = function (id, tr, d, b) { return { id: id, trajectId: tr, omschrijving: 'Verzonnen termijn', bedrag: b, datum: d, status: 'verzonden', factuurnummer: 'HD' + id, verzonden: d, betaald: '', aangemaakt: d + ' 09:00' }; };
+    ctx.schrijfVeel('Facturen', cx([t('a', 'hd-t', jV + '-08-20', 5000), t('b', 'hd-t', jV + '-10-15', 7000), t('c', 'hd-t', jV + '-07-20', 300), t('d', 'hd-x', jV + '-09-10', 900), t('e', 'hd-t', jV + '-12-01', 400)])); ctx._LEES = {};
+    ctx.GEBRUIKER = null; var c26 = null; ctx.sturingCijfers(jV + '-11-30').blokken.forEach(function (b) { b.cijfers.forEach(function (c) { if (c.id === 'gefactureerd') c26 = c; }); });
+    eis(c26 && c26.waarde === 12900, 'v7.9.4 harnasdekking (7), herstel r6 (R6-1): M26 op 30 november telt de facturen van het schooljaar t/m de peildatum (augustus, september van een ander project en oktober), niet alleen november, niet juli en niet december (' + (c26 && c26.waarde) + ')');
+  } catch (e) { fout794('harnasdekking definitie', e); } finally { standTerug(st); }
 })();
 
 /* ---- v7.9.4 herstel r2 (B-B3): §4 van docs/sturing-v7.9.md (de tekst die het MT aftekent) is per M-code gelijk aan de definitie in het register (METRIEKEN),

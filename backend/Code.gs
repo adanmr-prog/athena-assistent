@@ -4543,13 +4543,13 @@ var METRIEKEN = {
   retentie:              { team: 'sturing', label: 'Aanname retentie', kort: 'Retentie', soort: 'fractie', m: 'M03', besluit: 'B1', eigenaar: 'beheerder', tolerantie: '0',
     definitie: 'Het deel van de omzet vorig jaar dat naar verwachting bij dezelfde scholen terugkomt. Doel bestaand = omzet vorig jaar × retentie; doel nieuw = jaardoel − doel bestaand. Eén waarde per schooljaar, met onderbouwing en besluitdatum.' },
   gecontracteerd:        { team: 'sturing', label: 'Gecontracteerd', kort: 'Gecontr.', soort: 'euro', m: 'M04', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
-    definitie: 'Op de peildatum: de som van de getekende contractwaarde van alle gewonnen kansen waarvan de opdracht in het schooljaar valt, ongeacht de akkoorddatum, gesplitst naar nieuwe en bestaande klant. Het schooljaar van een winst is Kansen.schooljaar, anders dat van het project, anders dat van de akkoorddatum (dezelfde volgorde als de datacontracten). Geen schattingen. Een gewonnen kans zonder getekende waarde telt als aparte regel, niet als bedrag. Heeft geen enkele winst van het schooljaar een getekende waarde, dan is de waarde leeg (geen basis), geen 0; zonder winsten is 0 een echte 0. Een deel (nieuw, bestaand) waarvan geen winst een getekende waarde heeft, is leeg; een deel zonder winsten is 0.' + opPeildatumTekst('de getekende contractwaarde, het schooljaar en de klant') },  // v7.9.4 herstel r1 (K3); herstel r3 (R3-D1): leeg
+    definitie: 'Op de peildatum: de som van de getekende contractwaarde van alle gewonnen kansen waarvan de opdracht in het schooljaar valt, ongeacht de akkoorddatum, gesplitst naar nieuwe en bestaande klant. Het schooljaar van een winst is Kansen.schooljaar, anders dat van het project, anders dat van de akkoorddatum (dezelfde volgorde als de datacontracten). Geen schattingen. Een gewonnen kans zonder getekende waarde telt als aparte regel, niet als bedrag; een gewonnen kans zonder schooljaar (geen schooljaar, project of akkoorddatum) ook (zonder schooljaar). Heeft geen enkele winst van het schooljaar een getekende waarde terwijl er winsten van het schooljaar of zonder schooljaar zijn, dan is de waarde leeg (geen basis), geen 0; zonder winsten is 0 een echte 0. Een deel (nieuw, bestaand) waarvan geen winst een getekende waarde heeft, is leeg; een deel zonder winsten is 0.' + opPeildatumTekst('de getekende contractwaarde, het schooljaar en de klant') },  // v7.9.4 herstel r1 (K3); herstel r3 (R3-D1): leeg
   doelpad:               { team: 'sturing', label: 'Doelpad', kort: 'Doelpad', soort: 'euro', m: 'M05', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
-    definitie: 'Per datum: doel bestaand of nieuw × het deel van de jaarwaarde dat in eerdere schooljaren op dezelfde dag al gewonnen was (de curve uit de wissels naar gewonnen op akkoorddatum, gewogen met contractwaarde). De curve wordt na 31 juli opnieuw berekend en met versie vastgelegd. Bij een omzetdoel: het doel verdeeld over de maanden naar gewerkte uren of netto-omzet van vorig jaar, nooit naar het factuurpatroon. Naast het doelpad staat de achterstand: gecontracteerd − doelpad; is gecontracteerd leeg (winsten zonder getekende waarde), dan is er geen achterstand (leeg). Hebben alleen sommige winsten geen getekende waarde, dan rekent de achterstand met de getekende en staat het aantal zonder getekende waarde ernaast (telt niet mee).' },  // v7.9.4 herstel r3 (R3-D1)
+    definitie: 'Per datum: doel bestaand of nieuw × het deel van de jaarwaarde dat in eerdere schooljaren op dezelfde dag al gewonnen was (de curve uit de wissels naar gewonnen op akkoorddatum, gewogen met contractwaarde). De curve wordt na 31 juli opnieuw berekend en met versie vastgelegd. Bij een omzetdoel: het doel verdeeld over de maanden naar gewerkte uren of netto-omzet van vorig jaar, nooit naar het factuurpatroon. Naast het doelpad staat de achterstand: gecontracteerd − doelpad; is gecontracteerd leeg (winsten zonder getekende waarde of zonder schooljaar), dan is er geen achterstand (leeg). Hebben alleen sommige winsten geen getekende waarde, dan rekent de achterstand met de getekende en staat het aantal zonder getekende waarde ernaast (telt niet mee).' },  // v7.9.4 herstel r3 (R3-D1)
   gewogenPijplijn:       { team: 'sturing', label: 'Gewogen pipeline', kort: 'Gewogen', soort: 'euro', m: 'M06', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
     definitie: 'De som over open kansen van het schooljaar in de gewogen fasen van waarde × fasegewicht van de mijlpaal. De leadfase en gewonnen tellen niet. Kansen zonder waarde tellen als nul en staan er als aantal naast.' + opPeildatumTekst('de waarde, het fasegewicht van de mijlpaal, het schooljaar en de klant') },  // v7.9.4 herstel r1 (R794-7): ook het fasegewicht
   dekking:               { team: 'sturing', label: 'Dekking en nog te vinden', kort: 'Dekking', soort: 'procent', m: 'M07', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1',
-    definitie: 'Dekking = (gecontracteerd + gewogen pipeline) ÷ jaardoel. Nog te vinden = jaardoel − gecontracteerd − gewogen pipeline. Alleen te berekenen als teller en noemer dezelfde soort en periode hebben. Is gecontracteerd leeg (winsten zonder getekende waarde), dan zijn dekking en nog te vinden leeg, nooit 0 % of het hele jaardoel. Hebben alleen sommige winsten geen getekende waarde, dan rekenen dekking en nog te vinden met de getekende en staat het aantal zonder getekende waarde ernaast (telt niet mee).' },  // v7.9.4 herstel r3 (R3-D1)
+    definitie: 'Dekking = (gecontracteerd + gewogen pipeline) ÷ jaardoel. Nog te vinden = jaardoel − gecontracteerd − gewogen pipeline. Alleen te berekenen als teller en noemer dezelfde soort en periode hebben. Is gecontracteerd leeg (winsten zonder getekende waarde of zonder schooljaar), dan zijn dekking en nog te vinden leeg, nooit 0 % of het hele jaardoel. Hebben alleen sommige winsten geen getekende waarde, dan rekenen dekking en nog te vinden met de getekende en staat het aantal zonder getekende waarde ernaast (telt niet mee).' },  // v7.9.4 herstel r3 (R3-D1)
   urenVorigeJaren:       { team: 'sturing', label: 'Gewerkte uren tegenover vorige jaren', kort: 'Uren', soort: 'uren', m: 'M09', besluit: 'B2', eigenaar: 'beheerder', tolerantie: '1%',
     definitie: 'De som van gewerkte uren (XPS-diensten met een gewerkte status) per kalendermaand t/m de laatste hele maand, naast dezelfde maanden van de vorige schooljaren. Gesplitst naar bestaand en nieuw voor zover de school bekend is. De teller telt TalentUren: de diensten die bij de urenimport aan een talent in Athena koppelden (accountnummer, e-mail of een unieke naam), ook van wie daarna vertrokken is; een dienst zonder talent komt niet in TalentUren. De basislijn komt uit de XPS-dienstenexport (test/urenbasislijn.js) en telt de diensten die koppelen aan een talent in de Athena-export en, met de XPS-accountexport (--accounts), aan elk account dat niet actief is (inactief, uit dienst of zonder status); een actief account zonder profiel telt niet, net als in de teller (de urenimport koppelt alleen aan een profiel: importeer eerst de talenten). Zonder --accounts (alleen bewust, met --zonder-accounts) ontbreken flexkrachten die sindsdien vertrokken zijn en is de basislijn te laag. Zonder hele maand in het schooljaar (een peildatum in augustus) is er niets te vergelijken: leeg. Mist de basislijn van een vorig schooljaar een van die maanden, dan is er voor dat schooljaar geen basis (leeg, met de ontbrekende maanden), nooit een som met 0.' },  // v7.9.4 herstel r1 (R794-4, R794-5, K8); herstel r3 (R3-D3, R4); herstel r5 (R5-2, R5-C3)
   nettoOmzet:            { team: 'sturing', label: 'Netto-omzet tegen jaardoel', kort: 'Netto', soort: 'euro', m: 'M10', besluit: 'B2', eigenaar: 'FD', tolerantie: '1%', blokkade: 'extern: netto-omzet per maand van de boekhouder (§6)',
@@ -4567,7 +4567,7 @@ var METRIEKEN = {
   verwachteOpdrachten:   { team: 'sturing', label: 'Verwachte opdrachten (30 dagen)', kort: '30 dagen', soort: 'euro', m: 'M19', besluit: 'B5', eigenaar: 'beheerder', tolerantie: '1%',
     definitie: 'Open kansen in de voorstelfase met een verwachte tekendatum binnen 30 dagen na de peildatum, met hun waarde. Een verwachte tekendatum in het verleden staat als "verlopen" apart en telt niet.' + opPeildatumTekst('de waarde en de verwachte tekendatum') },
   stilstand:             { team: 'sturing', label: 'Stilstand', kort: 'Stil', soort: 'aantal', m: 'M20', besluit: 'B5', eigenaar: 'beheerder', tolerantie: '0',
-    definitie: 'Per open kans: het aantal dagen sinds het laatste contact (Kansen.laatsteContact) tegen de norm van de mijlpaal; boven de norm is de kans stil. Een kans zonder laatste contact telt niet als stil, ook op een eerdere peildatum; het aantal open kansen zonder laatste contact staat ernaast. Heeft geen enkele open kans een laatste contact, dan is de waarde leeg (geen basis), geen 0; zonder open kansen is 0 een echte 0.' + ' Op een eerdere peildatum het laatste contact tot die dag: ligt Kansen.laatsteContact erna, dan uit de activiteiten van de kans en de school, anders de aanmaak.' + opPeildatumTekst('de mijlpaal en zijn norm') },  // v7.9.4 herstel r3 (N1); herstel r5 (R5-C1): het aantal zonder contact, leeg
+    definitie: 'Per open kans: het aantal dagen sinds het laatste contact (Kansen.laatsteContact) tegen de norm van de mijlpaal; boven de norm is de kans stil. Een kans zonder laatste contact telt niet als stil, ook op een eerdere peildatum; het aantal open kansen zonder laatste contact staat ernaast. Heeft geen enkele open kans een laatste contact, dan is de waarde leeg (geen basis), geen 0; zonder open kansen is 0 een echte 0.' + ' Op een eerdere peildatum het laatste contact tot die dag: ligt Kansen.laatsteContact erna, dan uit de activiteiten van de kans en de school, anders bij een kans uit Athena de aanmaak (die gaf het eerste laatste contact); een kans uit Capsule is dan zonder laatste contact.' + opPeildatumTekst('de mijlpaal en zijn norm') },  // v7.9.4 herstel r3 (N1); herstel r5 (R5-C1): het aantal zonder contact, leeg
   verloren:              { team: 'sturing', label: 'Verloren met reden', kort: 'Verloren', soort: 'aantal', m: 'M21', besluit: 'B5', eigenaar: 'beheerder', tolerantie: '0',
     definitie: 'Kansen met een wissel naar verloren met een werkelijke datum in de periode, per reden uit een vaste lijst. "Opgeschoond" is een eigen reden en telt niet in de conversie.' },
   icpDeciel:             { team: 'sturing', label: 'ICP-deciel', kort: 'ICP', soort: 'aantal', m: 'M22', besluit: 'B6', eigenaar: 'beheerder', tolerantie: '0', blokkade: 'besluit ICP (§5 besluit 9)',
@@ -4577,14 +4577,14 @@ var METRIEKEN = {
   verlengingsstand:      { team: 'sturing', label: 'Verlengingsstand', kort: 'Verlenging', soort: 'procent', m: 'M24', besluit: 'B8', eigenaar: 'teamlead AM', tolerantie: '1',
     definitie: 'Van de scholen (BRIN en vestiging) met een project in het vorige schooljaar: per school de status voor het nieuwe schooljaar (verlengd, voorstel verstuurd, nog bespreken, stopt, geen kans), de eigenaar die het oppakt en de contractwaarde van vorig jaar; plus het aandeel van die contractwaarde dat verlengd is. De contractwaarde is Trajecten.contractwaarde, zonder terugval op de omzet (zoals de bedrijfsmetriek contractwaarde); het aantal projecten zonder contractwaarde staat ernaast.' },  // v7.9.4 herstel r1 (K13, R794-8)
   geleverd:              { team: 'sturing', label: 'Geleverd', kort: 'Geleverd', soort: 'euro', m: 'M25', besluit: 'B9', eigenaar: 'teamlead AM', tolerantie: '1%',
-    definitie: 'De gewerkte uren per project per maand × het projecttarief (Trajecten.tarief). Nooit loon of tarief per persoon.' + TOT_PEILDATUM + ' XPS levert uren per week: de week van de peildatum telt mee.' },
+    definitie: 'De gewerkte uren × het projecttarief (Trajecten.tarief) van de projecten van het schooljaar, opgeteld over het schooljaar t/m de peildatum (geen maandcijfer). Nooit loon of tarief per persoon.' + TOT_PEILDATUM + ' XPS levert uren per week: de week van de peildatum telt mee.' },  // v7.9.4 harnasdekking (7): de som, zoals sturingCijfers rekent
   gefactureerd:          { team: 'sturing', label: 'Gefactureerd', kort: 'Gefact.', soort: 'euro', m: 'M26', besluit: 'B9', eigenaar: 'boekhouder', tolerantie: '1%',
-    definitie: 'De som van termijnen met een verzenddatum in de maand, met creditnota\'s verrekend. Dit is geen omzet en geen stuurgetal; het is er alleen voor facturatie en cash.' + TOT_PEILDATUM },
+    definitie: 'De som van de facturen van dit schooljaar: de termijnen met een verzenddatum vanaf 1 augustus, van elk project (zoals Exact op factuurdatum en Financiën; ook een slottermijn van een project van vorig schooljaar), opgeteld over het schooljaar t/m de peildatum (geen maandcijfer), met creditnota\'s verrekend. Dit is geen omzet en geen stuurgetal; het is er alleen voor facturatie en cash.' + TOT_PEILDATUM },  // v7.9.4 harnasdekking (7); herstel r6 (R6-1): van elk project
   nogTeFactureren:       { team: 'sturing', label: 'Nog te factureren', kort: 'Nog te fact.', soort: 'euro', m: 'M27', besluit: 'B9', eigenaar: 'teamlead AM', tolerantie: '1%',
-    definitie: 'Per project: de getekende contractwaarde − gefactureerd (negatief = meerwerk), in de sommen per school en totaal op nul geklemd. Een project zonder getekende contractwaarde telt zoals in Financiën met de omzet of de termijnen; het aantal staat ernaast. De status volgt de factuurafspraak (vooraf, achteraf, termijnen): "achter" als bij achteraf geleverd − gefactureerd boven de tolerantie ligt.' + ' De soort van een eigen facturatievorm (per toetsweek, stukprijs) staat in Beheer → Keuzelijsten; zonder soort telt hij niet als achter en staat hij als aantal apart.' + TOT_PEILDATUM },
+    definitie: 'Per project van het schooljaar: de getekende contractwaarde − gefactureerd (negatief = meerwerk), in de sommen per school en totaal op nul geklemd. Een project zonder getekende contractwaarde telt zoals in Financiën met de omzet of de termijnen; het aantal staat ernaast. De status volgt de factuurafspraak (vooraf, achteraf, termijnen): "achter" als bij achteraf geleverd − gefactureerd boven de tolerantie ligt.' + ' De soort van een eigen facturatievorm (per toetsweek, stukprijs) staat in Beheer → Keuzelijsten; zonder soort telt hij niet als achter en staat hij als aantal apart.' + TOT_PEILDATUM },
   openstaand:            { team: 'sturing', label: 'Openstaand naar ouderdom', kort: 'Open', soort: 'euro', m: 'M28', besluit: 'B10', eigenaar: 'boekhouder', tolerantie: '1%',
-    definitie: 'Gefactureerd − ontvangen per factuur, in de klassen 0–30, 31–60 en meer dan 60 dagen na verzending.' + ' In een stand: verzonden en niet betaald t/m de peildatum, met de ouderdom tot de peildatum.' +
-      ' Een termijn die toen open was en later als betaald is vastgelegd, telt daar als open; die betaaldatum kan de dag van invoer of van de Exact-import zijn (een export zonder betaaldatum), dus het aantal staat ernaast.' },  // herstel r2 (A-B7)
+    definitie: 'Gefactureerd − ontvangen per factuur, voor de facturen van dit schooljaar (verzenddatum vanaf 1 augustus, van elk project, zoals M26), in de klassen 0–30, 31–60 en meer dan 60 dagen na verzending.' + ' In een stand: verzonden en niet betaald t/m de peildatum, met de ouderdom tot de peildatum.' +
+      ' Een termijn die toen open was en later als betaald is vastgelegd, telt daar als open; die betaaldatum kan de dag van invoer of van de Exact-import zijn (een export zonder betaaldatum), dus het aantal staat ernaast.' },  // herstel r2 (A-B7); r6 (R6-1): facturen van dit schooljaar
   realisatiegraad:       { team: 'sturing', label: 'Realisatiegraad per project', kort: 'Realisatie', soort: 'procent', m: 'M29', besluit: 'B11', eigenaar: 'teamlead AM', tolerantie: '1', blokkade: 'besluit realisatiegraad (§5 besluit 6)',
     definitie: 'Geleverd t/m de laatste hele maand ÷ de prognose uit het contract t/m dezelfde maand, per project, tegen een drempel. Minder afname door de school staat apart en telt niet als prestatie van de AM.' },
   brutomarge:            { team: 'sturing', label: 'Brutomarge', kort: 'Marge', soort: 'euro', m: 'M30', besluit: 'B12', eigenaar: 'FD', tolerantie: '1%', blokkade: 'kosten per maand van financiën ontbreken (§6)',
@@ -8457,7 +8457,7 @@ var CONTRACT_POPULATIE = {
   geen_bulk_op_werkelijke_datum: 'fasewissels met een werkelijke datum in dit schooljaar', actieve_eigenaar: 'open kansen', geen_dubbele_open_kansen: 'open kansen', verliesdiscipline: 'open kansen',
   weekdoel_voor_deze_week: 'OC\'s in het team', fasewissel_heeft_werkelijke_datum: 'fasewissels ingevoerd in dit schooljaar', school_heeft_brin: 'scholen met een kans vanaf AP of een winst van dit schooljaar',
   noemerbewaking: 'jaardoel', geen_target_op_facturatie: 'doelpadcurve of jaardoel', gewonnen_is_getekend: 'winsten in dit schooljaar', lopend_project_heeft_contract: 'lopende projecten',
-  kans_heeft_schooljaar_en_klant: 'open kansen of winsten van dit schooljaar', termijn_verzonden_heeft_factuurnummer: 'verzonden of betaalde termijnen', tarief_echt: 'lopende projecten met uren',
+  kans_heeft_schooljaar_en_klant: 'open kansen of winsten van dit schooljaar of zonder schooljaar', termijn_verzonden_heeft_factuurnummer: 'verzonden of betaalde termijnen', tarief_echt: 'lopende projecten met uren',
   verlenging_bekend: 'projecten van het vorige schooljaar', start_bij_bijna_rond: 'open kansen in een fase die een startdatum vraagt'
 };
 function contractLeegReden(id) { var p = uitMap(CONTRACT_POPULATIE, String(id)); return 'niets te toetsen: geen ' + (p || 'gegevens'); }
@@ -8668,7 +8668,8 @@ function datacontracten(S) {
   if (!overstap) { if (!vind_.lopend_project_heeft_contract.afwijkingen.length) zet('lopend_project_heeft_contract', 'niet getoetst', 'kansId-deel: overstapdatum niet vastgesteld (§5 besluit 1)'); else vind_.lopend_project_heeft_contract.reden = 'kansId-deel: overstapdatum niet vastgesteld (§5 besluit 1)'; }
   // 16. kans_heeft_schooljaar_en_klant
   // v7.9.4 (bouwpunt 2): ook de winsten van dit schooljaar (Kansen.schooljaar, anders de akkoorddatum of het project), zodat een winst zonder schooljaar meetelt
-  open.concat(winstNu).forEach(function (k) { telP('kans_heeft_schooljaar_en_klant'); if (!k.schooljaar || !k.klant) af('kans_heeft_schooljaar_en_klant', k.eigenaar, 'kans', k.id); });
+  // v7.9.4 herstel r6 (R6-2): ook een winst zonder schooljaar (winstSchooljaar ''), die M04 leeg maakt
+  open.concat(winstNu, S.kansen.filter(function (k) { return k.fase === 'gewonnen' && !winstVanSj(k); })).forEach(function (k) { telP('kans_heeft_schooljaar_en_klant'); if (!k.schooljaar || !k.klant) af('kans_heeft_schooljaar_en_klant', k.eigenaar, 'kans', k.id); });
   // 17. termijn_verzonden_heeft_factuurnummer: verzonden of betaald met een uniek factuurnummer en een bestaand project
   var tIds = {}, nrs = {}; S.trajecten.forEach(function (t) { tIds[String(t.id)] = true; });
   S.facturen.forEach(function (f) { if (f.factuurnummer !== '' && f.factuurnummer != null) { var n0 = nrSleutel(f.factuurnummer); nrs[n0] = (nrs[n0] || 0) + 1; } });
@@ -8956,6 +8957,7 @@ function cijferUit(id, x, peildatum) {
 /* ----- v7.9.4 (bouwpunt 7): de fase van elke kans op een eerdere peildatum, uit Fasewissels (M04, M06, M18, M19, M20) ----- */
 var STAND_ALLEEN_VANDAAG = 'stand alleen voor vandaag';
 var M04_LEEG = 'geen basis: winsten zonder getekende contractwaarde';  // v7.9.4 herstel r3 (R3-D1): M04 leeg, en daarom M05 (achterstand) en M07
+var M04_ZONDER_SJ = 'geen basis: winsten zonder schooljaar (geen schooljaar, project of akkoorddatum)';  // v7.9.4 herstel r6 (R6-2)
 var M20_LEEG = 'geen basis: open kansen zonder laatste contact';  // v7.9.4 herstel r5 (R5-C1)
 var M09_GEEN_MAAND = 'nog geen hele maand in dit schooljaar';  // v7.9.4 herstel r3 (R4)
 // Op of na vandaag: de stand van nu (Kansen). Op een eerdere peildatum per kans uit zijn geldige wissels (niet ongedaan, niet verwijderd) met een werkelijke datum,
@@ -8973,7 +8975,7 @@ var M09_GEEN_MAAND = 'nog geen hele maand in dit schooljaar';  // v7.9.4 herstel
 //   fase die geen mijlpaal meer is, is niet te reconstrueren;
 // - het laatste contact (M20): Kansen.laatsteContact als dat t/m de peildatum ligt, anders het laatste contact t/m de peildatum in de activiteiten (van de kans of
 //   de school, zoals zetLaatsteContact; geen notitie, fase of taak), de aanmaak of de aanmaakwissel; zonder één daarvan onbekend. Herstel r3 (N1): een kans
-//   zonder Kansen.laatsteContact houdt een leeg laatste contact (niet stil), net als vandaag.
+//   zonder Kansen.laatsteContact houdt een leeg laatste contact (niet stil), net als vandaag. Herstel r6: een Capsule-kans zonder contact t/m de peildatum ook.
 // Kansen.waarde, verwachteSluiting, schooljaar, klant en het project zijn niet gehistoriseerd: die komen uit de stand van nu (de definities zeggen het).
 // Geeft { kansen: kopieën met fase en laatsteContact op de peildatum (alleen die toen bestonden), onbekend, contactOnbekend, gereconstrueerd }.
 function kansenOpPeildatum(kansen, peildatum, acts) {
@@ -9014,8 +9016,9 @@ function kansenOpPeildatum(kansen, peildatum, acts) {
             if (a.schoolId) contact.school[String(a.schoolId)] = laatste(contact.school[String(a.schoolId)], da);
           });
         }
-        lc = laatste(laatste(laatste(uitMap(contact.kans, String(k.id)) || '', uitMap(contact.school, String(k.schoolId || '')) || ''), aangemaakt <= peildatum ? aangemaakt : ''), creatie);
-        if (!lc) contactOnbekend++;
+        var eigen = !k.capsuleId;  // v7.9.4 herstel r6 (nit R6-4): alleen een kans uit Athena kreeg bij de aanmaak een laatste contact (kansOpslaan); Capsule niet
+        lc = laatste(laatste(laatste(uitMap(contact.kans, String(k.id)) || '', uitMap(contact.school, String(k.schoolId || '')) || ''), eigen && aangemaakt <= peildatum ? aangemaakt : ''), eigen ? creatie : '');
+        if (!lc && eigen) contactOnbekend++;  // een Capsule-kans zonder contact t/m de peildatum: zonder laatste contact (niet stil), zoals vandaag
       }
       c.laatsteContact = lc;
     }
@@ -9053,16 +9056,19 @@ function sturingCijfers(peildatum) {
     C.retentie = { waarde: Number(ret), extra: doelB === null ? { verdeling: 'geblokkeerd: ' + verdeling } : { doelBestaand: doelB, doelNieuw: doelN } };
   }
   // M04: de getekende contractwaarde van de gewonnen kansen van het schooljaar (binnen de scope); zonder getekende waarde als aantal apart
-  var m04 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonder04 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonderGetekend = 0, totM04 = 0, pSj04 = projectSchooljaren(ts);
+  var m04 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonder04 = { nieuw: 0, bestaand: 0, onbekend: 0 }, zonderGetekend = 0, zonderSj04 = 0, totM04 = 0, pSj04 = projectSchooljaren(ts);
   kansenP.forEach(function (k) {  // v7.9.4 (bouwpunt 7): de fase op de peildatum
     if (k.fase !== 'gewonnen' || !binnen(schoolVan(k))) return;
-    if (winstSchooljaar(k, uitMap(pSj04, String(k.id)), k.gesloten) !== sj) return;  // v7.9.4 herstel r1 (K3): één volgorde met de contracten en stap kansen
+    var wsj = winstSchooljaar(k, uitMap(pSj04, String(k.id)), k.gesloten); if (!wsj) zonderSj04++;  // v7.9.4 herstel r6 (R6-2): zonder schooljaar apart, nooit stil weg
+    if (wsj !== sj) return;  // v7.9.4 herstel r1 (K3): één volgorde met de contracten en stap kansen
     var w = cw(k.id); if (!(w > 0)) { zonderGetekend++; zonder04[klantDeel(k)]++; return; }
     m04[klantDeel(k)] += w; totM04 += w;
   });
   // v7.9.4 herstel r3 (R3-D1): zijn er winsten maar heeft geen enkele een getekende waarde, dan is M04 leeg (zoals M08, K4), nooit 0; zonder winsten een echte 0
-  var m04Leeg = zonderGetekend > 0 && !(totM04 > 0);
-  C.gecontracteerd = standBlok ? { geblokkeerd: standBlok } : { waarde: m04Leeg ? null : Math.round(totM04 * 100) / 100, uitsplitsing: m04Leeg ? [] : delenUit(m04, zonder04), extra: ext(m04Leeg ? { zonderGetekend: zonderGetekend, scope: scopeTekst, reden: M04_LEEG } : { zonderGetekend: zonderGetekend, scope: scopeTekst }) };
+  // v7.9.4 herstel r6 (R6-2): ook met winsten zonder schooljaar (de reden noemt de oorzaak)
+  var m04Leeg = (zonderGetekend > 0 || zonderSj04 > 0) && !(totM04 > 0), r04 = zonderGetekend ? M04_LEEG : M04_ZONDER_SJ, x04 = { zonderGetekend: zonderGetekend, scope: scopeTekst };
+  if (zonderSj04) x04.zonderSchooljaar = zonderSj04; if (m04Leeg) x04.reden = r04;
+  C.gecontracteerd = standBlok ? { geblokkeerd: standBlok } : { waarde: m04Leeg ? null : Math.round(totM04 * 100) / 100, uitsplitsing: m04Leeg ? [] : delenUit(m04, zonder04), extra: ext(x04) };
   // M06: open kansen van het schooljaar × fasegewicht (lead 0), binnen de scope
   var m06 = { nieuw: 0, bestaand: 0, onbekend: 0 }, totM06 = 0, zonderWaarde = 0, zonderSj = 0, aantal06 = 0;
   open.forEach(function (k) {
@@ -9081,13 +9087,13 @@ function sturingCijfers(peildatum) {
   else {
     var dag = Math.round((middag(parseDatum(peildatum)) - middag(parseDatum(sjStart))) / 86400000), fr = curveOp(curve.totaal, dag), dp = Math.round(N.waarde * fr);
     var ex = { dag: dag, fractie: Math.round(fr * 10000) / 10000, bron: curve.bron || '', noemer: N.waarde, noemerLabel: N.label, achter: standBlok || m04Leeg ? '' : Math.round(totM04 - dp) };  // v7.9.4: zonder M04 geen achterstand
-    if (m04Leeg && !standBlok) ex.achterReden = M04_LEEG;  // herstel r3 (R3-D1)
+    if (m04Leeg && !standBlok) ex.achterReden = r04;  // herstel r3 (R3-D1)
     else if (zonderGetekend && !standBlok) ex.zonderGetekend = zonderGetekend;  // herstel r4 (R4-3): deels getekend, die winsten tellen niet mee
     if (doelB !== null && curve.bestaand instanceof Array && curve.nieuw instanceof Array) { ex.bestaand = Math.round(doelB * curveOp(curve.bestaand, dag)); ex.nieuw = Math.round(doelN * curveOp(curve.nieuw, dag)); }
     C.doelpad = { waarde: dp, extra: ex };
   }
   // herstel r3 (R3-D1): zonder waarde van M04 geen dekking en geen "nog te vinden" (leeg met de reden), nooit 0 % of het hele jaardoel
-  C.dekking = nBlok ? { geblokkeerd: nBlok } : standBlok ? { geblokkeerd: standBlok } : m04Leeg ? { waarde: null, extra: { reden: M04_LEEG, noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst } }
+  C.dekking = nBlok ? { geblokkeerd: nBlok } : standBlok ? { geblokkeerd: standBlok } : m04Leeg ? { waarde: null, extra: { reden: r04, noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst } }
     : { waarde: Math.round(1000 * (totM04 + totM06) / N.waarde) / 10, extra: { nogTeVinden: Math.round(N.waarde - totM04 - totM06), noemer: N.waarde, noemerLabel: N.label, scope: scopeTekst, zonderGetekend: zonderGetekend } };  // herstel r4 (R4-3)
   // M08: deals (per kans één, N8) met akkoorddatum in het schooljaar t/m de peildatum; de maand apart; zonder werkelijke datum apart
   // v7.9.4 (bouwpunt 4): de getekende contractwaarde van het project (Trajecten.contractwaarde, zoals M04), nooit de geschatte Fasewissels.waarde (bij een wissel uit
@@ -9230,16 +9236,28 @@ function sturingCijfers(peildatum) {
   // v7.9.4 (bouwpunt 7): de stand op de peildatum (financienProject met de peildatum): verzonden, betaald en geleverd t/m de peildatum, niet de hele maand van de
   // peildatum, en de ouderdom tot de peildatum. v7.9.4 (bouwpunt 9): "achter" volgt de soort van de facturatievorm; een eigen vorm zonder soort telt niet (zonderSoort)
   var D = financienData(), nuM = peildatum.slice(0, 7), maandenSj = schooljaarMaanden(sj), achterA = aw('achterTolerantie'), f = { geleverd: 0, gefactureerd: 0, nogTe: 0, achter: 0, zonderSoort: 0, zonderCw: 0, later: 0, ouderdom: { '0-30': 0, '31-60': 0, '60+': 0 } };
+  var opPeil = peildatum < vandaag;
   ts.forEach(function (t) {
     if (String(t.schooljaar) !== sj) return;
-    var F = financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], termijnDagenVan(t, D), peildatum < vandaag ? peildatum : undefined), gel = 0;  // v7.9.4 herstel r1 (K10): vandaag zoals Financiën en Home
-    maandenSj.forEach(function (m) { if (m > nuM) return; gel += F.per.geleverd[m] || 0; f.gefactureerd += F.per.gefactureerd[m] || 0; });
+    var F = financienProject(t, D.fac[t.id] || [], D.uren[t.id] || [], termijnDagenVan(t, D), opPeil ? peildatum : undefined), gel = 0;  // v7.9.4 herstel r1 (K10): vandaag zoals Financiën en Home
+    maandenSj.forEach(function (m) { if (m > nuM) return; gel += F.per.geleverd[m] || 0; });
     f.geleverd += gel; f.nogTe += Math.max(0, F.nogTeFactureren);
-    Object.keys(F.ouderdom).forEach(function (k) { f.ouderdom[k] += F.ouderdom[k]; });
-    f.later += F.laterBetaald.aantal; if (!(Number(t.contractwaarde) > 0) && F.contract) f.zonderCw++;  // herstel r2 (A-B7, N1): signalen naast M28 en M27
+    if (!(Number(t.contractwaarde) > 0) && F.contract) f.zonderCw++;  // herstel r2 (N1)
     var soortF = facturatieSoort(t.soortFacturatie); if (!soortF && facturatieZonderSoort(t.soortFacturatie)) f.zonderSoort++;
     if (achterA !== null && soortF === 'achteraf' && gel - F.gefactureerd > Number(achterA) * F.contract) f.achter++;
   });
+  // v7.9.4 herstel r6 (R6-1): M26 en M28 per termijn: de facturen van dit schooljaar (verzonden vanaf 1 augustus) van elk project, zoals Exact en Financiën per
+  // maand; verzonden en betaald zoals financienProject (op een eerdere peildatum t/m die dag, ouderdom tot de peildatum; vandaag zoals Financiën)
+  Object.keys(D.fac).forEach(function (id) { D.fac[id].forEach(function (x) {
+    var v = verzondenVan(x), b = betaaldVan(x), c = centen(x.bedrag);
+    if (opPeil && v && v.datum > peildatum) v = null;
+    if (opPeil && b && b.datum > peildatum) b = null;
+    if (!v || v.datum < sjStart) return;
+    if (maandVan(v.datum) <= nuM) f.gefactureerd += c;
+    if (b) return;
+    var oud = dagenTussen(v.datum, opPeil ? peildatum : vandaag) || 0; f.ouderdom[oud <= 30 ? '0-30' : oud <= 60 ? '31-60' : '60+'] += c;
+    if (opPeil && betaaldVan(x)) f.later++;  // herstel r2 (A-B7): toen open, later als betaald vastgelegd
+  }); });
   C.geleverd = { waarde: euro2(f.geleverd), extra: { totEnMet: peildatum } };
   C.gefactureerd = { waarde: euro2(f.gefactureerd), extra: { totEnMet: peildatum } };
   C.nogTeFactureren = { waarde: euro2(f.nogTe), extra: { achter: achterA === null ? 'niet getoetst: ' + NORM_ONTBREEKT : f.achter, zonderSoort: f.zonderSoort, zonderContractwaarde: f.zonderCw } };

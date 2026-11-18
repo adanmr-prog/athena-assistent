@@ -3,8 +3,8 @@
  * en verklaart elk verschil. Gebruik:
  *
  *   node test/vergelijk_sturing.js --export <export-jjjj-mm-dd.json> --referentie <referentie.csv>
- *        [--exact-verkoop <verkoopboek.csv>] [--exact-open <export met Open of betaaldatum.csv>] [--exact <facturatie-export.csv>]
- *        [--xps <dienstenexport.csv>] [--peildatum jjjj-mm-dd] [--code <pad naar Code.gs>]
+ *        [--exact-verkoop <verkoopboek.csv>] [--exact-open <export met Open of betaaldatum.csv> [--exact-open-stand jjjj-mm-dd]]
+ *        [--exact <facturatie-export.csv>] [--xps <dienstenexport.csv>] [--peildatum jjjj-mm-dd] [--code <pad naar Code.gs>]
  *
  * --export        de export van server/migratie.js --bewaar ({ tabellen: { Tab: [rij], … }, eigenschappen }); de echte Athena-stand
  * --referentie    csv (; of ,) met de kolommen metriek, periode, waarde en optioneel uitsplitsing; regels die met # beginnen zijn commentaar
@@ -13,6 +13,8 @@
  *                 uitsplitsing = nieuw, bestaand, onbekend (M04, M06, M08, M09) of zonder (M04, M06, M08, M18, M19)
  * --exact-verkoop v7.9.4 (bouwpunt 15): het verkoopboek van Exact (alleen scholen), de bron voor M26 en M27; een kolom Open is niet nodig
  * --exact-open    v7.9.4 (bouwpunt 15): een Exact-export met de kolom Open of een betaaldatum, de bron voor M28; zonder die kolom een invoerfout
+ * --exact-open-stand  harnasdekking (4): de dag van die export (Open is de stand op die dag), niet in de toekomst; alleen met --exact-open of --exact. Zonder
+ *                 betaaldatum vergelijkt het harnas Open alleen op een peildatum gelijk aan die dag
  * --exact         het oude gedrag: één facturatie-export voor M26, M27 en M28. Heeft die geen kolom Open en geen betaaldatum (het verkoopboek), dan geeft
  *                 M28 "geblokkeerd (export zonder Open)" in plaats van elke factuur als open te tellen. Niet samen met --exact-verkoop of --exact-open.
  * --xps           de dienstenexport van XPS (M09, M25: categorie bron)
@@ -29,8 +31,16 @@
  *                                     reconstrueren (een wissel zonder werkelijke datum, zoals elke open Capsule-kans na stap 3). Niet vergeleken, dus niet
  *                                     geslaagd: exitcode 3 en een melding zonder aantal
  *   geblokkeerd (export zonder Open)  v7.9.4 (bouwpunt 15): M28 wijkt af en de Exact-export voor M28 heeft geen kolom Open en geen betaaldatum
- *   geblokkeerd (export zonder betaaldatum)  herstel r1 (K12): M28 op een peildatum vóór vandaag wijkt af en de export heeft alleen de kolom Open (de stand op
- *                                     de exportdag): voor een eerdere peildatum telt alleen een betaaldatum
+ *   geblokkeerd (export zonder betaaldatum)  herstel r1 (K12): M28 wijkt af, de export heeft alleen de kolom Open en (harnasdekking) --exact-open-stand is
+ *                                     niet de peildatum: voor een andere dag dan de exportdag telt alleen een betaaldatum
+ *   geblokkeerd (stand van Open onbekend)  harnasdekking (4): idem zonder --exact-open-stand (Open zou anders als de stand van de peildatum tellen)
+ *   geblokkeerd (export dekt de periode niet)  harnasdekking (3, 4): M26, M27 of M28 wijkt af en een maand met een termijn van Athena die meetelt (M26, M27:
+ *                                     verzonden in het venster 1 augustus t/m de peildatum, vandaag t/m het eind van de maand; M28: verzonden vanaf 1 augustus
+ *                                     en open op de peildatum) ligt niet tussen de maand van de eerste en die van de laatste factuurdatum van de export (een
+ *                                     vorig boekjaar, een export die later begint): een maand buiten de export is geen afwijking. Een maand zonder termijn in
+ *                                     Athena telt niet. Herstel r6 (R6-1): de maand van de peildatum is gedekt als de export t/m de maand ervoor loopt (Exact
+ *                                     heeft nog geen factuur van deze maand); M26 en M28 tellen aan beide kanten de facturen van dit schooljaar van elk project
+ *                                     De vier exportblokkades zijn niet vergeleken: exitcode 3, met een vaste melding
  *   leeg (geen basis)                 v7.9.4 (bouwpunt 13): Athena heeft voor dit cijfer geen waarde (geen basis of geen populatie); nooit een vergelijking met 0.
  *                                     Herstel r4 (R4-1): raakt invoer het cijfer (zie hieronder), dan is een lege waarde gezakt (invoer)
  *   gezakt (definitie)                de referentie klopt met een oude definitie die het harnas ook rekent
@@ -43,10 +53,13 @@
  *   gezakt (onverklaard)              geen van drieën
  * Nooit waarden, namen, bedragen of tellingen. Een invoerfout noemt alleen het bestand, het regelnummer en de kolomnaam (op stderr).
  * v7.9.4 (bouwpunt 14): op stderr ook een "melding: …" als gewerkte diensten in de XPS-export niet aan een talent of project in Athena koppelen; zonder aantal.
+ * Harnasdekking: ook een melding met de namen van de contracten (gezakt of leeg) en overstapstappen (open) die de regels gezakt (invoer) raken (5), een vaste
+ * melding als een weekregel op de peildatum is afgekapt (maandag t/m de peildatum; 6) en als een standregel op een eerdere peildatum op fasewissels met zekerheid
+ * laag rust (vanaf 1 augustus van dat schooljaar; een tijdlijnwissel heeft de invoerdag als werkelijke datum; 8). Geen blokkade, nooit een aantal.
  * Vergeleken (herstel r3, R3-D2) is alleen een regel die geslaagd, gezakt (definitie) of gezakt (bron) is: dan staat de waarde van Athena tegen de referentie of
  * de bron. Invoer, leeg en geblokkeerd zijn niet vergeleken.
  * Exitcode (v7.9.4, bouwpunt 13): 1 bij minstens één onverklaarde regel of een invoerfout; 2 bij een onverwachte fout in het harnas zelf; 3 als niets
- * onverklaard is maar minstens één regel "geblokkeerd (stand)" is (herstel r1, K7), of als geen enkele regel vergeleken is (herstel r2, B-B7; herstel r3,
+ * onverklaard is maar minstens één regel "geblokkeerd (stand)" of een exportblokkade is (herstel r1, K7; harnasdekking), of als geen enkele regel vergeleken is (herstel r2, B-B7; herstel r3,
  * R3-D2: ook als de overige regels alleen invoer, leeg of geblokkeerd zijn), met een vaste melding zonder aantal: het harnas slaagt dan niet; anders 0, ook
  * met regels die geblokkeerd (een andere soort), leeg of gezakt (invoer) zijn naast minstens één vergeleken regel. Staat er een regel gezakt (invoer) bij,
  * dan zegt een vaste "melding: …" op stderr dat die regels niet vergeleken zijn. Een exitcriterium (U1, U2, U13) vraagt dus exitcode 0 én geen regel
@@ -84,8 +97,8 @@ function argumentenUit(argv, bekend, vlaggen) {
   return opt;
 }
 function argumenten(argv) {
-  var opt = argumentenUit(argv, ['export', 'referentie', 'exact', 'exact-verkoop', 'exact-open', 'xps', 'peildatum', 'code']);  // v7.9.4: exact-verkoop en exact-open
-  if (!opt.export || !opt.referentie) throw fout('Gebruik: node test/vergelijk_sturing.js --export <export.json> --referentie <referentie.csv> [--exact-verkoop <csv>] [--exact-open <csv>] [--exact <csv>] [--xps <csv>] [--peildatum jjjj-mm-dd] [--code <Code.gs>]');
+  var opt = argumentenUit(argv, ['export', 'referentie', 'exact', 'exact-verkoop', 'exact-open', 'exact-open-stand', 'xps', 'peildatum', 'code']);  // v7.9.4: exact-verkoop en exact-open; harnasdekking: exact-open-stand
+  if (!opt.export || !opt.referentie) throw fout('Gebruik: node test/vergelijk_sturing.js --export <export.json> --referentie <referentie.csv> [--exact-verkoop <csv>] [--exact-open <csv> [--exact-open-stand jjjj-mm-dd]] [--exact <csv>] [--xps <csv>] [--peildatum jjjj-mm-dd] [--code <Code.gs>]');
   return opt;
 }
 function scheidingsteken(tekst) { var r = (tekst.split('\n')[0] || ''); return r.indexOf(';') >= 0 ? ';' : ','; }
@@ -157,7 +170,7 @@ function periodeUit(ctx, p, P) {
     var van = ctx.maandagVanWeek(p);
     if (!van || ctx.isoWeekStr(ctx.parseDatum(van)) !== p) return { fout: 'onbekende week' };
     if (van > P) return { fout: 'na de peildatum' };
-    var eind = ctx.plusDagenVan(van, 6); return { soort: 'week', van: van, eind: eind, tot: kleinste(eind, P), peildatum: kleinste(eind, P) };
+    var eind = ctx.plusDagenVan(van, 6); return { soort: 'week', van: van, eind: eind, tot: kleinste(eind, P), peildatum: kleinste(eind, P), afgekapt: P < eind };  // harnasdekking (6): ma t/m P
   }
   if ((m = /^(\d{4})-(\d{4})$/.exec(p))) {
     if (+m[2] !== +m[1] + 1) return { fout: 'onbekende vorm' };
@@ -240,6 +253,19 @@ var INVOER_MELDING = 'melding: een of meer regels zijn niet vergeleken omdat Ath
 // herstel r3 (R3-D2): alleen deze uitkomsten zijn een vergelijking (de waarde van Athena is tegen de referentie of de bron gezet); onverklaard telt apart (exitcode 1)
 var VERGELEKEN = ['geslaagd', 'gezakt (definitie)', 'gezakt (bron)'];
 var STAND_MELDING = 'melding: een of meer regels zijn niet vergeleken: de stand op die peildatum is niet te reconstrueren (fasewissels zonder werkelijke datum: importeer de werkelijke datums in Beheer), of vergelijk de stand van vandaag.';  // geen getal (geen aantal)
+// harnasdekking: vaste zinnen zonder aantal (3, 4: de export; 6: een afgekapte week; 8: wissels met zekerheid laag; 5 noemt de invoer met vaste namen)
+var EXPORT_MELDING = 'melding: een of meer regels wijken af, maar de export kan de bron niet toetsen (geblokkeerd (export …) of (stand van Open onbekend)); die regels zijn niet vergeleken: geef een export die de hele periode dekt, met een betaaldatum of met de kolom Open en --exact-open-stand gelijk aan de peildatum.';
+var WEEK_MELDING = 'melding: een of meer weekregels zijn op de peildatum afgekapt (maandag t/m de peildatum, niet de hele week); vergelijk ze met een rapport over dezelfde dagen.';
+var LAAG_MELDING = 'melding: een of meer standregels op een eerdere peildatum rusten op fasewissels met zekerheid laag (bij een tijdlijnwissel is de werkelijke datum de dag van invoer, de echte datum kan eerder liggen); geen blokkade, maar importeer de werkelijke datums in Beheer voor een zekere stand.';
+// harnasdekking (8): standcijfers die op een eerdere peildatum op fasewissels rusten (de fase uit kansenOpPeildatum, of wissels in de periode)
+var OP_WISSELS = ['gecontracteerd', 'doelpad', 'gewogenPijplijn', 'dekking', 'gewonnenWaarde', 'conversie', 'funnel', 'verwachteOpdrachten', 'stilstand', 'verloren', 'ocActiviteit', 'registratievertraging'];
+// Een tellende wissel met zekerheid laag vanaf 1 augustus van het schooljaar van de peildatum kan de fase op die dag of de telling in het schooljaar verschuiven (zijn
+// echte datum kan eerder liggen); een eerdere niet, want die lag al vóór het schooljaar en vóór de peildatum
+function opLageWissels(L, r) {
+  if (r.per.soort !== 'stand' || r.per.peildatum >= L.vandaag || OP_WISSELS.indexOf(r.id) < 0) return false;
+  var van = sjVan(L, r.per.peildatum).slice(0, 4) + '-08-01';
+  return eenmaal(L, 'laag|' + van, function () { return L.ctx.tellendeWissels().some(function (w) { return w.zekerheid === 'laag' && String(w.werkelijkeDatum || '').slice(0, 10) >= van; }); });
+}
 function blokSoort(reden) { var s = String(reden || ''); for (var i = 0; i < BLOK_SOORTEN.length; i++) if (BLOK_SOORTEN[i][1].test(s)) return BLOK_SOORTEN[i][0]; return ''; }
 // De tolerantie uit het register: '0' en '1' absoluut (aantallen, procentpunten), '1%' relatief tegen de referentie
 function tolerantieVan(L, id) {
@@ -251,6 +277,7 @@ function binnen(x, ref, tol) { var grens = tol.pct ? Math.abs(ref) * tol.pct / 1
 /* ----- categorie definitie: oude definities die het harnas ook rekent ----- */
 
 function sjVan(L, d) { return L.ctx.sjOp(d); }
+function projectenVan(L, sj) { var u = {}; L.ctx.lees('Trajecten').forEach(function (t) { if (t.schooljaar === sj) u[t.id] = true; }); return u; }
 function deel(L, k, u) { return !u || L.ctx.klantDeel(k) === u; }
 // Per registersleutel een lijst van oude waarden (de definitie van vóór v7.9 of van de rapportscripts)
 var OUDE_DEFINITIES = {
@@ -282,6 +309,20 @@ var OUDE_DEFINITIES = {
       var w = Number(k.waarde) || 0, g = w * (Number(k.kans) || 0) / 100;
       u[0] += w; u[1] += g; if (String(k.schooljaar) === sj) { u[2] += w; u[3] += g; }
     });
+    return u;
+  },
+  // herstel r6 (nit R6-4): M26 voor alleen de projecten van het schooljaar (de definitie van vóór herstel r6, zoals een overzicht per project)
+  gefactureerd: function (L, r) {
+    if (r.uitsplitsing) return [];
+    var d = r.per.peildatum, sj = sjVan(L, d), van = sj.slice(0, 4) + '-08-01', tot = d < L.vandaag ? d : eindeMaand(d), inSj = projectenVan(L, sj), som = 0;
+    L.ctx.lees('Facturen').forEach(function (f) { var v = L.ctx.verzondenVan(f); if (inSj[f.trajectId] && v && v.datum >= van && v.datum <= tot) som += Number(f.bedrag) || 0; });
+    return [som];
+  },
+  // herstel r6 (R6-1): M28 voor alleen de projecten van het schooljaar (ook van vóór 1 augustus) en voor alle open posten (zoals de werklijst of Openstaande posten)
+  openstaand: function (L, r) {
+    if (r.uitsplitsing) return [];
+    var d = r.per.peildatum, inSj = projectenVan(L, sjVan(L, d)), u = [0, 0];
+    L.ctx.lees('Facturen').forEach(function (f) { var v = L.ctx.verzondenVan(f), b = L.ctx.betaaldVan(f), x = Number(f.bedrag) || 0; if (!v || v.datum > d || (b && b.datum <= d)) return; u[1] += x; if (inSj[f.trajectId]) u[0] += x; });
     return u;
   },
   // M27 als de som van de termijnen "nog te doen" (de oude tegel op Home), voor de projecten van het schooljaar en voor alle projecten
@@ -366,11 +407,14 @@ function openOverstap(L) {
       projecten: !Object.keys(metProject).length, metProject: metProject };
   });
 }
-function invoerRaakt(L, r) {
+// harnasdekking (5): welke invoer raakt deze regel (vaste namen uit de code: het contract met zijn stand, de open overstapstap; nooit een waarde of aantal)
+function invoerRedenen(L, r) {
   var c = contractStanden(L, r.per.peildatum), o = openOverstap(L);
   var open = function (stap) { return stap === 'projecten' ? !o.metProject[sjVan(L, r.per.peildatum)] : !!o[stap]; };  // herstel r2 (A-B2): per schooljaar van de peildatum
-  return (RAAKT[r.id] || []).some(function (x) { return x.indexOf('overstap:') === 0 ? open(x.slice(9)) : INVOER_STANDEN.indexOf(c[x]) >= 0; });
+  return (RAAKT[r.id] || []).filter(function (x) { return x.indexOf('overstap:') === 0 ? open(x.slice(9)) : INVOER_STANDEN.indexOf(c[x]) >= 0; })
+    .map(function (x) { return x.indexOf('overstap:') === 0 ? 'overstapstap ' + x.slice(9) + ' (open)' : 'contract ' + x + ' (' + c[x] + ')'; });
 }
+function invoerRaakt(L, r) { return invoerRedenen(L, r).length > 0; }
 
 /* ----- categorie bron: de Exact- en XPS-export tegen wat in de Athena-stand staat ----- */
 
@@ -403,7 +447,18 @@ function leesExact(ctx, tekst, soort, eisOpen) {
     if (idx.open >= 0 && cel('open') !== '' && open === null) throw fout(soort + ', regel ' + (i + 1) + ', kolom ' + kop[idx.open] + ': geen bedrag');
     uit.push({ datum: datum, bedrag: bedrag, open: open, betaald: idx.betaald >= 0 ? ctx.datumUitExport(cel('betaald')) : '' });
   }
-  return { rijen: uit, metOpen: metOpen, metBetaald: idx.betaald >= 0 };  // herstel r1 (K12): een betaaldatum zegt ook iets over een eerdere peildatum
+  var ds = uit.map(function (x) { return x.datum; }).sort();
+  return { rijen: uit, metOpen: metOpen, metBetaald: idx.betaald >= 0, eerste: ds[0] || '', laatste: ds[ds.length - 1] || '' };  // herstel r1 (K12): betaaldatum; harnasdekking: het bereik
+}
+// harnasdekking (3, 4): dekt de export de maanden van deze datums (de termijnen van Athena die meetellen)? Een maand is gedekt als ze tussen de maand van de eerste
+// en die van de laatste factuurdatum van de export ligt, grenzen inbegrepen (een maand zonder factuur daartussen is echt leeg). Alleen een maand met een termijn in
+// Athena telt: een maand zonder termijn in Athena kan geen schijnbare afwijking geven.
+// harnasdekking (3, 4): elke datum ligt tussen de maand van de eerste en die van de laatste factuurdatum van de export. Herstel r6 (R6-1): de maand van de peildatum P
+// ook, als de export t/m de maand ervoor loopt (een export van vandaag zonder factuur van deze maand: Exact heeft er nog geen, dat is bron, niet "dekt niet")
+function dekt(ex, datums, P) {
+  var eM = ex.eerste ? ex.eerste.slice(0, 7) : '', lM = ex.laatste ? ex.laatste.slice(0, 7) : '', pM = String(P || '').slice(0, 7), j = +pM.slice(0, 4), mm = +pM.slice(5, 7);
+  var vorige = !pM ? '' : mm === 1 ? (j - 1) + '-12' : j + '-' + ('0' + (mm - 1)).slice(-2);
+  return datums.every(function (d) { var m = String(d).slice(0, 7); return !!eM && m >= eM && (m <= lM || (m === pM && lM >= vorige)); });
 }
 function leesXps(ctx, tekst) {
   if (!tekst.trim()) throw fout('xps: het bestand is leeg.');
@@ -412,28 +467,29 @@ function leesXps(ctx, tekst) {
   return rijen;
 }
 function eindeMaand(d) { return laatsteDag(+d.slice(0, 4), +d.slice(5, 7)); }
-// Gefactureerd in centen tussen van en tot: Exact op factuurdatum, Athena op de verzenddatum van de termijnen (alle projecten)
-// v7.9.4 (bouwpunt 15): '' (geen oordeel: geen export voor dit cijfer), 'wijkt', of 'zonder open' (M28 met een export zonder kolom Open en zonder betaaldatum:
-// dan telt het harnas niet elke factuur als open, maar is de bron geblokkeerd). M26 en M27 lezen het verkoopboek, M28 de export met Open.
+// Gefactureerd in centen tussen van en tot: Exact op factuurdatum, Athena op de verzenddatum van de termijnen (alle projecten, zoals M26 sinds herstel r6)
+// v7.9.4 (bouwpunt 15): '' (geen oordeel: geen export voor dit cijfer), 'wijkt', of een reden waarom de export de bron niet kan toetsen (BRON_BLOK): 'zonder open'
+// (M28 zonder kolom Open en zonder betaaldatum), 'zonder betaaldatum', 'stand onbekend' of 'dekt niet'. M26 en M27 lezen het verkoopboek, M28 de export met Open.
 function exactWijkt(L, r) {
   var ctx = L.ctx, d = r.per.peildatum, tol = tolerantieVan(L, r.id), vergelijk = function (e, a) { return !binnen(a, e, tol.pct ? tol : { pct: 0, abs: tol.abs * 100 }) ? 'wijkt' : ''; };
   if (r.id === 'openstaand') {
-    if (!L.exactOpen) return '';
-    if (!L.exactOpen.metOpen) return 'zonder open';
-    // herstel r1 (K12): de kolom Open is de stand op de exportdag, niet op een eerdere peildatum; daar telt alleen een betaaldatum, en zonder die kolom geen oordeel
-    var vroeger = d < L.vandaag;
-    if (vroeger && !L.exactOpen.metBetaald) return 'zonder betaaldatum';
-    var eO = 0, aO = 0;
-    L.exactOpen.rijen.forEach(function (x) { if (x.datum > d) return; eO += !vroeger && x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
-    ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (v && v.datum <= d && !(b && b.datum <= d)) aO += ctx.centen(f.bedrag); });
-    return vergelijk(eO, aO);
+    var X = L.exactOpen; if (!X) return '';
+    if (!X.metOpen) return 'zonder open';
+    // herstel r1 (K12); harnasdekking (4): de kolom Open is de stand op de exportdag (--exact-open-stand). Zonder betaaldatum telt Open alleen als die dag de
+    // peildatum is; zonder --exact-open-stand geen oordeel. Met een betaaldatum zoals voorheen (Open op vandaag, anders de betaaldatum)
+    var opDag = L.openStand ? L.openStand === d : d >= L.vandaag, eO = 0, aO = 0, open = [], van = sjVan(L, d).slice(0, 4) + '-08-01';
+    if (!X.metBetaald && !(L.openStand && opDag)) return L.openStand ? 'zonder betaaldatum' : 'stand onbekend';
+    // herstel r6 (R6-1): aan beide kanten de facturen van dit schooljaar (factuurdatum vanaf 1 augustus), zoals M28
+    X.rijen.forEach(function (x) { if (x.datum > d || x.datum < van) return; eO += opDag && x.open !== null ? x.open : (x.betaald && x.betaald <= d ? 0 : x.bedrag); });
+    ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f), b = ctx.betaaldVan(f); if (v && v.datum >= van && v.datum <= d && !(b && b.datum <= d)) { aO += ctx.centen(f.bedrag); open.push(v.datum); } });
+    return dekt(X, open, d) ? vergelijk(eO, aO) : 'dekt niet';  // harnasdekking (4): een open termijn van Athena buiten het bereik van de export
   }
   if (!L.exactVerkoop) return '';
   // herstel r2 (A-B1, B-B2): dezelfde periode als M26 (bouwpunt 7, K10): in een stand op een eerdere peildatum t/m die dag, aan beide kanten; vandaag de hele maand
-  var van = sjVan(L, d).slice(0, 4) + '-08-01', tot = d < L.vandaag ? d : eindeMaand(d), e = 0, a = 0;
+  var van = sjVan(L, d).slice(0, 4) + '-08-01', tot = d < L.vandaag ? d : eindeMaand(d), e = 0, a = 0, verzonden = [];
   L.exactVerkoop.rijen.forEach(function (x) { if (x.datum >= van && x.datum <= tot) e += x.bedrag; });
-  ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f); if (v && v.datum >= van && v.datum <= tot) a += ctx.centen(f.bedrag); });
-  return vergelijk(e, a);
+  ctx.lees('Facturen').forEach(function (f) { var v = ctx.verzondenVan(f); if (v && v.datum >= van && v.datum <= tot) { a += ctx.centen(f.bedrag); verzonden.push(v.datum); } });
+  return dekt(L.exactVerkoop, verzonden, d) ? vergelijk(e, a) : 'dekt niet';  // harnasdekking (3): een vorig boekjaar dat het venster maar deels raakt, is geen bron
 }
 // v7.9.4 (bouwpunt 14): de rijen van een dienstenexport met één vast accountnummer, zodat urenUitRijen elke dienst aan één verzonnen talent koppelt. Zo telt
 // het totaal per maand ook de diensten zonder talent in Athena, met verder precies de regels van urenUitRijen (datum t/m vandaag, archiefvenster, status
@@ -488,7 +544,10 @@ function xpsWijkt(L, r) {
   return Object.keys(sleutels).some(function (k) { return Math.abs((s.A[k] || 0) - (s.X[k] || 0)) > XPS_TOLERANTIE; });
 }
 var BRON = { gefactureerd: 'exact', nogTeFactureren: 'exact', openstaand: 'exact', geleverd: 'xps', urenVorigeJaren: 'xps' };
-// '' (geen oordeel), 'wijkt' of 'zonder open'
+// harnasdekking: de export kan de bron niet toetsen → "geblokkeerd (<soort>)", niet vergeleken (exitcode 3; een afwijkende regel waarvan de bron niets zegt)
+var BRON_BLOK = { 'zonder open': 'export zonder Open', 'zonder betaaldatum': 'export zonder betaaldatum', 'stand onbekend': 'stand van Open onbekend', 'dekt niet': 'export dekt de periode niet' };
+var EXPORT_BLOK = Object.keys(BRON_BLOK).map(function (k) { return 'geblokkeerd (' + BRON_BLOK[k] + ')'; });
+// '' (geen oordeel), 'wijkt' of een sleutel van BRON_BLOK
 function bronOordeel(L, r) {
   var b = BRON[r.id]; if (!b || r.per.soort !== 'stand') return '';
   if (b === 'exact') return exactWijkt(L, r);
@@ -520,14 +579,14 @@ function beoordeel(L, r) {
   if (invoerRaakt(L, r)) return 'gezakt (invoer)';
   var b = bronOordeel(L, r);
   if (b === 'wijkt') return 'gezakt (bron)';
-  if (b === 'zonder open') return 'geblokkeerd (export zonder Open)';
-  if (b === 'zonder betaaldatum') return 'geblokkeerd (export zonder betaaldatum)';  // herstel r1 (K12)
+  if (Object.prototype.hasOwnProperty.call(BRON_BLOK, b)) return 'geblokkeerd (' + BRON_BLOK[b] + ')';  // bouwpunt 15, herstel r1 (K12), harnasdekking (3, 4)
   return 'gezakt (onverklaard)';
 }
 // Laadt de stand en de exports; geeft L = { ctx, peildatum, cache, exactVerkoop, exactOpen, xps }
 // v7.9.4 (bouwpunt 15): --exact vult beide Exact-invoeren (het oude gedrag), --exact-verkoop alleen M26 en M27, --exact-open alleen M28
 function laad(opt) {
   if (opt.exact && (opt['exact-verkoop'] || opt['exact-open'])) throw fout('argumenten: gebruik --exact of --exact-verkoop en --exact-open, niet allebei.');
+  if (opt['exact-open-stand'] !== undefined && !opt['exact-open'] && !opt.exact) throw fout('argumenten: --exact-open-stand alleen met --exact-open of --exact.');  // harnasdekking (4)
   var exportTekst = leesBestand('export', opt.export), refTekst = opt.referentie ? leesBestand('referentie', opt.referentie) : '';
   var exactTekst = opt.exact ? leesBestand('exact', opt.exact) : null, verkoopTekst = opt['exact-verkoop'] ? leesBestand('exact-verkoop', opt['exact-verkoop']) : null;
   var openTekst = opt['exact-open'] ? leesBestand('exact-open', opt['exact-open']) : null, xpsTekst = opt.xps ? leesBestand('xps', opt.xps) : null;
@@ -541,7 +600,10 @@ function laad(opt) {
     if (String(opt.peildatum) > vandaag) throw fout('peildatum: ligt in de toekomst.');
     P = String(opt.peildatum);
   }
-  var L = { ctx: ctx, peildatum: P, vandaag: vandaag, cache: {}, exactVerkoop: null, exactOpen: null, xps: xpsTekst === null ? null : leesXps(ctx, xpsTekst), refTekst: refTekst };
+  var stand = opt['exact-open-stand'] === undefined ? '' : String(opt['exact-open-stand']);  // harnasdekking (4): de dag van de export (de stand van Open)
+  if (stand && !dagGeldig(stand)) throw fout('exact-open-stand: gebruik jjjj-mm-dd.');
+  if (stand > vandaag) throw fout('exact-open-stand: ligt in de toekomst.');
+  var L = { ctx: ctx, peildatum: P, vandaag: vandaag, cache: {}, exactVerkoop: null, exactOpen: null, openStand: stand, xps: xpsTekst === null ? null : leesXps(ctx, xpsTekst), refTekst: refTekst };
   if (exactTekst !== null) L.exactVerkoop = L.exactOpen = leesExact(ctx, exactTekst, 'exact', false);
   if (verkoopTekst !== null) L.exactVerkoop = leesExact(ctx, verkoopTekst, 'exact-verkoop', false);
   if (openTekst !== null) L.exactOpen = leesExact(ctx, openTekst, 'exact-open', true);
@@ -554,22 +616,29 @@ function vergelijk(opt) {
   var ref;
   try { ref = leesReferentie(L.ctx, L.refTekst, L.peildatum); } catch (e) { return mis(e); }
   if (ref.fouten.length) return { uit: [], fouten: ref.fouten, meldingen: [], exit: 1 };
-  var uit = [], onverklaard = 0, nietVergeleken = 0, vergeleken = 0, invoer = 0, meldingen;
+  var uit = [], onverklaard = 0, stand = 0, exportBlok = 0, vergeleken = 0, invoer = {}, laag = false, meldingen;
   try {
     ref.regels.forEach(function (r) {
-      var c = beoordeel(L, r); if (c === 'gezakt (onverklaard)') onverklaard++; if (c === 'geblokkeerd (stand)') nietVergeleken++; if (c === 'gezakt (invoer)') invoer++;
+      var c = beoordeel(L, r); if (c === 'gezakt (onverklaard)') onverklaard++; if (c === 'geblokkeerd (stand)') stand++; if (EXPORT_BLOK.indexOf(c) >= 0) exportBlok++;
+      if (c === 'gezakt (invoer)') invoerRedenen(L, r).forEach(function (x) { invoer[x] = true; });  // harnasdekking (5)
+      if (!/^(geblokkeerd|leeg)/.test(c) && opLageWissels(L, r)) laag = true;  // harnasdekking (8)
       if (VERGELEKEN.indexOf(c) >= 0) vergeleken++;  // herstel r3 (R3-D2): invoer is geen vergelijking
       uit.push(r.token + ' ' + r.periode + (r.uitsplitsing ? '/' + r.uitsplitsing : '') + ' ' + c);
     });
     meldingen = xpsMeldingen(L, ref.regels);
-    if (nietVergeleken) meldingen.push(STAND_MELDING);
-    if (invoer) meldingen.push(INVOER_MELDING);  // herstel r3 (R3-D2): ook naast een geslaagde regel (exitcode 0), zonder aantal
-    if (!vergeleken && ref.regels.length) meldingen.push(NIETS_MELDING);
+    if (stand) meldingen.push(STAND_MELDING);
+    if (exportBlok) meldingen.push(EXPORT_MELDING);  // harnasdekking (3, 4)
+    var invoerNamen = Object.keys(invoer).sort();
+    if (invoerNamen.length) meldingen.push(INVOER_MELDING, 'melding: invoer die de regels gezakt (invoer) raakt: ' + invoerNamen.join(', ') + '.');  // herstel r3 (R3-D2); harnasdekking (5)
+    if (ref.regels.some(function (r) { return r.per.soort === 'week' && r.per.afgekapt; })) meldingen.push(WEEK_MELDING);  // harnasdekking (6)
+    if (laag) meldingen.push(LAAG_MELDING);  // harnasdekking (8)
+    if (!vergeleken && !onverklaard && ref.regels.length) meldingen.push(NIETS_MELDING);  // herstel r6 (nit R6-3): onverklaard is wel tegen de referentie gezet
   } catch (e) { return mis(e); }
   // herstel r1 (K7): 1 gaat voor 3 (onverklaard of invoerfout); 3 = niets onverklaard, maar een regel is niet vergeleken (stand): het harnas slaagt dan niet.
   // herstel r2 (B-B7): ook 3 als geen enkele regel vergeleken is (alles geblokkeerd of leeg, zoals zonder OC-accounts). Herstel r3 (R3-D2): vergeleken is alleen
   // geslaagd, gezakt (definitie) of gezakt (bron); een run met alleen invoer (en leeg of geblokkeerd) eindigt dus ook met 3, nooit 0
-  return { uit: uit, fouten: [], meldingen: meldingen, exit: onverklaard ? 1 : nietVergeleken || (!vergeleken && ref.regels.length) ? 3 : 0 };
+  // harnasdekking (3, 4): ook 3 bij een regel die afwijkt terwijl de export de bron niet kan toetsen (EXPORT_BLOK), zoals bij geblokkeerd (stand)
+  return { uit: uit, fouten: [], meldingen: meldingen, exit: onverklaard ? 1 : stand || exportBlok || (!vergeleken && ref.regels.length) ? 3 : 0 };
 }
 // v7.9.4 (bouwpunt 13): een onverwachte fout in het harnas zelf is exitcode 2 (niet 1: dat is alleen onverklaard of een invoerfout); geen melding met inhoud,
 // alleen de soort fout en de plek in de code
@@ -588,7 +657,7 @@ function main() {
 module.exports = {
   vergelijk: vergelijk, laad: laad, leesReferentie: leesReferentie, athenaWaarde: athenaWaarde, periodeUit: periodeUit, binnenRepo: binnenRepo, OUDE_DEFINITIES: OUDE_DEFINITIES, RAAKT: RAAKT,
   // v7.9.4: voor de test en voor test/urenbasislijn.js
-  blokSoort: blokSoort, openOverstap: openOverstap, invoerRaakt: invoerRaakt, beoordeel: beoordeel, alleDiensten: alleDiensten, ALLE_TALENT: ALLE_TALENT, maandTot: maandTot,
+  blokSoort: blokSoort, openOverstap: openOverstap, invoerRaakt: invoerRaakt, invoerRedenen: invoerRedenen, beoordeel: beoordeel, dekt: dekt, opLageWissels: opLageWissels, alleDiensten: alleDiensten, ALLE_TALENT: ALLE_TALENT, maandTot: maandTot,
   Invoerfout: Invoerfout, fout: fout, echtPad: echtPad, leesBestand: leesBestand, argumentenUit: argumentenUit, laadContext: laadContext, startMetExport: startMetExport,
   leesXps: leesXps, dagGeldig: dagGeldig, onverwacht: onverwacht, HOOFDLETTERS_ZIJN_GELIJK: HOOFDLETTERS_ZIJN_GELIJK
 };

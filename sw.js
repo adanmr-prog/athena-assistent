@@ -4,7 +4,7 @@ var CACHE = 'athena-assistent-v7.9.4';  // bump bij elke release (zie /release)
 // Rapporten → Week heeft een afdrukweergave in een vaste opzet met de link #rapport:week:<jjjj-Www>, Beheer → Keuzelijsten de soort per facturatievorm.
 // Herstel r3 (niet uitgerold, dus dezelfde CACHE): leeg als "—" met de reden (MT, Teams, Vandaag) en een verse basis na Beheer (telefoon).
 // Herstel r4 (dezelfde CACHE): een tab gekozen terwijl de basis laadt tekent zodra hij er is; elk Beheer-pad laadt de basis opnieuw.
-// Herstel r5 (dezelfde CACHE): na een mislukte basis probeert een tik op een tab het opnieuw (anders de fout); € met een harde spatie.
+// Herstel r5 (dezelfde CACHE): na een mislukte basis probeert een tik op een tab het opnieuw (anders de fout), na Andere datum een verse basis (het bord blijft); € met een harde spatie.
 // v7.9.3: herstel na review ronde 2 van fase 5b; 7.9.2 staat live, dus een nieuwe uitrol met een nieuwe CACHE. + Kans zet Opslaan uit tot de aanroep klaar is,
 // na een venster gaat de focus op een touch-apparaat niet terug naar een keuzelijst, de fout staat in het venster onder het veld. Review ronde 1 van 7.9.3 (nog
 // niet uitgerold, dus dezelfde CACHE): de stap fasen noemt een eigen rij die 5b wordt en wat erbij komt of verdwijnt, het vinkje in Beheer heeft een eigen naam.

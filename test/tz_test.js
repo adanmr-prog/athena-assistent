@@ -1,7 +1,7 @@
 // v7.2: tijdzone- en zomertijdtest. Draait test/node_rooktest.js en test/parser_test.js als kindproces onder vier tijdzones
 // (Europe/Amsterdam, Pacific/Auckland, America/Los_Angeles, UTC) met de echte klok en met een vaste "vandaag" (via test/tz_klok.js):
 // 2026-03-29 (begin zomertijd EU), 2026-10-25 (einde), 2026-12-31, 2027-01-01, plus randen om middernacht rond de EU-wissel en de
-// wisseldagen van Los Angeles (2026-11-01) en Auckland (2026-04-05). Daarnaast reproducties van datumvalkuilen in Code.gs onder een
+// wisseldagen van Los Angeles (2026-11-01) en Auckland (2026-04-05), en (v7.9.4 r5) 23:55, de laatste tien minuten vóór middernacht. Daarnaast reproducties van datumvalkuilen in Code.gs onder een
 // vaste klok en een statische scan van backend/Code.gs en index.html (new Date(tekst), getTime()-rekenen over 86400000 zonder
 // middag-normalisatie, toISOString, dd-MM-yyyy-parsing, vergelijkingen van datumteksten met verschillende lengtes).
 // Gebruik: node test/tz_test.js [--snel]   → "ALLES GOED" (exitcode 0) als alle combinaties groen zijn, anders "FOUTEN: n" (exitcode 1).
