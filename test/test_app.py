@@ -124,6 +124,30 @@ def scenario_nieuw_naast_venster(pg):
     assert aanroepen == [('tk2', 'Kennismakingsmail Montessori Demo (venster)'), (None, 'Half getypte taak naast het venster')], 'venster en pagina slaan elk hun eigen taak op: ' + repr(aanroepen)
     assert pg.locator('#crmNieuw #cf-tekst').count() == 0, 'het paginaformulier sluit na het opslaan'
 
+def scenario_koud_crm(b):
+    # v7.9.4 (herstel r13, R13-1): koude start met de bewaarde lijst (aa_cache_crm) en een apiCrm die blijft mislukken. Nog geen apiCrm gelukt in deze
+    # sessie (CRM.bnr bestaat niet), dus een mislukte stille verversing na + School moet de vlag CRM.oud toch zetten: na Terug de regel "Niet bijgewerkt"
+    # (of, als een poging lukt, de school in de lijst). De demo kan dit niet nabootsen (geen localStorage over een herlaad heen); daarom tegen de mock
+    c = b.new_context(viewport={'width': 375, 'height': 667}, is_mobile=True, has_touch=True, service_workers='block'); pg = c.new_page()
+    pg.on('pageerror', lambda e: meldingen.append(('pageerror koude start', str(e))))
+    pg.goto(BASIS + '/'); pg.wait_for_selector('#apiInput'); pg.fill('#apiInput', BASIS + '/api'); pg.fill('#codeInput', 'test123'); pg.click('#codeOpslaan'); pg.wait_for_selector('nav button[data-view="relaties"]'); pg.wait_for_timeout(800)
+    pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=10000); pg.wait_for_function("() => CRM.laadt === null", timeout=10000)
+    assert pg.evaluate("!!localStorage.getItem('aa_cache_crm')"), 'koude start: de lijst staat in aa_cache_crm'
+    pg.reload(); pg.wait_for_selector('nav button[data-view="relaties"]'); pg.wait_for_timeout(800)
+    assert pg.evaluate("CRM.bnr === undefined"), 'koude start: nog geen apiCrm gelukt in deze sessie'
+    assert mock_post({'fn': '_faal', 'args': ['apiCrm', 3]}).get('ok')  # Relaties, de stille verversing na + School en de poging bij Terug
+    pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=10000); pg.wait_for_function("() => CRM.laadt === null", timeout=10000)
+    pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_timeout(300)
+    naam = 'Verzonnen school koude start'
+    pg.tap('#crmBalk [data-crmnieuw="school"]'); pg.wait_for_selector('#crmNieuw input[id$="naam"]'); pg.fill('#crmNieuw input[id$="naam"]', naam)
+    pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap(); pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % naam, timeout=10000)
+    pg.wait_for_function("() => CRM.laadt === null", timeout=10000); pg.wait_for_timeout(300); oud = pg.evaluate("CRM.oud")
+    pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(500); pg.wait_for_function("() => CRM.laadt === null", timeout=10000); pg.wait_for_timeout(300)
+    regel = pg.evaluate("(function () { var e = document.querySelector('#crmInhoud > .leeg'); return e ? e.textContent : ''; })()")
+    staat = pg.evaluate("[].some.call(document.querySelectorAll('#crmInhoud .rij[data-crm-open^=\"school:\"] .r-titel'), function (x) { return (x.firstChild ? x.firstChild.textContent : '') === %s; })" % json.dumps(naam))
+    assert 'Niet bijgewerkt' in regel or staat, 'koude start (herstel r13, R13-1): na een mislukte stille verversing staat na Terug de regel "Niet bijgewerkt" of de school in de lijst: %r' % [oud, regel, staat]
+    mock_post({'fn': '_faal', 'args': ['apiCrm', 0]}); c.close(); mock_post({'fn': '_reset'})
+
 def scenario_bezetting_per_project(b):
     # v7.5: Bezetting → Per project, in een eigen context (eigen localStorage, zodat de rest van de test bij Per vacature blijft): één regel per project
     # (een knop in een h3 met aria-expanded, aria-controls en een korte naam via aria-labelledby); tikken klapt de vacatures eronder uit op de plek zelf
@@ -970,6 +994,7 @@ with sync_playwright() as p:
     p9.click('[data-beheer="v79"]'); p9.wait_for_selector('#venster.aan [data-v79="kansen:proef"]'); p9.click('[data-v79="kansen:proef"]'); p9.wait_for_selector('#v79-kansen')
     assert '0 open en 0 gewonnen kansen aan te vullen' in p9.inner_text('#v79-kansen') and 'open en gewonnen' in p9.inner_text('#v79stap-kansen .r-titel'), 'v7.9.4: de stap kansen noemt open en gewonnen'
     c9.close(); mock_post({'fn': '_reset'})
+    scenario_koud_crm(b)  # v7.9.4 (herstel r13, R13-1): eigen context, koude start met aa_cache_crm
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

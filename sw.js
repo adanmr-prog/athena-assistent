@@ -16,8 +16,10 @@ var CACHE = 'athena-assistent-v7.9.4';  // bump bij elke release (zie /release)
 // Herstel r11 (dezelfde CACHE): alleen de nieuwste apiCrm wist die regel (een oudere die later lukt niet), en Opnieuw proberen in de regel loopt luid: de
 // regel blijft tot de poging lukt en een fout geeft een melding.
 // Herstel r12 (dezelfde CACHE): na de poging gaat de focus alleen als hij weg is naar de knop of de tab (op body.desk de chip in #crmBalk), wie intussen
-// typt typt door; de knop staat uit tijdens de poging, een oudere mislukte poging zet de regel niet terug na een nieuwere die lukte, en een open + Persoon
-// krijgt de nieuwe school in zijn keuzelijst.
+// typt typt door; de knop staat uit tot de lijst opnieuw getekend wordt, een oudere mislukte poging zet de regel niet terug na een nieuwere die lukte, en een
+// open + Persoon krijgt de nieuwe school in zijn keuzelijst.
+// Herstel r13 (dezelfde CACHE): de regel komt ook na een koude start waarin nog geen apiCrm gelukt is; een tik op Opnieuw proberen terwijl er al een aanroep
+// loopt start geen tweede (hij wacht erop en maakt hem luid); elke geslaagde apiCrm, ook via Relaties in de tabbalk, zet de nieuwe school in die keuzelijst.
 // v7.9.3: herstel na review ronde 2 van fase 5b; 7.9.2 staat live, dus een nieuwe uitrol met een nieuwe CACHE. + Kans zet Opslaan uit tot de aanroep klaar is,
 // na een venster gaat de focus op een touch-apparaat niet terug naar een keuzelijst, de fout staat in het venster onder het veld. Review ronde 1 van 7.9.3 (nog
 // niet uitgerold, dus dezelfde CACHE): de stap fasen noemt een eigen rij die 5b wordt en wat erbij komt of verdwijnt, het vinkje in Beheer heeft een eigen naam.

@@ -38,6 +38,8 @@
 # v7.9.4 herstel r12 (sectie 21 en 22): wie tijdens de poging in Zoeken of in + Persoon typt, houdt de focus (R12-iOS-1); de keuzelijst School van een open
 # + Persoon krijgt na een geslaagde poging de nieuwe school (R12-iOS-2); de knop staat uit tijdens de poging, een oudere mislukte poging zet de regel niet terug
 # na een nieuwere die lukte, en zonder basis kost één tik één apiCrm (R12-iOS-4); op de iPad liggend de focus op de chip in #crmBalk (R12-iOS-3, nit R12-D2).
+# v7.9.4 herstel r13 (sectie 21): ook via Relaties in de tabbalk krijgt die keuzelijst de nieuwe school (R13-iOS-3), en een tweede tik op Opnieuw proberen na
+# typen in Zoeken start geen tweede apiCrm (R13-iOS-2). De koude start met aa_cache_crm (R13-1) staat in test_app.py (de demo bewaart geen localStorage).
 # v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout); na Andere datum een verse basis en een bruikbaar bord; Gebruikers
 # verouderen alles; € met een harde spatie in de tegel Verloren; M20 met het aantal zonder laatste contact.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
@@ -1857,6 +1859,50 @@ with sync_playwright() as p:
             ok(wie + ' (herstel r12): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
             leeg()
         stap('g5_794_r12_zonder_basis', g5_794_r12_zonder_basis)
+        # herstel r13 (R13-iOS-3, nit R13-N2): ook via Relaties in de tabbalk (laadRelaties, niet crmStil) krijgt de keuzelijst School van een open + Persoon de nieuwe school
+        def g5_794_r13_relaties():
+            f0 = len(pageerrors); leeg(); scholen(); s1 = 'Verzonnen school R13 relaties ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1000"); nieuwe_school(s1); na_poging(1)
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2); pg.tap('#crmTabs [data-crmtab="personen"]'); na_poging(3)
+            pg.tap('#crmBalk [data-crmnieuw="persoon"]'); pg.wait_for_selector('#crmNieuw #cf-voornaam', timeout=5000)
+            pg.fill('#crmNieuw #cf-voornaam', 'Verzonnen'); pg.fill('#crmNieuw #cf-achternaam', 'Relaties R13')
+            kies = pg.evaluate("document.querySelector('#crmNieuw [data-cf=schoolId]').options[1].value"); pg.select_option('#crmNieuw [data-cf=schoolId]', kies)
+            def in_keuze(): return pg.evaluate("(function (s) { return !!s && [].some.call(s.options, function (o) { return o.text.indexOf(%s) === 0; }); })(document.querySelector('#crmNieuw [data-cf=schoolId]'))" % json.dumps(s1))
+            voor = in_keuze(); pg.evaluate("window.__faal = {}"); pg.tap('nav button[data-view="relaties"]')
+            pg.wait_for_function("CRM.laadt === null && !document.querySelector('#crmInhoud > .leeg')", timeout=8000); pg.wait_for_timeout(300)
+            open_ = pg.evaluate("!!document.querySelector('#crmNieuw #cf-voornaam')")
+            uit = [voor, open_, in_keuze(), open_ and pg.input_value('#crmNieuw [data-cf=schoolId]') == kies, open_ and pg.input_value('#crmNieuw #cf-voornaam')]
+            ok(wie + ' (herstel r13, R13-iOS-3): lukt de nieuwe poging via Relaties in de tabbalk, dan staat de nieuwe school in de keuzelijst van het open + Persoon en blijft de gekozen school staan',
+               uit == [False, True, True, True, 'Verzonnen'], uit)
+            if open_: pg.tap('#crmNieuw [data-cf-annuleer]')
+            ok(wie + ' (herstel r13): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r13_relaties', g5_794_r13_relaties)
+        # herstel r13 (R13-iOS-2, nit R13-N1): typen in Zoeken tijdens Opnieuw proberen tekent de knop opnieuw; een tweede tik start dan geen tweede apiCrm, dus
+        # lukt de poging: één apiCrm, geen regel en geen "Niet gelukt"; mislukt hij: één apiCrm, de regel blijft en één melding (nooit een melding naast een bijgewerkte lijst)
+        def g5_794_r13_tweede_tik():
+            f0 = len(pageerrors); leeg(); scholen(); uit = []
+            for faalt in (0, 1):
+                s1 = 'Verzonnen school R13 tik %d %s' % (faalt, wie)
+                pg.evaluate("window.__faal.apiCrm = 1000"); nieuwe_school(s1); na_poging(1)
+                pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2)
+                pg.evaluate("window.__faal = { apiCrm: %d }; window.__laat.apiCrm = 2500" % faalt); n0 = n_crm()
+                pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_timeout(200); pg.evaluate("window.__laat = {}")
+                pg.tap('#crmZoek'); pg.keyboard.type('a', delay=50); pg.keyboard.press('Backspace'); pg.wait_for_timeout(200)
+                uit_knop = pg.evaluate("(function (k) { return k ? k.disabled : null; })(document.querySelector('#crmInhoud > .leeg [data-crmtab=\"scholen\"]'))")
+                pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]')  # de eerste poging antwoordt pas ná deze tik
+                pg.wait_for_timeout(2600); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+                t = melding(); n = n_crm() - n0 + faalt - (pg.evaluate("window.__faal.apiCrm") or 0)
+                uit.append([n, bool(regel('scholen')), 'Niet gelukt' in t, in_lijst('school', s1), uit_knop])
+                leeg(); pg.fill('#crmZoek', ''); pg.wait_for_timeout(300)
+                if faalt == 0: pg.wait_for_timeout(500)
+            ok(wie + ' (herstel r13, R13-iOS-2): typen in Zoeken tijdens Opnieuw proberen en daarna nog eens tikken geeft één apiCrm; lukt hij: geen regel en geen "Niet gelukt", mislukt hij: de regel en één melding',
+               [x[:4] for x in uit] == [[1, False, False, True], [1, True, True, False]], uit)
+            leeg()
+            if regel('scholen'): pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_function("CRM.laadt === null && !document.querySelector('#crmInhoud > .leeg')", timeout=8000); pg.wait_for_timeout(300)
+            ok(wie + ' (herstel r13): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r13_tweede_tik', g5_794_r13_tweede_tik)
         c.close()
 
     # ===== 22. v7.9.4 herstel r12 op de iPad liggend (1080×810, body.desk, touch; R12-iOS-3, nit R12-D2): lukt Opnieuw proberen, dan staat de focus op de

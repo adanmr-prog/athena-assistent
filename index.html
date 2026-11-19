@@ -3429,9 +3429,8 @@
   function crmVerouderd() { CRM.basis = null; CRM.pipeline = null; CRM.taken = null; CRM.rapport = null; CRM.sturing = null; }  // v7.9: ook de week en het MT-overzicht
   function crmOpnieuw() { crmVerouderd(); CRM.wacht = CRM.tab !== 'rapport'; laadCrmBasis(1, 1).catch(function () {}); }  // v7.9.4: vers en stil
   function crmVers(bord) { if (!bord) CRM.pipeline = null; CRM.taken = CRM.rapport = CRM.sturing = null; crmStil(); }
-  function crmStil(l) { if (!l) CRM.oud = 0; laadCrmBasis(1, !l).catch(function () { if (CRM.bnr < CRM.nr) CRM.oud = 1; }).then(function () { var a = document.activeElement, s = el('crmNieuw').querySelector('[data-cf=schoolId]'), d = document.createElement('div'); if (lijstOpen() && CRM.basis) { renderCrm();
-    if (s && !CRM.oud) { d.innerHTML = veldHtml({ naam: 'schoolId', type: 'select', opties: optiesScholen() }, s.value, (s.options[s.selectedIndex] || {}).text); s.innerHTML = d.querySelector('select').innerHTML; }
-    if (l && (!a || a === document.body || !document.contains(a))) focusStil(el('crmInhoud').querySelector('.leeg button') || el(isDesk() ? 'crmBalk' : 'crmTabs').querySelector('.aan')); } }); }  // v7.9.4 r8–r12
+  function crmStil(l) { if (!l) CRM.oud = 0; laadCrmBasis(!(l && CRM.laadt), !l).catch(function () { if (!(CRM.bnr >= CRM.nr)) CRM.oud = 1; }).then(function () { var a = document.activeElement; if (lijstOpen() && CRM.basis) { renderCrm();
+    if (l && (!a || a === document.body || !document.contains(a))) focusStil(el('crmInhoud').querySelector('.leeg button') || el(isDesk() ? 'crmBalk' : 'crmTabs').querySelector('.aan')); } }); }  // v7.9.4 r8–r13
   function lijstOpen() { return !CRM.detail && /^(scholen|personen)$/.test(CRM.tab) && el('view-relaties').classList.contains('actief'); }
   function crmFout(t) { return '<div class="leeg">' + t + ' <button class="chip" data-crmtab="' + CRM.tab + '">Opnieuw proberen</button></div>'; }
   function initialen(n) { var d = String(n || '?').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, ' ').trim().split(/\s+/); return ((d[0] || '?').charAt(0) + (d.length > 1 ? d[d.length - 1].charAt(0) : '')).toUpperCase(); }
@@ -3606,9 +3605,9 @@
   // v3.2: de laatst geladen Home en CRM-lijsten op dit toestel bewaren, zodat een scherm meteen gevuld is; de backend werkt het daarna bij
   function uitBewaard(k) { try { return JSON.parse(leesOpslag(k) || 'null'); } catch (e) { return null; } }
   function bewaar(k, v) { try { var t = JSON.stringify(v); if (t.length < 1500000) zetOpslag(k, t); } catch (e) {} }
-  function laadCrmBasis(vers, stil) {  // v3.0: naam in de zijbalk; v4.0: menu per rechten; v7.9: de versie van de backend; v7.9.4: één tegelijk
+  function laadCrmBasis(vers, stil) {  // v3.0: naam in de zijbalk; v4.0: menu per rechten; v7.9: de versie van de backend; v7.9.4: één tegelijk, r13: keuzelijst School
     if (CRM.laadt && !vers) { if (!stil) CRM.laadt.o.zacht = 0; return CRM.laadt; }
-    var n = CRM.nr = (CRM.nr || 0) + 1, o = { zacht: stil }, p = CRM.laadt = runKern('apiCrm', [], o).then(function (b) { var w = los(); if (n < CRM.bnr) return CRM.basis || b; CRM.bnr = n; if (n === CRM.nr) CRM.oud = 0; CRM.basis = b; BACKEND.versie = b.backendVersie || ''; bewaar('aa_cache_crm', b); zetRechten(); zetMeldingen(b.meldingen); CRM.wacht = 0; if (w) renderCrm(); return b; },
+    var n = CRM.nr = (CRM.nr || 0) + 1, o = { zacht: stil }, p = CRM.laadt = runKern('apiCrm', [], o).then(function (b) { var w = los(); if (n < CRM.bnr) return CRM.basis || b; CRM.bnr = n; if (n === CRM.nr) CRM.oud = 0; CRM.basis = b; var s = el('crmNieuw').querySelector('[data-cf=schoolId]'), d = document.createElement('div'); if (s) { d.innerHTML = veldHtml({ naam: 'schoolId', type: 'select', opties: optiesScholen() }, s.value, (s.options[s.selectedIndex] || {}).text); s.innerHTML = d.querySelector('select').innerHTML; } BACKEND.versie = b.backendVersie || ''; bewaar('aa_cache_crm', b); zetRechten(); zetMeldingen(b.meldingen); CRM.wacht = 0; if (w) renderCrm(); return b; },
       function (e) { if (los() && !CRM.basis) el('crmInhoud').innerHTML = crmFout('Kon de relaties niet laden.'); throw e; });  // r6, r9
     p.o = o;
     function los() { if (CRM.laadt === p) CRM.laadt = null; return CRM.wacht && el('view-relaties').classList.contains('actief'); }

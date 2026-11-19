@@ -60,12 +60,15 @@
  *                                     (een vaste "melding: …" op stderr, zonder aantal)
  *   gezakt (bron)                     de Exact- of XPS-export wijkt in dezelfde periode af van wat in de Athena-stand staat. v7.9.4 (bouwpunt 14): het
  *                                     XPS-totaal per maand telt ook diensten zonder gekoppeld talent of project (herstel r12, R12-1: voor M25 alleen
- *                                     diensten zonder project of op een project van het schooljaar). Bij M27 toetst bron het verkoopboek van alle bestaande
+ *                                     diensten zonder project of op een project van het schooljaar; herstel r13, R13-2: uren met een trajectId zonder
+ *                                     bestaand project tellen aan de kant van Athena als zonder project; een projectnummer dat sinds de laatste
+ *                                     urenimport anders koppelt, telt tot de volgende urenimport als bron). Bij M27 toetst bron het verkoopboek van alle bestaande
  *                                     projecten vanaf 1 augustus (het pad van M26), niet alleen de projecten van het schooljaar: een afwijking in de bron
  *                                     hoeft de afwijking van M27 dus niet te verklaren (herstel r12, nit R12-2)
  *   gezakt (onverklaard)              geen van drieën
  * Nooit waarden, namen, bedragen of tellingen. Een invoerfout noemt alleen het bestand, het regelnummer en de kolomnaam (op stderr).
- * v7.9.4 (bouwpunt 14): op stderr ook een "melding: …" als gewerkte diensten in de XPS-export niet aan een talent of project in Athena koppelen; zonder aantal.
+ * v7.9.4 (bouwpunt 14): op stderr ook een "melding: …" als gewerkte diensten in de XPS-export niet aan een talent of project in Athena koppelen; zonder aantal
+ * (herstel r13, R13-3: voor M25 die over talenten alleen voor diensten zonder project of op een project van het schooljaar).
  * Harnasdekking: ook een melding met de namen van de contracten (gezakt of leeg) en overstapstappen (open) die de regels gezakt (invoer) raken (5), een vaste
  * melding als een weekregel op de peildatum is afgekapt (maandag t/m de peildatum; 6) en als een standregel op een eerdere peildatum op fasewissels met zekerheid
  * laag rust (vanaf 1 augustus van dat schooljaar; een tijdlijnwissel heeft de invoerdag als werkelijke datum; 8). Geen blokkade, nooit een aantal.
@@ -545,14 +548,17 @@ var XPS_TOLERANTIE = 0.05;  // uren; afronding op twee decimalen per weekregel t
 // die aan een talent koppelen (zoals de urenimport); v7.9.4 (bouwpunt 14) het totaal per maand (m|*) over alle gewerkte diensten (alleDiensten), en of er
 // gewerkte diensten zijn zonder gekoppeld talent of zonder gekoppeld project (voor de melding, zonder aantal). Herstel r12 (R12-1): voor M25 een eigen totaal
 // per maand (m|sj) met alleen de diensten zonder project of op een project van het schooljaar, want M25 telt geen project van een ander schooljaar.
+// Herstel r13: een trajectId in TalentUren zonder bestaand project telt aan de kant van Athena als zonder project (R13-2, zoals de koppeling van nu aan de
+// kant van XPS), en voor M25 geldt de melding over diensten zonder talent alleen binnen m|sj (zonderTalentSj, R13-3).
 function xpsStand(L, d) {
   return eenmaal(L, 'xps|' + d, function () {
     var ctx = L.ctx, sj = sjVan(L, d), wkTot = ctx.isoWeekStr(ctx.parseDatum(d)), maanden = Array.prototype.filter.call(ctx.schooljaarMaanden(sj), function (m) { return m <= d.slice(0, 7); });
     var inSj = {}; ctx.lees('Trajecten').forEach(function (t) { if (t.schooljaar === sj) inSj[t.id] = true; });
-    var A = {}, X = {}, bij = function (o, k, u) { o[k] = (o[k] || 0) + u; }, uit = { A: A, X: X, zonderTalent: false, zonderProject: false };
+    var A = {}, X = {}, bij = function (o, k, u) { o[k] = (o[k] || 0) + u; }, uit = { A: A, X: X, zonderTalent: false, zonderTalentSj: false, zonderProject: false };
     ctx.lees('TalentUren').concat(ctx.lees('TalentUren_archief')).forEach(function (u) {
       var w = String(u.week || ''); if (!w || w > wkTot) return; var m = ctx.maandVan(ctx.maandagVanWeek(w)); if (maanden.indexOf(m) < 0) return;
-      var t = String(u.trajectId || ''), n = Number(u.uren) || 0; bij(A, m + '|*', n); if (inSj[t]) bij(A, m + '|' + t, n); if (!t || inSj[t]) bij(A, m + '|sj', n);
+      var t = String(u.trajectId || ''), n = Number(u.uren) || 0; if (t && !metProject(L)[t]) t = '';  // herstel r13 (R13-2): een verwijderd project = zonder project, zoals de koppeling van nu
+      bij(A, m + '|*', n); if (inSj[t]) bij(A, m + '|' + t, n); if (!t || inSj[t]) bij(A, m + '|sj', n);
     });
     var talenten = ctx.lees('Talenten'), trajecten = ctx.lees('Trajecten'), statussen = ctx.xpsStatussen(), alle = L.xpsAlle || (L.xpsAlle = alleDiensten(ctx, L.xps));
     maanden.forEach(function (m) {
@@ -562,13 +568,14 @@ function xpsStand(L, d) {
       // zonder kolom om aan talenten te koppelen koppelt geen dienst (het totaal hierboven telt ze wel)
       try { echt = eenmaal(L, 'xps-echt|' + vandaag, function () { return ctx.urenUitRijen(L.xps, talenten, opties); }); }
       catch (e) { if (!(e && e.xpsExport)) throw fout('xps, regel 1: de export is niet te lezen.'); echt = { regels: [] }; }
-      var inM = function (g) { return g.week <= wkTot && ctx.maandVan(ctx.maandagVanWeek(g.week)) === m; }, dEcht = 0, dAlle = 0;
-      echt.regels.forEach(function (g) { if (!inM(g)) return; dEcht += Number(g.diensten) || 0; var t = String(g.trajectId || ''); if (inSj[t]) bij(X, m + '|' + t, Number(g.uren) || 0); });
+      var inM = function (g) { return g.week <= wkTot && ctx.maandVan(ctx.maandagVanWeek(g.week)) === m; }, dEcht = 0, dAlle = 0, sEcht = 0, sAlle = 0;
+      echt.regels.forEach(function (g) { if (!inM(g)) return; var t = String(g.trajectId || ''), k = Number(g.diensten) || 0; dEcht += k; if (!t || inSj[t]) sEcht += k; if (inSj[t]) bij(X, m + '|' + t, Number(g.uren) || 0); });
       heel.regels.forEach(function (g) {
-        if (!inM(g)) return; var t = String(g.trajectId || ''), n = Number(g.uren) || 0; dAlle += Number(g.diensten) || 0; bij(X, m + '|*', n); if (!t || inSj[t]) bij(X, m + '|sj', n);
+        if (!inM(g)) return; var t = String(g.trajectId || ''), n = Number(g.uren) || 0, k = Number(g.diensten) || 0; dAlle += k; bij(X, m + '|*', n); if (!t || inSj[t]) { bij(X, m + '|sj', n); sAlle += k; }
         if (Number(g.diensten) > 0 && !t) uit.zonderProject = true;
       });
       if (dAlle > dEcht) uit.zonderTalent = true;
+      if (sAlle > sEcht) uit.zonderTalentSj = true;  // herstel r13 (R13-3): binnen de populatie van M25 (m|sj)
     });
     return uit;
   });
@@ -598,7 +605,7 @@ var XPS_MELDING = {
 function xpsMeldingen(L, regels) {
   if (!L.xps) return [];
   var m = {};
-  regels.forEach(function (r) { if (BRON[r.id] !== 'xps' || r.per.soort !== 'stand') return; var s = xpsStand(L, r.per.peildatum); if (s.zonderTalent) m.zonderTalent = true; if (s.zonderProject) m.zonderProject = true; });
+  regels.forEach(function (r) { if (BRON[r.id] !== 'xps' || r.per.soort !== 'stand') return; var s = xpsStand(L, r.per.peildatum); if (r.id === 'geleverd' ? s.zonderTalentSj : s.zonderTalent) m.zonderTalent = true; if (s.zonderProject) m.zonderProject = true; });
   return ['zonderTalent', 'zonderProject'].filter(function (k) { return m[k]; }).map(function (k) { return XPS_MELDING[k]; });
 }
 
