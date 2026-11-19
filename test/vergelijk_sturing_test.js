@@ -27,6 +27,8 @@
  * vandaag en een referentie zoals Exact is nooit gezakt (definitie): zonder export onverklaard, met een export met Open bron; twee mutanten erbij.
  * Herstel r11 (R11-1a): dezelfde factuur met een factuurdatum na vandaag in Athena en Exact wijkt niet af (de export telt hem op de stand van vandaag ook);
  * (nit R11-3) de geplande datum van R10-1a A in de volgende maand, zodat de begrenzing voor de dekking elke dag getoetst wordt; twee mutanten erbij.
+ * Herstel r12 (R12-1): een dienst zonder talent op een project van een ander schooljaar is voor M25 geen bron (onverklaard), op een project van het schooljaar
+ * wel (bron); één mutant erbij.
  * Herstel r10 (nit R10-N1): het bestand rekent met de echte dag, maar de afwijkingen in de Exact- en XPS-exports liggen in dit schooljaar, de kopie heeft geen
  * termijnen met een datum na vandaag, M06 telt alleen mee met open kansen van dit schooljaar en het voorbeeld schuift zo nodig hele jaren terug. Met VASTE_DATUM
  * (test/tz_klok.js, ook voor de kindprocessen) groen gemeten op 2026-08-10, -12, -14 en -16, 2026-09-01, 2026-10-01, 2026-10-15, 2026-10-25, 2026-11-18,
@@ -687,7 +689,15 @@ var laag = function (run) { return run.melding.some(function (l) { return /zeker
 var runZ1 = draai(['--export', EXPORT_Z, '--referentie', refZ]), runZ0 = draai(['--export', EXPORT, '--referentie', refZ]), runZ2 = draai(['--export', EXPORT_Z, '--referentie', refZ2]);
 eis(runZ1.uit.join() === 'M06 ' + vorigeMaand + ' geslaagd' && runZ1.code === 0 && laag(runZ1) && !laag(runZ0) && !laag(runZ2) && runZ2.code === 0,
   'harnasdekking (8): M06 op een eerdere peildatum met een wissel met zekerheid laag geeft een melding (geen blokkade); de seed, de stand van vandaag en M26 niet (' + runZ1.melding.concat(runZ0.melding, runZ2.melding).join(' | ') + ')');
-// Zes (herstel r6: tien; r7: elf; r8: zestien; r10: achttien; r11: twintig) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
+// herstel r12 (R12-1): M25 telt alleen de projecten van het schooljaar. Een dienst zonder talent in Athena op een project van een ander schooljaar raakt M25 niet en
+// is dus geen bron (onverklaard, exitcode 1); dezelfde dienst op een project van het schooljaar wel (bron, exitcode 0)
+var tVorig = exp.tabellen.Trajecten.filter(function (t) { return t.schooljaar !== sj && t.xpsProject; })[0], tNu = exp.tabellen.Trajecten.filter(function (t) { return t.schooljaar === sj && t.xpsProject; })[0];
+var XPS_R12V = path.join(TMP, 'diensten_r12_vorig.csv'), XPS_R12N = path.join(TMP, 'diensten_r12_nu.csv'), REF_R12 = schrijfRef('referentie_r12.csv', [['M25', maand, ref25, '']]);
+fs.writeFileSync(XPS_R12V, xpsCsv(0, [xpsRegel(dienstDag, 6, 'X0000099', tVorig ? tVorig.xpsProject : '')])); fs.writeFileSync(XPS_R12N, xpsCsv(0, [xpsRegel(dienstDag, 6, 'X0000099', tNu ? tNu.xpsProject : '')]));
+var r12V = draai(['--export', EXPORT, '--referentie', REF_R12, '--xps', XPS_R12V]), r12N = draai(['--export', EXPORT, '--referentie', REF_R12, '--xps', XPS_R12N]);
+eis(!!tVorig && !!tNu && r12V.uit.join() === 'M25 ' + maand + ' gezakt (onverklaard)' && r12V.code === 1 && r12N.uit.join() === 'M25 ' + maand + ' gezakt (bron)' && r12N.code === 0,
+  'herstel r12 (R12-1): een dienst zonder talent op een project van een ander schooljaar is voor M25 geen bron (onverklaard), op een project van het schooljaar wel (bron) (' + r12V.uit.concat(r12N.uit).join(' | ') + ')');
+// Zes (herstel r6: tien; r7: elf; r8: zestien; r10: achttien; r11: twintig; r12: eenentwintig) mutanten van het harnas, alleen in het geheugen: elk geeft het oude gedrag terug, en de eis erachter laat zien dat een eis hierboven hem vangt
 var metMelding = function (u, re) { return u.meldingen.some(function (l) { return re.test(l); }); };
 [['dekking (3, 4)', 'return datums.every(function (d) {', 'return true || datums.every(function (d) {', function (m) {
     return m.vergelijk({ export: EXPORT_D, referentie: refD3, 'exact-verkoop': VERKOOP_AUG }).uit[0] === 'M26 ' + perV + ' gezakt (bron)' &&
@@ -717,7 +727,9 @@ var metMelding = function (u, re) { return u.meldingen.some(function (l) { retur
   ['exactWijkt M28 op datum (R10-1a)', "var nu = d >= L.vandaag;\n    X.rijen", "var nu = false;\n    X.rijen", function (m) { var Lm = m.laad({ export: r10B.export, 'exact-open': EXACT_10B, 'exact-open-stand': vandaag }); return m.exactWijkt(Lm, { id: 'openstaand', per: m.periodeUit(Lm.ctx, vandaag, Lm.vandaag) }) === ''; }],
   // herstel r11: de begrenzing voor de dekking (nit R11-3) en de kant van de export op de stand van vandaag (R11-1a)
   ['begrenzing van de dekking (R10-1a, nit R11-3)', 'open.push(v.datum > d ? d : v.datum);', 'open.push(v.datum);', function (m) { return m.vergelijk({ export: r10A.export, referentie: r10A.referentie, 'exact-open': EXACT_10A, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' geblokkeerd (export dekt de periode niet)'; }],
-  ['export op datum op de stand van vandaag (R11-1a)', 'if ((!nu && x.datum > d) || x.datum < van) return;', 'if (x.datum > d || x.datum < van) return;', function (m) { return m.vergelijk({ export: r11C.export, referentie: path.join(TMP, 'referentie_r11_c.csv'), 'exact-open': r11C.exact, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }]
+  ['export op datum op de stand van vandaag (R11-1a)', 'if ((!nu && x.datum > d) || x.datum < van) return;', 'if (x.datum > d || x.datum < van) return;', function (m) { return m.vergelijk({ export: r11C.export, referentie: path.join(TMP, 'referentie_r11_c.csv'), 'exact-open': r11C.exact, 'exact-open-stand': vandaag }).uit[0] === 'M28 ' + vandaag + ' gezakt (bron)'; }],
+  // herstel r12 (R12-1): geleverd (M25) vergelijkt het maandtotaal over alle diensten (m|*), zoals bouwpunt 14 tot r12
+  ['M25 per maand over alle diensten (R12-1)', 'if (perProject ? !/\\|\\*$/.test(k) : /\\|\\*$/.test(k))', 'if (perProject || /\\|\\*$/.test(k))', function (m) { return m.vergelijk({ export: EXPORT, referentie: REF_R12, xps: XPS_R12V }).uit[0] === 'M25 ' + maand + ' gezakt (bron)'; }]
 ].forEach(function (x) { var m = harnasMutant(x[1], x[2]); eis(!!m && x[3](m), 'harnasdekking: de mutant "' + x[0] + '" geeft het oude gedrag; een eis hierboven vangt hem' + (m ? '' : ' (zoektekst niet gevonden)')); });
 
 /* ---- 5. invoerfouten: alleen bestand, regelnummer en kolomnaam; v7.9.4: een fout in het harnas zelf is exitcode 2 ---- */

@@ -5222,22 +5222,24 @@ function fout794(naam, e) { eis(false, 'v7.9.4 ' + naam + ': onverwachte fout ' 
 
 /* ---- v7.9.4 herstel r11 (R11-1b): een stand op zijn eigen peildatum (live, de maandstand van de trigger, een tussenstand) telt M26–M28 zoals Financiën, niet
    op datum: een verzonden termijn is open, ook met een (geplande) verzenddatum erna, en elke ingevulde betaaldatum telt als betaald. Dezelfde peildatum later
-   opnieuw gerekend (hier: gisteren) telt op datum. De definitie in het register, en dus in de bevroren stand, zegt dat. Verzonnen gegevens. ---- */
+   opnieuw gerekend (hier: gisteren) telt op datum. De definitie in het register, en dus in de bevroren stand, zegt dat. Verzonnen gegevens. Herstel r12 (nit
+   R12-D1): de termijnen a en b hebben verschillende bedragen (900 en 400), zodat zoals Financiën (+400) en op datum (+900) een andere som geven en dit blok
+   zelf een stand op de dag zelf op datum vangt. ---- */
 (function () {
   vers79(); var st = standBewaren();
   try {
     var vandaag = plusDagen(0), gisteren = plusDagen(-1), sjStart = sjNu().slice(0, 4) + '-08-01', vroeg = plusDagen(-20) < sjStart ? sjStart : plusDagen(-20), tr = ctx.lees('Trajecten')[0];
     var cijfer = function (p, id) { var w = null; ctx.GEBRUIKER = null; ctx._LEES = {}; ctx.sturingCijfers(p).blokken.forEach(function (b) { b.cijfers.forEach(function (c) { if (c.id === id) w = c.waarde; }); }); return w; };
     var voor = cijfer(vandaag, 'openstaand'), voorG = cijfer(gisteren, 'openstaand');
-    var f = function (id, v, status, b) { return { id: id, trajectId: tr.id, omschrijving: 'Verzonnen termijn', bedrag: 900, datum: v, status: status, factuurnummer: 'R11' + id, verzonden: v, betaald: b, aangemaakt: vroeg + ' 09:00' }; };
+    var f = function (id, v, status, b, x) { return { id: id, trajectId: tr.id, omschrijving: 'Verzonnen termijn', bedrag: x, datum: v, status: status, factuurnummer: 'R11' + id, verzonden: v, betaald: b, aangemaakt: vroeg + ' 09:00' }; };
     // a: verzonden vóór de peildatum, betaald (gepland) na vandaag; b: verzonden met een factuurdatum na vandaag (zoals apiExactImport hem vastlegt)
-    ctx.schrijfVeel('Facturen', cx([f('a', vroeg, 'betaald', plusDagen(5)), f('b', plusDagen(3), 'verzonden', '')]));
+    ctx.schrijfVeel('Facturen', cx([f('a', vroeg, 'betaald', plusDagen(5), 900), f('b', plusDagen(3), 'verzonden', '', 400)]));
     ctx.verwijderRijen('Standen', function () { return true; }); ctx._LEES = {}; ctx.GEBRUIKER = null; ctx.sturingBevriezen(vandaag, 'tussenstand');
     var rij = function (id) { return ctx.lees('Standen').filter(function (r) { return r.metriek === id && !r.uitsplitsing && String(r.peildatum).slice(0, 10) === vandaag; })[0] || {}; }, r28 = rij('openstaand'), r26 = rij('gefactureerd');
-    eis(cijfer(vandaag, 'openstaand') === voor + 900 && Number(r28.waarde) === voor + 900,
-      'v7.9.4 herstel r11 (R11-1b): op de dag zelf (live en in een tussenstand van vandaag) telt M28 zoals Financiën: de termijn met een betaaldatum na vandaag als betaald, die met een verzenddatum na vandaag als open (' + [voor, cijfer(vandaag, 'openstaand'), r28.waarde].join(' → ') + ')');
+    eis(cijfer(vandaag, 'openstaand') === voor + 400 && Number(r28.waarde) === voor + 400,
+      'v7.9.4 herstel r11 (R11-1b): op de dag zelf (live en in een tussenstand van vandaag) telt M28 zoals Financiën: de termijn met een betaaldatum na vandaag (900) als betaald, die met een verzenddatum na vandaag (400) als open, dus +400 en niet +900 op datum (' + [voor, cijfer(vandaag, 'openstaand'), r28.waarde].join(' → ') + ')');
     eis(vroeg > gisteren || cijfer(gisteren, 'openstaand') === voorG + 900,
-      'v7.9.4 herstel r11 (R11-1b): op een eerdere peildatum telt M28 op datum: de termijn die na die dag betaald is als open, die met een latere verzenddatum niet (' + voorG + ' → ' + cijfer(gisteren, 'openstaand') + ')');
+      'v7.9.4 herstel r11 (R11-1b): op een eerdere peildatum telt M28 op datum: de termijn die na die dag betaald is als open (+900), die met een latere verzenddatum niet (' + voorG + ' → ' + cijfer(gisteren, 'openstaand') + ')');
     eis([r28.definitie, ctx.METRIEKEN.openstaand.definitie].every(function (d) { return /In een stand op een eerdere peildatum: verzonden en niet betaald t\/m die dag/.test(d) && /Op de dag zelf \(live, en ook een maand- of tussenstand die die dag bevroren is\) telt het zoals Financiën/.test(d) && /elke ingevulde betaaldatum telt als betaald/.test(d) && /later opnieuw gerekend telt op datum/.test(d) && !/In een stand: verzonden/.test(d); }),
       'v7.9.4 herstel r11 (R11-1b): de definitie van M28 (register en bevroren stand) zegt dat een stand op de dag zelf telt zoals Financiën en een eerdere peildatum op datum (' + r28.definitie + ')');
     eis(['geleverd', 'gefactureerd', 'nogTeFactureren'].every(function (k) { return /Op de dag zelf \(live, en ook een maand- of tussenstand die die dag bevroren is\) telt het zoals Financiën/.test(ctx.METRIEKEN[k].definitie); }) && /op de dag zelf t\/m het eind van die maand/.test(r26.definitie || ''),

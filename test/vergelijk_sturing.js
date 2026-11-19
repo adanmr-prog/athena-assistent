@@ -59,7 +59,10 @@
  *                                     (v7.9.4, bouwpunt 12). Herstel r3 (R3-D2): Athena mist dan de gegevens; zo'n regel is niet vergeleken en toont niets aan
  *                                     (een vaste "melding: …" op stderr, zonder aantal)
  *   gezakt (bron)                     de Exact- of XPS-export wijkt in dezelfde periode af van wat in de Athena-stand staat. v7.9.4 (bouwpunt 14): het
- *                                     XPS-totaal per maand telt ook diensten zonder gekoppeld talent of project
+ *                                     XPS-totaal per maand telt ook diensten zonder gekoppeld talent of project (herstel r12, R12-1: voor M25 alleen
+ *                                     diensten zonder project of op een project van het schooljaar). Bij M27 toetst bron het verkoopboek van alle bestaande
+ *                                     projecten vanaf 1 augustus (het pad van M26), niet alleen de projecten van het schooljaar: een afwijking in de bron
+ *                                     hoeft de afwijking van M27 dus niet te verklaren (herstel r12, nit R12-2)
  *   gezakt (onverklaard)              geen van drieën
  * Nooit waarden, namen, bedragen of tellingen. Een invoerfout noemt alleen het bestand, het regelnummer en de kolomnaam (op stderr).
  * v7.9.4 (bouwpunt 14): op stderr ook een "melding: …" als gewerkte diensten in de XPS-export niet aan een talent of project in Athena koppelen; zonder aantal.
@@ -511,6 +514,7 @@ function exactWijkt(L, r) {
     return dekt(X, open, d, R) ? vergelijk(eO, aO) : 'dekt niet';  // harnasdekking (4): een open termijn van Athena buiten het bereik van de export
   }
   if (!L.exactVerkoop) return '';
+  // M26 en M27 (herstel r12, nit R12-2): bij M27 hetzelfde verkoopboek van alle bestaande projecten, dus ook een slottermijn van vorig schooljaar die M27 niet raakt
   var een = L.exactVerkoop === L.exactOpen;  // herstel r8 (R8-1a): --exact, één bestand voor verkoop en Open: dezelfde grens en dezelfde maand van de run
   if (een && S && d > S) return 'dekt niet';
   // herstel r2 (A-B1, B-B2): dezelfde periode als M26 (bouwpunt 7, K10): in een stand op een eerdere peildatum t/m die dag, aan beide kanten; vandaag de hele maand
@@ -539,7 +543,8 @@ function maandTot(ctx, m, tot) { return kleinste(ctx.plusDagenVan(ctx.datumStr(c
 var XPS_TOLERANTIE = 0.05;  // uren; afronding op twee decimalen per weekregel telt bij veel regels op
 // Gewerkte uren per maand en per project van het schooljaar t/m peildatum d: Athena uit TalentUren en het archief, XPS via urenUitRijen. Per project de diensten
 // die aan een talent koppelen (zoals de urenimport); v7.9.4 (bouwpunt 14) het totaal per maand (m|*) over alle gewerkte diensten (alleDiensten), en of er
-// gewerkte diensten zijn zonder gekoppeld talent of zonder gekoppeld project (voor de melding, zonder aantal).
+// gewerkte diensten zijn zonder gekoppeld talent of zonder gekoppeld project (voor de melding, zonder aantal). Herstel r12 (R12-1): voor M25 een eigen totaal
+// per maand (m|sj) met alleen de diensten zonder project of op een project van het schooljaar, want M25 telt geen project van een ander schooljaar.
 function xpsStand(L, d) {
   return eenmaal(L, 'xps|' + d, function () {
     var ctx = L.ctx, sj = sjVan(L, d), wkTot = ctx.isoWeekStr(ctx.parseDatum(d)), maanden = Array.prototype.filter.call(ctx.schooljaarMaanden(sj), function (m) { return m <= d.slice(0, 7); });
@@ -547,7 +552,7 @@ function xpsStand(L, d) {
     var A = {}, X = {}, bij = function (o, k, u) { o[k] = (o[k] || 0) + u; }, uit = { A: A, X: X, zonderTalent: false, zonderProject: false };
     ctx.lees('TalentUren').concat(ctx.lees('TalentUren_archief')).forEach(function (u) {
       var w = String(u.week || ''); if (!w || w > wkTot) return; var m = ctx.maandVan(ctx.maandagVanWeek(w)); if (maanden.indexOf(m) < 0) return;
-      var t = String(u.trajectId || ''), n = Number(u.uren) || 0; bij(A, m + '|*', n); if (inSj[t]) bij(A, m + '|' + t, n);
+      var t = String(u.trajectId || ''), n = Number(u.uren) || 0; bij(A, m + '|*', n); if (inSj[t]) bij(A, m + '|' + t, n); if (!t || inSj[t]) bij(A, m + '|sj', n);
     });
     var talenten = ctx.lees('Talenten'), trajecten = ctx.lees('Trajecten'), statussen = ctx.xpsStatussen(), alle = L.xpsAlle || (L.xpsAlle = alleDiensten(ctx, L.xps));
     maanden.forEach(function (m) {
@@ -559,16 +564,20 @@ function xpsStand(L, d) {
       catch (e) { if (!(e && e.xpsExport)) throw fout('xps, regel 1: de export is niet te lezen.'); echt = { regels: [] }; }
       var inM = function (g) { return g.week <= wkTot && ctx.maandVan(ctx.maandagVanWeek(g.week)) === m; }, dEcht = 0, dAlle = 0;
       echt.regels.forEach(function (g) { if (!inM(g)) return; dEcht += Number(g.diensten) || 0; var t = String(g.trajectId || ''); if (inSj[t]) bij(X, m + '|' + t, Number(g.uren) || 0); });
-      heel.regels.forEach(function (g) { if (!inM(g)) return; dAlle += Number(g.diensten) || 0; bij(X, m + '|*', Number(g.uren) || 0); if (Number(g.diensten) > 0 && !g.trajectId) uit.zonderProject = true; });
+      heel.regels.forEach(function (g) {
+        if (!inM(g)) return; var t = String(g.trajectId || ''), n = Number(g.uren) || 0; dAlle += Number(g.diensten) || 0; bij(X, m + '|*', n); if (!t || inSj[t]) bij(X, m + '|sj', n);
+        if (Number(g.diensten) > 0 && !t) uit.zonderProject = true;
+      });
       if (dAlle > dEcht) uit.zonderTalent = true;
     });
     return uit;
   });
 }
-// M25 per project en per maand, M09 per maand (het niveau van de referentie); v7.9.4: M25 ook per maand, zodat diensten zonder talent of project meetellen
+// M25 per project en per maand, M09 per maand (het niveau van de referentie); v7.9.4: M25 ook per maand, zodat diensten zonder talent of project meetellen;
+// herstel r12 (R12-1): voor M25 is dat het totaal m|sj (zonder project of op een project van het schooljaar), M09 houdt m|* (urenPerMaand telt elke rij)
 function xpsWijkt(L, r) {
   var s = xpsStand(L, r.per.peildatum), perProject = r.id === 'geleverd', sleutels = {};
-  Object.keys(s.A).concat(Object.keys(s.X)).forEach(function (k) { if (perProject || /\|\*$/.test(k)) sleutels[k] = true; });
+  Object.keys(s.A).concat(Object.keys(s.X)).forEach(function (k) { if (perProject ? !/\|\*$/.test(k) : /\|\*$/.test(k)) sleutels[k] = true; });
   return Object.keys(sleutels).some(function (k) { return Math.abs((s.A[k] || 0) - (s.X[k] || 0)) > XPS_TOLERANTIE; });
 }
 var BRON = { gefactureerd: 'exact', nogTeFactureren: 'exact', openstaand: 'exact', geleverd: 'xps', urenVorigeJaren: 'xps' };

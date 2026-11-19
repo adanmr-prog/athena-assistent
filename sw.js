@@ -14,7 +14,10 @@ var CACHE = 'athena-assistent-v7.9.4';  // bump bij elke release (zie /release)
 // met één regel erboven ("Niet bijgewerkt", Opnieuw proberen); een nieuwe poging alleen bij Terug, een tab of Relaties; "Kon de relaties niet laden" alleen
 // zonder basis; Opnieuw proberen op dezelfde tab laat + Persoon staan; alleen een koppelveld (…Id) houdt zijn huidige waarde, met de naam uit het record.
 // Herstel r11 (dezelfde CACHE): alleen de nieuwste apiCrm wist die regel (een oudere die later lukt niet), en Opnieuw proberen in de regel loopt luid: de
-// regel blijft tot de poging lukt, een fout geeft een melding en de focus staat daarna op de knop of op de tab.
+// regel blijft tot de poging lukt en een fout geeft een melding.
+// Herstel r12 (dezelfde CACHE): na de poging gaat de focus alleen als hij weg is naar de knop of de tab (op body.desk de chip in #crmBalk), wie intussen
+// typt typt door; de knop staat uit tijdens de poging, een oudere mislukte poging zet de regel niet terug na een nieuwere die lukte, en een open + Persoon
+// krijgt de nieuwe school in zijn keuzelijst.
 // v7.9.3: herstel na review ronde 2 van fase 5b; 7.9.2 staat live, dus een nieuwe uitrol met een nieuwe CACHE. + Kans zet Opslaan uit tot de aanroep klaar is,
 // na een venster gaat de focus op een touch-apparaat niet terug naar een keuzelijst, de fout staat in het venster onder het veld. Review ronde 1 van 7.9.3 (nog
 // niet uitgerold, dus dezelfde CACHE): de stap fasen noemt een eigen rij die 5b wordt en wat erbij komt of verdwijnt, het vinkje in Beheer heeft een eigen naam.

@@ -35,6 +35,9 @@
 # nieuwe poging bij Terug, een tab of Relaties, Opnieuw proberen laat + Persoon staan; de terugval van een keuzelijst alleen voor koppelvelden, met het label uit het record.
 # v7.9.4 herstel r11 (sectie 21): een oudere stille verversing wist de regel niet na een nieuwere die mislukte (R11-iOS-1), een geslaagde apiCrm via Relaties
 # wist hem wel (nit R11-2), en Opnieuw proberen in de regel loopt luid met de focus op de knop of de tab (nit R11-iOS-N1).
+# v7.9.4 herstel r12 (sectie 21 en 22): wie tijdens de poging in Zoeken of in + Persoon typt, houdt de focus (R12-iOS-1); de keuzelijst School van een open
+# + Persoon krijgt na een geslaagde poging de nieuwe school (R12-iOS-2); de knop staat uit tijdens de poging, een oudere mislukte poging zet de regel niet terug
+# na een nieuwere die lukte, en zonder basis kost één tik één apiCrm (R12-iOS-4); op de iPad liggend de focus op de chip in #crmBalk (R12-iOS-3, nit R12-D2).
 # v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout); na Andere datum een verse basis en een bruikbaar bord; Gebruikers
 # verouderen alles; € met een harde spatie in de tegel Verloren; M20 met het aantal zonder laatste contact.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
@@ -1776,7 +1779,109 @@ with sync_playwright() as p:
             ok(wie + ' (herstel r11): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
             leeg()
         stap('g5_794_r11_opnieuw', g5_794_r11_opnieuw)
+        # herstel r12 (R12-iOS-1): de focus gaat na de poging alleen naar de knop of de tab als hij weg is; wie intussen in Zoeken typt, typt door
+        def g5_794_r12_typen():
+            f0 = len(pageerrors); leeg(); scholen(); s1 = 'Verzonnen school R12 typen ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1000"); nieuwe_school(s1); na_poging(1)
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2); uit = []
+            for faalt in (1, 0):
+                pg.evaluate("window.__faal = { apiCrm: %d }; window.__laat.apiCrm = 2500" % faalt)
+                pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_timeout(200)
+                pg.tap('#crmZoek'); pg.keyboard.type('jan', delay=60)
+                pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(400)
+                pg.keyboard.type('sen', delay=60); pg.wait_for_timeout(300)
+                uit.append([pg.input_value('#crmZoek'), pg.evaluate("document.activeElement.id"), 'Niet bijgewerkt' in pg.inner_text('#crmInhoud')])
+                pg.fill('#crmZoek', ''); pg.wait_for_timeout(300)
+            ok(wie + ' (herstel r12, R12-iOS-1): wie tijdens Opnieuw proberen (2,5 s) in Zoeken typt, houdt de focus in het veld ("jansen"), of de poging nu mislukt of lukt',
+               uit == [['jansen', 'crmZoek', True], ['jansen', 'crmZoek', False]], uit)
+            ok(wie + ' (herstel r12): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r12_typen', g5_794_r12_typen)
+        # herstel r12 (R12-iOS-2): na een geslaagde poging krijgt de keuzelijst School van een open + Persoon de nieuwe school en houdt hij de gekozen school
+        def g5_794_r12_formulier():
+            f0 = len(pageerrors); leeg(); scholen(); s1 = 'Verzonnen school R12 formulier ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1000"); nieuwe_school(s1); na_poging(1)
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2); pg.tap('#crmTabs [data-crmtab="personen"]'); na_poging(3)
+            pg.tap('#crmBalk [data-crmnieuw="persoon"]'); pg.wait_for_selector('#crmNieuw #cf-voornaam', timeout=5000)
+            pg.fill('#crmNieuw #cf-voornaam', 'Verzonnen'); pg.fill('#crmNieuw #cf-achternaam', 'Formulier R12')
+            kies = pg.evaluate("document.querySelector('#crmNieuw [data-cf=schoolId]').options[1].value"); pg.select_option('#crmNieuw [data-cf=schoolId]', kies)
+            def in_keuze(): return pg.evaluate("[].some.call(document.querySelector('#crmNieuw [data-cf=schoolId]').options, function (o) { return o.text.indexOf(%s) === 0; })" % json.dumps(s1))
+            voor = in_keuze(); pg.evaluate("window.__faal = {}; window.__laat.apiCrm = 2500")
+            pg.tap('#crmInhoud > .leeg [data-crmtab="personen"]'); pg.wait_for_timeout(200)
+            pg.tap('#crmNieuw #cf-email'); pg.keyboard.type('jan', delay=60)
+            pg.wait_for_function("CRM.laadt === null && !document.querySelector('#crmInhoud > .leeg')", timeout=8000); pg.wait_for_timeout(400)
+            pg.keyboard.type('sen', delay=60); pg.wait_for_timeout(300)
+            uit = [voor, in_keuze(), pg.input_value('#crmNieuw [data-cf=schoolId]') == kies, pg.input_value('#crmNieuw #cf-email'), pg.evaluate("document.activeElement.id")]
+            ok(wie + ' (herstel r12, R12-iOS-2, R12-iOS-1): na een geslaagde Opnieuw proberen staat de nieuwe school in de keuzelijst van het open + Persoon, blijft de gekozen school staan en typt wie intussen typt door ("jansen")',
+               uit == [False, True, True, 'jansen', 'cf-email'], uit)
+            pg.tap('#crmNieuw [data-cf-annuleer]')
+            ok(wie + ' (herstel r12): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r12_formulier', g5_794_r12_formulier)
+        # herstel r12 (R12-iOS-4): de knop staat uit tijdens de poging (een tweede tik start geen tweede apiCrm), en een oudere poging die mislukt nadat een
+        # nieuwere apiCrm lukte, zet de regel niet terug
+        def g5_794_r12_tweemaal():
+            f0 = len(pageerrors); leeg(); scholen(); s1 = 'Verzonnen school R12 tweemaal ' + wie
+            pg.evaluate("window.__faal.apiCrm = 1000"); nieuwe_school(s1); na_poging(1)
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2)
+            pg.evaluate("window.__faal = {}; window.__laat.apiCrm = 1500"); n0 = n_crm()
+            pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_timeout(500)
+            pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]', force=True)
+            pg.wait_for_timeout(2500); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+            t = melding(); uit = [n_crm() - n0, regel('scholen'), pg.evaluate("CRM.oud"), 'Niet gelukt' in t, in_lijst('school', s1)]
+            ok(wie + ' (herstel r12, R12-iOS-4): twee tikken op Opnieuw proberen kort na elkaar geven één apiCrm (de knop staat uit tijdens de poging) en eindigen met de school in de lijst, zonder regel en zonder "Niet gelukt"',
+               uit[0] == 1 and not uit[1] and not uit[2] and not uit[3] and uit[4], uit + [t])
+            s2 = 'Verzonnen school R12 race ' + wie
+            pg.evaluate("window.__laat = {}; window.__faal = { apiCrm: 1000 }"); nieuwe_school(s2); na_poging(1)
+            pg.tap('#crmDetailScherm [data-crm-terug]'); na_poging(2)
+            pg.evaluate("window.__faal = { apiCrm: 1 }; window.__laat.apiCrm = 2000")  # de poging mislukt na 2 s
+            pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_timeout(300); pg.evaluate("window.__laat = {}")
+            pg.tap('#crmTabs [data-crmtab="personen"]')  # een nieuwere stille apiCrm die meteen lukt
+            pg.wait_for_timeout(2500); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+            uit = [regel('personen'), pg.evaluate("CRM.oud"), pg.evaluate("CRM.basis.scholen.some(function (s) { return s.naam === %s; })" % json.dumps(s2))]
+            ok(wie + ' (herstel r12, R12-iOS-4): mislukt Opnieuw proberen pas nadat een nieuwere apiCrm (de tab Personen) lukte, dan komt de regel "Niet bijgewerkt" niet terug',
+               not uit[0] and not uit[1] and uit[2], uit)
+            ok(wie + ' (herstel r12): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r12_tweemaal', g5_794_r12_tweemaal)
+        # herstel r12 (R12-iOS-4): zonder basis ("Kon de relaties niet laden") kost één tik op Opnieuw proberen één apiCrm, niet twee
+        def g5_794_r12_zonder_basis():
+            f0 = len(pageerrors); leeg(); scholen()
+            pg.evaluate("window.__faal.apiCrm = 1000; CRM.oud = 1; crmOpnieuw()"); pg.wait_for_selector('#crmInhoud > .leeg:has-text("Kon de relaties niet laden")', timeout=8000); na_poging(1)
+            pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_timeout(1500); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+            n = pg.evaluate("1000 - window.__faal.apiCrm") - 1; fout = 'Kon de relaties niet laden' in pg.inner_text('#crmInhoud')
+            leeg(); pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=8000)
+            pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+            ok(wie + ' (herstel r12, R12-iOS-4): zonder basis kost één tik op Opnieuw proberen één apiCrm (mislukt: weer de fout met de knop); lukt de volgende, dan de lijst zonder regel',
+               n == 1 and fout and not regel('scholen') and not pg.evaluate("CRM.oud"), [n, fout, regel('scholen')])
+            ok(wie + ' (herstel r12): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+            leeg()
+        stap('g5_794_r12_zonder_basis', g5_794_r12_zonder_basis)
         c.close()
+
+    # ===== 22. v7.9.4 herstel r12 op de iPad liggend (1080×810, body.desk, touch; R12-iOS-3, nit R12-D2): lukt Opnieuw proberen, dan staat de focus op de
+    # zichtbare chip Scholen in #crmBalk (#crmTabs is op body.desk verborgen), niet op body =====
+    c = b.new_context(viewport={'width': 1080, 'height': 810}, is_mobile=True, has_touch=True)
+    pg = c.new_page(); pg.on('pageerror', lambda e: pageerrors.append('r12: ' + str(e))); pg.on('dialog', dialoog)
+    pg.goto(U + 'sophie'); pg.wait_for_selector('#zijbalk'); pg.wait_for_load_state('networkidle'); pg.wait_for_timeout(500); pg.evaluate(VOLG); pg.evaluate(TRAAG); pg.evaluate(LAAT)
+    def g5_794_r12_liggend():
+        f0 = len(pageerrors); pg.evaluate("window.__faal = {}; window.__traag = {}; window.__laat = {}")
+        pg.tap('.zb-item[data-desk="contacten"]'); pg.wait_for_selector('#crmInhoud [data-crm-open^="school:"]', timeout=8000); pg.wait_for_function("CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+        s1 = 'Verzonnen school R12 liggend'; pg.evaluate("window.__faal.apiCrm = 1000")
+        pg.locator('[data-crmnieuw="school"]:visible').first.tap(); pg.wait_for_selector('#crmNieuw input[id$="naam"]', timeout=5000)
+        pg.fill('#crmNieuw input[id$="naam"]', s1); pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap()
+        pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % s1, timeout=8000)
+        pg.wait_for_function("1000 - window.__faal.apiCrm === 1 && CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+        pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_function("1000 - window.__faal.apiCrm === 2 && CRM.laadt === null", timeout=8000); pg.wait_for_timeout(300)
+        r0 = pg.evaluate("!!document.querySelector('#crmInhoud > .leeg [data-crmtab]')")
+        pg.evaluate("window.__faal = {}"); pg.tap('#crmInhoud > .leeg [data-crmtab="scholen"]')
+        pg.wait_for_function("CRM.laadt === null && !document.querySelector('#crmInhoud > .leeg')", timeout=8000); pg.wait_for_timeout(300)
+        f = pg.evaluate("(function (a) { return a ? [a.tagName, !!a.closest('#crmBalk'), a.getAttribute('data-crmtab'), a.classList.contains('aan'), !!(a.offsetWidth || a.offsetHeight)] : null; })(document.activeElement)")
+        ok('ipad liggend 1080 (herstel r12, R12-iOS-3, nit R12-D2): lukt Opnieuw proberen op body.desk, dan staat de focus op de zichtbare chip Scholen in #crmBalk', r0 and f == ['BUTTON', True, 'scholen', True, True], [r0, f])
+        ok('ipad liggend 1080 (herstel r12): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
+        pg.evaluate("window.__faal = {}")
+    stap('g5_794_r12_liggend', g5_794_r12_liggend)
+    c.close()
     b.close()
 
 srv.shutdown()
