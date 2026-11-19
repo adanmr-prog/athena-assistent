@@ -1,5 +1,7 @@
 /* Athena Assistent — service worker: HTML cache-first met verversen op de achtergrond (v7.6, stale-while-revalidate), statische shell cache-first, API altijd via netwerk */
-var CACHE = 'athena-assistent-v7.9.4';  // bump bij elke release (zie /release)
+var CACHE = 'athena-assistent-v7.9.5';  // bump bij elke release (zie /release)
+// v7.9.5: Rapporten → Teams faalt niet stil: de reden in het scherm met Opnieuw proberen, de weergavechips en de kaart Beheer blijven, alleen de nieuwste aanroep tekent, een fout bij het
+// tekenen komt in de metingen (alleen de app; Code.gs blijft 7.9.4).
 // v7.9.4: deel B op de echte stand. Datakwaliteit toont de stand leeg (niets te toetsen) apart, de weekweergave een team zonder leden als geblokkeerd,
 // Rapporten → Week heeft een afdrukweergave in een vaste opzet met de link #rapport:week:<jjjj-Www>, Beheer → Keuzelijsten de soort per facturatievorm.
 // Herstel r3 (niet uitgerold, dus dezelfde CACHE): leeg als "—" met de reden (MT, Teams, Vandaag) en een verse basis na Beheer (telefoon).

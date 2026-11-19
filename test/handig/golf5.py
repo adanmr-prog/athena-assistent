@@ -42,6 +42,7 @@
 # typen in Zoeken start geen tweede apiCrm (R13-iOS-2). De koude start met aa_cache_crm (R13-1) staat in test_app.py (de demo bewaart geen localStorage).
 # v7.9.4 herstel r5 (sectie 15): een mislukte apiCrm laat geen tab op Laden (opnieuw proberen bij een tik, anders de fout); na Andere datum een verse basis en een bruikbaar bord; Gebruikers
 # verouderen alles; € met een harde spatie in de tegel Verloren; M20 met het aantal zonder laatste contact.
+# v7.9.5 (sectie 23): een fout bij het tekenen van Rapporten → Teams geeft de vaste zin met Opnieuw proberen, een meting `js` en console.error; chips en Beheer blijven.
 # De selectors staan letterlijk (als `data-…`) in dit bestand: test/handelingen.js grept ze.
 # Gebruik: python3 test/handig/golf5.py — per controle "ok   …" of "FOUT …", eindigt met ALLES GOED (exitcode 0) of FOUTEN: n (exitcode 1).
 # Eigen server op poort 8799; elke rol begint met een verse context (de demo schrijft in sessionStorage). Mislukte stappen: test/shots/robuust/golf5_<stap>.png.
@@ -1927,6 +1928,36 @@ with sync_playwright() as p:
         ok('ipad liggend 1080 (herstel r12): zonder JS-fout', len(pageerrors) == f0, pageerrors[f0:])
         pg.evaluate("window.__faal = {}")
     stap('g5_794_r12_liggend', g5_794_r12_liggend)
+    c.close()
+
+    # ===== 23. v7.9.5: Rapporten → Teams faalt niet stil. Een fout bij het tekenen (apiTeamRapport zonder ik, een vorm die alleen productie geeft) toont de
+    # vaste zin met Opnieuw proberen, komt als meting met fn 'js' in METING.lijst (Instellingen → Metingen) en in console.error, zonder melding; de
+    # weergavechips en de kaart Beheer blijven (Gebruikers opent in #crmBeheer, Jaardoel en aannames in het venster) en Opnieuw proberen tekent het rapport =====
+    c, pg = nieuw(b, 'sophie')
+    def g5_795_tekenfout():
+        f0 = len(pageerrors); cons = []; pg.on('console', lambda m: cons.append(m.text) if m.type == 'error' else None)
+        pg.evaluate("""(function () { var D = window.AthenaDemo, o = D.run; window.__zonderIk = 1;
+          D.run = function (fn) { var p = Promise.resolve(o.apply(D, arguments)); return fn !== 'apiTeamRapport' ? p : p.then(function (d) { if (window.__zonderIk > 0 && d && d.ok && d.result) { window.__zonderIk--; delete d.result.ik; } return d; }); }; })()""")
+        pg.wait_for_function("METING.eersteOk && !METING.bezig && !!leesOpslag('aa_metingen_verzonden')", timeout=8000)  # eerst de verzending na de start (die leegt METING.lijst)
+        JS = "metingenLees().filter(function (m) { return m.fn === 'js' && /beheer/.test(m.fout); }).map(function (m) { return m.fout; })"
+        m0 = len(pg.evaluate(JS))
+        desk('rapporten', '#crmInhoud .leeg:has-text("Kon het rapport niet maken")')
+        tekst = pg.inner_text('#crmInhoud .leeg')
+        ok('v7.9.5: een fout bij het tekenen van Rapporten → Teams geeft de vaste zin met Opnieuw proberen', 'Kon het rapport niet maken: een fout bij het tekenen van het rapport (komt in Instellingen → Metingen)' in tekst, tekst)
+        js = pg.evaluate(JS)
+        ok('v7.9.5: de fout bij het tekenen staat als meting met fn js in METING.lijst', m0 == 0 and len(js) == 1, [m0, js])
+        ok('v7.9.5: de fout bij het tekenen staat in console.error', any('beheer' in x for x in cons), cons[-3:])
+        ok('v7.9.5: geen melding bij een fout bij het tekenen (de catch herstelt alleen het scherm)', pg.locator('#toast.aan:has-text("Niet gelukt")').count() == 0)
+        ok('v7.9.5: de weergavechips (Teams, Week, MT) en Definities blijven', all(pg.locator('#crmBalk [data-rweergave="%s"]' % w).count() == 1 for w in ('teams', 'week', 'mt')) and pg.locator('#crmBalk [data-defs]').count() == 1)
+        ok('v7.9.5: de kaart Beheer staat er (Mijlpalen, Gebruikers, Jaardoel en aannames, Overstap)', all(pg.locator('#crmInhoud [data-beheer="%s"]' % k).count() == 1 for k in ('mijlpalen', 'gebruikers', 'aannames', 'v79')) and pg.locator('#crmInhoud #crmBeheer').count() == 1)
+        pg.click('#crmInhoud [data-beheer="gebruikers"]'); pg.wait_for_selector('#crmBeheer .kop:has-text("Gebruikers")', timeout=5000)
+        ok('v7.9.5: Beheer → Gebruikers opent in #crmBeheer', pg.locator('#crmBeheer [data-gbewerk]').count() >= 1)
+        pg.click('#crmInhoud [data-beheer="aannames"]'); venster_open('#aannameLijst'); pg.click('#venster [data-cf-annuleer]'); venster_dicht()
+        ok('v7.9.5: Beheer → Jaardoel en aannames opent het venster', True)
+        pg.click('#crmInhoud .leeg [data-crmtab="rapport"]'); pg.wait_for_selector('#crmInhoud .alle-team', timeout=8000); pg.wait_for_timeout(300)
+        ok('v7.9.5: Opnieuw proberen tekent het rapport (Alle teams)', pg.locator('#crmInhoud .leeg [data-crmtab="rapport"]').count() == 0 and pg.locator('#crmInhoud [data-beheer="mijlpalen"]').count() == 1)
+        ok('v7.9.5: zonder JS-fout in de pagina', len(pageerrors) == f0, pageerrors[f0:])
+    stap('g5_795_tekenfout', g5_795_tekenfout)
     c.close()
     b.close()
 

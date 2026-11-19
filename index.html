@@ -1561,6 +1561,11 @@
   // v7.6: run() is een dunne schil om runKern(fn, args, opties): de 140 aanroepers blijven gelijk. opties.stil (metingen, apiCijfers) = geen toast, geen
   // meting, de koppeling niet aanraken bij 'secret'. v7.9.4 r8: zacht = alleen geen toast
   function run(fn) { return runKern(fn, Array.prototype.slice.call(arguments, 1), null); }
+  // v7.2: Nederlandse melding (time-out, fetch-fout per browser); v7.9.5: ook in een scherm
+  function foutTekst(e) {
+    var n = e && e.name;
+    return n === 'AbortError' ? 'de server reageert niet — probeer het zo nog eens' : n === 'TypeError' ? (navigator.onLine === false ? 'je bent offline' : 'geen verbinding met de server — probeer het zo nog eens') : (e && e.message) || 'probeer opnieuw';
+  }
   function runKern(fn, args, opties) {
     opties = opties || {};
     var ms = RUN_LANG.hasOwnProperty(fn) ? RUN_TIMEOUT_LANG_MS : RUN_TIMEOUT_MS, t0 = tijdNu();  // v7.2; v7.6: t0 voor de meting
@@ -1579,9 +1584,7 @@
         throw new Error((d && d.fout) || 'serverfout');
       })
       .catch(function (err) {
-        var m = (err && err.message) || 'probeer opnieuw';
-        if (err && err.name === 'AbortError') m = 'de server reageert niet — probeer het zo nog eens';  // v7.2: de time-out van metTimeout (een hangende fetch geeft op iOS geen TypeError)
-        else if (err && err.name === 'TypeError') m = navigator.onLine === false ? 'je bent offline' : 'geen verbinding met de server — probeer het zo nog eens';  // v7.2: fetch-fouten zijn Engels en per browser anders ("Failed to fetch", "Load failed")
+        var m = foutTekst(err);
         meet(fn, t0, false, foutCode(err), opties);  // v7.6
         // v7.9 (iOS-review): eisNieuweApp() in Code.gs; in standalone heeft de toast geen herlaadknop, dus de balk "Nieuwe versie" (nooit vanzelf herladen).
         // v7.9 (iOS-review, tweede ronde): NIEUWE_VERSIE doet eerst de update-check van de worker en toont de balk pas daarna; zonder service worker of in
@@ -1598,7 +1601,7 @@
      maxMs en één ingekorte foutmelding zonder e-mailadressen. Nooit argumenten of gegevens. Verzenden (stil, nooit een toast, nooit een lus) zodra er
      iets is én de vorige verzending meer dan een dag geleden is óf er METING.drempel ruwe metingen staan: na de eerste geslaagde aanroep bij het
      starten en als de app uit beeld gaat. Niet in de portaalmodus. In de demo gaat het via zetOpslag naar het geheugen van de pagina (DEMO_OPSLAG). */
-  var APP_VERSIE = '7.9.4';  // v7.9.4 (schrijfcontract 7.9.2); bump per release
+  var APP_VERSIE = '7.9.5';  // v7.9.5 (Code.gs 7.9.4, schrijfcontract 7.9.2); bump per release
   var SW_REGISTREER = function () {};  // v7.9: wordt onderaan gezet als er een service worker kan zijn (zie de registratie)
   var NIEUWE_VERSIE = function () {};  // v7.9 (iOS-review): update-check en dan #updateBalk (Herladen, Later); onderaan gezet bij de service worker, zoals SW_REGISTREER
   var METING = { max: 400, drempel: 50, perKeer: 150, dag24: 24 * 60 * 60 * 1000, wachtNaFout: 10 * 60 * 1000, bezig: false, eersteOk: false, poging: 0, laatsteJs: '', laatsteJsOp: 0 };
@@ -3430,7 +3433,8 @@
   function crmOpnieuw() { crmVerouderd(); CRM.wacht = CRM.tab !== 'rapport'; laadCrmBasis(1, 1).catch(function () {}); }  // v7.9.4: vers en stil
   function crmVers(bord) { if (!bord) CRM.pipeline = null; CRM.taken = CRM.rapport = CRM.sturing = null; crmStil(); }
   function crmStil(l) { if (!l) CRM.oud = 0; laadCrmBasis(!(l && CRM.laadt), !l).catch(function () { if (!(CRM.bnr >= CRM.nr)) CRM.oud = 1; }).then(function () { var a = document.activeElement; if (lijstOpen() && CRM.basis) { renderCrm();
-    if (l && (!a || a === document.body || !document.contains(a))) focusStil(el('crmInhoud').querySelector('.leeg button') || el(isDesk() ? 'crmBalk' : 'crmTabs').querySelector('.aan')); } }); }  // v7.9.4 r8–r13
+    if (l) focusPoging(a); } }); }  // v7.9.4 r8–r13
+  function focusPoging(a) { if (!a || a === document.body || !document.contains(a)) focusStil(el('crmInhoud').querySelector('.leeg button') || el(isDesk() ? 'crmBalk' : 'crmTabs').querySelector('.aan')); }  // v7.9.5
   function lijstOpen() { return !CRM.detail && /^(scholen|personen)$/.test(CRM.tab) && el('view-relaties').classList.contains('actief'); }
   function crmFout(t) { return '<div class="leeg">' + t + ' <button class="chip" data-crmtab="' + CRM.tab + '">Opnieuw proberen</button></div>'; }
   function initialen(n) { var d = String(n || '?').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, ' ').trim().split(/\s+/); return ((d[0] || '?').charAt(0) + (d.length > 1 ? d[d.length - 1].charAt(0) : '')).toUpperCase(); }
@@ -3868,7 +3872,7 @@
 
   /* --- rapport en beheer --- */
   function laadRapport() {
-    var W = rWeergave(); if (W !== 'teams') { laadSturing(W); return; }  // v7.9 (punt 19, 20): Week en MT doen één aanroep van apiSturing
+    var W = rWeergave(), n = CRM.rnr = (CRM.rnr || 0) + 1, f = CRM.rFocus; CRM.rFocus = 0; if (W !== 'teams') { laadSturing(W); return; }  // v7.9 (punt 19, 20): Week en MT doen één aanroep van apiSturing; v7.9.5: n, f
     // v4.4: bij bladeren of een andere periode blijft de balk staan (geen sprong); de knoppen gaan uit tot het nieuwe rapport er is
     CRM.act = null;  // nieuw rapport: de activiteit ook opnieuw ophalen
     var nav = el('crmBalk').querySelector('.periode-nav');
@@ -3882,9 +3886,13 @@
     // v7.9 (review T7): het blok hangt alleen af van de controle van vandaag; bewaard per sessie zolang het de rijen van vandaag zijn (Nu opnieuw rekenen vervangt het)
     var dqBewaard = !!(CRM.dq && CRM.dq.contracten && CRM.dq.dag === vandaagStr());
     var dq = v79() && magApp('datakwaliteit') ? (dqBewaard ? CRM.dq : run('apiSturing', 'datakwaliteit', {}).catch(function () { return null; })) : null;
-    Promise.all([run('apiTeamRapport', CRM.preset, CRM.rTeam, CRM.rEigenaar, CRM.rStap), magApp('pipeline') && (!CRM.rTeam || CRM.rTeam === 'consultancy') ? run('apiRapport', CRM.preset, CRM.rEigenaar, CRM.rStap) : null, dq]).then(function (r) { CRM.rapport = r[0]; CRM.pijp = r[1]; CRM.dq = r[2]; CRM.rTeam = r[0].team; if (CRM.tab === 'rapport' && rWeergave() === 'teams') renderRapport(); })
-      .catch(function () { if (CRM.tab === 'rapport') el('crmInhoud').innerHTML = '<div class="leeg">Kon het rapport niet maken.</div>'; })
-      .then(function () { el('crmInhoud').style.opacity = ''; Array.prototype.forEach.call(el('crmBalk').querySelectorAll('button[disabled]:not([data-rstap="1"])'), function (b) { b.disabled = false; }); });
+    Promise.all([run('apiTeamRapport', CRM.preset, CRM.rTeam, CRM.rEigenaar, CRM.rStap), magApp('pipeline') && (!CRM.rTeam || CRM.rTeam === 'consultancy') ? run('apiRapport', CRM.preset, CRM.rEigenaar, CRM.rStap) : null, dq]).then(function (r) { if (n !== CRM.rnr) return; CRM.rapport = r[0]; CRM.pijp = r[1]; CRM.dq = r[2]; CRM.rTeam = r[0].team; if (CRM.tab === 'rapport' && rWeergave() === 'teams') renderRapport(); }, function (e) { throw { r: foutTekst(e) }; })
+      .catch(function (e) {  // v7.9.5: reden, Opnieuw proberen, weergaven en Beheer; tekenfout gemeten
+        if (n !== CRM.rnr) return; var t = e && e.r; if (!t) { console.error(e); jsFout(e && e.message, plekUitStack(e)); }
+        CRM.rapport = null;
+        if (CRM.tab === 'rapport') { el('crmBalk').innerHTML = rWeergaveChips(); el('crmInhoud').innerHTML = crmFout('Kon het rapport niet maken: ' + esc(t || 'een fout bij het tekenen van het rapport' + (magApp('metingen') ? ' (komt in Instellingen → Metingen)' : ''))) + beheerKaart(ikBen()); }
+      })
+      .then(function () { if (n !== CRM.rnr) return; if (f) focusPoging(document.activeElement); el('crmInhoud').style.opacity = ''; Array.prototype.forEach.call(el('crmBalk').querySelectorAll('button[disabled]:not([data-rstap="1"])'), function (b) { b.disabled = false; }); });
   }
   function balk(label, waarde, sterk, max, tekst) {
     var pct = function (v) { return Math.max(0, Math.min(100, Math.round(100 * (Number(v) || 0) / (max || 1)))); };
@@ -3941,6 +3949,17 @@
   var PERIODE_NAAM = { week: 'Week', maand: 'Maand', kwartaal: 'Kwartaal', halfjaar: 'Half jaar', jaar: 'Jaar', schooljaar: 'Schooljaar' };
   var PER_PERIODE = { week: 'per week', maand: 'per maand', kwartaal: 'per kwartaal', halfjaar: 'per half jaar', jaar: 'per jaar', schooljaar: 'per schooljaar' };
   var TEAM_KNOP = { alle: 'Alle teams' };
+  // v7.9.5: ook bij een mislukt rapport
+  function beheerKaart(ik) {
+    if (!ik || !ik.beheer) return ik && ik.rechten && ik.rechten.doelen ? '<div class="kop">Team</div><div class="kaart"><div class="balk" style="margin-top:0"><button class="knop licht klein" data-beheer="doelen">Doelen van mijn team</button></div></div>' : '';  // v4.0: teamlead
+    return '<div class="kop">Beheer</div><div class="kaart"><div class="balk" style="margin-top:0">' +
+      [['sync', 'Mail & agenda nu koppelen'], ['gebruikers', 'Gebruikers'], ['doelen', 'Doelen'], ['mijlpalen', 'Mijlpalen'], ['tracks', 'Tracks'], ['keuzelijsten', 'Keuzelijsten'], ['tags', 'Tags en velden'], ['talentrun', 'Talentrun nu'], ['urenimport', 'XPS-uren importeren'], ['talentimport', 'Talenten importeren uit XPS'], ['inrichten', 'Oude gegevens overzetten'], ['capsule', 'Capsule-migratie']]  // v7.7: talentimport
+        .concat(v79() ? [['cijfers', 'Register van cijfers'], ['aannames', 'Jaardoel en aannames'], ['werkelijkedatums', 'Werkelijke datums importeren'], ['v79', 'Overstap naar v7.9']] : [])  // v7.9: alleen met een backend van v7.9 of nieuwer
+        .map(function (b) { return '<button class="knop licht klein" data-beheer="' + b[0] + '">' + b[1] + '</button>'; }).join('') +
+      '</div><div class="balk">' + ['scholen', 'personen', 'kansen', 'activiteiten', 'taken', 'talenten', 'beoordelingen', 'talenturen'].map(function (t) { return '<button class="chip" data-export="' + t + '">CSV ' + t + '</button>'; }).join('') + '</div>' +  // v5.0: talenten, beoordelingen, talenturen
+      '<div class="hint">Mails en afspraken met scholen worden elk uur automatisch aan de juiste school en persoon gekoppeld. Tot ieders eigen Gmail gekoppeld is, kunnen collega\'s mails doorsturen of bcc\'en naar het CRM-adres (label CRM).</div></div>' +
+      '<div class="composer" id="crmBeheer"></div>';
+  }
   function renderRapport() {
     var W = rWeergave(); if (W !== 'teams') { if (CRM.sturing && CRM.sturing.weergave === W) renderSturing(); else laadSturing(W); return; }  // v7.9
     var R = CRM.rapport, P = CRM.pijp, beheer = !!R.ik.beheer, rr = R.ik.rechten || {}, defs = R.metrieken || [], kies = R.kiesbaar || [], gb = R.geblokkeerd || {};  // v7.9 (B1): geblokkeerd per metriek
@@ -3991,14 +4010,7 @@
     if (CRM.dq && CRM.dq.contracten) h += '<div id="dqWrap">' + dqBlokHtml(CRM.dq) + '</div>';  // v7.9 (punt 11): Datakwaliteit per eigenaar
     var kiezer = beheer || !!rr.teamlead;
     h += '<div class="kop">Activiteit ' + (R.eigenaar ? 'van ' + esc(R.eigenaar) : R.team === 'alle' ? 'van iedereen' : (kiezer ? 'van het team' : '')) + ' <small id="rapportActTelling"></small></div><div id="rapportActiviteit"><div class="spinner">Laden</div></div>';  // v3.3
-    if (!beheer && rr.doelen) h += '<div class="kop">Team</div><div class="kaart"><div class="balk" style="margin-top:0"><button class="knop licht klein" data-beheer="doelen">Doelen van mijn team</button></div></div>';  // v4.0: teamlead
-    if (beheer) h += '<div class="kop">Beheer</div><div class="kaart"><div class="balk" style="margin-top:0">' +
-      [['sync', 'Mail & agenda nu koppelen'], ['gebruikers', 'Gebruikers'], ['doelen', 'Doelen'], ['mijlpalen', 'Mijlpalen'], ['tracks', 'Tracks'], ['keuzelijsten', 'Keuzelijsten'], ['tags', 'Tags en velden'], ['talentrun', 'Talentrun nu'], ['urenimport', 'XPS-uren importeren'], ['talentimport', 'Talenten importeren uit XPS'], ['inrichten', 'Oude gegevens overzetten'], ['capsule', 'Capsule-migratie']]  // v7.7: talentimport
-        .concat(v79() ? [['cijfers', 'Register van cijfers'], ['aannames', 'Jaardoel en aannames'], ['werkelijkedatums', 'Werkelijke datums importeren'], ['v79', 'Overstap naar v7.9']] : [])  // v7.9: alleen met een backend van v7.9 of nieuwer
-        .map(function (b) { return '<button class="knop licht klein" data-beheer="' + b[0] + '">' + b[1] + '</button>'; }).join('') +
-      '</div><div class="balk">' + ['scholen', 'personen', 'kansen', 'activiteiten', 'taken', 'talenten', 'beoordelingen', 'talenturen'].map(function (t) { return '<button class="chip" data-export="' + t + '">CSV ' + t + '</button>'; }).join('') + '</div>' +  // v5.0: talenten, beoordelingen, talenturen
-      '<div class="hint">Mails en afspraken met scholen worden elk uur automatisch aan de juiste school en persoon gekoppeld. Tot ieders eigen Gmail gekoppeld is, kunnen collega\'s mails doorsturen of bcc\'en naar het CRM-adres (label CRM).</div></div>' +
-      '<div class="composer" id="crmBeheer"></div>';
+    h += beheerKaart(R.ik);
     el('crmInhoud').innerHTML = h;
     if (CRM.naarDq && el('dqBlok')) { CRM.naarDq = false; var dqk = el('dqBlok'); dqk.scrollIntoView({ block: 'start' }); focusStil(dqk); }  // v7.9: de melding "Datakwaliteit" opent dit blok
     if (el('rapportTalent')) run('apiTalentRapport', CRM.preset, CRM.rStap).then(function (T) { if (el('rapportTalent')) el('rapportTalent').innerHTML = talentRapportHtml(T, vkort); }).catch(function () { if (el('rapportTalent')) el('rapportTalent').innerHTML = '<div class="leeg">Kon het talentrapport niet maken.</div>'; });  // v5.0
@@ -4777,7 +4789,7 @@
       return;
     }
     if (t.closest('[data-crm-terug]')) { if (history.state && history.state.crm) history.back(); else sluitDetail(); return; }
-    if ((x = t.closest('[data-crmtab]'))) { if (x.dataset.crmtab !== CRM.tab) { CRM.tab = x.dataset.crmtab; el('crmNieuw').innerHTML = ''; formActie = null; } if (isDesk() && /^(scholen|personen)$/.test(CRM.tab)) DESK.contacten = CRM.tab; if (CRM.oud && x.closest('.leeg')) { x.disabled = true; return crmStil(1); } if (CRM.oud) crmStil(); renderCrm(); return; }  // v7.9.4 r11
+    if ((x = t.closest('[data-crmtab]'))) { if (x.dataset.crmtab !== CRM.tab) { CRM.tab = x.dataset.crmtab; el('crmNieuw').innerHTML = ''; formActie = null; } if (isDesk() && /^(scholen|personen)$/.test(CRM.tab)) DESK.contacten = CRM.tab; if (x.closest('.leeg') && CRM.tab == 'rapport') { CRM.rTeam = ''; CRM.rFocus = 1; } else if (CRM.oud && x.closest('.leeg')) { x.disabled = true; return crmStil(1); } if (CRM.oud) crmStil(); renderCrm(); return; }  // v7.9.4 r11; v7.9.5: het rapport opnieuw vanaf Alle teams
     if (t.closest('[data-crmmijn]')) { CRM.mijn = !CRM.mijn; CRM.weergaveActief = null; renderCrm(); return; }
     if (t.closest('[data-crmbrin]')) { CRM.zonderBrin = !CRM.zonderBrin; renderCrm(); return; }  // v7.9 (punt 6): scholen zonder BRIN
     if ((x = t.closest('[data-fwdatum]'))) { var fwd = REG.fw && REG.fw[x.getAttribute('data-fwdatum')]; if (fwd) andereDatumVenster(fwd, function () { crmVers(); herlaadDetail(); }); return; }  // v7.9 (punt 2): andere datum voor een wissel in de kansdetail
