@@ -148,6 +148,60 @@ def scenario_koud_crm(b):
     assert 'Niet bijgewerkt' in regel or staat, 'koude start (herstel r13, R13-1): na een mislukte stille verversing staat na Terug de regel "Niet bijgewerkt" of de school in de lijst: %r' % [oud, regel, staat]
     mock_post({'fn': '_faal', 'args': ['apiCrm', 0]}); c.close(); mock_post({'fn': '_reset'})
 
+def scenario_rapport_mislukt(b):
+    # v7.9.5: Rapporten → Teams mislukt voor de beheerder (test123), zoals in productie: apiTeamRapport faalt. De reden blijft in het scherm (de melding
+    # verdwijnt), de weergavechips blijven (Week, MT, Definities), de kaart Beheer werkt (Mijlpalen in #crmBeheer) en Opnieuw proberen tekent het
+    # rapport, ook na een mislukte stille verversing (CRM.oud). Faalt apiRapport blijvend (team consultancy), dan brengt Opnieuw proberen het
+    # management naar Alle teams (zonder apiRapport) in plaats van steeds dezelfde fout. Review: na Opnieuw proberen staat de focus op de chip of op de
+    # knop (R2), een mislukt bladeren houdt het team en vervangt de balk door de weergaven (R1, N3), en een oudere mislukte aanroep overschrijft geen
+    # nieuwer rapport (R1, volgnummer).
+    c = b.new_context(viewport={'width': 1280, 'height': 800}, service_workers='block'); pg = c.new_page(); log = []
+    pg.on('pageerror', lambda e: meldingen.append(('pageerror rapport mislukt', str(e))))
+    pg.on('request', lambda r: log.append(json.loads(r.post_data or '{}')) if r.method == 'POST' and r.url.startswith(BASIS + '/api') else None)
+    pg.goto(BASIS + '/'); pg.wait_for_selector('#apiInput'); pg.fill('#apiInput', BASIS + '/api'); pg.fill('#codeInput', 'test123'); pg.click('#codeOpslaan'); pg.wait_for_selector('#homeInhoud .hkaart'); pg.wait_for_timeout(600)
+    assert mock_post({'fn': '_faal', 'args': ['apiTeamRapport', 1]}).get('ok')
+    pg.click('.zb-item[data-desk="rapporten"]'); pg.wait_for_selector('#crmInhoud .leeg:has-text("Kon het rapport niet maken")', timeout=8000); pg.wait_for_timeout(300)
+    tekst = pg.inner_text('#crmInhoud .leeg')
+    assert 'Kon het rapport niet maken: Tijdelijke storing in de mock (gepland door de test).' in tekst and pg.locator('#crmInhoud .leeg [data-crmtab="rapport"]:has-text("Opnieuw proberen")').count() == 1, 'v7.9.5: de reden en Opnieuw proberen in het scherm: %r' % tekst
+    assert all(pg.locator('#crmBalk [data-rweergave="%s"]' % w).count() == 1 for w in ('teams', 'week', 'mt')) and pg.locator('#crmBalk [data-defs]').count() == 1, 'v7.9.5: de weergavechips en Definities blijven bij een mislukt rapport'
+    assert all(pg.locator('#crmInhoud [data-beheer="%s"]' % k).count() == 1 for k in ('mijlpalen', 'gebruikers', 'aannames', 'v79')) and pg.locator('#crmInhoud #crmBeheer').count() == 1, 'v7.9.5: de kaart Beheer staat bij een mislukt rapport'
+    pg.click('#crmInhoud [data-beheer="mijlpalen"]'); pg.wait_for_selector('#crmBeheer #leMijlpalen .le-rij', timeout=5000)
+    pg.evaluate("CRM.oud = 1")  # zoals na een mislukte stille verversing van de basis
+    n1 = len(log); pg.focus('#crmInhoud .leeg [data-crmtab="rapport"]'); pg.keyboard.press('Enter'); pg.wait_for_selector('#crmInhoud .alle-team', timeout=8000); pg.wait_for_timeout(300)
+    tr = [x.get('args') for x in log[n1:] if x.get('fn') == 'apiTeamRapport']
+    assert len(tr) == 1 and tr[0][1] == 'alle' and pg.locator('#crmInhoud .leeg [data-crmtab="rapport"]').count() == 0, 'v7.9.5: Opnieuw proberen tekent het rapport (Alle teams), ook met CRM.oud: %r' % tr
+    assert pg.evaluate("document.activeElement.matches('#crmBalk .aan')"), 'v7.9.5 (review R2): na een geslaagde poging staat de focus op de chip in #crmBalk: %r' % pg.evaluate("document.activeElement.outerHTML.slice(0, 80)")
+    assert mock_post({'fn': '_faal', 'args': ['apiRapport', 50]}).get('ok')
+    pg.click('#crmBalk [data-rteam="consultancy"]'); pg.wait_for_selector('#crmInhoud .leeg:has-text("Kon het rapport niet maken")', timeout=8000)
+    assert pg.locator('#crmBalk [data-rweergave="week"]').count() == 1, 'v7.9.5: de balk blijft na een mislukt team'
+    n2 = len(log); pg.click('#crmInhoud .leeg [data-crmtab="rapport"]'); pg.wait_for_selector('#crmInhoud .alle-team', timeout=8000); pg.wait_for_timeout(300)
+    assert not [x for x in log[n2:] if x.get('fn') == 'apiRapport'], 'v7.9.5: na een mislukte apiRapport brengt Opnieuw proberen het management naar Alle teams (geen apiRapport)'
+    mock_post({'fn': '_faal', 'args': ['apiRapport', 0]})
+    # review R1 en N3: een mislukt bladeren houdt het gekozen team; de balk toont dan alleen de weergaven (geen ‹ › of teamchip die niet bij de toestand past)
+    def wacht(js):  # wait_for_function gebruikt eval, en de CSP (MOCK_CSP=1) staat dat niet toe
+        for _ in range(80):
+            if pg.evaluate(js): return
+            pg.wait_for_timeout(100)
+        raise AssertionError('v7.9.5: wacht op ' + js)
+    pg.click('#crmBalk [data-rteam="consultancy"]'); wacht("!!(CRM.rapport && CRM.rapport.team === 'consultancy' && !el('crmInhoud').style.opacity)"); pg.wait_for_timeout(200)
+    assert mock_post({'fn': '_faal', 'args': ['apiTeamRapport', 1]}).get('ok')
+    pg.click('#crmBalk [data-rstap="-1"]'); pg.wait_for_selector('#crmInhoud .leeg:has-text("Kon het rapport niet maken")', timeout=8000)
+    assert pg.evaluate("CRM.rTeam") == 'consultancy' and pg.locator('#crmBalk [data-rstap], #crmBalk [data-rteam]').count() == 0 and pg.locator('#crmBalk [data-rweergave="teams"]').count() == 1, 'v7.9.5 (review R1, N3): na een mislukt bladeren blijft het team en staan alleen de weergaven in de balk: %r' % pg.evaluate("[CRM.rTeam, el('crmBalk').innerText]")
+    n3 = len(log); pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#crmBalk [data-rteam="consultancy"].aan', timeout=8000)
+    tr = [x.get('args') for x in log[n3:] if x.get('fn') == 'apiTeamRapport']
+    assert tr and tr[0][1] == 'consultancy', 'v7.9.5 (review R1): na een mislukt bladeren laadt Teams het gekozen team: %r' % tr
+    # review R2: mislukt Opnieuw proberen weer, dan staat de focus op Opnieuw proberen (niet op body)
+    assert mock_post({'fn': '_faal', 'args': ['apiTeamRapport', 2]}).get('ok')
+    pg.click('#crmBalk [data-rweergave="teams"]'); pg.wait_for_selector('#crmInhoud .leeg [data-crmtab="rapport"]', timeout=8000)
+    pg.focus('#crmInhoud .leeg [data-crmtab="rapport"]'); pg.keyboard.press('Enter'); pg.wait_for_timeout(300); wacht("!document.querySelector('#crmInhoud .spinner') && !!document.querySelector('#crmInhoud .leeg [data-crmtab=\"rapport\"]')"); pg.wait_for_timeout(200)
+    assert pg.evaluate("document.activeElement.matches('#crmInhoud .leeg [data-crmtab=\"rapport\"]')"), 'v7.9.5 (review R2): na een mislukte poging staat de focus op Opnieuw proberen: %r' % pg.evaluate("document.activeElement.outerHTML.slice(0, 80)")
+    # review R1 (volgnummer): een oudere aanroep die later mislukt, overschrijft het nieuwere rapport niet
+    pg.evaluate("""(function () { var o = window.fetch, k = 0; window.fetch = function (u, i) { if (/apiTeamRapport/.test((i && i.body) || '') && !k++) return new Promise(function (r) { setTimeout(function () { r(new Response(JSON.stringify({ ok: false, fout: 'Traag en mislukt' }), { headers: { 'Content-Type': 'application/json' } })); }, 1500); }); return o.apply(this, arguments); }; })()""")
+    pg.click('#crmInhoud .leeg [data-crmtab="rapport"]'); pg.wait_for_timeout(200)
+    pg.click('.zb-item[data-desk="rapporten"]'); pg.wait_for_selector('#crmInhoud .alle-team', timeout=8000); pg.wait_for_timeout(2000)
+    assert pg.locator('#crmInhoud .alle-team').count() >= 1 and pg.locator('#crmInhoud .leeg:has-text("Kon het rapport niet maken")').count() == 0 and pg.evaluate("!!CRM.rapport"), 'v7.9.5 (review R1): een oudere mislukte aanroep overschrijft het nieuwere rapport niet'
+    c.close(); mock_post({'fn': '_reset'})
+
 def scenario_bezetting_per_project(b):
     # v7.5: Bezetting → Per project, in een eigen context (eigen localStorage, zodat de rest van de test bij Per vacature blijft): één regel per project
     # (een knop in een h3 met aria-expanded, aria-controls en een korte naam via aria-labelledby); tikken klapt de vacatures eronder uit op de plek zelf
@@ -320,7 +374,8 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
     # v7.9 "v7.9 labels" (punt 17): één definitie per naam — contractwaarde (niet omzet) en open waarde (niet "in de pijplijn"); runKern stuurt v mee
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
-    assert all(x.get('v') == '7.9.4' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.4
+    av = page.evaluate('APP_VERSIE'); assert av and all(x.get('v') == av for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.5: de versie van de pagina, niet vast (APP_VERSIE hoeft niet gelijk aan VERSIE)
+    assert "var CACHE = 'athena-assistent-v%s'" % av in open(os.path.join(ROOT, 'sw.js'), encoding='utf-8').read(), 'v7.9.5 (review N2): APP_VERSIE %s hoort bij CACHE in sw.js' % av  # beide gaan per release omhoog
     # v7.9.4 (bouwpunt 19): contractwaarde zonder terugval op de omzet; het aantal projecten zonder contractwaarde staat als signaal op de tegel
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027") .t-signaal:text-is("1 zonder waarde")').count() == 1, 'v7.9.4: het signaal projecten zonder contractwaarde (herstel r2 N3, r3 N2: kort op de tegel)'
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
@@ -995,6 +1050,7 @@ with sync_playwright() as p:
     assert '0 open en 0 gewonnen kansen aan te vullen' in p9.inner_text('#v79-kansen') and 'open en gewonnen' in p9.inner_text('#v79stap-kansen .r-titel'), 'v7.9.4: de stap kansen noemt open en gewonnen'
     c9.close(); mock_post({'fn': '_reset'})
     scenario_koud_crm(b)  # v7.9.4 (herstel r13, R13-1): eigen context, koude start met aa_cache_crm
+    scenario_rapport_mislukt(b)  # v7.9.5: eigen context, Rapporten → Teams mislukt
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')
