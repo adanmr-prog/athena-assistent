@@ -40,7 +40,7 @@ var SOPHIE = 'demo-sophie', FEMKE = 'demo-femke', IRIS = 'demo-iris';
 
   /* ---- koppelcode: lezen, schrijven, verwijderen ---- */
   var ov = await roep(SOPHIE, 'apiOverzicht');
-  eis(ov.kpi && ov.kpi.scholen === 4 && ov.kpi.omzet === 157500, 'apiOverzicht met de koppelcode van het management (v6.4: met het net gewonnen demoproject)');
+  eis(ov.kpi && ov.kpi.scholen === 4 && ov.kpi.omzet === 131200 && ov.kpi.zonderContractwaarde === 2, 'apiOverzicht met de koppelcode van het management (v6.4: met het net gewonnen demoproject; v7.9.4: contractwaarde zonder terugval op de omzet, twee projecten zonder contractwaarde apart)');
   var crm = await roep(FEMKE, 'apiCrm');
   eis(crm.ik.naam === 'Femke de Wit' && crm.ik.team === 'accountmanagement' && crm.scholen.length === 12, 'apiCrm als accountmanager');
   eis(/secret/.test(await faalt('bestaat-niet', 'apiCrm')), 'een verkeerde koppelcode geeft secret');

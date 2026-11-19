@@ -273,7 +273,8 @@ with sync_playwright() as p:
                 melding = str(e).split('\n')[0][:160]
             # --- JS ---
             try:
-                bron = page.evaluate("Array.prototype.filter.call(document.scripts, function (s) { return !s.src; })[0].textContent")
+                # v7.9.4 herstel r1: het hoofdscript, niet <script id="deskVroeg"> (sinds v7.8 het eerste inline script); op schijf leest html.index('<script>') ook het hoofdscript
+                bron = page.evaluate("Array.prototype.filter.call(document.scripts, function (s) { return !s.src && !s.id; })[0].textContent")
                 cov = cdp.send('Profiler.takePreciseCoverage')
                 cu_map = code_eenheden(bron); n_cu = cu_map[-1] if cu_map else len(bron)
                 kand = [s for s in cov['result'] if s.get('url', '').split('#')[0] == basis]

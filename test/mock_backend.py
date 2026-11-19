@@ -151,8 +151,8 @@ def wissel_maken(k, van, naar, datum, bron):  # v7.9: zoals faseWisselRij in Cod
 REGISTER = {'contactmomenten': ('M14', 'Contactmomenten', 'Activiteiten met een contactvorm per maker, maandag t/m vrijdag.', ''), 'ap': ('M16', 'AP gepland', 'Fasewissels naar de rol AP gepland op werkelijke datum.', ''),
             'voorstellen': ('M16', 'Voorstellen', 'Fasewissels naar de rol voorstel op werkelijke datum.', ''), 'gewonnen': ('M16', 'Gewonnen', 'Fasewissels naar gewonnen op de akkoorddatum.', ''),
             'gecontracteerd': ('M04', 'Gecontracteerd', 'De getekende contractwaarde van de gewonnen kansen van het schooljaar.', ''), 'jaardoel': ('M01', 'Jaardoel', 'Eén getal met soort, periode, scope en basis.', ''),
-            'dekking': ('M07', 'Dekking en nog te vinden', '(Gecontracteerd + gewogen pipeline) ÷ jaardoel.', ''), 'datakwaliteit': ('M36', 'Datakwaliteit per eigenaar', 'Per datacontract geslaagd of gezakt, per eigenaar.', ''),
-            'logdekking': ('M34', 'Logdekking', 'Schoolafspraken in de agenda die ook in Athena staan.', 'besluit agenda-toegang (§5 besluit 10)'), 'contractwaarde': ('', 'Contractwaarde schooljaar', 'De som van de contractwaarde van de projecten van het schooljaar.', ''),
+            'dekking': ('M07', 'Dekking en nog te vinden', '(Gecontracteerd + gewogen pipeline) ÷ jaardoel.', ''), 'datakwaliteit': ('M36', 'Datakwaliteit per eigenaar', 'Per datacontract geslaagd, gezakt of leeg (niets te toetsen), per eigenaar.', ''),
+            'logdekking': ('M34', 'Logdekking', 'Schoolafspraken in de agenda die ook in Athena staan.', 'besluit agenda-toegang (§5 besluit 10)'), 'contractwaarde': ('', 'Contractwaarde schooljaar', 'De som van de getekende contractwaarde van de projecten van het schooljaar, zonder terugval op de omzet.', ''),
             'openWaarde': ('', 'Open waarde', 'De waarde van de open kansen, ongewogen.', ''), 'gewogenPijplijn': ('M06', 'Gewogen pipeline', 'Waarde × fasegewicht van de mijlpaal; lead telt niet.', '')}
 CIJFER_VERSIES = {'contactmomenten': 1}
 CIJFER_HISTORIE = [{'metriek': 'contactmomenten', 'versie': 1, 'definitie': REGISTER['contactmomenten'][2], 'status': 'afgetekend', 'ingang': d(-21), 'door': 'Menno', 'aangemaakt': d(-23) + ' 10:00'}]
@@ -162,6 +162,8 @@ AANNAMES_MOCK = {}
 STANDEN_MOCK = {'2026-10-29': 'maand'}
 def standen_mock(): return [{'sleutel': k if v == 'tussenstand' else k[:7], 'soort': v, 'peildatum': k, 'ingehaald': False, 'label': ('Tussenstand ' + k) if v == 'tussenstand' else 'Maandstand oktober 2026 (peildatum ' + k + ')'} for k, v in sorted(STANDEN_MOCK.items(), reverse=True)]
 def sturing_def(k): v = REGISTER.get(k, ('', k, '', '')); return {'m': v[0], 'label': v[1], 'definitie': v[2], 'versie': CIJFER_VERSIES.get(k, 0), 'status': 'afgetekend' if CIJFER_VERSIES.get(k) else 'concept', 'eigenaar': 'beheerder'}
+DQ_CONTRACTEN_MT = [{'id': 'gewonnen_is_getekend', 'label': 'Gewonnen is getekend', 'stand': 'gezakt', 'aantal': 3}, {'id': 'actieve_eigenaar', 'label': 'Open kans heeft een actieve eigenaar', 'stand': 'geslaagd', 'aantal': 0},
+                    {'id': 'logdekking', 'label': 'Logdekking', 'stand': 'geblokkeerd', 'aantal': 0}, {'id': 'verlenging_bekend', 'label': 'Verlengingsstatus bekend', 'stand': 'leeg', 'aantal': 0}]  # v7.9.4 (bouwpunt 1)
 def sturing_mock(weergave, o):
     if weergave == 'week':
         if not (beheer() or ik()['team'] == 'consultancy'): geen_toegang()
@@ -170,15 +172,20 @@ def sturing_mock(weergave, o):
         rijen = [{'naam': 'Menno', 'team': 'consultancy', 'cijfers': c, 'vertraging': v, 'doelen': {'contactmomenten': 12, 'ap': 2}, 'geblokkeerd': {}}]
         if beheer(): rijen.append({'naam': 'beheerder', 'team': 'management', 'cijfers': dict(c, contactmomenten=3, ap=0, voorstellen=0, gewonnen=0), 'vertraging': v, 'doelen': {}, 'geblokkeerd': {}})
         stap = min(0, int(o.get('stap') or 0))
+        if TEAM_LEEG[0]:  # v7.9.4 (bouwpunt 5): zoals sturingWeek: geen OC-regels, het teamtotaal per cijfer geblokkeerd (null, nooit 0); de regel beheerder telt gewoon
+            tb = 'geen leden in het team (Beheer → Gebruikers)'; rijen = [r for r in rijen if r['naam'] == 'beheerder']
+            return {'weergave': 'week', 'van': d(-2 + 7 * stap), 'tot': d(0 + 7 * stap), 'eind': d(4 + 7 * stap), 'label': 'week 46 van 2026', 'stap': stap, 'lopend': stap == 0, 'week': SLEUTELS['week'][0]['waarde'],
+                    'rijen': rijen, 'totaal': {'cijfers': {k: None for k in c}, 'vertraging': {'mediaan': None, 'aantal': 0, 'norm': 'norm niet vastgesteld', 'boven': None}, 'doelen': {}, 'geblokkeerd': {k: tb for k in c}},
+                    'defs': {k: sturing_def(k) for k in ('contactmomenten', 'ap', 'voorstellen', 'gewonnen')}, 'rolOntbreekt': ['ad'], 'rollenIngesteld': True, 'kiesbaar': [], 'eigenaar': '', 'teamBlokkade': tb}
         return {'weergave': 'week', 'van': d(-2 + 7 * stap), 'tot': d(0 + 7 * stap), 'eind': d(4 + 7 * stap), 'label': 'week 46 van 2026', 'stap': stap, 'lopend': stap == 0, 'week': SLEUTELS['week'][0]['waarde'],
                 'rijen': rijen, 'totaal': {'cijfers': c, 'vertraging': v, 'doelen': {}, 'geblokkeerd': {}}, 'defs': {k: sturing_def(k) for k in ('contactmomenten', 'ap', 'voorstellen', 'gewonnen')},
-                'rolOntbreekt': ['ad'], 'rollenIngesteld': True, 'kiesbaar': ['Menno'] if beheer() else [], 'eigenaar': ''}
+                'rolOntbreekt': ['ad'], 'rollenIngesteld': True, 'kiesbaar': ['Menno'] if beheer() else [], 'eigenaar': '', 'teamBlokkade': ''}  # v7.9.4: teamBlokkade ('' of 'geen leden in het team …')
     if weergave == 'mt':
         if not beheer(): geen_toegang()
         cijfer = lambda k, w, blok='', uit=None: {'id': k, 'm': REGISTER.get(k, ('',))[0], 'label': REGISTER.get(k, ('', k))[1], 'soort': 'euro', 'waarde': '' if blok else w, 'uitsplitsing': [] if blok else (uit or []), 'extra': {}, 'geblokkeerd': blok, 'def': sturing_def(k)}
         jd = AANNAMES_MOCK.get('jaardoel'); blok = '' if jd and isinstance(jd.get('waarde'), dict) and jd['waarde'].get('waarde') else 'besluit jaardoel (§5 besluit 2)'
         blokken = [{'id': 'koers', 'label': 'Koers op het jaardoel', 'besluit': 'B1 en B2', 'cijfers': [cijfer('jaardoel', 250000, blok), cijfer('gecontracteerd', 87580, '', [{'label': 'nieuw', 'waarde': 37580}, {'label': 'bestaand', 'waarde': 50000}]), cijfer('gewogenPijplijn', 12020), cijfer('dekking', 39.8, blok)]},
-                   {'id': 'datakwaliteit', 'label': 'Datakwaliteit', 'besluit': 'B14', 'cijfers': [cijfer('datakwaliteit', 3, '', [{'label': 'gewonnen_is_getekend', 'waarde': 3}]), cijfer('logdekking', '', 'besluit agenda-toegang (§5 besluit 10)')]}]
+                   {'id': 'datakwaliteit', 'label': 'Datakwaliteit', 'besluit': 'B14', 'cijfers': [dict(cijfer('datakwaliteit', 3, '', [{'label': 'gewonnen_is_getekend', 'waarde': 3}]), soort='aantal', extra={'dag': d(0), 'contracten': DQ_CONTRACTEN_MT, 'telling': {'geslaagd': 1, 'gezakt': 1, 'nietGetoetst': 0, 'geblokkeerd': 1, 'leeg': 1}, 'reden': ''}), cijfer('logdekking', '', 'besluit agenda-toegang (§5 besluit 10)')]}]  # v7.9.4 (bouwpunt 1): de stand per contract, ook leeg
         st = str(o.get('stand') or '')
         return {'weergave': 'mt', 'peildatum': st if len(st) == 10 else ('2026-10-29' if st else d(0)), 'schooljaar': '2026-2027', 'bevroren': bool(st), 'standSoort': STANDEN_MOCK.get(st if len(st) == 10 else '2026-10-29', '') if st else '', 'stand': st,
                 'standen': standen_mock(), 'blokken': blokken, 'defs': {c['id']: c['def'] for b in blokken for c in b['cijfers']}, 'scope': [], 'noemer': None, 'magBevriezen': True, 'tussenstandVandaag': d(0) in STANDEN_MOCK}
@@ -188,7 +195,9 @@ def sturing_mock(weergave, o):
         verw = [{'soort': 'kans', 'id': 'k1', 'naam': 'NT2-ondersteuning (ISK Voorbeeld)', 'open': True}, {'soort': 'kans', 'id': '', 'naam': 'kans van een collega', 'open': False}]
         per = [{'eigenaar': eig, 'aantal': 2, 'gezakt': [{'contract': 'gewonnen_is_getekend', 'label': 'Gewonnen is getekend', 'aantal': 2, 'verwijzingen': verw if beheer() else verw[1:]}]}]
         return {'weergave': 'datakwaliteit', 'dag': d(0), 'bron': 'vers' if o.get('vers') is True else 'trigger', 'vandaag': True,
-                'contracten': [{'id': 'gewonnen_is_getekend', 'label': 'Gewonnen is getekend', 'eigenaarSoort': 'eigenaar van de kans', 'stand': 'gezakt', 'aantal': 2, 'reden': ''}, {'id': 'logdekking', 'label': 'Logdekking', 'eigenaarSoort': 'beheerder', 'stand': 'geblokkeerd', 'aantal': 0, 'reden': 'geblokkeerd tot besluit agenda-toegang (§5 besluit 10)'}],
+                'contracten': [{'id': 'gewonnen_is_getekend', 'label': 'Gewonnen is getekend', 'eigenaarSoort': 'eigenaar van de kans', 'stand': 'gezakt', 'aantal': 2, 'reden': ''}, {'id': 'logdekking', 'label': 'Logdekking', 'eigenaarSoort': 'beheerder', 'stand': 'geblokkeerd', 'aantal': 0, 'reden': 'geblokkeerd tot besluit agenda-toegang (§5 besluit 10)'},
+                               {'id': 'verlenging_bekend', 'label': 'Verlengingsstatus bekend', 'eigenaarSoort': 'accountmanager', 'stand': 'leeg', 'aantal': 0, 'reden': 'niets te toetsen: geen projecten van het vorige schooljaar'}],  # v7.9.4: stand leeg
+                'telling': {'geslaagd': 0, 'gezakt': 1, 'nietGetoetst': 0, 'geblokkeerd': 1, 'leeg': 1},  # v7.9.4
                 'perEigenaar': per, 'defs': {'datakwaliteit': sturing_def('datakwaliteit')}, 'magVers': beheer()}
     raise ValueError('Kies de weergave week, mt of datakwaliteit.')
 TAKEN = [
@@ -219,11 +228,11 @@ METR = [{'id': 'gesprekken', 'team': 'consultancy', 'label': 'Gesprekken', 'kort
         {'id': 'lopendeProjecten', 'team': 'accountmanagement', 'label': 'Lopende projecten', 'kort': 'Lopend', 'soort': 'aantal'}, {'id': 'bezetting', 'team': 'accountmanagement', 'label': 'Bezetting (gevuld van nodig)', 'kort': 'Bezet', 'soort': 'procent'},
         {'id': 'dagenTotBezetting', 'team': 'accountmanagement', 'label': 'Dagen tot bezetting', 'kort': 'Dagen', 'soort': 'dagen', 'laagIsGoed': True},
         {'id': 'voordrachten', 'team': 'talent', 'label': 'Voordrachten', 'kort': 'Voordr.', 'soort': 'aantal'}, {'id': 'timeToFill', 'team': 'talent', 'label': 'Time-to-fill', 'kort': 'TTF', 'soort': 'dagen', 'laagIsGoed': True},
-        {'id': 'contractwaarde', 'team': 'bedrijf', 'label': 'Contractwaarde schooljaar', 'kort': 'Contract', 'soort': 'euro'}, {'id': 'verlengingspercentage', 'team': 'bedrijf', 'label': 'Verlengingspercentage', 'kort': 'Verl.', 'soort': 'procent'}]
+        {'id': 'contractwaarde', 'team': 'bedrijf', 'label': 'Contractwaarde schooljaar', 'kort': 'Contract', 'soort': 'euro'}, {'id': 'verlengingspercentage', 'team': 'bedrijf', 'label': 'Verlengd per project', 'kort': 'Verl.', 'soort': 'procent'}]
 TEAMLEDEN = {'consultancy': ['Menno'], 'accountmanagement': ['Joris', 'Mees'], 'talent': ['Lotte']}
 CIJFERS = {'gesprekken': 4, 'gewonnenWaarde': 12000, 'conversie': 50, 'lopendeProjecten': 3, 'bezetting': 75, 'dagenTotBezetting': 12, 'voordrachten': 5, 'timeToFill': 9}
 def doelen_van(periode, eig): return {x['metric']: x['doel'] for x in DOELEN if x['periode'] == periode and x['eigenaar'] == eig}
-def bedrijf(): return {'schooljaar': '2026-2027', 'metrieken': [m for m in METR if m['team'] == 'bedrijf'], 'cijfers': {'contractwaarde': 87580, 'verlengingspercentage': 50}, 'doelen': doelen_van('schooljaar', 'bedrijf')}
+def bedrijf(): return {'schooljaar': '2026-2027', 'metrieken': [m for m in METR if m['team'] == 'bedrijf'], 'cijfers': {'contractwaarde': 87580, 'verlengingspercentage': 50}, 'doelen': doelen_van('schooljaar', 'bedrijf'), 'zonderContractwaarde': 1}  # v7.9.4: projecten zonder contractwaarde
 GEBRUIKERS = [{'id': 'g1', 'naam': 'Mees', 'email': 'mees@voorbeeld.nl', 'rol': 'am', 'actief': True, 'heeftCode': True}]
 
 def per_id(lijst): return {x['id']: x for x in lijst}
@@ -243,7 +252,7 @@ TRAJECTEN[1].update({'soortFacturatie': 'achteraf', 'gefactureerd': 'nee', 'vaka
 FACTUREN = [{'id': 'f1', 'trajectId': 't1', 'omschrijving': 'Factuur vooraf', 'bedrag': 20370, 'datum': d(-2), 'status': 'verzonden', 'factuurnummer': '99990001', 'bijzonderheden': 'op basis van 38 weken', 'exactId': '', 'door': 'Menno'},
             {'id': 'f2', 'trajectId': 't1', 'omschrijving': 'Januari', 'bedrag': 2037, 'datum': d(90), 'status': 'nog te doen', 'factuurnummer': '', 'bijzonderheden': '', 'exactId': '', 'door': 'Menno'}]
 KEUZES = {'verliesRedenen': ['te duur', 'geen budget', 'eigen oplossing', 'andere aanbieder', 'geen reactie', 'opgeschoond'], 'productsoorten': ['onderwijsondersteuning', 'huiswerkbegeleiding', 'examentraining', 'studentdocent', 'nt2-ondersteuning', 'surveillance', 'overig'],  # v7.9
-          'soortFacturatie': ['vooraf', 'achteraf'], 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
+          'soortFacturatie': ['vooraf', 'achteraf'], 'soortFacturatieSoorten': {'vooraf': 'vooraf', 'achteraf': 'achteraf'}, 'gefactureerd': ['ja', 'nee', 'n.v.t.'], 'vakanties': ['doorbetaald', 'niet doorbetaald', 'n.v.t.'], 'factuurStatussen': ['nog te doen', 'aangemaakt', 'verzonden', 'betaald'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt'], 'verlenging': ['nog bespreken', 'voorstel verstuurd', 'verlengd', 'stopt']}
 # v4.0: twee gebruikers. test123 = Menno (management), am123 = Joris (accountmanager): ziet geen pipeline, alleen zijn eigen projecten en facturatie
 ALLES = {o: {'zien': 'alles', 'wijzigen': 'alles'} for o in ('relaties', 'pipeline', 'projecten', 'facturatie', 'vacatures', 'kandidaten', 'talenten', 'beoordelingen', 'financien', 'metingen', 'cijfers', 'aannames', 'sturingWeek', 'sturingMt', 'datakwaliteit')}  # v5.0: talenten, beoordelingen; v7.6: metingen; v7.9: sturing
 IKKEN = {'test123': {'naam': 'Menno', 'team': 'management', 'rol': 'management', 'beheer': True, 'gekoppeld': True, 'rechten': dict(ALLES, beheer=True, teamlead=False, doelen=True)},
@@ -694,11 +703,11 @@ def handle_crm(fn, args):
             if any(str(kop.get('scholen-' + m['mijlpaal'], '')) not in ('1', '2', '3', '4', '5', '5b', '6') for m in MIJLPALEN if m['pipeline'] == 'Scholen'): raise ValueError('Kies voor elke mijlpaal van Scholen een fase uit Capsule (1 tot en met 6, of 5b).')  # v7.9.2: 5b
             return {'stap': 'fasen', 'toegepast': True, 'alGedaan': False, 'gewijzigd': True, 'mijlpalen': 6, 'toegevoegd': 6, 'verhuisd': {'1': 2, '2': 0, '3': 3, '4': 0, '5': 3, '5b': 0}, 'gewonnen': 0, 'dealDatum': 0, 'eerderGewonnen': 0, 'ongewijzigd': 0, 'wissels': 8, 'herzien': 0, 'herzienVerschil': {}, 'dubbel': [], 'gewichtenTerug': 0, 'aanname': 1,
                     'rollen': {'ingesteld': True, 'pipelinesZonder': []}, 'melding': 'De pipeline Scholen heeft nu de fasen van Capsule: 8 open kansen verhuisd.'}
-        if stap == 'status': return {'stap': 'status', 'fasen': {'alGedaan': False, 'mijlpalen': len([m for m in MIJLPALEN if m['pipeline'] == 'Scholen'])}, 'rollen': {'ingesteld': True, 'pipelinesZonder': [], 'afwijkend': 0}, 'tijdlijn': {'teOmzetten': 0, 'alOmgezet': 1}, 'wissels': {'teHerzien': 0}, 'kansen': {'zonderSchooljaar': 0, 'zonderKlant': 0}, 'redenen': {'gekoppeld': True, 'buitenLijst': 0}}
+        if stap == 'status': return {'stap': 'status', 'fasen': {'alGedaan': False, 'mijlpalen': len([m for m in MIJLPALEN if m['pipeline'] == 'Scholen'])}, 'rollen': {'ingesteld': True, 'pipelinesZonder': [], 'afwijkend': 0}, 'tijdlijn': {'teOmzetten': 0, 'alOmgezet': 1}, 'wissels': {'teHerzien': 0}, 'kansen': {'zonderSchooljaar': 0, 'zonderKlant': 0, 'teVullen': 0, 'zonderBasis': 0}, 'redenen': {'gekoppeld': True, 'buitenLijst': 0}}  # v7.9.4: teVullen, zonderBasis
         if stap == 'rollen': return {'stap': 'rollen', 'toegepast': True, 'gewijzigd': 0, 'rollen': {'ingesteld': True, 'pipelinesZonder': []}} if toe else {'stap': 'rollen', 'toegepast': False, 'pipelines': [], 'mijlpalen': [], 'afwijkend': []}  # r3 (R4): afwijkend
         if stap == 'tijdlijn': return {'stap': 'tijdlijn', 'toegepast': toe, 'teOmzetten': 0, 'alOmgezet': 1, 'zonderKans': 0, 'geschreven': 0}
         if stap == 'wissels': return {'stap': 'wissels', 'toegepast': toe, 'bekeken': 0, 'gewijzigd': 0, 'perBron': {}, 'nogLeeg': 0}
-        if stap == 'kansen': return {'stap': 'kansen', 'toegepast': toe, 'aantal': 0, 'perSchooljaar': {}, 'perKlant': {}}
+        if stap == 'kansen': return {'stap': 'kansen', 'toegepast': toe, 'aantal': 0, 'perSchooljaar': {}, 'perKlant': {}, 'open': 0, 'gewonnen': 0, 'zonderBasis': 0}  # v7.9.4: ook gewonnen kansen
         if stap == 'redenen': return {'stap': 'redenen', 'toegepast': toe, 'gekoppeld': True, 'redenen': [], 'lijst': VERLIES_REDENEN} if not toe else {'stap': 'redenen', 'toegepast': True, 'kansen': 0, 'wissels': 0, 'gekoppeld': True}
         raise ValueError('Onbekende stap. Kies status, fasen, rollen, tijdlijn, wissels, kansen, redenen.')
     if fn == 'apiFasewisselsImport':  # v7.9: proefdraai en toepassen met de tellingen van het verzonnen voorbeeld
@@ -790,7 +799,9 @@ def handle_crm(fn, args):
             return {'id': o['id']}
         if o.get('vorm') in TYPE_VAN_VORM: o['type'] = TYPE_VAN_VORM[o['vorm']]  # v7.1
         a = per_id(ACTIVITEITEN)[o['id']]; a.update(o); return dict(act_uit(a), agendaBijgewerkt=bool(a.get('agenda')))
-    if fn == 'apiInstellingen': return dict(INSTELLINGEN, schooljaar=INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027', schooljaarOpDatum='2026-2027', schooljaarHandmatig=INSTELLINGEN.get('schooljaarHandmatig', ''),
+    if fn == 'apiInstellingen' and args != ['_nieuw'] and [int(x) for x in BACKEND_VERSIE[0].split('.')] < [7, 9, 4]:  # v7.9.4: een oudere backend kent de soort per facturatievorm niet
+        uit = handle_crm('apiInstellingen', ['_nieuw']); uit.pop('soortFacturatieSoorten', None); return uit
+    if fn == 'apiInstellingen': return dict(INSTELLINGEN, soortFacturatie=KEUZES['soortFacturatie'], soortFacturatieSoorten=KEUZES['soortFacturatieSoorten'], schooljaar=INSTELLINGEN.get('schooljaarHandmatig') or '2026-2027', schooljaarOpDatum='2026-2027', schooljaarHandmatig=INSTELLINGEN.get('schooljaarHandmatig', ''),
                                             verlenging=KEUZES['verlenging'], kandidaatBronnen=['talentbestand', 'XPS-bestand', 'LinkedIn', 'eigen netwerk', 'sollicitatie', 'anders'],
                                             talentFuncties=TALENT_KEUZES['functies'], sectoren=TALENT_KEUZES['sectoren'], vakken=TALENT_KEUZES['vakken'], documentSoorten=TALENT_KEUZES['documentSoorten'], contractvormen=TALENT_KEUZES['contractvormen'], beoordelingsCriteria=TALENT_KEUZES['criteria'], talentBronnen=TALENT_KEUZES['bronnen'], verliesRedenen=INSTELLINGEN.get('verliesRedenen', VERLIES_REDENEN), productsoorten=INSTELLINGEN.get('productsoorten', PRODUCTSOORTEN))  # v5.0; v7.9
     if fn == 'apiSchooljaarOpslaan': INSTELLINGEN['schooljaarHandmatig'] = args[0]; return {'schooljaar': args[0] or '2026-2027'}  # v4.1
@@ -849,11 +860,20 @@ def handle_crm(fn, args):
         return project_bezetting(t)
     if fn == 'apiKeuzelijstOpslaan':
         INSTELLINGEN[args[0]] = [x['waarde'].lower() for x in args[1]]
+        if args[0] == 'soortFacturatie':  # v7.9.4 (bouwpunt 9): een soort per eigen waarde (vooraf of achteraf); zonder het veld soort (een oudere app) blijft de soort staan
+            KEUZES['soortFacturatie'] = INSTELLINGEN['soortFacturatie']
+            for x in args[1]:
+                w, so = x['waarde'].lower(), str(x.get('soort', '') or '').lower()
+                if so and so not in ('vooraf', 'achteraf'): raise ValueError('Kies voor de soort vooraf of achteraf, of laat hem leeg.')
+                if w in ('vooraf', 'achteraf') and so and so != w: raise ValueError('"' + w + '" is altijd ' + w + '.')
+                if x.get('oud') and x['oud'].lower() != w and x['oud'].lower() in KEUZES['soortFacturatieSoorten']: KEUZES['soortFacturatieSoorten'][w] = KEUZES['soortFacturatieSoorten'].pop(x['oud'].lower())
+                if 'soort' in x and w not in ('vooraf', 'achteraf'): KEUZES['soortFacturatieSoorten'][w] = so
+            KEUZES['soortFacturatieSoorten'] = {w: KEUZES['soortFacturatieSoorten'].get(w, '') for w in KEUZES['soortFacturatie']}
         if args[0] == 'schoolStatussen':
             for x in args[1]:
                 for sc in SCHOLEN:
                     if x.get('oud') and sc['status'] == x['oud']: sc['status'] = x['waarde'].lower()
-        return INSTELLINGEN
+        return handle_crm('apiInstellingen', [])  # v7.9.4: zoals Code.gs: apiKeuzelijstOpslaan geeft apiInstellingen() terug
     if fn == 'apiVelden':
         tags = {}
         for sc in SCHOLEN:
@@ -870,7 +890,7 @@ def handle_crm(fn, args):
         for st in t['stappen']: TAKEN.append({'id': 'tk' + uuid.uuid4().hex[:5], 'tekst': st['tekst'], 'bron': 'track', 'prio': st['prio'], 'deadline': (datetime.date.fromisoformat(args[2]) + datetime.timedelta(days=st['dagenNaStart'])).isoformat(), 'link': '', 'over': None, 'categorie': st['categorie'], 'eigenaar': args[3] if len(args) > 3 else 'Menno', 'status': 'open', 'afgerond': '', 'notitie': '', 'schoolId': kop.get('schoolId', ''), 'persoonId': kop.get('persoonId', ''), 'kansId': kop.get('kansId', '')})
         return {'aantal': len(t['stappen']), 'track': t['naam']}
     if fn == 'apiTrackOpslaan': return TRACKS
-    if fn == 'apiRapport':
+    if fn == 'apiRapport':  # v7.9.4 herstel r3 (R3): winst.gewonnenWaarde is de getekende waarde (null als geen winst er een heeft), met winst.zonderGetekend
         c = {'gesprekken': 4, 'mails': 11, 'afspraken': 2, 'notities': 3, 'nieuweKansen': 2, 'voorstellen': 1, 'gewonnen': 1, 'gewonnenWaarde': 12000, 'verloren': 1, 'takenAf': 6}
         c2 = {'gesprekken': 6, 'mails': 7, 'afspraken': 3, 'notities': 1, 'nieuweKansen': 1, 'voorstellen': 0, 'gewonnen': 0, 'gewonnenWaarde': 0, 'verloren': 0, 'takenAf': 4}
         team = {k: c[k] + c2[k] for k in c}
@@ -878,7 +898,7 @@ def handle_crm(fn, args):
                 'perPersoon': [{'naam': 'Menno', 'cijfers': c, 'doelen': {}}, {'naam': 'Mees', 'cijfers': c2, 'doelen': {'gesprekken': 8}}], 'totaal': {'open': 3, 'waarde': 30040, 'gewogen': 10370},
                 'forecast': [{'maand': d(30)[:7], 'waarde': 15040, 'gewogen': 7520, 'aantal': 1}, {'maand': d(60)[:7], 'waarde': 9000, 'gewogen': 2250, 'aantal': 1}, {'maand': 'zonder datum', 'waarde': 6000, 'gewogen': 600, 'aantal': 1}],
                 'trechter': [{'mijlpaal': m['mijlpaal'], 'pipeline': 'Scholen', 'aantal': len([k for k in CRMKANSEN if k['fase'] == m['mijlpaal']]), 'waarde': sum(k['waarde'] for k in CRMKANSEN if k['fase'] == m['mijlpaal']), 'gewogen': sum(kans_uit(k)['gewogen'] for k in CRMKANSEN if k['fase'] == m['mijlpaal'])} for m in MIJLPALEN],
-                'winst': {'gewonnen': 1, 'gewonnenWaarde': 12000, 'verloren': 1, 'verlorenWaarde': 4000, 'ratio': 50}, 'redenen': [{'reden': 'Te duur', 'aantal': 1}], 'stil': [kans_uit(k) for k in CRMKANSEN if kans_uit(k)['stil']]}
+                'winst': {'gewonnen': 1, 'gewonnenWaarde': 12000, 'zonderGetekend': 0, 'verloren': 1, 'verlorenWaarde': 4000, 'ratio': 50}, 'redenen': [{'reden': 'Te duur', 'aantal': 1}], 'stil': [kans_uit(k) for k in CRMKANSEN if kans_uit(k)['stil']]}
     if fn == 'apiDoelen':  # v4.2: ook team- en bedrijfsdoelen
         eig = ([{'waarde': 'bedrijf', 'label': 'Bedrijf (iedereen)', 'team': 'bedrijf'}] if beheer() else []) + [y for t in TEAMLEDEN for y in [{'waarde': 'team:' + t, 'label': 'Team ' + t, 'team': t}] + [{'waarde': n, 'label': n, 'team': t} for n in TEAMLEDEN[t]]] if beheer() else []
         return {'doelen': DOELEN, 'metrics': [m['id'] for m in METR], 'metrieken': METR, 'periodes': ['week', 'maand', 'kwartaal', 'halfjaar', 'jaar', 'schooljaar'], 'gebruikers': GEBRUIKERS_NAMEN, 'eigenaren': eig,
@@ -977,7 +997,8 @@ BREIN_UITGEVOERD = []
 INSTELLINGEN = {'schoolStatussen': ['lead', 'prospect', 'klant', 'oud-klant'], 'taakCategorieen': ['bellen', 'mailen', 'afspraak', 'voorstel', 'opvolgen', 'overig'], 'trajectStatussen': ['opstart', 'bezig', 'afgelopen', 'onduidelijk', 'gestopt']}
 FAAL = {}  # v7.3 (H2): api-naam -> hoeveel aanroepen nog moeten mislukken (gezet met {"fn":"_faal","args":[naam, n]})
 FAAL_FOUT = {}  # v7.9 (iOS-review): api-naam -> eigen melding van die storing (derde argument van _faal, bijv. "Herlaad de app: er is een nieuwe versie. Sluit de app en open hem opnieuw.")
-BACKEND_VERSIE = ['7.9.3']  # v7.9.3: herstel (schrijfcontract gelijk aan 7.9.2); v7.9.2: release (fase 5b); v7.9.1: release; v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
+TEAM_LEEG = [False]  # v7.9.4 (bouwpunt 5): {"fn":"_teamLeeg","args":[true]} bootst een team consultancy zonder (actieve) leden na; _reset zet hem terug
+BACKEND_VERSIE = ['7.9.4']  # v7.9.4: deel B op de echte stand (schrijfcontract gelijk aan 7.9.2); v7.9.3: herstel (schrijfcontract gelijk aan 7.9.2); v7.9.2: release (fase 5b); v7.9.1: release; v7.9 (R13): {"fn":"_backendVersie","args":["7.8"]} bootst een oudere backend na: apiCrm zonder backendVersie (zoals Code.gs 7.8); _reset zet hem terug
 # v7.3 (FL-1): de seed bevriezen zodra alle tabellen gevuld zijn. reset() zet elke lijst en dict in place terug (de handlers houden de modulevariabelen
 # bij naam vast), dus een draaiende mock begint daarna weer bij dezelfde uitgangsstand; ook HUIDIG (de ingelogde code) en FAAL gaan terug.
 _SEED = {k: copy.deepcopy(v) for k, v in list(globals().items()) if k.isupper() and isinstance(v, (list, dict))}
@@ -999,7 +1020,7 @@ def faal_zetten(args):
 def handle(fn, args):
     if fn == 'apiOverzicht':
         open_ = [a for a in ACTIES]
-        return {'datum': 'dinsdag 22 september', 'groet': 'Goedemorgen Menno', 'kpi': {'trajecten': 3, 'kansen': 2, 'scholen': 3, 'omzet': 64260, 'schooljaar': '2026-2027', 'pijplijn': 24040},
+        return {'datum': 'dinsdag 22 september', 'groet': 'Goedemorgen Menno', 'kpi': {'trajecten': 3, 'kansen': 2, 'scholen': 3, 'omzet': 64260, 'schooljaar': '2026-2027', 'pijplijn': 24040, 'zonderContractwaarde': 1},  # v7.9.4
                 'focus': open_[:3], 'aandacht': open_[3:], 'mails': [{'onderwerp': 'Rooster periode 2', 'van': 'A. de Vries', 'dagen': 4, 'threadId': 'th1', 'link': 'https://mail.google.com/'}, {'onderwerp': 'Factuur september', 'van': 'Administratie Lyceum Demo', 'dagen': 2, 'link': 'https://mail.google.com/'}],
                 'agenda': [{'tijd': '10:00', 'titel': 'Gesprek teamleider Lyceum Demo', 'duurMin': 60}, {'tijd': '14:30', 'titel': 'Intake ondersteuner', 'duurMin': 45}], 'kansen': [kans_uit(k) for k in CRMKANSEN if k['fase'] not in ('gewonnen', 'verloren')], 'tellingScholen': 4}
     if fn == 'apiActieKlaar':
@@ -1204,7 +1225,9 @@ class H(SimpleHTTPRequestHandler):
         body = json.loads(ruw)
         if body.get('fn') == '_reset': return self.json(reset())  # v7.3 (FL-1): testhulp, zonder koppelcode
         if body.get('fn') == '_backendVersie':  # v7.9 (R13): testhulp: de versie die apiCrm noemt (een oudere = zonder backendVersie)
-            v = str((body.get('args') or ['7.9.3'])[0] or '7.9.3'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
+            v = str((body.get('args') or ['7.9.4'])[0] or '7.9.4'); BACKEND_VERSIE[0] = v; return self.json({'ok': True, 'backendVersie': v})
+        if body.get('fn') == '_teamLeeg':  # v7.9.4 (bouwpunt 5): testhulp: het team consultancy heeft geen leden (weekweergave)
+            TEAM_LEEG[0] = bool((body.get('args') or [True])[0]); return self.json({'ok': True, 'teamLeeg': TEAM_LEEG[0]})
         if body.get('fn') == '_faal':  # v7.3 (H2): testhulp: de volgende n aanroepen van een api mislukken
             try: return self.json(faal_zetten(body.get('args') or []))
             except Exception as e: return self.json({'ok': False, 'fout': str(e)})

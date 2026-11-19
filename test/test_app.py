@@ -124,6 +124,30 @@ def scenario_nieuw_naast_venster(pg):
     assert aanroepen == [('tk2', 'Kennismakingsmail Montessori Demo (venster)'), (None, 'Half getypte taak naast het venster')], 'venster en pagina slaan elk hun eigen taak op: ' + repr(aanroepen)
     assert pg.locator('#crmNieuw #cf-tekst').count() == 0, 'het paginaformulier sluit na het opslaan'
 
+def scenario_koud_crm(b):
+    # v7.9.4 (herstel r13, R13-1): koude start met de bewaarde lijst (aa_cache_crm) en een apiCrm die blijft mislukken. Nog geen apiCrm gelukt in deze
+    # sessie (CRM.bnr bestaat niet), dus een mislukte stille verversing na + School moet de vlag CRM.oud toch zetten: na Terug de regel "Niet bijgewerkt"
+    # (of, als een poging lukt, de school in de lijst). De demo kan dit niet nabootsen (geen localStorage over een herlaad heen); daarom tegen de mock
+    c = b.new_context(viewport={'width': 375, 'height': 667}, is_mobile=True, has_touch=True, service_workers='block'); pg = c.new_page()
+    pg.on('pageerror', lambda e: meldingen.append(('pageerror koude start', str(e))))
+    pg.goto(BASIS + '/'); pg.wait_for_selector('#apiInput'); pg.fill('#apiInput', BASIS + '/api'); pg.fill('#codeInput', 'test123'); pg.click('#codeOpslaan'); pg.wait_for_selector('nav button[data-view="relaties"]'); pg.wait_for_timeout(800)
+    pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=10000); pg.wait_for_function("() => CRM.laadt === null", timeout=10000)
+    assert pg.evaluate("!!localStorage.getItem('aa_cache_crm')"), 'koude start: de lijst staat in aa_cache_crm'
+    pg.reload(); pg.wait_for_selector('nav button[data-view="relaties"]'); pg.wait_for_timeout(800)
+    assert pg.evaluate("CRM.bnr === undefined"), 'koude start: nog geen apiCrm gelukt in deze sessie'
+    assert mock_post({'fn': '_faal', 'args': ['apiCrm', 3]}).get('ok')  # Relaties, de stille verversing na + School en de poging bij Terug
+    pg.tap('nav button[data-view="relaties"]'); pg.wait_for_selector('#crmInhoud .rij[data-crm-open^="school:"]', timeout=10000); pg.wait_for_function("() => CRM.laadt === null", timeout=10000)
+    pg.tap('#crmTabs [data-crmtab="scholen"]'); pg.wait_for_timeout(300)
+    naam = 'Verzonnen school koude start'
+    pg.tap('#crmBalk [data-crmnieuw="school"]'); pg.wait_for_selector('#crmNieuw input[id$="naam"]'); pg.fill('#crmNieuw input[id$="naam"]', naam)
+    pg.locator('#crmNieuw button:has-text("Opslaan")').first.tap(); pg.wait_for_selector('#crmDetailScherm .d-naam h2:has-text("%s")' % naam, timeout=10000)
+    pg.wait_for_function("() => CRM.laadt === null", timeout=10000); pg.wait_for_timeout(300); oud = pg.evaluate("CRM.oud")
+    pg.tap('#crmDetailScherm [data-crm-terug]'); pg.wait_for_timeout(500); pg.wait_for_function("() => CRM.laadt === null", timeout=10000); pg.wait_for_timeout(300)
+    regel = pg.evaluate("(function () { var e = document.querySelector('#crmInhoud > .leeg'); return e ? e.textContent : ''; })()")
+    staat = pg.evaluate("[].some.call(document.querySelectorAll('#crmInhoud .rij[data-crm-open^=\"school:\"] .r-titel'), function (x) { return (x.firstChild ? x.firstChild.textContent : '') === %s; })" % json.dumps(naam))
+    assert 'Niet bijgewerkt' in regel or staat, 'koude start (herstel r13, R13-1): na een mislukte stille verversing staat na Terug de regel "Niet bijgewerkt" of de school in de lijst: %r' % [oud, regel, staat]
+    mock_post({'fn': '_faal', 'args': ['apiCrm', 0]}); c.close(); mock_post({'fn': '_reset'})
+
 def scenario_bezetting_per_project(b):
     # v7.5: Bezetting → Per project, in een eigen context (eigen localStorage, zodat de rest van de test bij Per vacature blijft): één regel per project
     # (een knop in een h3 met aria-expanded, aria-controls en een korte naam via aria-labelledby); tikken klapt de vacatures eronder uit op de plek zelf
@@ -296,7 +320,9 @@ with sync_playwright() as p:
     page.screenshot(path=OUT + '/01_vandaag.png', full_page=True)
     # v7.9 "v7.9 labels" (punt 17): één definitie per naam — contractwaarde (niet omzet) en open waarde (niet "in de pijplijn"); runKern stuurt v mee
     assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027")').count() == 1 and 'open waarde' in page.inner_text('#pijplijn'), 'Vandaag: Contractwaarde en open waarde'
-    assert all(x.get('v') == '7.9.3' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.3
+    assert all(x.get('v') == '7.9.4' for x in API_LOG if x.get('fn') == 'apiOverzicht'), 'runKern stuurt v: APP_VERSIE in de body'  # v7.9.4
+    # v7.9.4 (bouwpunt 19): contractwaarde zonder terugval op de omzet; het aantal projecten zonder contractwaarde staat als signaal op de tegel
+    assert page.locator('#kpis .tegel:has-text("Contractwaarde 2026-2027") .t-signaal:text-is("1 zonder waarde")').count() == 1, 'v7.9.4: het signaal projecten zonder contractwaarde (herstel r2 N3, r3 N2: kort op de tegel)'
     page.click('[data-klaar="a1"]'); page.wait_for_selector('#toast.aan:has-text("Ongedaan maken")')  # v4.5: afvinken met ongedaan maken
     assert page.locator('[data-klaar="a1"]').count() == 0, 'afgevinkte actie meteen weg'
     # v4.5: snelinvoer in het Nederlands met een chip die laat zien wat begrepen is
@@ -565,9 +591,13 @@ with sync_playwright() as p:
     assert len(api_vanaf(0, 'apiCijfers')) == 1 and api_vanaf(0, 'apiCijfers')[0]['args'][0].get('kort') is True, 'het register één keer per sessie, kort'
     # "v7.9 datakwaliteit in Rapporten" (punt 11): per eigenaar, met een doorklik (tabindex 0, role link); management kan opnieuw rekenen
     page.wait_for_selector('#dqBlok'); assert page.locator('.dq-eigenaar').count() >= 1 and page.locator('.dq-regel[data-crm-open][tabindex="0"][role="link"]').count() >= 1, 'datakwaliteit per eigenaar met doorklik'
+    # v7.9.4 (bouwpunt 1) "datakwaliteit leeg": de stand leeg als eigen tag (statusKlasse) met de uitleg, ook in Alle contracten met de reden
+    assert page.locator('#dqWrap .dq-telling .tag.leeg:has-text("1 leeg")').count() == 1 and 'niets te toetsen' in page.inner_text('#dqWrap .dq-telling') and 'niets te toetsen: geen projecten van het vorige schooljaar' in page.evaluate("document.querySelector('#dqWrap .legenda-defs dl').textContent"), 'v7.9.4: datakwaliteit toont leeg apart met de uitleg'
+    assert page.evaluate("getComputedStyle(document.querySelector('#dqWrap .tag.leeg')).borderTopStyle") == 'dashed' and page.evaluate("getComputedStyle(document.querySelector('#dqWrap .tag.leeg')).paddingTop") == '1px', 'v7.9.4: de tag leeg is een tag (geen .leeg-lijstopmaak), gestippeld'
     page.locator('.dq-eigenaar summary').first.click(); page.click('[data-dqvers]'); page.wait_for_selector('#toast.aan:has-text("opnieuw gerekend")')
     assert eerste_arg({'args': api_vanaf(0, 'apiSturing')[-1]['args'][1:]}).get('vers') is True, 'Nu opnieuw rekenen vraagt vers'
     page.click('#crmBalk [data-rweergave="week"]'); page.wait_for_selector('#crmInhoud .week-kaart'); assert page.locator('#crmInhoud .week-kaart').count() >= 2 and page.locator('#crmInhoud .week-kaart.team').count() == 1, 'Week: per OC een kaart en het teamtotaal'
+    assert page.locator('[data-weekprint]').count() == 1 and page.locator('[data-weeklink]').count() == 1 and page.locator('.week-print-tabel .week-tabel').count() == 1 and not page.locator('.week-print-tabel').is_visible(), 'v7.9.4 (bouwpunt 16; herstel r1, R1): op de telefoon Afdrukken en de link (als app vanaf het beginscherm heeft iOS geen browsermenu); de tabel alleen voor de afdruk'
     assert page.locator('#crmInhoud .week-kaart .t-def:has-text("contactvorm")').count() >= 1 and page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), 'Week: definities zichtbaar, geen horizontale scroll op 390 px'
     page.click('.periode-nav [data-rstap="-1"]'); page.wait_for_selector('.periode-nav [data-rstap="nu"]'); assert api_vanaf(0, 'apiSturing')[-1]['args'][1].get('stap') == -1, 'Week: bladeren naar de vorige week'
     page.click('.periode-nav [data-rstap="nu"]'); page.wait_for_selector('.periode-nav [data-rstap="nu"]', state='detached')
@@ -769,7 +799,20 @@ with sync_playwright() as p:
     page.emulate_media(media='print'); assert not page.locator('#zijbalk').is_visible() and page.locator('.mt-print-kop').is_visible(), 'print: zonder zijbalk, met de kop van het maanddocument'; page.emulate_media(media='screen')
     page.click('[data-mtlink]'); page.wait_for_timeout(300)
     page.screenshot(path=OUT + '/30_desk_mt.png', full_page=True)
-    page.select_option('#mtStand', ''); page.wait_for_selector('.mt .hint:has-text("live")'); page.click('#crmBalk [data-rweergave="teams"]'); page.wait_for_selector('.tabel')
+    page.select_option('#mtStand', ''); page.wait_for_selector('.mt .hint:has-text("live")')
+    # v7.9.4 (bouwpunt 1): bij M36 de stand per contract als tags, leeg apart
+    assert page.locator('.mt .mt-regel:has(.mt-m:text-is("M36")) .dq-telling .tag.leeg').count() == 1 and 'Leeg, niets te toetsen: Verlengingsstatus bekend' in page.inner_text('.mt .mt-regel:has(.mt-m:text-is("M36"))'), 'v7.9.4: MT M36 met de stand leeg'
+    # v7.9.4 (bouwpunt 16) "afdrukken van de week": desktop met Afdrukken en de link; print in een vaste opzet met de kop en de week
+    page.click('#crmBalk [data-rweergave="week"]'); page.wait_for_selector('#crmInhoud .week-tabel'); page.click('[data-weekprint]'); assert (page.evaluate("window.__geprint") or 0) >= 2, 'Week: Afdrukken'
+    page.emulate_media(media='print'); assert page.locator('.week-print-kop').is_visible() and 'Weekrapport commercie' in page.inner_text('.week-print-kop') and not page.locator('#zijbalk').is_visible() and not page.locator('[data-weeklink]').is_visible() and page.locator('.week-print-defs').is_visible(), 'print: de week met de vaste kop en de definities'; page.emulate_media(media='screen')
+    page.click('[data-weeklink]'); page.wait_for_timeout(200)
+    # v7.9.4 (bouwpunt 5) "team zonder leden": de mock bootst een leeg team consultancy na; het teamtotaal is per cijfer geblokkeerd, nooit 0
+    assert mock_post({'fn': '_teamLeeg', 'args': [True]}).get('teamLeeg') is True, 'de mock kent _teamLeeg'
+    page.click('.periode-nav [data-rstap="-1"]'); page.wait_for_selector('.week-teamblok')
+    tb = page.evaluate("[].map.call(document.querySelectorAll('.week-tabel tr.r-team td'), function (x) { return x.textContent; })")
+    assert len(tb) == 11 and all(x == '—' for x in tb[1:]) and 'geblokkeerd: geen leden in het team' in page.inner_text('.week-teamblok'), 'v7.9.4: een team zonder leden: geblokkeerd, nooit 0: %s' % tb
+    mock_post({'fn': '_teamLeeg', 'args': [False]}); page.click('.periode-nav [data-rstap="nu"]'); page.wait_for_selector('.periode-nav [data-rstap="nu"]', state='detached')
+    page.click('#crmBalk [data-rweergave="teams"]'); page.wait_for_selector('.tabel')
     page.click('.zb-item[data-desk="doelen"]'); page.wait_for_selector('#doelenInhoud .doel-rij'); page.wait_for_timeout(150)
     page.click('#doelenInhoud [data-doelteam="accountmanagement"]'); page.wait_for_selector('#doelenInhoud .hkaart:has-text("Joris") .doel-rij')  # v4.2: doelen per team
     page.screenshot(path=OUT + '/27_desk_doelen.png')
@@ -934,6 +977,24 @@ with sync_playwright() as p:
     p9.click('#venster [data-cf-annuleer]'); p9.click('[data-beheer="mijlpalen"]'); p9.wait_for_selector('#leMijlpalen .le-rij')
     assert p9.locator('#leMijlpalen [data-le="vraagtStart"]').count() == 0 and p9.locator('#leMijlpalen [data-le="rol"]').count() == 4, '7.9.1-backend: geen vinkje Vraagt startdatum'
     c9.close(); mock_post({'fn': '_reset'})
+    # v7.9.4 "7.9.3-backend": een backend van 7.9.3 kent de soort per facturatievorm niet: wel de lijst soort facturatie, geen soortkeuze; de stap kansen zonder open/gewonnen
+    assert mock_post({'fn': '_backendVersie', 'args': ['7.9.3']}).get('ok')
+    c9 = b.new_context(viewport={'width': 1280, 'height': 800}); p9 = c9.new_page(); p9.on('pageerror', lambda e: meldingen.append(('pageerror 7.9.3-backend', str(e))))
+    overstap(p9); p9.click('#venster [data-cf-annuleer]'); p9.click('[data-beheer="keuzelijsten"]'); p9.wait_for_selector('#le-soortFacturatie .le-rij')
+    assert p9.locator('#factSoortRijen').count() == 0 and p9.locator('[data-factsoort]').count() == 0, '7.9.3-backend: geen soort per facturatievorm'
+    c9.close(); mock_post({'fn': '_reset'})
+    # v7.9.4 (bouwpunt 9) "soort per facturatievorm (mock)": een eigen vorm, de soort in het bewerkvenster, één aanroep met het veld soort
+    c9 = b.new_context(viewport={'width': 1280, 'height': 800}); p9 = c9.new_page(); p9.on('pageerror', lambda e: meldingen.append(('pageerror soort', str(e))))
+    overstap(p9); p9.click('#venster [data-cf-annuleer]'); p9.click('[data-beheer="keuzelijsten"]'); p9.wait_for_selector('#le-soortFacturatie .le-rij')
+    p9.click('[data-le-erbij="le-soortFacturatie"]'); p9.locator('#le-soortFacturatie .le-rij').last.locator('[data-le="waarde"]').fill('Stukprijs'); p9.click('#crmBeheer [data-cf-opslaan]'); p9.wait_for_selector('#toast.aan:has-text("Keuzelijsten opgeslagen")')
+    p9.click('[data-beheer="keuzelijsten"]'); p9.wait_for_selector('[data-factsoort]'); p9.click('[data-factsoort]'); p9.wait_for_selector('#venster.aan #vf-soort0')
+    p9.select_option('#vf-soort0', 'achteraf'); p9.click('#venster [data-cf-opslaan]'); p9.wait_for_selector('#toast.aan:has-text("Soort per facturatievorm opgeslagen")')
+    assert 'over de maanden, met de status achter' in p9.inner_text('#factSoortRijen .k-rij:has-text("stukprijs")'), 'v7.9.4: de soort staat in het overzicht'
+    # v7.9.4 (bouwpunt 3): de stap kansen noemt open en gewonnen
+    p9.click('[data-beheer="v79"]'); p9.wait_for_selector('#venster.aan [data-v79="kansen:proef"]'); p9.click('[data-v79="kansen:proef"]'); p9.wait_for_selector('#v79-kansen')
+    assert '0 open en 0 gewonnen kansen aan te vullen' in p9.inner_text('#v79-kansen') and 'open en gewonnen' in p9.inner_text('#v79stap-kansen .r-titel'), 'v7.9.4: de stap kansen noemt open en gewonnen'
+    c9.close(); mock_post({'fn': '_reset'})
+    scenario_koud_crm(b)  # v7.9.4 (herstel r13, R13-1): eigen context, koude start met aa_cache_crm
     b.close()
 meldingen = [m for m in meldingen if '/api/config' not in ' '.join(m)]  # v6.1: zonder eigen server (GitHub Pages, deze mock) geeft api/config een 404; die is verwacht
 print('meldingen:', json.dumps(meldingen, indent=1, ensure_ascii=False) if meldingen else 'geen')

@@ -1,5 +1,25 @@
 /* Athena Assistent — service worker: HTML cache-first met verversen op de achtergrond (v7.6, stale-while-revalidate), statische shell cache-first, API altijd via netwerk */
-var CACHE = 'athena-assistent-v7.9.3';  // bump bij elke release (zie /release)
+var CACHE = 'athena-assistent-v7.9.4';  // bump bij elke release (zie /release)
+// v7.9.4: deel B op de echte stand. Datakwaliteit toont de stand leeg (niets te toetsen) apart, de weekweergave een team zonder leden als geblokkeerd,
+// Rapporten → Week heeft een afdrukweergave in een vaste opzet met de link #rapport:week:<jjjj-Www>, Beheer → Keuzelijsten de soort per facturatievorm.
+// Herstel r3 (niet uitgerold, dus dezelfde CACHE): leeg als "—" met de reden (MT, Teams, Vandaag) en een verse basis na Beheer (telefoon).
+// Herstel r4 (dezelfde CACHE): een tab gekozen terwijl de basis laadt tekent zodra hij er is; elk Beheer-pad laadt de basis opnieuw.
+// Herstel r5 (dezelfde CACHE): na een mislukte basis probeert een tik op een tab het opnieuw (anders de fout), na Andere datum een verse basis (het bord blijft); € met een harde spatie.
+// Herstel r7 (dezelfde CACHE): de verse basis na een geslaagde opslag komt stil (in r7 alleen op het bord en na Beheer); Opnieuw proberen zet Contacten op de iPad niet op een andere tab (36 px).
+// Herstel r8 (dezelfde CACHE): ook in het kansdetail (mijlpaal, Andere datum, Ongedaan maken, gewonnen, verloren) en na + School, + Persoon en + Kans blijft de
+// basis staan en komt de verse stil; een mislukte stille verversing staat wel in de metingen.
+// Herstel r9 (dezelfde CACHE): mislukt die stille verversing, dan laadt de volgende lijst (Terug, een tab) de basis opnieuw, anders de fout met Opnieuw proberen;
+// een keuzelijst houdt de huidige waarde (nooit stil '' bij Opslaan); een ouder antwoord van apiCrm overschrijft geen nieuwer; Ongedaan maken ververst het bord.
+// Herstel r10 (dezelfde CACHE): mislukt die nieuwe poging terwijl er een basis is, dan blijft de lijst staan en bruikbaar (ook zoeken, zonder apiCrm per toets)
+// met één regel erboven ("Niet bijgewerkt", Opnieuw proberen); een nieuwe poging alleen bij Terug, een tab of Relaties; "Kon de relaties niet laden" alleen
+// zonder basis; Opnieuw proberen op dezelfde tab laat + Persoon staan; alleen een koppelveld (…Id) houdt zijn huidige waarde, met de naam uit het record.
+// Herstel r11 (dezelfde CACHE): alleen de nieuwste apiCrm wist die regel (een oudere die later lukt niet), en Opnieuw proberen in de regel loopt luid: de
+// regel blijft tot de poging lukt en een fout geeft een melding.
+// Herstel r12 (dezelfde CACHE): na de poging gaat de focus alleen als hij weg is naar de knop of de tab (op body.desk de chip in #crmBalk), wie intussen
+// typt typt door; de knop staat uit tot de lijst opnieuw getekend wordt, een oudere mislukte poging zet de regel niet terug na een nieuwere die lukte, en een
+// open + Persoon krijgt de nieuwe school in zijn keuzelijst.
+// Herstel r13 (dezelfde CACHE): de regel komt ook na een koude start waarin nog geen apiCrm gelukt is; een tik op Opnieuw proberen terwijl er al een aanroep
+// loopt start geen tweede (hij wacht erop en maakt hem luid); elke geslaagde apiCrm, ook via Relaties in de tabbalk, zet de nieuwe school in die keuzelijst.
 // v7.9.3: herstel na review ronde 2 van fase 5b; 7.9.2 staat live, dus een nieuwe uitrol met een nieuwe CACHE. + Kans zet Opslaan uit tot de aanroep klaar is,
 // na een venster gaat de focus op een touch-apparaat niet terug naar een keuzelijst, de fout staat in het venster onder het veld. Review ronde 1 van 7.9.3 (nog
 // niet uitgerold, dus dezelfde CACHE): de stap fasen noemt een eigen rij die 5b wordt en wat erbij komt of verdwijnt, het vinkje in Beheer heeft een eigen naam.

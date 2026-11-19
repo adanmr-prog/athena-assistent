@@ -1,7 +1,7 @@
 // v7.2: tijdzone- en zomertijdtest. Draait test/node_rooktest.js en test/parser_test.js als kindproces onder vier tijdzones
 // (Europe/Amsterdam, Pacific/Auckland, America/Los_Angeles, UTC) met de echte klok en met een vaste "vandaag" (via test/tz_klok.js):
 // 2026-03-29 (begin zomertijd EU), 2026-10-25 (einde), 2026-12-31, 2027-01-01, plus randen om middernacht rond de EU-wissel en de
-// wisseldagen van Los Angeles (2026-11-01) en Auckland (2026-04-05). Daarnaast reproducties van datumvalkuilen in Code.gs onder een
+// wisseldagen van Los Angeles (2026-11-01) en Auckland (2026-04-05), en (v7.9.4 r5) 23:55, de laatste tien minuten vóór middernacht. Daarnaast reproducties van datumvalkuilen in Code.gs onder een
 // vaste klok en een statische scan van backend/Code.gs en index.html (new Date(tekst), getTime()-rekenen over 86400000 zonder
 // middag-normalisatie, toISOString, dd-MM-yyyy-parsing, vergelijkingen van datumteksten met verschillende lengtes).
 // Gebruik: node test/tz_test.js [--snel]   → "ALLES GOED" (exitcode 0) als alle combinaties groen zijn, anders "FOUTEN: n" (exitcode 1).
@@ -54,7 +54,8 @@ var KLOKKEN = [{ naam: 'echt', vast: '' },
   { naam: '2026-12-31T10:00', vast: '2026-12-31T10:00', reden: 'jaareinde' }, { naam: '2027-01-01T10:00', vast: '2027-01-01T10:00', reden: 'nieuwjaar (ISO-week 53/1)' }];
 var EXTRA = [{ naam: '2026-03-28T23:30', vast: '2026-03-28T23:30', reden: 'uur vóór de dag van de EU-wissel' }, { naam: '2026-03-29T00:30', vast: '2026-03-29T00:30', reden: 'uur na middernacht op de EU-wisseldag' },
   { naam: '2026-10-24T23:30', vast: '2026-10-24T23:30', reden: 'uur vóór de dag van de EU-wissel (einde)' }, { naam: '2026-10-25T00:30', vast: '2026-10-25T00:30', reden: 'uur na middernacht op de EU-wisseldag (einde)' },
-  { naam: '2026-11-01T10:00', vast: '2026-11-01T10:00', reden: 'einde zomertijd Los Angeles' }, { naam: '2026-04-05T10:00', vast: '2026-04-05T10:00', reden: 'einde zomertijd Auckland' }];
+  { naam: '2026-11-01T10:00', vast: '2026-11-01T10:00', reden: 'einde zomertijd Los Angeles' }, { naam: '2026-04-05T10:00', vast: '2026-04-05T10:00', reden: 'einde zomertijd Auckland' },
+  { naam: '2026-11-17T23:55', vast: '2026-11-17T23:55', reden: 'laatste tien minuten vóór middernacht (v7.9.4 r5: de seedtaak over tien minuten)' }];
 if (!SNEL) KLOKKEN = KLOKKEN.concat(EXTRA);
 else info('--snel: de randen om middernacht en de wisseldagen van Los Angeles/Auckland worden overgeslagen');
 
